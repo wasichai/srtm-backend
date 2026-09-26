@@ -30,7 +30,12 @@ prediales) que se carga por REST, y un importador del padrón de predios en Exce
 
 ## Arrancar
 
+La guía completa de desarrollo local (variables, base, IDE, tests, front) está en
+[docs/develop/README.md](docs/develop/README.md).
+
 ```bash
+cp develop/example.env develop/.env  # variables de ejemplo; develop/.env no se versiona
+set -a; source develop/.env; set +a
 docker compose up -d                 # postgres:18 en localhost:5433, base srtm (usuario/clave srtm)
 ./gradlew bootRun                    # servidor en http://localhost:8090
 ```
