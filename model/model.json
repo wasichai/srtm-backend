@@ -1,0 +1,124 @@
+{
+  "enums": {
+    "tipo_persona": ["NATURAL", "JURIDICA", "SUCESION"],
+    "tipo_documento": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION"],
+    "condicion_predio": ["URBANO", "RUSTICO"],
+    "ubicacion_area_verde": ["FRENTE A PARQUE", "MEDIANAMENTE CERCANO A AREAS VERDES", "FRENTE A BERMA", "OTRAS UBICACIONES"],
+    "condicion_propiedad": ["PROPIETARIO UNICO", "CONDOMINO"],
+    "uso": [
+      "RESIDENCIAL - CASA HABITACION",
+      "TERRENO",
+      "COMERCIAL",
+      "DESOCUPADO",
+      "INSTITUCIONAL",
+      "EQUIPAMIENTO URBANO",
+      "INDUSTRIA",
+      "RECREACIONAL",
+      "BIENES COMUNES",
+      "ESTACIONAMIENTO"
+    ],
+    "clasificacion": [
+      "CASA HABITACION Y DEPARTAMENTOS PARA VIVIENDA",
+      "TIENDAS DEPOSITOS CENTROS DE RECREACION CLUBES E INSTITUCIONES",
+      "CLINICAS HOSPITALES CINES INDUSTRIAS COLEGIOS TALLERES",
+      "EDIFICIO-OFICINAS"
+    ],
+    "estado_construccion": ["TERMINADO", "EN CONSTRUCCION", "TERRENO SIN CONSTRUIR", "EN RUINAS"]
+  },
+  "objects": [
+    {
+      "name": "contribuyente",
+      "label": "Contribuyente",
+      "pluralLabel": "Contribuyentes",
+      "description": "Persona natural, persona jurídica o sucesión obligada al pago de tributos municipales.",
+      "fields": [
+        {"name": "tipo_persona", "label": "Tipo de persona", "type": "ENUM", "enum": "tipo_persona", "required": true,
+          "description": "Derivado del tipo de documento y del nombre."},
+        {"name": "tipo_documento", "label": "Tipo de documento", "type": "ENUM", "enum": "tipo_documento", "required": true,
+          "source": "tipo_doc"},
+        {"name": "numero_documento", "label": "Número de documento", "type": "TEXT", "required": true, "unique": true,
+          "source": "num_doc"},
+        {"name": "nombre_completo", "label": "Nombre completo", "type": "TEXT", "required": true, "source": "nombre_contribuyente",
+          "description": "Nombre tal como figura en el padrón; apellidos y nombres o razón social."},
+        {"name": "apellido_paterno", "label": "Apellido paterno", "type": "TEXT", "source": "nombre_contribuyente"},
+        {"name": "apellido_materno", "label": "Apellido materno", "type": "TEXT", "source": "nombre_contribuyente"},
+        {"name": "nombres", "label": "Nombres", "type": "TEXT", "source": "nombre_contribuyente"},
+        {"name": "razon_social", "label": "Razón social", "type": "TEXT", "source": "nombre_contribuyente",
+          "description": "Solo personas jurídicas y sucesiones."},
+        {"name": "domicilio_fiscal", "label": "Domicilio fiscal", "type": "TEXT", "source": "domicilio_fiscal"},
+        {"name": "domicilio_distrito", "label": "Distrito del domicilio", "type": "TEXT", "source": "domicilio_fiscal"},
+        {"name": "domicilio_provincia", "label": "Provincia del domicilio", "type": "TEXT", "source": "domicilio_fiscal"},
+        {"name": "domicilio_departamento", "label": "Departamento del domicilio", "type": "TEXT", "source": "domicilio_fiscal"}
+      ]
+    },
+    {
+      "name": "predio",
+      "label": "Predio",
+      "pluralLabel": "Predios",
+      "description": "Predio urbano o rústico del distrito, identificado por su código sector-manzana-número.",
+      "fields": [
+        {"name": "codigo", "label": "Código de predio", "type": "TEXT", "required": true, "unique": true, "source": "codigo_predio"},
+        {"name": "sector_catastral", "label": "Sector catastral", "type": "TEXT", "source": "sector_manzana"},
+        {"name": "manzana_catastral", "label": "Manzana catastral", "type": "TEXT", "source": "sector_manzana"},
+        {"name": "condicion", "label": "Condición del predio", "type": "ENUM", "enum": "condicion_predio", "source": "tipo_pupr_desc"},
+        {"name": "direccion", "label": "Dirección", "type": "TEXT", "required": true, "source": "direccion_predio"},
+        {"name": "via", "label": "Vía", "type": "TEXT", "source": "direccion_predio"},
+        {"name": "numero", "label": "Número", "type": "TEXT", "source": "direccion_predio"},
+        {"name": "manzana", "label": "Manzana", "type": "TEXT", "source": "direccion_predio"},
+        {"name": "lote", "label": "Lote", "type": "TEXT", "source": "direccion_predio"},
+        {"name": "habilitacion_urbana", "label": "Habilitación urbana", "type": "TEXT", "source": "direccion_predio"},
+        {"name": "ubicacion_area_verde", "label": "Ubicación respecto a áreas verdes", "type": "ENUM", "enum": "ubicacion_area_verde",
+          "source": "ubicacion_parque"}
+      ]
+    },
+    {
+      "name": "declaracion_predial",
+      "label": "Declaración predial",
+      "pluralLabel": "Declaraciones prediales",
+      "description": "Lo que un contribuyente declara sobre un predio en un año: características, autoavalúo y su parte en el condominio.",
+      "fields": [
+        {"name": "anio", "label": "Año", "type": "INTEGER", "required": true},
+        {"name": "secuencia_uso", "label": "Secuencia de uso", "type": "TEXT", "required": true, "source": "secuencia_uso"},
+        {"name": "condicion_propiedad", "label": "Condición de propiedad", "type": "ENUM", "enum": "condicion_propiedad",
+          "description": "Derivado: CONDOMINO si el predio tiene más de un titular."},
+        {"name": "porcentaje_condominio", "label": "% de condominio", "type": "DECIMAL",
+          "description": "Derivado: valor_condominio / valor_autoavaluo × 100."},
+        {"name": "uso", "label": "Uso", "type": "ENUM", "enum": "uso", "source": "grupo_uso_desc"},
+        {"name": "clasificacion", "label": "Clasificación", "type": "ENUM", "enum": "clasificacion", "source": "clasificacion_predio_desc"},
+        {"name": "estado_construccion", "label": "Estado de construcción", "type": "ENUM", "enum": "estado_construccion",
+          "source": "estado_construccion_desc"},
+        {"name": "area_terreno", "label": "Área de terreno (m²)", "type": "DECIMAL", "source": "area_terreno"},
+        {"name": "area_construida", "label": "Área construida (m²)", "type": "DECIMAL", "source": "area_construida"},
+        {"name": "longitud_frente", "label": "Longitud de frente (m)", "type": "DECIMAL", "source": "longitud_frente"},
+        {"name": "numero_habitantes", "label": "Número de habitantes", "type": "INTEGER", "source": "cantidad_habitantes"},
+        {"name": "valor_autoavaluo", "label": "Valor del autoavalúo", "type": "DECIMAL", "source": "autoavaluo_total",
+          "description": "Autoavalúo total del predio (o de la secuencia de uso)."},
+        {"name": "valor_condominio", "label": "Valor en condominio", "type": "DECIMAL", "source": "condominio",
+          "description": "Parte del autoavalúo que corresponde a este titular."},
+        {"name": "deduccion", "label": "Deducción", "type": "DECIMAL", "source": "deduccion"},
+        {"name": "valor_afecto", "label": "Valor afecto", "type": "DECIMAL", "source": "autoavaluo_afecto",
+          "description": "valor_condominio - deduccion."}
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "name": "declaracion_predial_contribuyente",
+      "label": "Contribuyente",
+      "inverseLabel": "Declaraciones prediales",
+      "source": "declaracion_predial",
+      "target": "contribuyente",
+      "fieldName": "contribuyente",
+      "required": true
+    },
+    {
+      "name": "declaracion_predial_predio",
+      "label": "Predio",
+      "inverseLabel": "Declaraciones prediales",
+      "source": "declaracion_predial",
+      "target": "predio",
+      "fieldName": "predio",
+      "required": true
+    }
+  ]
+}

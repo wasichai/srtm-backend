@@ -1,0 +1,23 @@
+server:
+  # model/apply.py and model/import_predios.py default to http://localhost:8090
+  port: 8090
+
+spring:
+  application:
+    name: srtm-backend
+
+wasichai:
+  database:
+    host: ${WASICHAI_DB_HOST:localhost}
+    # compose.yml publishes plain postgres on 5433. never 5432: another app's postgres may live there
+    port: ${WASICHAI_DB_PORT:5433}
+    name: ${WASICHAI_DB_NAME:srtm}
+    username: ${WASICHAI_DB_USERNAME:srtm}
+    password: ${WASICHAI_DB_PASSWORD:srtm}
+  seed:
+    # admin@wasichai.local / admin. development only: turn off anywhere real
+    dev: ${WASICHAI_SEED_DEV:true}
+  security:
+    jwt:
+      # development only. a real deployment sets WASICHAI_JWT_SECRET (>= 32 bytes)
+      secret: ${WASICHAI_JWT_SECRET:srtm-dev-only-secret-change-me-0123456789}
