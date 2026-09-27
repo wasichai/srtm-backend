@@ -23,9 +23,10 @@ class PdfMerger {
         merger.mergeDocuments(MemoryUsageSetting.setupTempFileOnly().streamCache)
     }
 
-    // pdfs on disk to a file (created or replaced), read one at a time
+    // pdfs on disk to a file (created or replaced), read one at a time. final: kotlin-spring opens a @Component's
+    // members, and an open one cannot take @JvmName (both overloads erase to merge(List, …))
     @JvmName("mergeArchivos")
-    fun merge(
+    final fun merge(
         partes: List<Path>,
         destino: Path
     ) {
