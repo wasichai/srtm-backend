@@ -185,10 +185,21 @@ class ShippedUsosTests(unittest.TestCase):
         self.assertEqual(sorted({u["sub_clase"] for u in usos} - set(self.enums["sub_clase_uso"])), [])
         self.assertEqual(sorted({u["uso"] for u in usos} - set(self.enums["uso"])), [])
 
-    def test_the_padron_usos_stay_storable(self):
-        padron = ["RESIDENCIAL - CASA HABITACION", "TERRENO", "COMERCIAL", "DESOCUPADO", "INSTITUCIONAL",
-                  "EQUIPAMIENTO URBANO", "INDUSTRIA", "RECREACIONAL", "BIENES COMUNES", "ESTACIONAMIENTO"]
-        self.assertTrue(set(padron) <= set(self.enums["uso"]))
+    def test_uso_lists_the_catalog_usos_only(self):
+        # wasichai/srtm-backend#31: the padrón's grupos de uso left it for the clases. COMERCIAL and INDUSTRIA stay:
+        # they are also usos of the catalog (060806, 090301, 100402; 100301)
+        usos = ic.read_usos(self.path)
+        self.assertEqual(sorted(set(self.enums["uso"]) - {u["uso"] for u in usos}), [])
+        self.assertEqual(len(self.enums["uso"]), len(set(self.enums["uso"])))
+        self.assertNotIn("RESIDENCIAL - CASA HABITACION", self.enums["uso"])
+
+    def test_the_padron_grupos_are_the_clases(self):
+        padron = ["RESIDENCIAL", "TERRENO", "COMERCIAL", "DESOCUPADO", "INSTITUCIONAL", "EQUIPAMIENTO URBANO", "INDUSTRIA",
+                  "RECREACIONAL", "BIENES COMUNES", "ESTACIONAMIENTO"]
+        self.assertEqual(sorted(self.enums["clase_uso"]), sorted(padron))
+        self.assertIn(
+            {"codigo": "010101", "clase": "RESIDENCIAL", "sub_clase": "UNIFAMILIAR", "uso": "CASA HABITACIÓN"}, ic.read_usos(self.path)
+        )
 
     def test_every_row_says_where_it_comes_from(self):
         import csv

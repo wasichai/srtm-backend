@@ -36,6 +36,16 @@ CLASIFICACION = {
         "TIENDAS DEPOSITOS CENTROS DE RECREACION CLUBES E INSTITUCIONES",
     "CLINICA,HOSPITALES,CINE,INDUSTRIAS,COLEGIOS,TALLER": "CLINICAS HOSPITALES CINES INDUSTRIAS COLEGIOS TALLERES",
 }
+# the padrón's grupo de uso -> the srtm's clase, sub clase and uso (data/usos_predio.csv). the ten grupos are its ten
+# clases; only the residential one says more. the portal asks for what is missing when the declaración is edited
+USOS_DEL_PADRON = {
+    "RESIDENCIAL - CASA HABITACION": ("RESIDENCIAL", "UNIFAMILIAR", "CASA HABITACIÓN"),
+    **{clase: (clase, None, None) for clase in (
+        "COMERCIAL", "INDUSTRIA", "RECREACIONAL", "EQUIPAMIENTO URBANO", "INSTITUCIONAL", "TERRENO", "DESOCUPADO",
+        "ESTACIONAMIENTO", "BIENES COMUNES",
+    )},
+}
+USO_FIELDS = ("clase_uso", "sub_clase_uso", "uso")
 
 # words that start a surname without being one: DE LA CRUZ is one surname
 SURNAME_PARTICLES = frozenset({"DE", "DEL", "LA", "LAS", "LOS", "SAN", "SANTA", "MC", "MAC", "VAN", "VON", "DI", "DA"})
@@ -229,6 +239,13 @@ def split_ubicacion(address):
     return out
 
 
+def uso_del_padron(grupo):
+    """A grupo de uso of the padrón as the declaración stores it: {clase_uso, sub_clase_uso, uso}. None for anything
+    else (an srtm uso included)."""
+    usos = USOS_DEL_PADRON.get(grupo)
+    return dict(zip(USO_FIELDS, usos)) if usos else None
+
+
 def secuencia_uso(value):
     """The padrón's three digits: '1' is '001', none is the first. Anything but a number stays as written."""
     text = clean_text(value) or "1"
@@ -387,6 +404,13 @@ class _Mapper:
             self.problems.append(f"fila {row['_fila']}: {column} '{value}' is not an option of enum {enum_name}")
         return value
 
+    def uso(self, row):
+        grupo = clean_text(row.get("grupo_uso_desc"))
+        usos = uso_del_padron(grupo) if grupo else None
+        if grupo and usos is None:
+            self.problems.append(f"fila {row['_fila']}: grupo_uso_desc '{grupo}' is not a grupo de uso of the padrón")
+        return usos or dict.fromkeys(USO_FIELDS)
+
 
 def _contribuyente(row, mapper, data):
     tipo_doc = clean_text(row.get("tipo_doc"))
@@ -442,7 +466,7 @@ def _declaracion(row, anio, secuencia, mapper):
         "anio": anio,
         "secuencia_uso": secuencia,
         "porcentaje_condominio": _porcentaje(valor_condominio, valor_autoavaluo),
-        "uso": mapper.enum(row, "grupo_uso_desc", "uso"),
+        **mapper.uso(row),
         "clasificacion": mapper.enum(row, "clasificacion_predio_desc", "clasificacion", CLASIFICACION),
         "estado_construccion": mapper.enum(row, "estado_construccion_desc", "estado_construccion"),
         "area_terreno": clean_decimal(row.get("area_terreno")),

@@ -290,6 +290,33 @@ class BuildDatasetTests(unittest.TestCase):
         self.assertIsNone(data.declaraciones[1].attributes["clasificacion"])
         self.assertIsNone(data.declaraciones[1].attributes["porcentaje_condominio"])
 
+    def test_the_grupo_de_uso_is_the_srtm_clase(self):
+        # wasichai/srtm-backend#31: the ten grupos are the catalog's ten clases; only the residential one says more
+        [casa] = self.build([row()]).declaraciones
+        self.assertEqual(
+            {k: casa.attributes[k] for k in ("clase_uso", "sub_clase_uso", "uso")},
+            {"clase_uso": "RESIDENCIAL", "sub_clase_uso": "UNIFAMILIAR", "uso": "CASA HABITACIÓN"},
+        )
+        [terreno] = self.build([row(grupo_uso_desc="TERRENO")]).declaraciones
+        self.assertEqual(
+            {k: terreno.attributes[k] for k in ("clase_uso", "sub_clase_uso", "uso")},
+            {"clase_uso": "TERRENO", "sub_clase_uso": None, "uso": None},
+        )
+        [sin_uso] = self.build([row(grupo_uso_desc=None)]).declaraciones
+        self.assertEqual((sin_uso.attributes["clase_uso"], sin_uso.attributes["uso"]), (None, None))
+
+    def test_every_grupo_lands_on_options_of_the_model(self):
+        enums = ip.load_enums(ip.default_model_path())
+        self.assertEqual(len(ip.USOS_DEL_PADRON), 10)
+        for grupo in ip.USOS_DEL_PADRON:
+            with self.subTest(grupo=grupo):
+                usos = ip.uso_del_padron(grupo)
+                self.assertIn(usos["clase_uso"], enums["clase_uso"])
+                self.assertTrue(usos["sub_clase_uso"] is None or usos["sub_clase_uso"] in enums["sub_clase_uso"])
+                self.assertTrue(usos["uso"] is None or usos["uso"] in enums["uso"])
+        self.assertIsNone(ip.uso_del_padron("SPA"))
+        self.assertIsNone(ip.uso_del_padron("CASA HABITACIÓN"))
+
     def test_unknown_values_are_problems(self):
         data = self.build([row(tipo_doc="99", grupo_uso_desc="SPA")])
         self.assertTrue(any("tipo_doc '99'" in p for p in data.problems))

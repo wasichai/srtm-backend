@@ -32,7 +32,7 @@ class UsosPredioApiTest : SrtmApiTest() {
     }
 
     @Test
-    fun `a declaration stores the srtm's clase, sub clase and uso, or the padron's uso alone`() {
+    fun `a declaration stores the srtm's clase, sub clase and uso, or the clase alone the padron's grupo became`() {
         val predio = predio()
         val srtm =
             post(
@@ -43,9 +43,12 @@ class UsosPredioApiTest : SrtmApiTest() {
         assertEquals("UNIFAMILIAR", srtm["sub_clase_uso"].asString())
         assertEquals("CASA HABITACIÓN", srtm["uso"].asString())
 
-        val padron = post("/api/srtm/declaraciones", body(inscribir(), predio()) + ("uso" to "RESIDENCIAL - CASA HABITACION"))
-        assertEquals("RESIDENCIAL - CASA HABITACION", padron["uso"].asString())
-        assertTrue(padron["clase_uso"] == null || padron["clase_uso"].isNull)
+        // model/migrar_usos_padron.py (wasichai/srtm-backend#31): the grupo TERRENO is the clase TERRENO, nothing more
+        val padron = post("/api/srtm/declaraciones", body(inscribir(), predio()) + ("clase_uso" to "TERRENO"))
+        assertEquals("TERRENO", padron["clase_uso"].asString())
+        assertTrue(padron["uso"] == null || padron["uso"].isNull)
+        // the grupos are not usos anymore
+        rejected("POST", "/api/srtm/declaraciones", body(inscribir(), predio()) + ("uso" to "RESIDENCIAL - CASA HABITACION"), "uso")
     }
 
     private fun body(
