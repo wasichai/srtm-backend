@@ -2,47 +2,15 @@ package srtm.impuesto
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
-import srtm.rentas.SrtmApiTest
 import tools.jackson.databind.JsonNode
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.UUID
 
-// GET /api/srtm/contribuyentes/{id}/liquidacion: the impuesto predial of a contribuyente's vigentes declaraciones,
-// with the verified parameters loaded the way model/import_parametros.py loads them
-class LiquidacionApiTest : SrtmApiTest() {
-    @BeforeEach
-    fun parametros() {
-        // the test db is shared by the suite: load each row of the csv once
-        val stored =
-            tree(send("GET", "/api/objects/parametro_tributario/records?size=500", null, HttpStatus.OK))["content"]
-                .iterator()
-                .asSequence()
-                .map { clave(it["attributes"]) }
-                .toSet()
-        for (p in Parametros.predial) {
-            val attributes =
-                mapOf(
-                    "tipo" to p.tipo,
-                    "clave" to p.clave,
-                    "vigencia_desde" to p.vigenciaDesde.toString(),
-                    "vigencia_hasta" to p.vigenciaHasta?.toString(),
-                    "valor_numerico" to p.valorNumerico,
-                    "texto" to p.texto,
-                    "norma" to p.norma,
-                    "fuente" to p.fuente,
-                    "transcribio" to p.transcribio,
-                    "verifico" to p.verifico
-                ).filterValues { it != null }
-            if (Triple(p.tipo, p.clave ?: "", p.vigenciaDesde.toString()) !in stored) {
-                post("/api/objects/parametro_tributario/records", mapOf("attributes" to attributes))
-            }
-        }
-    }
-
+// GET /api/srtm/contribuyentes/{id}/liquidacion: the impuesto predial of a contribuyente's vigentes declaraciones
+class LiquidacionApiTest : ConParametrosApiTest() {
     @Test
     fun `two vigentes declaraciones add their valor afecto, the annulled one does not`() {
         val a = inscribir()
@@ -124,9 +92,6 @@ class LiquidacionApiTest : SrtmApiTest() {
                 "valor_autoavaluo" to BigDecimal(autoavaluo)
             )
         )["id"].asString()
-
-    private fun clave(attributes: JsonNode) =
-        Triple(attributes["tipo"].asString(), attributes["clave"]?.takeUnless { it.isNull }?.asString() ?: "", attributes["vigencia_desde"].asString())
 
     private fun pct(
         monto: BigDecimal,

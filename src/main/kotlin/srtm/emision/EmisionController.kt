@@ -18,7 +18,8 @@ import java.time.LocalDate
 import java.util.UUID
 
 // the predial documents as pdf, to see, print or download from the portal. under /api like the rest: core's jwt
-// protects it and its handler answers every error as problem+json, except the pu's 409, which carries the titulares
+// protects it and its handler answers every error as problem+json, except the pu's 409, which carries the titulares,
+// and the hr's 422, which carries faltan
 @RestController
 @RequestMapping("/api/srtm")
 class EmisionController(
@@ -33,13 +34,29 @@ class EmisionController(
         @RequestParam(required = false) contribuyente: UUID?
     ): ResponseEntity<ByteArray> = inline(documentos.pu(id, contribuyente, anio ?: LocalDate.now().year))
 
+    // the HR of a contribuyente; without anio, the current year
+    @GetMapping("/contribuyentes/{id}/hr")
+    suspend fun hr(
+        @PathVariable id: UUID,
+        @RequestParam(required = false) anio: Int?
+    ): ResponseEntity<ByteArray> = inline(documentos.hr(id, anio ?: LocalDate.now().year))
+
     // the problem core's handler would write, plus the titulares to choose from
     @ExceptionHandler(VariosTitulares::class)
-    fun variosTitulares(ex: VariosTitulares): ProblemDetail =
-        ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.message).apply {
-            type = URI.create("${web.problemBaseUri.trimEnd('/')}/${HttpStatus.CONFLICT.value()}")
-            title = HttpStatus.CONFLICT.reasonPhrase
-            setProperty("titulares", ex.titulares)
+    fun variosTitulares(ex: VariosTitulares): ProblemDetail = problema(HttpStatus.CONFLICT, ex.message).apply { setProperty("titulares", ex.titulares) }
+
+    // the same, plus the parameters of the year that are missing
+    @ExceptionHandler(FaltanParametros::class)
+    fun faltanParametros(ex: FaltanParametros): ProblemDetail =
+        problema(HttpStatus.UNPROCESSABLE_CONTENT, ex.message).apply { setProperty("faltan", ex.faltan) }
+
+    private fun problema(
+        status: HttpStatus,
+        detail: String?
+    ): ProblemDetail =
+        ProblemDetail.forStatusAndDetail(status, detail).apply {
+            type = URI.create("${web.problemBaseUri.trimEnd('/')}/${status.value()}")
+            title = status.reasonPhrase
         }
 
     private fun inline(documento: Documento): ResponseEntity<ByteArray> =

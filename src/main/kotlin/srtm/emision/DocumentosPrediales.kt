@@ -5,6 +5,7 @@ import kotlinx.coroutines.withContext
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import srtm.impuesto.LiquidacionService
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
 import srtm.rentas.DECLARACION
@@ -40,6 +41,12 @@ class VariosTitulares(
     val titulares: List<Titular>
 ) : WasichaiException(HttpStatus.CONFLICT, "El predio tiene ${titulares.size} titulares: indique el contribuyente")
 
+// the year's liquidación lacks a parameter: problem+json 422 with `faltan`, the ones missing
+class FaltanParametros(
+    anio: Int,
+    val faltan: List<String>
+) : WasichaiException(HttpStatus.UNPROCESSABLE_CONTENT, "Faltan parámetros tributarios de $anio: ${faltan.joinToString(", ")}")
+
 // the predial documents: the PU (a predio and one titular) and the HR (a contribuyente). the only way in for the
 // endpoints and the masiva (wasichai/srtm-backend#41). reads go through Registros as the caller, so core applies their
 // permissions; the pdf is rendered off the request's thread
@@ -47,6 +54,7 @@ class VariosTitulares(
 class DocumentosPrediales(
     private val registros: Registros,
     private val renderer: PdfRenderer,
+    private val liquidaciones: LiquidacionService,
     @param:Value("\${srtm.municipalidad.nombre}") private val municipalidad: String
 ) {
     // the PU of a predio for one titular: its vigente declaraciones of `anio`, a section per secuencia de uso.
@@ -87,16 +95,25 @@ class DocumentosPrediales(
         return Documento("PU-${predio.codigo ?: predioId}-$anio.pdf", pdf)
     }
 
-    /**
-     * The HR (hoja de resumen) of a contribuyente for [anio]: its predios and the impuesto predial with its cuotas.
-     *
-     * Not implemented yet: wasichai/srtm-backend#40 builds it on this infrastructure, with the liquidación of
-     * wasichai/srtm-backend#38.
-     */
+    // the HR of a contribuyente for `anio`: its vigente declaraciones and the impuesto predial with its cuotas, from the
+    // same liquidación GET /liquidacion answers (LiquidacionService.determinar). FaltanParametros when a parameter of
+    // the year is missing; NotFoundException when the contribuyente does not exist or has no vigente declaración
     suspend fun hr(
         contribuyenteId: UUID,
         anio: Int
-    ): Documento = throw NotImplementedError("La HR llega con wasichai/srtm-backend#40")
+    ): Documento {
+        val determinacion = liquidaciones.determinar(contribuyenteId, anio)
+        val contribuyente = determinacion.contribuyente
+        val liquidacion = determinacion.liquidacion
+        if (liquidacion.faltan.isNotEmpty()) throw FaltanParametros(anio, liquidacion.faltan)
+        if (determinacion.declaraciones.isEmpty()) {
+            throw NotFoundException("El contribuyente ${contribuyente.codigo.orEmpty()} no tiene declaración jurada vigente en $anio")
+        }
+        val predios = registros.byIds(PREDIO, Predio::class.java, determinacion.declaraciones.mapNotNull { it.predio })
+        val hoja = hojaHr(municipalidad, anio, contribuyente, predios, determinacion.declaraciones, liquidacion, LocalDate.now())
+        val pdf = withContext(Dispatchers.Default) { renderer.render("hr", mapOf("hr" to hoja)) }
+        return Documento("HR-${contribuyente.codigo ?: contribuyenteId}-$anio.pdf", pdf)
+    }
 
     private suspend fun titularesDe(ids: List<String>): List<Titular> {
         val contribuyentes = registros.byIds(CONTRIBUYENTE, Contribuyente::class.java, ids)
