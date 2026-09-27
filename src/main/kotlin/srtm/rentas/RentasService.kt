@@ -31,7 +31,7 @@ class RentasService(
             contribuyente = contribuyentes.get(id),
             anio = year,
             predios = declaraciones.mapNotNull { it.predio }.distinct().size,
-            totales = totales(declaraciones)
+            totales = totalesDeContribuyente(declaraciones)
         )
     }
 
@@ -64,7 +64,7 @@ class RentasService(
             predio = predio(id),
             anio = year,
             titulares = declaraciones.mapNotNull { it.contribuyente }.distinct().size,
-            totales = totales(declaraciones)
+            totales = totalesDePredio(declaraciones)
         )
     }
 
