@@ -34,11 +34,11 @@ class PadronNormalizadoApiTest : SrtmApiTest() {
         val id = post("/api/objects/predio/records", mapOf("attributes" to padron(via)))["id"].asString()
 
         val saved = put("/api/srtm/predios/$id", padron(via) + PERENE)
-        assertEquals("JR. $via, N° 12, MZ. A, LT. 5, KM. 23.5, CERCADO II MESETA, JUNIN-CHANCHAMAYO-PERENE", saved["direccion"].asString())
+        assertEquals("JR. $via, N° 12, MZ. A, LT. 5, KM. 23.5, CER II MESETA, JUNIN-CHANCHAMAYO-PERENE", saved["direccion"].asString())
 
         // one saved before normalizar_padron.py ran: the vía still carries its type
         val antes = put("/api/srtm/predios/$id", padron(via) + PERENE + ("via" to "JIRON $via"))
-        assertEquals("JIRON $via, N° 12, MZ. A, LT. 5, KM. 23.5, CERCADO II MESETA, JUNIN-CHANCHAMAYO-PERENE", antes["direccion"].asString())
+        assertEquals("JIRON $via, N° 12, MZ. A, LT. 5, KM. 23.5, CER II MESETA, JUNIN-CHANCHAMAYO-PERENE", antes["direccion"].asString())
     }
 
     @Test

@@ -64,9 +64,10 @@ fun errorDocumento(
     }
 }
 
-// the srtm writes the common types of vía and unidad urbana abbreviated (AV. ANDRES AVELINO CACERES): the records keep
-// the model's word, the address its abbreviation; a type not here goes whole. the same two tables are in srtm-ui
-// (forms/direccion.ts), and model/import_predios.py (split_tipo) reads each abbreviation back: change the three together
+// the srtm writes the common types of vía and every type of unidad urbana abbreviated (AV. ANDRES AVELINO CACERES,
+// A.P.V. LOS PINOS): the records keep the model's word, the address its abbreviation; a type not here goes whole. the
+// same two tables are in srtm-ui (forms/direccion.ts), and model/import_predios.py (split_tipo) reads each abbreviation
+// back: change the three together
 val ABREVIATURA_VIA =
     mapOf(
         "AVENIDA" to "AV.",
@@ -77,12 +78,52 @@ val ABREVIATURA_VIA =
         "CARRETERA" to "CARR."
     )
 
+// the catastro fiscal's ABREV_UU (model/data/tipos_unidad_urbana.csv), by type. 48 and 53 share ASOC.VIS.
 val ABREVIATURA_UNIDAD_URBANA =
     mapOf(
+        "AGRUPACION" to "AGRUP",
         "ASENTAMIENTO HUMANO" to "AA.HH.",
-        "ASOCIACION DE VIVIENDA" to "AA.VV.",
+        "ASOCIACION" to "ASOC",
+        "ASOCIACION DE VIVIENDA" to "ASOC. VIV.",
+        "ASOCIACION DE VIVIENDA DE INTERES SOCIAL" to "ASOC.VIS.",
+        "ASOCIACION DE VIVIENDA E INTERES SOCIAL" to "ASOC.VIS.",
+        "ASOCIACION DE VIVIENDA POPULAR DE INTERES SOCIAL" to "ASOC.V.POPIS",
+        "ASOCIACION POPULAR URBANIZADORA" to "ASOC.PU.",
+        "ASOCIACION PRO VIVIENDA" to "A.P.V.",
+        "ASOCIACION PRO VIVIENDA DE INTERES SOCIAL" to "ASOC.PVIS.",
+        "ASOCIACION PRO VIVIENDA UNIDAD VECINAL" to "ASOC.PVUV.",
+        "BALNEARIO" to "BAL.",
+        "BARRIO" to "BAR",
+        "CASERIO" to "CAS",
         "CENTRO POBLADO" to "C.P.",
-        "URBANIZACION" to "URB."
+        "CERCADO" to "CER",
+        "COMPLEJO HABITACIONAL" to "C.HAB.",
+        "CONJUNTO HABITACIONAL" to "CONJ. HAB.",
+        "CONJUNTO RESIDENCIAL" to "C.R.",
+        "COOPERATIVA" to "COOP",
+        "COOPERATIVA DE VIVIENDA" to "COOP. VIV.",
+        "FUNDO" to "FDO",
+        "LOTE UNICO" to "L.U.",
+        "LOTIZACION" to "LOT",
+        "POSESION INFORMAL" to "P.I.",
+        "PROGRAMA" to "PRO.",
+        "PROGRAMA DE ADJUDICACION DE LOTES" to "P.A.L.",
+        "PROGRAMA DE VIVIENDA" to "P.V.",
+        "PROGRAMA MUNICIPAL DE VIVIENDA" to "PMV.",
+        "PROYECTO INTEGRAL DE LAS JUNTAS VECINALES" to "PROY.I.J.V.",
+        "PUEBLO JOVEN" to "P.J.",
+        "PUEBLO TRADICIONAL" to "P. T.",
+        "RESIDENCIAL" to "RES.",
+        "SECTOR" to "S.",
+        "SIN HABILITACION" to "SIN. HAB.",
+        "UNIDAD VECINAL" to "U.V.",
+        "URBANIZACION" to "URB.",
+        "URBANIZACION POPULAR" to "URB. POP.",
+        "URBANIZACION POPULAR DE INTERES SOCIAL" to "UPIS",
+        "URBANIZACION PRO VIVIENDA DE INTERES SOCIAL" to "UPVIS",
+        "ZONA" to "Z.",
+        "ZONA INDUSTRIAL" to "Z.I.",
+        "ZONA URBANA" to "Z.U."
     )
 
 // a vía or unidad urbana with its type in front, abbreviated. OTROS is not a word of the address, and a name that

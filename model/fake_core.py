@@ -53,7 +53,7 @@ class FakeCore:
 
     def __init__(self, existing_objects=(), existing_relationships=(), fail_on_post_object=None,
                  fail_put=False, fail_put_status=500, login_response=None, fail_on_record=None, existing_fields=None,
-                 fail_on_update=None):
+                 fail_on_update=None, fail_on_delete=None):
         self.existing_objects = set(existing_objects)
         self.existing_fields = existing_fields or {}  # object name -> list of {"name", "enumOptions"?}
         self.existing_relationships = set(existing_relationships)
@@ -63,6 +63,7 @@ class FakeCore:
         self.login_response = login_response  # override the default {"token": "t"}
         self.fail_on_record = fail_on_record  # object name -> its record POSTs answer 400
         self.fail_on_update = fail_on_update  # object name -> its record PUTs answer 400
+        self.fail_on_delete = fail_on_delete  # object name -> its record DELETEs answer 409
         self.records = {}  # object name -> list of {"id", "attributes"}
         self.requests = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeCoreHandler)
@@ -117,6 +118,17 @@ class FakeCore:
         record["attributes"] = dict(body["attributes"])
         return 200, record
 
+    def _delete(self, path):
+        """A record's DELETE: it leaves the records."""
+        name, record_id = RECORD.match(path).groups()
+        if self.fail_on_delete == name:
+            return 409, {"detail": "In use", "errors": [{"field": "id", "message": "boom-delete"}]}
+        records = self.records.get(name, [])
+        if not any(r["id"] == record_id for r in records):
+            return 404, {"detail": "not found"}
+        self.records[name] = [r for r in records if r["id"] != record_id]
+        return 204, None
+
     def _script(self, method, full_path, body):
         path, _, query = full_path.partition("?")
         if path == "/api/auth/login" and method == "POST":
@@ -127,6 +139,8 @@ class FakeCore:
             return self._records(method, path, query, body)
         if RECORD.match(path) and method == "PUT":
             return self._update(path, body)
+        if RECORD.match(path) and method == "DELETE":
+            return self._delete(path)
         if path == "/api/objects" and method == "GET":
             return 200, [{"name": n} for n in self.existing_objects]
         if path == "/api/objects" and method == "POST":

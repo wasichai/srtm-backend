@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.io.File
 
 class ReglasTest {
     @Test
@@ -62,12 +63,60 @@ class ReglasTest {
                 describir(Domicilio(tipoVia = it, via = "A"))
             }
         )
-        assertEquals(
-            listOf("AA.HH. B", "AA.VV. B", "C.P. B", "URB. B", "CERCADO B", "B"),
-            listOf("ASENTAMIENTO HUMANO", "ASOCIACION DE VIVIENDA", "CENTRO POBLADO", "URBANIZACION", "CERCADO", "OTROS").map {
-                describir(Domicilio(tipoUnidadUrbana = it, unidadUrbana = "B"))
-            }
-        )
+        // every tipo de unidad urbana, with the catastro fiscal's ABREV_UU
+        val unidades =
+            listOf(
+                "AGRUPACION" to "AGRUP B",
+                "ASENTAMIENTO HUMANO" to "AA.HH. B",
+                "ASOCIACION" to "ASOC B",
+                "ASOCIACION DE VIVIENDA" to "ASOC. VIV. B",
+                "ASOCIACION DE VIVIENDA DE INTERES SOCIAL" to "ASOC.VIS. B",
+                "ASOCIACION DE VIVIENDA E INTERES SOCIAL" to "ASOC.VIS. B",
+                "ASOCIACION DE VIVIENDA POPULAR DE INTERES SOCIAL" to "ASOC.V.POPIS B",
+                "ASOCIACION POPULAR URBANIZADORA" to "ASOC.PU. B",
+                "ASOCIACION PRO VIVIENDA" to "A.P.V. B",
+                "ASOCIACION PRO VIVIENDA DE INTERES SOCIAL" to "ASOC.PVIS. B",
+                "ASOCIACION PRO VIVIENDA UNIDAD VECINAL" to "ASOC.PVUV. B",
+                "BALNEARIO" to "BAL. B",
+                "BARRIO" to "BAR B",
+                "CASERIO" to "CAS B",
+                "CENTRO POBLADO" to "C.P. B",
+                "CERCADO" to "CER B",
+                "COMPLEJO HABITACIONAL" to "C.HAB. B",
+                "CONJUNTO HABITACIONAL" to "CONJ. HAB. B",
+                "CONJUNTO RESIDENCIAL" to "C.R. B",
+                "COOPERATIVA" to "COOP B",
+                "COOPERATIVA DE VIVIENDA" to "COOP. VIV. B",
+                "FUNDO" to "FDO B",
+                "LOTE UNICO" to "L.U. B",
+                "LOTIZACION" to "LOT B",
+                "POSESION INFORMAL" to "P.I. B",
+                "PROGRAMA" to "PRO. B",
+                "PROGRAMA DE ADJUDICACION DE LOTES" to "P.A.L. B",
+                "PROGRAMA DE VIVIENDA" to "P.V. B",
+                "PROGRAMA MUNICIPAL DE VIVIENDA" to "PMV. B",
+                "PROYECTO INTEGRAL DE LAS JUNTAS VECINALES" to "PROY.I.J.V. B",
+                "PUEBLO JOVEN" to "P.J. B",
+                "PUEBLO TRADICIONAL" to "P. T. B",
+                "RESIDENCIAL" to "RES. B",
+                "SECTOR" to "S. B",
+                "SIN HABILITACION" to "SIN. HAB. B",
+                "UNIDAD VECINAL" to "U.V. B",
+                "URBANIZACION" to "URB. B",
+                "URBANIZACION POPULAR" to "URB. POP. B",
+                "URBANIZACION POPULAR DE INTERES SOCIAL" to "UPIS B",
+                "URBANIZACION PRO VIVIENDA DE INTERES SOCIAL" to "UPVIS B",
+                "ZONA" to "Z. B",
+                "ZONA INDUSTRIAL" to "Z.I. B",
+                "ZONA URBANA" to "Z.U. B"
+            )
+        assertEquals(unidades.map { it.second }, unidades.map { describir(Domicilio(tipoUnidadUrbana = it.first, unidadUrbana = "B")) })
+    }
+
+    @Test
+    fun `the abbreviations of the unidades urbanas are the catastro fiscal's ABREV_UU`() {
+        val tipos = File("model/data/tipos_unidad_urbana.csv").readLines().drop(1).map { it.split(",") }
+        assertEquals(tipos.associate { (_, nombre, abreviatura) -> nombre to abreviatura }, ABREVIATURA_UNIDAD_URBANA)
     }
 
     @Test
@@ -75,6 +124,7 @@ class ReglasTest {
         assertEquals("JR. LIMA", describir(Domicilio(tipoVia = "JIRON", via = "JR. LIMA")))
         assertEquals("JIRON LIMA", describir(Domicilio(tipoVia = "JIRON", via = "JIRON LIMA")))
         assertEquals("URB. LOS PINOS", describir(Domicilio(tipoUnidadUrbana = "URBANIZACION", unidadUrbana = "URB. LOS PINOS")))
+        assertEquals("ASOC. VIV. LAS VEGAS", describir(Domicilio(tipoUnidadUrbana = "ASOCIACION DE VIVIENDA", unidadUrbana = "ASOC. VIV. LAS VEGAS")))
         // a word that only starts like the type is the name's
         assertEquals("CA. CALLEJON OSCURO", describir(Domicilio(tipoVia = "CALLE", via = "CALLEJON OSCURO")))
         // a type alone, with no name, is still written
@@ -133,7 +183,7 @@ class ReglasTest {
                 provincia = "CHANCHAMAYO",
                 distrito = "PERENE"
             )
-        assertEquals("JR. LIMA, N° 12, MZ. A, LT. 5, KM. 1, CERCADO II MESETA, JUNIN-CHANCHAMAYO-PERENE", describirUbicacion(padron))
+        assertEquals("JR. LIMA, N° 12, MZ. A, LT. 5, KM. 1, CER II MESETA, JUNIN-CHANCHAMAYO-PERENE", describirUbicacion(padron))
     }
 
     @Test

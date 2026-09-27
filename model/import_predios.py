@@ -64,9 +64,10 @@ ADDRESS_TAG = re.compile(r"(Nro\.Alt|Nro|Mz|Lt|Block|Dpto|Int|Km)\.:\s*(\S+)")
 DOMICILIO_SUFFIX = re.compile(r"^(?P<dir>.*?)\s*,?\s*Dist\.\s*(?P<dist>.*?)\s+Prov\.\s*(?P<prov>.*?)\s+Dpto\.\s*(?P<dpto>.*?)\s*$")
 SECTOR_MANZANA = re.compile(r"^\s*(\S+)\s*-\s*(\S+)\s*$")
 
-# prefix as written in the padrón -> the model's option. longest first, so "ASOCIACION DE VIVIENDA" wins over
-# "ASOCIACION". anything else keeps its whole text as the name, under OTROS. the abbreviations are also the ones the
-# portal writes an address with (Reglas.kt in srtm-backend, forms/direccion.ts in srtm-ui): each must be read back
+# prefix as written in the padrón -> the model's option. the longest wins, so "ASOCIACION DE VIVIENDA" over
+# "ASOCIACION". anything else keeps its whole text as the name: a vía under OTROS, a unidad urbana with no type. the
+# abbreviations are also the ones the portal writes an address with (Reglas.kt in srtm-backend, forms/direccion.ts in
+# srtm-ui): each must be read back
 TIPOS_VIA = [
     ("PROLONGACION", "PROLONGACION"), ("CARROZABLE", "CARROZABLE"), ("CARRETERA", "CARRETERA"), ("AVENIDA", "AVENIDA"),
     ("MALECON", "MALECON"), ("ALAMEDA", "ALAMEDA"), ("PASAJE", "PASAJE"), ("TROCHA", "TROCHA"), ("CAMINO", "CAMINO"),
@@ -75,17 +76,38 @@ TIPOS_VIA = [
     # the padrón's misspellings of CARROZABLE
     ("CACARROZABLE", "CARROZABLE"), ("CORRAZABLE", "CARROZABLE"), ("CORROZABLE", "CARROZABLE"), ("CARROZBLE", "CARROZABLE"),
 ]
-TIPOS_UNIDAD_URBANA = [
-    ("ASOCIACION DE VIVIENDA DE INTERES SOCIAL", "ASOCIACION DE VIVIENDA DE INTERES SOCIAL"),
-    ("ASOCIACION DE VIVIENDA E INTERES SOCIAL", "ASOCIACION DE VIVIENDA E INTERES SOCIAL"),
-    ("ASOCIACION DE VIVIENDA", "ASOCIACION DE VIVIENDA"), ("ASENTAMIENTO HUMANO", "ASENTAMIENTO HUMANO"),
-    ("COMUNIDAD CAMPESINA", "COMUNIDAD CAMPESINA"), ("HABILITACION URBANA", "HABILITACION URBANA"),
-    ("COMUNIDAD NATIVA", "COMUNIDAD NATIVA"), ("CENTRO POBLADO", "CENTRO POBLADO"), ("URBANIZACION", "URBANIZACION"),
-    ("PUEBLO JOVEN", "PUEBLO JOVEN"), ("HABILITACION", "HABILITACION URBANA"), ("COOPERATIVA", "COOPERATIVA"),
-    ("AGRUPACION", "AGRUPACION"), ("LOTIZACION", "LOTIZACION"), ("ASOCIACION", "ASOCIACION"), ("CERCADO", "CERCADO"),
-    ("CASERIO", "CASERIO"), ("SECTOR", "SECTOR"), ("ANEXO", "ANEXO"), ("AA.HH.", "ASENTAMIENTO HUMANO"),
-    ("AA.VV.", "ASOCIACION DE VIVIENDA"), ("URB.", "URBANIZACION"), ("C.P.", "CENTRO POBLADO"), ("ZONA", "ZONA"),
-]
+
+
+def read_tipos_unidad_urbana(path=os.path.join(HERE, "data", "tipos_unidad_urbana.csv")):
+    """The srtm's tipos de unidad urbana, the catastro fiscal's TIPO_UU domain: one row per type with its codigo, its
+    nombre (the model's option) and its ABREV_UU abreviatura (the one the portal writes an address with)."""
+    with open(path, encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+# the padrón's words for a unidad urbana the srtm names otherwise: an ANEXO is a CENTRO POBLADO, a HABILITACION URBANA
+# an URBANIZACION and a CENTRO URBANO INFORMAL a POSESION INFORMAL, unless the name after them starts with its own type
+# (split_tipo)
+PALABRAS_DEL_PADRON = {
+    "ANEXO": "CENTRO POBLADO", "HABILITACION URBANA": "URBANIZACION", "HABILITACION": "URBANIZACION",
+    "CENTRO URBANO INFORMAL": "POSESION INFORMAL",
+}
+
+
+def _tipos_unidad_urbana(tipos):
+    """Every type whole and abbreviated, the padrón's words, and AA.VV.: the ASOCIACION DE VIVIENDA the portal wrote
+    before ABREV_UU. ASOC.VIS., which 48 and 53 share, is read as the first the file lists: ASOCIACION DE VIVIENDA DE
+    INTERES SOCIAL."""
+    abreviaturas = {}
+    for t in tipos:
+        abreviaturas.setdefault(t["abreviatura"], t["nombre"])
+    return [
+        *((t["nombre"], t["nombre"]) for t in tipos), *abreviaturas.items(), *PALABRAS_DEL_PADRON.items(),
+        ("AA.VV.", "ASOCIACION DE VIVIENDA"),
+    ]
+
+
+TIPOS_UNIDAD_URBANA = _tipos_unidad_urbana(read_tipos_unidad_urbana())
 
 # the padrón numbers the usos of a predio with three digits: 001, 002...
 SECUENCIA_WIDTH = 3
@@ -208,10 +230,10 @@ def parse_address(value):
     }
 
 
-def split_tipo(text, tipos, default="OTROS", anywhere=False):
-    """'AVENIDA LOS OLIVOS' -> ('AVENIDA', 'LOS OLIVOS'). The type must be a whole word followed by a name.
-    anywhere: the type may come after leftovers of the lot ('03-B CERCADO III MESETA'), which are dropped;
-    the earliest type wins, the longest on a tie. No type found: the whole text is the name, under default."""
+def find_tipo(text, tipos, anywhere=False):
+    """The type split_tipo takes from text, as (where it starts, prefix, type, name); None when there is none. With
+    anywhere, a type written whole (or a word of the padrón) comes before an abbreviation: the padrón writes its types
+    whole, and its lot's leftovers may read like one ('LOT 2A CENTRO POBLADO X' is a CENTRO POBLADO)."""
     best = None
     for prefix, tipo in tipos:
         pattern = re.compile(r"(?:^|(?<=[\s(-]))" + re.escape(prefix) + (r"(?=\s)" if not prefix.endswith(".") else r""))
@@ -221,24 +243,42 @@ def split_tipo(text, tipos, default="OTROS", anywhere=False):
         name = text[match.end():].strip(" -")
         if not name:
             continue
-        candidate = (match.start(), -len(prefix), tipo, name)
+        abreviatura = anywhere and prefix != tipo and prefix not in PALABRAS_DEL_PADRON
+        candidate = (abreviatura, match.start(), -len(prefix), prefix, tipo, name)
         if best is None or candidate < best:
             best = candidate
-    if best is None:
+    return None if best is None else (best[1], best[3], best[4], best[5])
+
+
+def split_tipo(text, tipos, default="OTROS", anywhere=False):
+    """'AVENIDA LOS OLIVOS' -> ('AVENIDA', 'LOS OLIVOS'). The type must be a whole word followed by a name.
+    anywhere: the type may come after leftovers of the lot ('03-B CERCADO III MESETA'), which are dropped;
+    the earliest type wins, the longest on a tie. No type found: the whole text is the name, under default.
+    A word of the padrón (PALABRAS_DEL_PADRON) yields to a type its name starts with, written whole."""
+    found = find_tipo(text, tipos, anywhere)
+    if found is None:
         return default, text
-    return best[2], best[3]
+    _, prefix, tipo, name = found
+    propio = find_tipo(name, [(p, t) for p, t in tipos if p == t]) if prefix in PALABRAS_DEL_PADRON else None
+    return (propio[2], propio[3]) if propio else (tipo, name)
 
 
 def split_ubicacion(address):
     """parse_address's vía and habilitación urbana with their type split off, as the srtm's ubicación keeps them:
     'JIRON LIMA' is tipo_via JIRON, via LIMA; '03-B CERCADO III MESETA' is tipo_zona CERCADO, habilitacion_urbana
-    III MESETA (the lot's leftovers dropped). What is missing stays missing."""
+    III MESETA (the lot's leftovers dropped). What is missing stays missing, and a zona of no type has none."""
     out = dict(address)
     if address.get("via"):
         out["tipo_via"], out["via"] = split_tipo(address["via"], TIPOS_VIA)
     if address.get("habilitacion_urbana"):
-        out["tipo_zona"], out["habilitacion_urbana"] = split_tipo(address["habilitacion_urbana"], TIPOS_UNIDAD_URBANA, anywhere=True)
+        out["tipo_zona"], out["habilitacion_urbana"] = split_zona(address["habilitacion_urbana"])
     return out
+
+
+def split_zona(text):
+    """A habilitación of the padrón as (tipo de unidad urbana, name): 'ANEXO - CENTRO POBLADO MIRICHARO' is (CENTRO
+    POBLADO, MIRICHARO), '03-B CERCADO III MESETA' (CERCADO, III MESETA); one of no type is (None, the whole text)."""
+    return split_tipo(text, TIPOS_UNIDAD_URBANA, default=None, anywhere=True)
 
 
 def uso_del_padron(grupo):

@@ -24,16 +24,17 @@ from dataclasses import dataclass
 
 from core_client import Client, CoreError
 from import_predios import (
-    PROGRESS_EVERY, TIPOS_UNIDAD_URBANA, TIPOS_VIA, LoadError, clean_text, parse_address, secuencia_uso, split_tipo,
-    split_ubicacion,
+    PROGRESS_EVERY, TIPOS_UNIDAD_URBANA, TIPOS_VIA, LoadError, clean_text, find_tipo, parse_address, secuencia_uso,
+    split_tipo, split_ubicacion,
 )
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPORT_COLUMNS = ["objeto", "id", "clave", "campo", "antes", "despues", "nota"]
-# a predio's parts that carry a type: (field, its type's field, the types, the name the report gives it)
+# a predio's parts that carry a type: (field, its type's field, the types, the name the report gives it, what one of no
+# type gets: a vía OTROS, a zona none)
 PARTES = [
-    ("via", "tipo_via", TIPOS_VIA, "vía"),
-    ("habilitacion_urbana", "tipo_zona", TIPOS_UNIDAD_URBANA, "zona"),
+    ("via", "tipo_via", TIPOS_VIA, "vía", "OTROS"),
+    ("habilitacion_urbana", "tipo_zona", TIPOS_UNIDAD_URBANA, "zona", None),
 ]
 
 
@@ -50,7 +51,7 @@ def normalizar_predio(attributes):
     if clean_text(attributes.get("tipo_via")):
         return {}
     wanted = {}
-    for field, tipo_field, _, _ in PARTES:
+    for field, tipo_field, _, _, _ in PARTES:
         text = clean_text(attributes.get(field))
         if text and not clean_text(attributes.get(tipo_field)):
             split = split_ubicacion({field: text})
@@ -69,7 +70,7 @@ def notas_predio(attributes):
     portal = bool(clean_text(attributes.get("tipo_via")))
     direccion = clean_text(attributes.get("direccion")) or ""
     notas = []
-    for field, tipo_field, tipos, nombre in PARTES:
+    for field, tipo_field, tipos, nombre, sin_tipo in PARTES:
         text = clean_text(attributes.get(field))
         tipo_actual = clean_text(attributes.get(tipo_field))
         if not text:
@@ -81,22 +82,13 @@ def notas_predio(attributes):
         elif not tipo_actual:
             # only a zona's type may come after other words (split_ubicacion)
             anywhere = field == "habilitacion_urbana"
-            tipo, name = split_tipo(text, tipos, anywhere=anywhere)
-            restos = _restos(text, tipo, name, tipos) if anywhere else None
-            if tipo == "OTROS":
-                notas.append(f"{nombre} sin tipo reconocido: queda OTROS")
+            found = find_tipo(text, tipos, anywhere=anywhere)
+            restos = text[:found[0]].strip(" -") if found and anywhere else None
+            if found is None:
+                notas.append(f"{nombre} sin tipo reconocido: queda {sin_tipo or 'sin tipo'}")
             elif restos:
                 notas.append(f"se descartan restos de lote de la {nombre}: {restos}")
     return notas
-
-
-def _restos(text, tipo, name, tipos):
-    """What split_tipo dropped before the type: the lot's leftovers ('03-B' of '03-B CERCADO III MESETA')."""
-    before = text[:text.rfind(name)].rstrip(" -")
-    for prefix, t in tipos:
-        if t == tipo and before.endswith(prefix):
-            return before[:-len(prefix)].strip(" -") or None
-    return None
 
 
 def normalizar_declaracion(attributes):

@@ -194,8 +194,8 @@ class DropOptionsTests(ApplyCliTestCase):
         new = [o for o in self.tipo_obra if o not in kept]
         self.assertEqual(option_puts, {
             "obra_categoria": kept + new,
-            # a declaración already has an OTROS obra: it stays storable
-            "obra_complementaria": kept + ["OTROS"] + new,
+            # a declaración already has an OTROS obra: it stays storable, after model.json's options
+            "obra_complementaria": kept + new + ["OTROS"],
         })
         self.assertIn("; -CISTERNAS, PISCINAS, LOSAS DEPORTIVAS, PISOS DE CONCRETO, OTROS)", out)
         self.assertIn("; -CISTERNAS, PISCINAS, LOSAS DEPORTIVAS, PISOS DE CONCRETO)", out)

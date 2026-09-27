@@ -17,8 +17,7 @@ import re
 import sys
 
 from core_client import Client, CoreError
-from import_predios import (TIPOS_UNIDAD_URBANA, TIPOS_VIA, LoadError, clean_decimal, clean_text, parse_address, post_all, read_xlsx,
-                            split_tipo)
+from import_predios import TIPOS_VIA, LoadError, clean_decimal, clean_text, parse_address, post_all, read_xlsx, split_tipo, split_zona
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -86,7 +85,8 @@ def read_usos(path):
 
 
 def catalogs_from_rows(rows, ubigeo):
-    """Distinct (tipo, nombre) of the vías and unidades urbanas in the padrón's addresses, in first-seen order."""
+    """Distinct (tipo, nombre) of the vías and unidades urbanas in the padrón's addresses, in first-seen order. A
+    habilitación of no type is no unidad urbana of the catalog: its tipo is required."""
     vias = {}
     unidades = {}
     for row in rows:
@@ -94,8 +94,8 @@ def catalogs_from_rows(rows, ubigeo):
         if address["via"]:
             tipo, nombre = split_tipo(address["via"], TIPOS_VIA)
             vias.setdefault((tipo, nombre, ubigeo), {"tipo_via": tipo, "nombre": nombre, "ubigeo": ubigeo})
-        if address["habilitacion_urbana"]:
-            tipo, nombre = split_tipo(address["habilitacion_urbana"], TIPOS_UNIDAD_URBANA, anywhere=True)
+        tipo, nombre = split_zona(address["habilitacion_urbana"]) if address["habilitacion_urbana"] else (None, None)
+        if tipo:
             unidades.setdefault((tipo, nombre, ubigeo), {"tipo_unidad_urbana": tipo, "nombre": nombre, "ubigeo": ubigeo})
     return list(vias.values()), list(unidades.values())
 
