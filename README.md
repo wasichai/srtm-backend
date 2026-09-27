@@ -388,6 +388,18 @@ Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
   `null` **conserva** la geometría guardada. El portal la reemplaza, nunca la borra.
 - **Lo que no se edita:** en una edición, `codigo`, `numero_declaracion`, `fecha_registro` y el domicilio fiscal se
   conservan aunque el cuerpo diga otra cosa. Una fila de una lista nunca cambia de contribuyente.
+- **Motivo** (`Motivo.kt`): INSCRIPCIÓN al inscribir un contribuyente o presentar una DJ. Cada edición desde el portal
+  (`PUT` del contribuyente o de la declaración) lo pasa a ACTUALIZACIÓN, diga lo que diga el cuerpo, sin renumerar ni
+  guardar historial. Una DJ anulada no se edita (ver *Anulación y baja*) y un DESCARGO nunca se pisa.
+  - No son una edición las filas de sus listas (domicilios, niveles, transferentes…) ni los valores que el condominio
+    recalcula en los otros condóminos.
+  - Los importados del padrón no traen motivo, código ni número: editarlos los pasa a ACTUALIZACIÓN, pero no les
+    asigna código ni número (el portal muestra "SIN CÓDIGO (padrón)").
+- **Medio de determinación y modificación de oficio:** de solo lectura en el portal; se guardan como vienen
+  (DECLARACIÓN JURADA al inscribir o presentar).
+  - La modificación de oficio (FISCALIZACIÓN, CRUCE DE INFORMACIÓN, RESOLUCIÓN) dice por qué la administración cambió
+    una declaración sin que el contribuyente la presentara, con medio de determinación FISCALIZACIÓN o DE OFICIO.
+  - Solo la fijará un flujo de fiscalización, que el portal no tiene (fuera de alcance: siguientes pasos).
 - **Escrituras:** el `update` de Core reemplaza **todos** los campos editables. Por eso el portal fusiona lo que envía
   con el registro guardado: un campo añadido desde el admin, que el DTO no conoce, no se borra al guardar desde el
   portal. Un campo enviado como `null`, en cambio, sí se borra.
@@ -426,10 +438,13 @@ tunelizada: `WASICHAI_TEST_DB_HOST`, `_PORT`, `_NAME` (debe terminar en `_test`,
 ## Siguientes pasos (fuera de este alcance)
 
 - **Datos:** completar `model/data/obras_complementarias.csv` con el anexo oficial, y cargar el GeoJSON del catastro
-  fiscal cuando esté disponible.
+  fiscal cuando esté disponible. Si se decide, asignar código y número a los contribuyentes y declaraciones importados
+  del padrón.
 - **Integraciones:** PIDE RENIEC. El fondo del mapa es OpenStreetMap; una capa WMS/WMTS municipal se puede publicar
   con GeoServer.
 - **Cálculo y cobranza:** impuesto predial (tramos UIT), arbitrios, deuda y cuotas, pagos y recibos.
+- **Fiscalización:** el flujo (rol y pantallas) que determina de oficio una declaración: medio de determinación
+  FISCALIZACIÓN o DE OFICIO y su modificación de oficio.
 - **En el modelo:** workflows y plantillas de documentos.
 
 El frontend web está en `srtm-ui`.

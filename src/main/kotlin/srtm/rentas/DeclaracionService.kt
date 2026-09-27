@@ -64,6 +64,7 @@ class DeclaracionService(
             body.copy(
                 numeroDeclaracion = stored.numeroDeclaracion,
                 secuenciaUso = secuenciaUso(body.secuenciaUso),
+                motivo = motivoAlEditar(stored.motivo),
                 estado = stored.estado,
                 motivoAnulacion = stored.motivoAnulacion,
                 fechaAnulacion = stored.fechaAnulacion
