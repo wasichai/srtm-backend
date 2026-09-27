@@ -24,18 +24,13 @@ class ReglasFueraDelPortal(
         if (change.kind != RecordChangeKind.CREATED && change.kind != RecordChangeKind.UPDATED) return
         val derivados = completar(change.objectName, change.before, change.after ?: return)
         if (derivados.isEmpty()) return
-        val escribibles =
-            metadata
-                .definitionOf(change.objectName)
-                .fields
-                .filter { it.editable }
-                .mapTo(HashSet()) { it.name }
-        val cambios = derivados.filterKeys { it in escribibles }
+        val definicion = metadata.definitionOf(change.objectName)
+        val cambios = Registros.soloEscribibles(definicion, derivados)
         if (cambios.isEmpty()) return
         val records = recordService.getObject()
         val stored = records.get(change.objectName, change.recordId).attributes
         try {
-            records.update(change.objectName, change.recordId, RecordRequest(stored.filterKeys { it in escribibles } + cambios))
+            records.update(change.objectName, change.recordId, RecordRequest(Registros.soloEscribibles(definicion, stored) + cambios))
         } catch (_: ForbiddenException) {
             // a caller that may create but not update: the record stays as they saved it
         }
@@ -44,7 +39,8 @@ class ReglasFueraDelPortal(
 
 // the portal's rules that read one record alone, as its services apply them (Reglas.kt): object -> the derived
 // fields and the values they take. rules that read other records (codes, numbering, the fiscal domicilio copied to
-// the contribuyente, condominio) stay in the services: a record saved outside the portal skips them
+// the contribuyente, condominio) stay in the services: a record saved outside the portal skips them. so does a
+// predio's direccion: model/normalizar_padron.py splits the padrón's vías through core's api and keeps its text
 private val REGLAS: Map<String, (Map<String, Any?>) -> Map<String, Any?>> =
     mapOf(
         CONTRIBUYENTE to { a ->
@@ -52,8 +48,7 @@ private val REGLAS: Map<String, (Map<String, Any?>) -> Map<String, Any?>> =
             mapOf("tipo_persona" to (tipoPersona(c.tipoContribuyente) ?: c.tipoPersona), "nombre_completo" to nombreCompleto(c))
         },
         DOMICILIO to { a -> mapOf("descripcion" to describir(Records.read<Domicilio>("", a))) },
-        OBRA_COMPLEMENTARIA to { a -> mapOf("total_metrado" to totalMetrado(Records.read<ObraComplementaria>("", a))) },
-        PREDIO to { a -> mapOf("direccion" to describirUbicacion(Records.read<Predio>("", a))) }
+        OBRA_COMPLEMENTARIA to { a -> mapOf("total_metrado" to totalMetrado(Records.read<ObraComplementaria>("", a))) }
     )
 
 // what a save outside the portal (the admin, core's own api) leaves for those rules to complete: field -> value.

@@ -382,16 +382,17 @@ Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
 Guardado fuera del portal (el admin, la API de registros de Core; `ReglasFueraDelPortal.kt`): Core no tiene un gancho
 antes de escribir, sus `RecordChangeListener` corren justo después, dentro de la misma petición. El listener completa el
 registro con una segunda escritura, como el mismo usuario y solo en los campos que puede escribir:
-- **Derivados de un solo registro:** `tipo_persona` y `nombre_completo` del contribuyente, `descripcion` del domicilio,
-  `total_metrado` de la obra complementaria y `direccion` del predio (con `tipo_via`), con las mismas funciones de
-  `Reglas.kt` que usan los servicios.
+- **Derivados de un solo registro:** `tipo_persona` y `nombre_completo` del contribuyente, `descripcion` del domicilio y
+  `total_metrado` de la obra complementaria, con las mismas funciones de `Reglas.kt` que usan los servicios.
 - **Cuándo:** un registro nuevo recibe solo los derivados que dejó vacíos (el importador conserva el texto del padrón).
   Uno editado recibe los que cambian porque cambió aquello de lo que salen, salvo que esa misma escritura los fije a
   mano. Lo que el portal ya guardó derivado no se vuelve a escribir.
-- **Solo por el portal** (leen otros registros): numeración y códigos (`codigo`, `numero_declaracion`, `fecha_registro`
-  del contribuyente; `numero_declaracion` de la DJ; `codigo` y `numero_registro` del predio), el domicilio fiscal
-  copiado al contribuyente, el condominio (condición, % y valores de todo el grupo), la validación del documento
-  (formato y duplicados) y los valores por defecto de una inscripción o una DJ nueva. Desde el admin no se aplican.
+- **Solo por el portal:** las reglas que leen otros registros: numeración y códigos (`codigo`, `numero_declaracion`,
+  `fecha_registro` del contribuyente; `numero_declaracion` de la DJ; `codigo` y `numero_registro` del predio), el
+  domicilio fiscal copiado al contribuyente, el condominio (condición, % y valores de todo el grupo), la validación del
+  documento (formato y duplicados) y los valores por defecto de una inscripción o una DJ nueva. También la `direccion`
+  del predio: `normalizar_padron.py` separa por esta API el tipo de vía del padrón y conserva su texto, y el portal la
+  rearma al guardar la ubicación. Desde el admin no se aplican.
 
 ## Tests
 

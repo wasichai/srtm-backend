@@ -25,7 +25,7 @@ class ReglasFueraDelPortalTest {
             "departamento" to "JUNIN",
             "provincia" to "CHANCHAMAYO",
             "distrito" to "PERENE",
-            "descripcion" to "AVENIDA MARGINAL, N° 234, JUNIN-CHANCHAMAYO-PERENE"
+            "descripcion" to "AV. MARGINAL, N° 234, JUNIN-CHANCHAMAYO-PERENE"
         )
 
     @Test
@@ -64,7 +64,7 @@ class ReglasFueraDelPortalTest {
     fun `a new domicilio is described, and an edited one described again`() {
         assertEquals(mapOf("descripcion" to domicilio["descripcion"]), completar(DOMICILIO, null, domicilio - "descripcion"))
         assertEquals(
-            mapOf("descripcion" to "AVENIDA MARGINAL, N° 240, JUNIN-CHANCHAMAYO-PERENE"),
+            mapOf("descripcion" to "AV. MARGINAL, N° 240, JUNIN-CHANCHAMAYO-PERENE"),
             completar(DOMICILIO, domicilio, domicilio + ("numero" to "240"))
         )
     }
@@ -81,12 +81,13 @@ class ReglasFueraDelPortalTest {
         )
     }
 
+    // model/normalizar_padron.py splits the padrón's vías through core's api and keeps its direccion: the portal
+    // rebuilds it when someone saves the predio's ubicación there
     @Test
-    fun `a predio with the srtm's ubicacion gets its direccion, an imported one keeps the padron's`() {
-        val importado = mapOf("direccion" to "JR. LIMA 123", "via" to "LIMA", "numero" to "123", "tipo_via" to null)
-        assertEquals(emptyMap<String, Any?>(), completar(PREDIO, importado, importado + ("numero" to "125")))
-        val ubicado = importado + mapOf("tipo_via" to "JIRON", "distrito" to "PERENE")
-        assertEquals(mapOf("direccion" to "JIRON LIMA, N° 123, PERENE"), completar(PREDIO, importado, ubicado))
+    fun `a predio keeps its direccion when its via is split outside the portal`() {
+        val importado = mapOf("direccion" to "JR. LIMA 123", "via" to "JR. LIMA", "numero" to "123", "tipo_via" to null)
+        val normalizado = importado + mapOf("tipo_via" to "JIRON", "via" to "LIMA")
+        assertEquals(emptyMap<String, Any?>(), completar(PREDIO, importado, normalizado))
     }
 
     // the portal already sets them, and the listener's own write only changes derived fields: neither asks for more

@@ -54,9 +54,9 @@ class ReglasFueraDelPortalApiTest : WasichaiIntegrationTest() {
                     "numero" to "234"
                 )
             )
-        assertEquals("AVENIDA MARGINAL, N° 234, JUNIN-CHANCHAMAYO-PERENE", registro(DOMICILIO, domicilio)["descripcion"].asString())
+        assertEquals("AV. MARGINAL, N° 234, JUNIN-CHANCHAMAYO-PERENE", registro(DOMICILIO, domicilio)["descripcion"].asString())
         guardar(DOMICILIO, domicilio, "numero" to "240")
-        assertEquals("AVENIDA MARGINAL, N° 240, JUNIN-CHANCHAMAYO-PERENE", registro(DOMICILIO, domicilio)["descripcion"].asString())
+        assertEquals("AV. MARGINAL, N° 240, JUNIN-CHANCHAMAYO-PERENE", registro(DOMICILIO, domicilio)["descripcion"].asString())
     }
 
     @Test
