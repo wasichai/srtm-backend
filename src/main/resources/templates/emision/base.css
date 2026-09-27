@@ -168,3 +168,46 @@ body {
 .importe {
     text-align: right;
 }
+
+/* a table's totals row (the HR's predios) */
+.tabla .total td {
+    background: #efefef;
+    font-weight: bold;
+}
+
+/* the HR's impuesto anual: the figure the cuotas split, boxed apart */
+.anual {
+    width: 100%;
+    border-collapse: collapse;
+    border-top: 0.8pt solid #000;
+}
+
+.anual td {
+    padding: 1.5mm 2mm;
+    font-size: 9pt;
+    font-weight: bold;
+    vertical-align: middle;
+}
+
+.anual .etiqueta {
+    font-size: 7pt;
+    color: #000;
+}
+
+.marca {
+    border: 0.8pt solid #000;
+    padding: 0.3mm 1.5mm;
+    margin-left: 2mm;
+    font-size: 7pt;
+}
+
+.contado {
+    font-weight: bold;
+    padding: 1.2mm 2mm 0.5mm 2mm;
+}
+
+.nota {
+    font-size: 6.5pt;
+    color: #333;
+    padding: 0 2mm 1.2mm 2mm;
+}

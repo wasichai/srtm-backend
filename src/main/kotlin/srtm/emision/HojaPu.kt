@@ -211,16 +211,16 @@ private fun anioMes(
         else -> "%02d/%d".format(mes, anio)
     }
 
-private fun unir(
+internal fun unir(
     separador: String,
     vararg partes: String?
 ): String = partes.mapNotNull { it?.trim()?.ifEmpty { null } }.joinToString(separador)
 
 // 1,234.56: the thousands with a comma and the cents with a point, as the municipality's forms
-private fun numero(valor: BigDecimal?): String = valor?.let { DecimalFormat("#,##0.00", PUNTO).format(it.setScale(2, RoundingMode.HALF_UP)) }.orEmpty()
+internal fun numero(valor: BigDecimal?): String = valor?.let { DecimalFormat("#,##0.00", PUNTO).format(it.setScale(2, RoundingMode.HALF_UP)) }.orEmpty()
 
 // an amount; one not declared prints 0.00
-private fun soles(valor: BigDecimal?): String = "S/ ${numero(valor ?: BigDecimal.ZERO)}"
+internal fun soles(valor: BigDecimal?): String = "S/ ${numero(valor ?: BigDecimal.ZERO)}"
 
 private val PUNTO = DecimalFormatSymbols(Locale.US)
-private val FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+internal val FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy")

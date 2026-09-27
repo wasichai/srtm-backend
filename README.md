@@ -598,6 +598,7 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET | `/api/gis/objects/{catastro_fiscal\|predio}/features?bbox&geometry=lote_geom` | de wasichai-gis: los lotes del área visible, para el mapa |
 | GET | `/api/srtm/documentos/{tipo}/{numero}` | los apellidos y nombres que RENIEC da de un DNI; 404 si no hay datos o no hay convenio ([PIDE RENIEC](#pide-reniec)) |
 | GET | `/api/srtm/predios/{id}/pu?anio&contribuyente` | la PU del predio en PDF, inline; 404 sin DJ vigente en el año, 409 con `titulares` si hay varios y falta `contribuyente` ([Emisión de documentos](#emisión-de-documentos)) |
+| GET | `/api/srtm/contribuyentes/{id}/hr?anio` | la HR del contribuyente en PDF, inline, con el impuesto y las cuotas de `/liquidacion`; 422 con `faltan` sin parámetros del año, 404 sin DJ vigente en el año ([Emisión de documentos](#emisión-de-documentos)) |
 
 Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
 - **Inscripción:** el backend asigna `codigo` (6 dígitos, correlativo), `numero_declaracion` y `fecha_registro`.
@@ -737,8 +738,8 @@ PIDE RENIEC; sin ella (404), se escriben a mano con fuente MANUAL.
 ## Emisión de documentos
 
 wasichai no genera PDF en el servidor: el paquete `srtm.emision` trae su propia infraestructura. De la épica
-wasichai/srtm-backend#37, esta es la PU (Predio Urbano); la HR (wasichai/srtm-backend#40) y la emisión masiva
-(wasichai/srtm-backend#41) se construyen encima.
+wasichai/srtm-backend#37, aquí están la PU (Predio Urbano) y la HR (Hoja de Resumen); la emisión masiva
+(wasichai/srtm-backend#41) se construye encima.
 
 - **`PdfRenderer.render(template, model)`:** una plantilla de `templates/emision/` a PDF.
   - Thymeleaf standalone (`TemplateEngine` + `ClassLoaderTemplateResolver`, sin MVC: la app es WebFlux) arma el
@@ -751,7 +752,7 @@ wasichai/srtm-backend#37, esta es la PU (Predio Urbano); la HR (wasichai/srtm-ba
   archivo. Usa archivos temporales (`MemoryUsageSetting.setupTempFileOnly()`), para que la masiva no llene la memoria.
 - **`DocumentosPrediales`:** la única fachada para los endpoints y la masiva.
   - `pu(predioId, contribuyenteId?, anio)` devuelve un `Documento(nombre, bytes)`.
-  - `hr(contribuyenteId, anio)` es por ahora un stub que lanza `NotImplementedError`.
+  - `hr(contribuyenteId, anio)` devuelve la HR del contribuyente, también como `Documento`.
   - Lee Core como el usuario, a través de `Registros`, y dibuja el PDF fuera del hilo de la petición.
 - **La PU** (`templates/emision/pu.html`, con `HojaPu.kt` que deja cada valor ya formateado):
   - Una por predio y titular, con sus DJ **vigentes** del año. Cada `secuencia_uso` es una sección "Uso N.°".
@@ -766,6 +767,22 @@ wasichai/srtm-backend#37, esta es la PU (Predio Urbano); la HR (wasichai/srtm-ba
   - 404 si el predio no tiene DJ vigente ese año (una ANULADA no se emite) o si `contribuyente` no lo declara.
   - 409 si hay más de un titular y falta `contribuyente`. El problem+json agrega
     `titulares: [{id, nombre, documento}]` para elegir.
+- **La HR** (`templates/emision/hr.html`, con `HojaHr.kt`), una por contribuyente y año, con la misma cabecera y el
+  mismo CSS que la PU:
+  - Contribuyente: código, nombre o razón social, documento, domicilio fiscal completo (descripción y distrito /
+    provincia / departamento) y la condición especial (pensionista…) que declaren sus DJ, si la hay.
+  - Relación de predios: una fila por DJ **vigente** del año (un predio con dos usos tiene dos), con código,
+    dirección, uso, autoavalúo, % de propiedad y valor afecto, y una fila de totales.
+  - Determinación del impuesto: UIT, base imponible, cada tramo (desde, hasta, alícuota, monto gravado, impuesto), el
+    impuesto calculado, el mínimo y el impuesto anual, con la marca "Se aplica el mínimo" cuando corresponde.
+  - Cuotas 1 a 4 con monto y vencimiento, la línea "Al contado: <anual> hasta el <vencimiento 1>" y la nota "Las
+    cuotas 2 a 4 se reajustan por IPM (TUO LTM art. 15)".
+  - Las cifras salen de `LiquidacionService.determinar`, la misma liquidación que responde `/liquidacion`: la HR y el
+    endpoint no pueden diferir.
+- **Endpoint** `GET /api/srtm/contribuyentes/{id}/hr?anio=` (sin `anio`, el año en curso):
+  - Responde `application/pdf` con `Content-Disposition: inline; filename="HR-<codigo>-<anio>.pdf"`.
+  - 422 si falta un parámetro tributario del año. El problem+json agrega `faltan` (como en `/liquidacion`).
+  - 404 si el contribuyente no existe o no tiene DJ vigente ese año.
 - **Tiempo:** unos 80 ms por PU de dos usos solo en dibujar el PDF (`HojaPuTest`). `PuApiTest` mide 100 PU seguidas
   por la API, con las lecturas de Core, y lo imprime en la salida de `integrationTest`.
 
@@ -781,7 +798,7 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`,
   `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…), `Records`,
   `Registros`, `srtm.pide` (`PideReniecTest`, contra un servidor local) y `srtm.emision` (`PdfRendererTest`,
-  `PdfMergerTest`, `HojaPuTest`, que leen el PDF de vuelta con PDFBox).
+  `PdfMergerTest`, `HojaPuTest`, `HojaHrTest`, que leen el PDF de vuelta con PDFBox).
 - **Integración** (`@Tag("integration")`): `SrtmSmokeTest` y las clases `*ApiTest`, que llaman a la API del portal
   sobre la app entera y PostGIS. Heredan de `SrtmApiTest`: el modelo aplicado como lo hace `apply.py`, el token del
   admin de desarrollo y las llamadas. Cada endpoint de `RentasController` y `DocumentosController` tiene un caso feliz
