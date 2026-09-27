@@ -92,7 +92,8 @@ Con el servidor corriendo y `develop/.env` cargado:
 
 ```bash
 cd model
-python3 apply.py                                   # 18 objetos + 10 relaciones; idempotente
+python3 apply.py                                   # 19 objetos + 10 relaciones; idempotente
+python3 import_parametros.py                       # UIT, tramos y mínimo del predial; idempotente
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --limit 200
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"
