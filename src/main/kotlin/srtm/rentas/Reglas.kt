@@ -1,0 +1,111 @@
+package srtm.rentas
+
+import java.math.BigDecimal
+
+// the registration rules of the srtm forms, as pure functions: the service applies them, the tests pin them
+
+// tipo_persona (what the padrón import and the lists use) follows the srtm's tipo_contribuyente
+fun tipoPersona(tipoContribuyente: String?): String? =
+    when (tipoContribuyente) {
+        null -> null
+        "PERSONA NATURAL", "SOCIEDAD CONYUGAL" -> "NATURAL"
+        "SUCESION INDIVISA" -> "SUCESION"
+        else -> "JURIDICA"
+    }
+
+// nombre_completo as the padrón writes it: surnames then names for a person, the razón social otherwise
+fun nombreCompleto(c: Contribuyente): String? {
+    val persona = listOfNotNull(c.apellidoPaterno, c.apellidoMaterno, c.nombres).map { it.trim() }.filter { it.isNotEmpty() }
+    return when {
+        tipoPersona(c.tipoContribuyente) == "NATURAL" && persona.isNotEmpty() -> persona.joinToString(" ")
+        !c.razonSocial.isNullOrBlank() -> c.razonSocial.trim()
+        persona.isNotEmpty() -> persona.joinToString(" ")
+        else -> c.nombreCompleto
+    }
+}
+
+// the one-line address of a domicilio, in the srtm's order: vía and number, the building, the lot,
+// the unidad urbana, the sub zona, then DEPARTAMENTO-PROVINCIA-DISTRITO. the portal previews the same text
+// (describirDomicilio in srtm-ui): change both together
+fun describir(d: Domicilio): String {
+    fun join(vararg parts: String?) = parts.mapNotNull { it?.trim()?.ifEmpty { null } }.joinToString(" ").ifEmpty { null }
+    val numero = join(d.numero, d.letra1, d.letra2)
+    val partes =
+        listOf(
+            join(if (d.tipoVia == "OTROS") null else d.tipoVia, d.via),
+            numero?.let { "N° $it" },
+            d.numeroAlterno?.ifBlank { null }?.let { "N° ALT. $it" },
+            join(if (d.edificacion == "OTROS") null else d.edificacion, d.nombreEdificacion),
+            join(if (d.interior == "OTROS") null else d.interior, d.descripcionInterior),
+            d.piso?.ifBlank { null }?.let { "PISO $it" },
+            d.ingreso?.ifBlank { null }?.let { "PUERTA $it" },
+            d.manzana?.ifBlank { null }?.let { "MZ. $it" },
+            d.lote?.ifBlank { null }?.let { "LT. $it" },
+            d.subLote?.ifBlank { null }?.let { "SUB LT. $it" },
+            d.kilometro?.ifBlank { null }?.let { "KM. $it" },
+            join(if (d.tipoUnidadUrbana == "OTROS") null else d.tipoUnidadUrbana, d.unidadUrbana),
+            join(if (d.subZona == "OTROS") null else d.subZona, d.descripcionSubZona),
+            listOfNotNull(d.departamento, d.provincia, d.distrito).filter { it.isNotBlank() }.joinToString("-").ifEmpty { null }
+        )
+    return partes.filterNotNull().joinToString(", ")
+}
+
+// only an active fiscal domicilio is the contribuyente's domicilio_fiscal
+fun esFiscalActivo(d: Domicilio): Boolean = d.tipoDomicilio == "FISCAL" && d.estado != "INACTIVO"
+
+// codes are numbers written with a fixed width, so a text sort is a numeric sort
+const val CODIGO_WIDTH = 6
+
+fun siguienteCodigo(ultimo: String?): String = ((ultimo?.toIntOrNull() ?: 0) + 1).toString().padStart(CODIGO_WIDTH, '0')
+
+// a predio's direccion from its srtm ubicación, in the same order as a domicilio's. only for a predio whose ubicación
+// is the srtm's (tipo_via set): an imported one keeps the padrón's text until someone fills its ubicación
+fun describirUbicacion(p: Predio): String? =
+    if (p.tipoVia == null) {
+        p.direccion
+    } else {
+        describir(
+            Domicilio(
+                tipoVia = p.tipoVia,
+                via = p.via,
+                numero = p.numero,
+                numeroAlterno = p.numeroAlterno,
+                letra1 = p.letra1,
+                letra2 = p.letra2,
+                manzana = p.manzana,
+                lote = p.lote,
+                subLote = p.subLote,
+                kilometro = p.kilometro,
+                edificacion = p.edificacion,
+                nombreEdificacion = p.descripcionEdificacion,
+                interior = p.interior,
+                descripcionInterior = p.descripcionInterior,
+                piso = p.piso,
+                ingreso = p.ingreso,
+                tipoUnidadUrbana = p.tipoZona,
+                unidadUrbana = p.habilitacionUrbana,
+                subZona = p.subZona,
+                descripcionSubZona = p.descripcionSubZona,
+                departamento = p.departamento,
+                provincia = p.provincia,
+                distrito = p.distrito
+            )
+        )
+    }
+
+// a predio's code is sector-manzana-number, as in the padrón: 01-01-0001. the next number of that manzana
+fun prefijoPredio(
+    sector: String,
+    manzana: String
+): String = "${sector.trim().padStart(2, '0')}-${manzana.trim().padStart(2, '0')}-"
+
+fun siguienteCodigoPredio(
+    prefijo: String,
+    ultimo: String?
+): String {
+    val numero = ultimo?.removePrefix(prefijo)?.toIntOrNull() ?: 0
+    return prefijo + (numero + 1).toString().padStart(4, '0')
+}
+
+// what an obra complementaria declares in all: cantidad x metrado, once both are there
+fun totalMetrado(o: ObraComplementaria): BigDecimal? = if (o.cantidad == null || o.metrado == null) null else o.cantidad.multiply(o.metrado)

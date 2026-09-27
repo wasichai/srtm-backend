@@ -200,28 +200,37 @@ def validate(model):
 # payload builders (pure)
 # ---------------------------------------------------------------------------
 
+def field_payload(model, f):
+    field = {
+        "name": f["name"],
+        "label": f["label"],
+        "type": f["type"],
+        "required": f.get("required", False),
+        "unique": f.get("unique", False),
+    }
+    if "description" in f:
+        field["description"] = f["description"]
+    if f["type"] == "ENUM":
+        field["enumOptions"] = model["enums"][f["enum"]]
+    return field
+
+
 def object_payload(model, obj):
-    fields = []
-    for f in obj["fields"]:
-        field = {
-            "name": f["name"],
-            "label": f["label"],
-            "type": f["type"],
-            "required": f.get("required", False),
-            "unique": f.get("unique", False),
-        }
-        if "description" in f:
-            field["description"] = f["description"]
-        if f["type"] == "ENUM":
-            field["enumOptions"] = model["enums"][f["enum"]]
-        fields.append(field)
     return {
         "name": obj["name"],
         "label": obj["label"],
         "pluralLabel": obj["pluralLabel"],
         "description": obj.get("description", ""),
-        "fields": fields,
+        "fields": [field_payload(model, f) for f in obj["fields"]],
     }
+
+
+def missing_options(model, field, existing):
+    """Options of an ENUM field in model.json that Core does not have yet, in model order."""
+    if field["type"] != "ENUM":
+        return []
+    have = set(existing.get("enumOptions") or [])
+    return [o for o in model["enums"][field["enum"]] if o not in have]
 
 
 def relationship_payload(rel):
@@ -267,16 +276,67 @@ def _apply_required_put(client, rel):
     return True
 
 
+def _fields_by_name(data):
+    if isinstance(data, dict):
+        data = data.get("items", data.get("content", []))
+    return {f["name"]: f for f in (data or [])}
+
+
+def sync_object(client, model, obj):
+    """An object that already exists: add the fields model.json has and Core lacks, and the ENUM options
+    it lacks. Additive only: nothing is renamed, retyped or removed, so imported records stay valid.
+    Returns (added, updated), or None when Core refused (already reported)."""
+    name = obj["name"]
+    path = f"/api/metadata/objects/{name}/fields"
+    try:
+        existing = _fields_by_name(client.get(path))
+    except CoreError as e:
+        _fatal("GET", path, e)
+        return None
+    added = updated = 0
+    for field in obj["fields"]:
+        current = existing.get(field["name"])
+        if current is None:
+            try:
+                status, _ = client.post(path, field_payload(model, field))
+            except CoreError as e:
+                _fatal("POST", path, e)
+                return None
+            print(f"add    field {name}.{field['name']} ({status})")
+            added += 1
+            continue
+        extra = missing_options(model, field, current)
+        if extra:
+            options = list(current.get("enumOptions") or []) + extra
+            field_path = f"{path}/{field['name']}"
+            try:
+                client.put(field_path, {"enumOptions": options})
+            except CoreError as e:
+                _fatal("PUT", field_path, e)
+                return None
+            print(f"update field {name}.{field['name']} (+{', '.join(extra)})")
+            updated += 1
+    return added, updated
+
+
 def do_apply(client, model):
     created = 0
+    updated = 0
     skipped = 0
 
     existing = _existing_names(client.get("/api/objects"))
     for obj in model["objects"]:
         name = obj["name"]
         if name in existing:
-            print(f"skip   object {name} (exists)")
-            skipped += 1
+            synced = sync_object(client, model, obj)
+            if synced is None:
+                return 1
+            added, changed = synced
+            created += added
+            updated += changed
+            if not added and not changed:
+                print(f"skip   object {name} (exists)")
+                skipped += 1
             continue
         try:
             status, _ = client.post("/api/objects", object_payload(model, obj))
@@ -306,7 +366,7 @@ def do_apply(client, model):
         if not _apply_required_put(client, rel):
             return 1
 
-    print(f"done: {created} created, {skipped} skipped")
+    print(f"done: {created} created, {updated} updated, {skipped} skipped")
     return 0
 
 

@@ -25,15 +25,24 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(validate(self.model), [])
 
     def test_objects_in_topological_order(self):
-        self.assertEqual([o["name"] for o in self.model["objects"]], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(self.model["relationships"]), 2)
+        names = [o["name"] for o in self.model["objects"]]
+        self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
+        self.assertEqual(len(names), 15)
+        self.assertEqual(len(self.model["relationships"]), 10)
+
+    def test_new_contribuyente_fields_are_optional(self):
+        # 11 840 contribuyentes came from the padron without them: a required field would be refused by Core
+        first = {"tipo_persona", "tipo_documento", "numero_documento", "nombre_completo"}
+        contribuyente = next(o for o in self.model["objects"] if o["name"] == "contribuyente")
+        required = {f["name"] for f in contribuyente["fields"] if f.get("required")}
+        self.assertEqual(required, first)
 
     def test_every_enum_option_passes_core_regex(self):
         for name, options in self.model["enums"].items():
             for opt in options:
                 self.assertTrue(enum_option_valid(opt), f"{name}: {opt}")
 
-    def test_both_relations_are_required(self):
+    def test_every_relation_is_required(self):
         self.assertTrue(all(r["required"] for r in self.model["relationships"]))
 
     def test_business_keys_are_unique(self):
@@ -54,7 +63,7 @@ class PayloadTests(unittest.TestCase):
         obj = next(o for o in self.model["objects"] if o["name"] == "contribuyente")
         payload = object_payload(self.model, obj)
         tipo = next(f for f in payload["fields"] if f["name"] == "tipo_documento")
-        self.assertEqual(tipo["enumOptions"], ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION"])
+        self.assertEqual(tipo["enumOptions"], ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION", "PASAPORTE"])
         self.assertTrue(tipo["required"])
         self.assertNotIn("enum", tipo)
         self.assertNotIn("source", tipo)
