@@ -3,12 +3,12 @@ package srtm.rentas
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import wasichai.core.common.ValidationException
-import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.UUID
 
 // the srtm's declaración jurada predial: datos del predio, ubicación (the predio's), transferentes, características
-// (niveles de construcción, obras complementarias), condóminos (the other declarations of the predio) and otros frentes
+// (niveles de construcción, obras complementarias), condóminos (the other declarations of the predio) and otros frentes.
+// every write of a declaración recomputes its condominio (Condominio.kt)
 @Service
 class DeclaracionService(
     private val registros: Registros,
@@ -36,7 +36,7 @@ class DeclaracionService(
         val predio = existente ?: registrarPredio(body.predio ?: throw ValidationException("Falta el predio", "predio_id", "elige un predio o registra uno"))
         val predioId = UUID.fromString(predio.id)
         try {
-            val declaracion = numerar { nueva(body.declaracion, contribuyente, predioId) }
+            val declaracion = registrar(nueva(body.declaracion, contribuyente, predioId))
             return ficha(UUID.fromString(declaracion.id))
         } catch (e: Exception) {
             if (existente == null) registros.delete(PREDIO, predioId)
@@ -48,16 +48,52 @@ class DeclaracionService(
     suspend fun crear(body: Declaracion): Declaracion {
         val contribuyente = body.contribuyente ?: throw ValidationException("Falta el contribuyente", "contribuyente", "es obligatorio")
         val predio = body.predio ?: throw ValidationException("Falta el predio", "predio", "es obligatorio")
-        return numerar { nueva(body, UUID.fromString(contribuyente), UUID.fromString(predio)) }
+        return registrar(nueva(body, UUID.fromString(contribuyente), UUID.fromString(predio)))
     }
 
+    // a declaración that moves to another predio, year or secuencia joins that condominio and leaves its own
     suspend fun actualizar(
         id: UUID,
         body: Declaracion
     ): Declaracion {
         val stored = registros.get(DECLARACION, Declaracion::class.java, id)
         val next = body.copy(numeroDeclaracion = stored.numeroDeclaracion)
-        return registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(next))
+        val seUne = grupoDe(next) != grupoDe(stored)
+        val otros = titulares(next).filter { it.id != id.toString() }
+        val grupo = condominioCon(next, otros, seUne)
+        val saved = registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(grupo.first()))
+        guardarDerivados(grupo.drop(1), otros)
+        if (seUne) recalcular(stored)
+        return saved
+    }
+
+    // with its own lists; the condóminos left are recomputed
+    suspend fun borrarDeclaracion(id: UUID) {
+        val stored = registros.get(DECLARACION, Declaracion::class.java, id)
+        for (lista in listOf(TRANSFERENTE, NIVEL_CONSTRUCCION, OBRA_COMPLEMENTARIA, OTRO_FRENTE)) {
+            listas.listar(lista, Map::class.java, PARENT, id).forEach { registros.delete(lista, UUID.fromString(it["id"].toString())) }
+        }
+        registros.delete(DECLARACION, id)
+        recalcular(stored)
+    }
+
+    // "datos de los condóminos": another contribuyente's declaración of the same predio, year and secuencia, with what
+    // the source declares of the predio and its niveles, obras and otros frentes
+    suspend fun agregarCondomino(
+        id: UUID,
+        body: NuevoCondomino
+    ): Declaracion {
+        val origen = registros.get(DECLARACION, Declaracion::class.java, id)
+        val contribuyente =
+            body.contribuyente?.let { runCatching { UUID.fromString(it) }.getOrNull() }
+                ?: throw ValidationException("Falta el contribuyente", "contribuyente", "elige un contribuyente")
+        contribuyentes.get(contribuyente)
+        val creada = registrar(nueva(delPredio(origen).copy(porcentajeCondominio = body.porcentajeCondominio), contribuyente, UUID.fromString(origen.predio)))
+        val nuevaId = UUID.fromString(creada.id)
+        niveles(id).forEach { agregarNivel(nuevaId, it.copy(id = null, declaracion = null)) }
+        obras(id).forEach { agregarObra(nuevaId, it.copy(id = null, declaracion = null)) }
+        frentes(id).forEach { agregarFrente(nuevaId, it.copy(id = null, declaracion = null)) }
+        return creada
     }
 
     // a predio of the srtm: its code comes from sector and manzana when blank, its direccion from its ubicación
@@ -138,31 +174,79 @@ class DeclaracionService(
         id: UUID
     ) = listas.borrar(objectName, id)
 
-    private suspend fun nueva(
+    // the srtm's defaults. condición and % are the condominio's (registrar)
+    private fun nueva(
         body: Declaracion,
         contribuyente: UUID,
         predio: UUID
     ): Declaracion {
         val presentacion = body.fechaPresentacion ?: LocalDate.now()
-        val condicion = body.condicionPropiedad ?: "PROPIETARIO UNICO"
         return body.copy(
             contribuyente = contribuyente.toString(),
             predio = predio.toString(),
-            numeroDeclaracion = (registros.highest(DECLARACION, "numero_declaracion")?.toIntOrNull() ?: 0) + 1,
             anio = body.anio ?: presentacion.year,
             secuenciaUso = body.secuenciaUso?.ifBlank { null } ?: "1",
             motivo = body.motivo ?: "INSCRIPCION",
             medioDeterminacion = body.medioDeterminacion ?: "DECLARACION JURADA",
             medioPresentacion = body.medioPresentacion ?: "FISICO",
-            fechaPresentacion = presentacion,
-            condicionPropiedad = condicion,
-            porcentajeCondominio = body.porcentajeCondominio ?: if (condicion == "PROPIETARIO UNICO") BigDecimal(100) else null
+            fechaPresentacion = presentacion
         )
     }
 
+    // a new titular joins its predio's condominio: checked and derived before it is stored, the others after
+    private suspend fun registrar(declaracion: Declaracion): Declaracion {
+        val otros = titulares(declaracion)
+        val grupo = condominioCon(declaracion, otros, seUne = true)
+        val creada = numerar(grupo.first())
+        guardarDerivados(grupo.drop(1), otros)
+        return creada
+    }
+
+    // the declaraciones of a condominio: same predio, year and secuencia de uso
+    private suspend fun titulares(d: Declaracion): List<Declaracion> {
+        val (predio, anio, secuencia) = grupoDe(d)
+        if (predio == null || anio == null || secuencia == null) return emptyList()
+        return registros.all(DECLARACION, Declaracion::class.java, filters = mapOf("predio" to predio, "anio" to anio.toString(), "secuencia_uso" to secuencia))
+    }
+
+    // what is left of a condominio a declaración went away from
+    private suspend fun recalcular(fuera: Declaracion) {
+        val resto = titulares(fuera).filter { it.id != fuera.id }
+        guardarDerivados(condominio(resto), resto)
+    }
+
+    // only the derived fields, and only where they changed from what is stored
+    private suspend fun guardarDerivados(
+        grupo: List<Declaracion>,
+        stored: List<Declaracion>
+    ) {
+        val antes = stored.associateBy { it.id }
+        for (d in grupo) {
+            if (derivados(d) == antes[d.id]?.let(::derivados)) continue
+            registros.replace(
+                DECLARACION,
+                Declaracion::class.java,
+                UUID.fromString(d.id),
+                mapOf(
+                    "condicion_propiedad" to d.condicionPropiedad,
+                    "porcentaje_condominio" to d.porcentajeCondominio,
+                    "valor_condominio" to d.valorCondominio,
+                    "valor_afecto" to d.valorAfecto
+                )
+            )
+        }
+    }
+
+    // compared by value: 100 and 100.00 are the same %
+    private fun derivados(d: Declaracion) =
+        listOf(d.condicionPropiedad, d.porcentajeCondominio?.stripTrailingZeros(), d.valorCondominio?.stripTrailingZeros(), d.valorAfecto?.stripTrailingZeros())
+
     // numero_declaracion is unique: two clerks presenting at once may pick the same one. read it again and retry
-    private suspend fun numerar(build: suspend () -> Declaracion): Declaracion =
-        conReintento { registros.create(DECLARACION, Declaracion::class.java, Records.attributes(build())) }
+    private suspend fun numerar(declaracion: Declaracion): Declaracion =
+        conReintento {
+            val numero = (registros.highest(DECLARACION, "numero_declaracion")?.toIntOrNull() ?: 0) + 1
+            registros.create(DECLARACION, Declaracion::class.java, Records.attributes(declaracion.copy(numeroDeclaracion = numero)))
+        }
 
     // a numbered insert: when the number was taken meanwhile (the database refuses the duplicate), number it again
     private suspend fun <T> conReintento(insert: suspend () -> T): T {

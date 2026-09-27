@@ -328,6 +328,13 @@ data class NuevaDeclaracion(
     val predioId: String? = null
 )
 
+// a condómino added from a declaración ("datos de los condóminos"): who, and its % of the predio
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class NuevoCondomino(
+    val contribuyente: String? = null,
+    val porcentajeCondominio: BigDecimal? = null
+)
+
 // a lote of the catastro fiscal
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class CatastroFiscal(
