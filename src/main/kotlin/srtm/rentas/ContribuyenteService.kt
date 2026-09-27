@@ -31,7 +31,7 @@ class ContribuyenteService(
 
     // inscripción: the backend numbers it and dates it; the form's choices are kept, with the srtm's defaults
     suspend fun inscribir(body: Contribuyente): Contribuyente {
-        documentoLibre(body.numeroDocumento, except = null)
+        documentoLibre(body, except = null)
         repeat(CODE_ATTEMPTS - 1) {
             try {
                 return registros.create(CONTRIBUYENTE, Contribuyente::class.java, Records.attributes(nuevo(body)))
@@ -48,7 +48,7 @@ class ContribuyenteService(
         body: Contribuyente
     ): Contribuyente {
         val stored = get(id)
-        documentoLibre(body.numeroDocumento, except = id)
+        documentoLibre(body, except = id)
         val next =
             derivar(body).copy(
                 // the backend's, and the fiscal domicilio's (kept in step by the domicilios below)
@@ -142,15 +142,17 @@ class ContribuyenteService(
         id: UUID
     ) = listas.borrar(objectName, id)
 
-    // numero_documento is unique, and the database would answer a duplicate with a 500: say it on the field instead
+    // the number its tipo takes (none for SIN DOCUMENTO), and nobody else's: numero_documento is unique, and the
+    // database would answer a duplicate with a 500. both said on the field instead
     private suspend fun documentoLibre(
-        numero: String?,
+        body: Contribuyente,
         except: UUID?
     ) {
-        if (numero.isNullOrBlank()) return
+        errorDocumento(body.tipoDocumento, body.numeroDocumento)?.let { throw ValidationException("Documento inválido", "numero_documento", it) }
+        val numero = numeroDocumento(body.tipoDocumento, body.numeroDocumento) ?: return
         val otro =
             registros
-                .all(CONTRIBUYENTE, Contribuyente::class.java, filters = mapOf("numero_documento" to numero.trim()))
+                .all(CONTRIBUYENTE, Contribuyente::class.java, filters = mapOf("numero_documento" to numero))
                 .firstOrNull { it.id != except?.toString() }
                 ?: return
         throw ValidationException(
@@ -182,6 +184,7 @@ class ContribuyenteService(
     private fun derivar(body: Contribuyente): Contribuyente =
         body.copy(
             tipoPersona = tipoPersona(body.tipoContribuyente) ?: body.tipoPersona,
+            numeroDocumento = numeroDocumento(body.tipoDocumento, body.numeroDocumento),
             nombreCompleto = nombreCompleto(body)
         )
 

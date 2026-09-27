@@ -24,6 +24,39 @@ fun nombreCompleto(c: Contribuyente): String? {
     }
 }
 
+const val SIN_DOCUMENTO = "SIN DOCUMENTO"
+
+// the number as it is stored: trimmed, and none at all for SIN DOCUMENTO
+fun numeroDocumento(
+    tipo: String?,
+    numero: String?
+): String? = if (tipo == SIN_DOCUMENTO) null else numero?.trim()?.ifEmpty { null }
+
+private val RUC_PESOS = listOf(5, 4, 3, 2, 7, 6, 5, 4, 3, 2)
+
+// sunat's modulo 11 over the first ten digits: 11 - sum % 11, where 10 is written 0 and 11 is written 1
+private fun digitoVerificadorRuc(ruc: String): Int = (11 - RUC_PESOS.withIndex().sumOf { (i, p) -> ruc[i].digitToInt() * p } % 11) % 10
+
+// the number each tipo de documento takes: null when it fits, the reason otherwise. no tipo is the model's to refuse.
+// the portal checks the same (errorDocumento in srtm-ui): change both together
+fun errorDocumento(
+    tipo: String?,
+    numero: String?
+): String? {
+    if (tipo == null || tipo == SIN_DOCUMENTO) return null
+    val n = numeroDocumento(tipo, numero) ?: return "Este dato es obligatorio"
+    return when (tipo) {
+        "DNI" -> if (Regex("\\d{8}").matches(n)) null else "El DNI tiene 8 dígitos"
+        "RUC" ->
+            when {
+                !Regex("(10|15|16|17|20)\\d{9}").matches(n) -> "El RUC tiene 11 dígitos y empieza con 10, 15, 16, 17 o 20"
+                digitoVerificadorRuc(n) != n.last().digitToInt() -> "El dígito verificador del RUC no es válido"
+                else -> null
+            }
+        else -> if (Regex("[A-Za-z0-9]{1,12}").matches(n)) null else "Hasta 12 letras o dígitos"
+    }
+}
+
 // the one-line address of a domicilio, in the srtm's order: vía and number, the building, the lot,
 // the unidad urbana, the sub zona, then DEPARTAMENTO-PROVINCIA-DISTRITO. the portal previews the same text
 // (describirDomicilio in srtm-ui): change both together
