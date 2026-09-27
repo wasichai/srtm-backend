@@ -72,7 +72,9 @@ class ContribuyenteService(
         body: Domicilio
     ): Domicilio {
         get(contribuyente)
-        val saved = agregar(DOMICILIO, Domicilio::class.java, contribuyente, domicilio(body))
+        val nuevo = domicilio(body)
+        exigirFiscal(domicilios(contribuyente), antes = null, despues = nuevo)
+        val saved = agregar(DOMICILIO, Domicilio::class.java, contribuyente, nuevo)
         sincronizarFiscal(contribuyente)
         return saved
     }
@@ -81,13 +83,17 @@ class ContribuyenteService(
         id: UUID,
         body: Domicilio
     ): Domicilio {
-        val saved = cambiar(DOMICILIO, Domicilio::class.java, id, domicilio(body))
+        val stored = registros.get(DOMICILIO, Domicilio::class.java, id)
+        val next = domicilio(body)
+        exigirFiscal(otrosDomicilios(stored), antes = stored, despues = next)
+        val saved = cambiar(DOMICILIO, Domicilio::class.java, id, next)
         saved.contribuyente?.let { sincronizarFiscal(UUID.fromString(it)) }
         return saved
     }
 
     suspend fun borrarDomicilio(id: UUID) {
         val stored = registros.get(DOMICILIO, Domicilio::class.java, id)
+        exigirFiscal(otrosDomicilios(stored), antes = stored, despues = null)
         registros.delete(DOMICILIO, id)
         stored.contribuyente?.let { sincronizarFiscal(UUID.fromString(it)) }
     }
@@ -193,25 +199,28 @@ class ContribuyenteService(
 
     private fun domicilio(body: Domicilio): Domicilio = body.copy(estado = body.estado ?: ACTIVO).let { it.copy(descripcion = describir(it)) }
 
-    // the newest active fiscal domicilio is the contribuyente's domicilio_fiscal. with none left, the last one stays:
-    // the lists and the padrón keep showing where it was
+    // the active fiscal domicilio (the newest, if two are left from before the rule) is the contribuyente's
+    // domicilio_fiscal, written only when it changed. none yet (a contribuyente of the padrón): the padrón's stays
     private suspend fun sincronizarFiscal(contribuyente: UUID) {
         val fiscal = domicilios(contribuyente).lastOrNull(::esFiscalActivo) ?: return
         val stored = get(contribuyente)
-        registros.replace(
-            CONTRIBUYENTE,
-            Contribuyente::class.java,
-            contribuyente,
-            Records.attributes(
-                stored.copy(
-                    domicilioFiscal = fiscal.descripcion,
-                    domicilioDistrito = fiscal.distrito,
-                    domicilioProvincia = fiscal.provincia,
-                    domicilioDepartamento = fiscal.departamento
-                )
+        val next =
+            stored.copy(
+                domicilioFiscal = fiscal.descripcion,
+                domicilioDistrito = fiscal.distrito,
+                domicilioProvincia = fiscal.provincia,
+                domicilioDepartamento = fiscal.departamento
             )
-        )
+        if (next == stored) return
+        registros.replace(CONTRIBUYENTE, Contribuyente::class.java, contribuyente, Records.attributes(next))
     }
+
+    // the domicilio's siblings: what the fiscal rule weighs it against
+    private suspend fun otrosDomicilios(domicilio: Domicilio): List<Domicilio> =
+        domicilio.contribuyente
+            ?.let { domicilios(UUID.fromString(it)) }
+            .orEmpty()
+            .filter { it.id != domicilio.id }
 
     private suspend fun <T : Any> hijos(
         objectName: String,
@@ -237,5 +246,31 @@ class ContribuyenteService(
         const val ACTIVO = Listas.ACTIVO
         const val PARENT = "contribuyente"
         const val CODE_ATTEMPTS = 3
+    }
+}
+
+// the srtm's "(*) registrar al menos 1 domicilio fiscal": a contribuyente's first domicilio is its active fiscal one
+// and then its only one: it stays fiscal, active and there (its address changes freely), and no second one joins it.
+// otros: the contribuyente's other domicilios; antes: the stored one (null when adding); despues: what it becomes
+// (null when removing). a contribuyente left without one from before the rule keeps what it has until it adds it
+fun exigirFiscal(
+    otros: List<Domicilio>,
+    antes: Domicilio?,
+    despues: Domicilio?
+) {
+    val otroFiscal = otros.any(::esFiscalActivo)
+    if (despues != null && esFiscalActivo(despues) && otroFiscal) {
+        throw ValidationException("Ya hay un domicilio fiscal activo", "tipo_domicilio", "ya tiene otro domicilio fiscal activo: actualice ese domicilio")
+    }
+    if (otroFiscal || (despues != null && esFiscalActivo(despues))) return
+    // no active fiscal one would be left
+    val campo = if (despues?.tipoDomicilio == "FISCAL") "estado" else "tipo_domicilio"
+    when {
+        antes == null -> throw ValidationException("Falta el domicilio fiscal", campo, "el primer domicilio debe ser el fiscal, activo")
+        !esFiscalActivo(antes) -> return
+        despues == null ->
+            throw ValidationException("No se puede eliminar el único domicilio fiscal activo", "tipo_domicilio", "es el único domicilio fiscal activo")
+        campo == "estado" -> throw ValidationException("Falta el domicilio fiscal", "estado", "es el único domicilio fiscal activo: no se puede inactivar")
+        else -> throw ValidationException("Falta el domicilio fiscal", "tipo_domicilio", "es el único domicilio fiscal activo: debe seguir siendo FISCAL")
     }
 }

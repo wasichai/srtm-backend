@@ -157,12 +157,6 @@ class RentasApiTest : WasichaiIntegrationTest() {
             .expectBody()
             .jsonPath("$.contribuyente.domicilio_fiscal")
             .isEqualTo("AV. MARGINAL, N° 240, JUNIN-CHANCHAMAYO-PERENE")
-
-        delete("/api/srtm/domicilios/$domicilioId")
-        get("/api/srtm/contribuyentes/$id/domicilios")
-            .expectBody()
-            .jsonPath("$.length()")
-            .isEqualTo(0)
     }
 
     @Test
