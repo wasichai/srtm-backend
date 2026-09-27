@@ -98,6 +98,8 @@ registros importados siguen siendo válidos. Por ejemplo, sobre la base del padr
   `LOSAS DEPORTIVAS`, `PISOS DE CONCRETO` y `OTROS`) y añade `PZA` a `unidad_medida`;
 - quita de `clase_uso` y `sub_clase_uso` las opciones de antes del catálogo de usos del SRTM (`INDUSTRIAL`,
   `SERVICIOS`, `AGRICOLA`, `OTROS`; `BODEGA`, `TIENDA`, `OFICINA`, `TALLER`, `ALMACEN`, `OTROS`) que ninguna DJ usa;
+- quita de `uso` los grupos de uso del padrón (`RESIDENCIAL - CASA HABITACION`, `TERRENO`…) una vez migradas las DJ
+  que los usan ([Migrar los usos del padrón](#migrar-los-usos-del-padrón));
 - crea los objetos y relaciones de las fases 1 y 2.
 
 Flags: `--core` (default `http://localhost:8090` o `$WASICHAI_CORE`), `--email`, `--password`, `--dry-run`,
@@ -167,8 +169,10 @@ python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"      
     (`python3 -m unittest` dice cuáles faltan), `python3 apply.py` y `python3 import_catalogos.py`. Lo cargado no se
     borra: un uso que desaparezca de la lista se borra a mano desde el admin.
   - Los campos `clase_uso`, `sub_clase_uso` y `uso` de `declaracion_predial` siguen siendo ENUM (Core no cambia el tipo
-    de un campo) con los nombres del catálogo. `uso` conserva además los diez grupos del padrón
-    (`RESIDENCIAL - CASA HABITACION`, `TERRENO`…), que las DJ importadas tienen sin clase ni sub clase.
+    de un campo) con los nombres del catálogo, y nada más: `uso` lista solo los usos del catálogo. Los diez grupos de
+    uso del padrón son las diez clases: `RESIDENCIAL - CASA HABITACION` se guarda como RESIDENCIAL / UNIFAMILIAR / CASA
+    HABITACIÓN y cualquier otro grupo como la clase de su nombre, sin sub clase ni uso, que el portal pide al editar la
+    DJ (ver [Migrar los usos del padrón](#migrar-los-usos-del-padrón)).
 - **Idempotente**, como los otros scripts.
 - Los catálogos se pueden editar después desde el admin.
 
@@ -243,6 +247,34 @@ python3 normalizar_padron.py             # actualiza lo que el reporte lista
 - Flags: `--report`, `--workers` (PUTs en paralelo, default 4), `--core`, `--email`, `--password`. Salida: `0` ok, `1`
   Core rechazó algo (se muestra el código del predio o el número de la declaración).
 
+## Migrar los usos del padrón
+
+Las DJ importadas antes de que `import_predios.py` guardara el grupo de uso del padrón como clase tienen el grupo en
+`uso` (`RESIDENCIAL - CASA HABITACION`, `TERRENO`…) y ninguna clase. En una base así, en este orden:
+
+```bash
+cd model
+python3 apply.py                          # 1. agrega opciones y campos, y quita las opciones sin uso
+python3 migrar_usos_padron.py --dry-run   # 2. lee Core y escribe el reporte, sin cambiar nada: revisarlo
+python3 migrar_usos_padron.py             #    y migrar
+python3 apply.py                          # 3. quita de `uso` los grupos, que ya no usa nadie
+```
+
+- **El paso 1** conserva los grupos que alguna DJ usa, con un aviso `keep option declaracion_predial.uso …`.
+- **Migración:** `RESIDENCIAL - CASA HABITACION` pasa a `clase_uso` RESIDENCIAL, `sub_clase_uso` UNIFAMILIAR y `uso`
+  CASA HABITACIÓN. Los otros nueve grupos pasan a `clase_uso` del mismo nombre, con `sub_clase_uso` y `uso` vacíos: el
+  padrón no dice más, y el portal los pide al editar la DJ.
+- Una DJ que ya tiene clase o sub clase **no se pisa**: queda en el reporte, salvo que su `uso` sea el del catálogo
+  bajo esa clase y sub clase (COMERCIAL e INDUSTRIA también son usos del catálogo). Un grupo que siga en uso lo
+  conserva el paso 3, con su aviso.
+- La salida dice cuántas DJ hay por migrar de cada grupo (`TERRENO: 6562 -> TERRENO`). El **reporte**
+  (`model/reports/migrar_usos_padron.csv`) tiene una fila por DJ con un grupo: el grupo, la clase, sub clase y uso con
+  que queda y, si no se migra, por qué.
+- Actualiza cada DJ con todos sus campos (el update de Core los reemplaza todos). **Idempotente:** una segunda corrida
+  no cambia nada.
+- Flags: `--dry-run`, `--report`, `--workers` (PUTs en paralelo, default 4), `--core`, `--email`, `--password`.
+  Salida: `0` ok, `1` Core rechazó algo (se muestra el número de la declaración, o su id si no tiene).
+
 ## Modelo
 
 Dieciocho objetos (`model/model.json`):
@@ -308,7 +340,7 @@ guardar.
 | `secuencia_uso` | `secuencia_uso` |
 | `condicion_propiedad` (PROPIETARIO UNICO, CONDOMINO) | derivado: CONDOMINO si el predio tiene más de un titular |
 | `porcentaje_condominio` | derivado: `valor_condominio / valor_autoavaluo × 100` |
-| `uso` | `grupo_uso_desc` |
+| `clase_uso`, `sub_clase_uso`, `uso` | `grupo_uso_desc`: `RESIDENCIAL - CASA HABITACION` es RESIDENCIAL / UNIFAMILIAR / CASA HABITACIÓN; otro grupo, la clase de su nombre, sin sub clase ni uso |
 | `clasificacion` | `clasificacion_predio_desc`, acortado a 64 caracteres sin comas (límite de las opciones ENUM de Core) |
 | `estado_construccion` | `estado_construccion_desc` |
 | `area_terreno`, `area_construida`, `longitud_frente` | columnas con el mismo nombre |
