@@ -26,3 +26,18 @@ wasichai:
       # without GeoServer the lotes are served straight from PostGIS; only publishing WMS layers needs it
       enabled: ${WASICHAI_GEOSERVER_ENABLED:false}
       url: ${WASICHAI_GEOSERVER_URL:http://localhost:8081/geoserver}
+
+srtm:
+  pide:
+    reniec:
+      # the DNI's names from RENIEC through the PIDE (pages 3, 8 and 15). off until the municipality's convenio gives
+      # a user (a DNI), its RUC and a password: set them in the environment, never here. off, the names are typed
+      enabled: ${SRTM_PIDE_RENIEC_ENABLED:false}
+      url: ${SRTM_PIDE_RENIEC_URL:https://ws2.pide.gob.pe/Rest/RENIEC/Consultar}
+      dni-usuario: ${SRTM_PIDE_RENIEC_DNI_USUARIO:}
+      ruc-usuario: ${SRTM_PIDE_RENIEC_RUC_USUARIO:}
+      password: ${SRTM_PIDE_RENIEC_PASSWORD:}
+      # the clerk waits on it leaving the DNI
+      timeout: ${SRTM_PIDE_RENIEC_TIMEOUT:5s}
+      # how long a consulta backs a save with fuente PIDE RENIEC
+      vigencia: 30m

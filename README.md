@@ -51,6 +51,9 @@ ese puerto queda en el loopback del servidor: llega por un túnel, `ssh -N -L 54
 | `WASICHAI_JWT_SECRET` | un valor solo para desarrollo | poner uno propio (>= 32 bytes) en cualquier entorno real |
 | `SRTM_PG_PORT` | `5433` | puerto publicado por `compose.yml` |
 | `WASICHAI_GEOSERVER_ENABLED` / `_URL` | `false` / `http://localhost:8081/geoserver` | solo para publicar capas WMS |
+| `SRTM_PIDE_RENIEC_ENABLED` | `false` | consulta de DNI a RENIEC por la PIDE (ver [PIDE RENIEC](#pide-reniec)) |
+| `SRTM_PIDE_RENIEC_DNI_USUARIO` / `_RUC_USUARIO` / `_PASSWORD` | vacías | credenciales del convenio con la PIDE; nunca en el repositorio |
+| `SRTM_PIDE_RENIEC_URL` / `_TIMEOUT` | `https://ws2.pide.gob.pe/Rest/RENIEC/Consultar` / `5s` | servicio REST "Consultar" y cuánto se espera |
 
 ### Pasar una base existente a PostGIS
 
@@ -351,6 +354,7 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET, POST | `/api/srtm/catastro?…` | "Buscar en Catastro Fiscal" (pág. 13), y el alta de un lote |
 | GET, PUT | `/api/srtm/catastro/{id}` | un lote del catastro, y su edición (polígono incluido) |
 | GET | `/api/gis/objects/{catastro_fiscal\|predio}/features?bbox&geometry=lote_geom` | de wasichai-gis: los lotes del área visible, para el mapa |
+| GET | `/api/srtm/documentos/{tipo}/{numero}` | los apellidos y nombres que RENIEC da de un DNI; 404 si no hay datos o no hay convenio ([PIDE RENIEC](#pide-reniec)) |
 
 Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
 - **Inscripción:** el backend asigna `codigo` (6 dígitos, correlativo), `numero_declaracion` y `fecha_registro`.
@@ -450,6 +454,37 @@ registro con una segunda escritura, como el mismo usuario y solo en los campos q
   También la `direccion` del predio: `normalizar_padron.py` separa por esta API el tipo de vía del padrón y conserva su
   texto, y el portal la rearma al guardar la ubicación. Desde el admin no se aplican.
 
+## PIDE RENIEC
+
+Al salir del N° de DNI de un contribuyente, relacionado o transferente (págs. 3, 8 y 15), el portal pide
+`GET /api/srtm/documentos/DNI/{numero}`. Con respuesta, rellena y deja en gris apellidos y nombres, con fuente
+PIDE RENIEC; sin ella (404), se escriben a mano con fuente MANUAL.
+
+- **Paquete `srtm.pide`:** la interfaz `ConsultaDocumento`, con dos implementaciones:
+  - `SinConsulta`, por defecto: nunca hay datos.
+  - `PideReniec`, con `SRTM_PIDE_RENIEC_ENABLED=true` y las tres credenciales del convenio. Si falta alguna, se
+    registra un aviso y no se consulta.
+- **Contrato:** `PideReniec` hace un POST a `…/Rest/RENIEC/Consultar?out=json` con
+  `{"PIDE": {"nuDniConsulta", "nuDniUsuario", "nuRucUsuario", "password"}}`, así la clave nunca va en una URL. Lee
+  `consultarResponse.return`:
+  - `coResultado` es `0000` cuando encuentra a la persona.
+  - `datosPersona` trae `apPrimer`, `apSegundo`, `prenombres`, `estadoCivil`, `direccion` y `ubigeo`. La foto no se lee.
+  - Está tomado de los ejemplos publicados de la PIDE, sin credenciales para probarlo: **hay que revisarlo contra la
+    documentación del convenio** antes de encenderlo. Algunas entidades usan `ws6.pide.gob.pe` en producción: la URL se
+    configura.
+- **Fallos:** cualquier error, código distinto de `0000` o demora mayor a `SRTM_PIDE_RENIEC_TIMEOUT` equivale a "sin
+  datos". El log registra solo el motivo, nunca la clave ni los datos de la persona.
+  - La clave vencida (`1002`) no se renueva sola: hay que cambiarla en el convenio.
+- **Qué se consulta:** solo un DNI de 8 dígitos, porque cada consulta tiene costo.
+- **Fuente PIDE RENIEC respaldada:** el backend recuerda en memoria, durante 30 minutos, cada consulta con respuesta.
+  Una alta o edición con fuente PIDE RENIEC exige una consulta vigente de ese DNI con los mismos apellidos y nombres,
+  sin distinguir mayúsculas ni espacios. Si no, es un 400 sobre `fuente_informacion`.
+  - Un registro que ya tenía PIDE RENIEC la conserva mientras no cambien su documento ni sus nombres.
+  - La memoria es de cada instancia: con varias instancias del backend habría que guardarla en la base.
+  - Lo que se escribe fuera del portal (admin, API de Core) no pasa por esta regla.
+- **Tests:** usan un doble de `ConsultaDocumento` (`ConsultaReniecApiTest`) o un servidor local
+  (`PideReniecTest`). Nunca llaman a la PIDE real.
+
 ## Tests
 
 ```bash
@@ -468,8 +503,9 @@ tunelizada: `WASICHAI_TEST_DB_HOST`, `_PORT`, `_NAME` (debe terminar en `_test`,
 - **Datos:** completar `model/data/obras_complementarias.csv` con el anexo oficial, y cargar el GeoJSON del catastro
   fiscal cuando esté disponible. Si se decide, asignar código y número a los contribuyentes y declaraciones importados
   del padrón.
-- **Integraciones:** PIDE RENIEC. El fondo del mapa es OpenStreetMap; una capa WMS/WMTS municipal se puede publicar
-  con GeoServer.
+- **Integraciones:** probar PIDE RENIEC con las credenciales del convenio; PIDE SUNAT (RUC) y MIGRACIONES (carné de
+  extranjería) con la misma interfaz `ConsultaDocumento`. El fondo del mapa es OpenStreetMap; una capa WMS/WMTS
+  municipal se puede publicar con GeoServer.
 - **Cálculo y cobranza:** impuesto predial (tramos UIT), arbitrios, deuda y cuotas, pagos y recibos.
 - **Fiscalización:** el flujo (rol y pantallas) que determina de oficio una declaración: medio de determinación
   FISCALIZACIÓN o DE OFICIO y su modificación de oficio.

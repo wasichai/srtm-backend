@@ -2,20 +2,24 @@ package srtm.rentas
 
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
+import srtm.pide.ConsultasReniec
 import wasichai.core.common.ConflictException
 import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
 import wasichai.core.common.ValidationException
 import wasichai.core.data.RecordQuery
+import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
 
 // the srtm's "registro de contribuyente": the contribuyente itself (datos de la declaración, identificación,
-// datos personales) and its four lists (domicilios, relacionados, medios de contacto, sustento)
+// datos personales) and its four lists (domicilios, relacionados, medios de contacto, sustento). reniec: the recent
+// consultas that back a fuente PIDE RENIEC (srtm.pide); built by hand (unit tests), none, so PIDE RENIEC is refused
 @Service
 class ContribuyenteService(
     private val registros: Registros,
-    private val listas: Listas
+    private val listas: Listas,
+    private val reniec: ConsultasReniec = ConsultasReniec(Duration.ZERO)
 ) {
     suspend fun buscar(
         q: String?,
@@ -33,6 +37,7 @@ class ContribuyenteService(
     // inscripción: the backend numbers it and dates it; the form's choices are kept, with the srtm's defaults
     suspend fun inscribir(body: Contribuyente): Contribuyente {
         documentoLibre(body, except = null)
+        reniec.respaldar(body.persona(), anterior = null)
         repeat(CODE_ATTEMPTS - 1) {
             try {
                 return registros.create(CONTRIBUYENTE, Contribuyente::class.java, Records.attributes(nuevo(body)))
@@ -50,6 +55,7 @@ class ContribuyenteService(
     ): Contribuyente {
         val stored = get(id)
         documentoLibre(body, except = id)
+        reniec.respaldar(body.persona(), stored.persona())
         val next =
             derivar(body, stored).copy(
                 // the backend's, and the fiscal domicilio's (kept in step by the domicilios below)
@@ -123,7 +129,7 @@ class ContribuyenteService(
     ): Relacionado {
         get(contribuyente)
         val codigo = siguienteCodigoLista(relacionados(contribuyente).map { it.codigo })
-        return agregar(RELACIONADO, Relacionado::class.java, contribuyente, relacionado(body).copy(codigo = codigo, estado = body.estado ?: ACTIVO))
+        return agregar(RELACIONADO, Relacionado::class.java, contribuyente, relacionado(body, null).copy(codigo = codigo, estado = body.estado ?: ACTIVO))
     }
 
     suspend fun actualizarRelacionado(
@@ -131,11 +137,15 @@ class ContribuyenteService(
         body: Relacionado
     ): Relacionado {
         val stored = registros.get(RELACIONADO, Relacionado::class.java, id)
-        return cambiar(RELACIONADO, Relacionado::class.java, id, relacionado(body).copy(codigo = stored.codigo))
+        return cambiar(RELACIONADO, Relacionado::class.java, id, relacionado(body, stored).copy(codigo = stored.codigo))
     }
 
-    private fun relacionado(body: Relacionado): Relacionado {
+    private fun relacionado(
+        body: Relacionado,
+        stored: Relacionado?
+    ): Relacionado {
         validarNombre(body.tipoDocumento, body.razonSocial, body.nombres)
+        reniec.respaldar(body.persona(), stored?.persona())
         return body.copy(fuenteInformacion = body.fuenteInformacion ?: FUENTE_MANUAL)
     }
 
