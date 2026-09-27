@@ -123,15 +123,33 @@ class DeclaracionService(
 
     suspend fun transferentes(id: UUID) = listas.listar(TRANSFERENTE, Transferente::class.java, PARENT, id)
 
+    // coded by the backend under their declaración, named by razón social (RUC) or by names
     suspend fun agregarTransferente(
         id: UUID,
         body: Transferente
-    ) = listas.agregar(TRANSFERENTE, Transferente::class.java, PARENT, existe(id), body.copy(estado = body.estado ?: Listas.ACTIVO))
+    ): Transferente {
+        val codigo = siguienteCodigoLista(transferentes(existe(id)).map { it.codigo })
+        return listas.agregar(
+            TRANSFERENTE,
+            Transferente::class.java,
+            PARENT,
+            id,
+            transferente(body).copy(codigo = codigo, estado = body.estado ?: Listas.ACTIVO)
+        )
+    }
 
     suspend fun actualizarTransferente(
         id: UUID,
         body: Transferente
-    ) = listas.cambiar(TRANSFERENTE, Transferente::class.java, PARENT, id, body)
+    ): Transferente {
+        val stored = registros.get(TRANSFERENTE, Transferente::class.java, id)
+        return listas.cambiar(TRANSFERENTE, Transferente::class.java, PARENT, id, transferente(body).copy(codigo = stored.codigo))
+    }
+
+    private fun transferente(body: Transferente): Transferente {
+        validarNombre(body.tipoDocumento, body.razonSocial, body.nombres)
+        return body.copy(fuenteInformacion = body.fuenteInformacion ?: FUENTE_MANUAL)
+    }
 
     suspend fun niveles(id: UUID) = listas.listar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id)
 

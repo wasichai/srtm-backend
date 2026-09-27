@@ -189,6 +189,44 @@ class RelaxRequiredTests(ApplyCliTestCase):
         self.assertIn("done: 0 created, 1 updated, 26 skipped", out)
 
 
+class RelacionadoTransferenteSyncTests(ApplyCliTestCase):
+    """relacionado and transferente before razón social and código: both fields are added, and nombres (required
+    then, optional now that a company has none) is relaxed. a field model.json requires is never tightened."""
+
+    NEW_FIELDS = ["codigo", "razon_social"]
+
+    def setUp(self):
+        model = load_model()
+        fields = {o["name"]: core_fields(model, o["name"]) for o in model["objects"]}
+        for name in ("relacionado", "transferente"):
+            fields[name] = core_fields(model, name, drop=self.NEW_FIELDS)
+            for field in fields[name]:
+                field["required"] = field["name"] == "nombres"
+        self.core = FakeCore(
+            existing_objects=[o["name"] for o in model["objects"]],
+            existing_relationships=[r["name"] for r in model["relationships"]],
+            existing_fields=fields,
+        )
+        self.addCleanup(self.core.stop)
+
+    def test_adds_razon_social_and_codigo_and_relaxes_nombres(self):
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0, msg=err)
+        for name in ("relacionado", "transferente"):
+            added = [r[3]["name"] for r in self.core.requests
+                     if r[0] == "POST" and r[1] == f"/api/metadata/objects/{name}/fields"]
+            self.assertEqual(sorted(added), self.NEW_FIELDS)
+        # the relations' own required PUT aside (HappyPathTests)
+        relations = {f"/api/metadata/objects/{r['source']}/fields/{r['fieldName']}" for r in load_model()["relationships"]}
+        field_puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "/fields/" in r[1] and r[1] not in relations]
+        self.assertEqual(field_puts, [
+            ("/api/metadata/objects/relacionado/fields/nombres", {"required": False}),
+            ("/api/metadata/objects/transferente/fields/nombres", {"required": False}),
+        ])
+        self.assertIn("update field relacionado.nombres (optional)", out)
+        self.assertIn("done: 4 created, 2 updated, 25 skipped", out)
+
+
 class FailureStopsTests(ApplyCliTestCase):
     def setUp(self):
         self.core = FakeCore(fail_on_post_object="predio")

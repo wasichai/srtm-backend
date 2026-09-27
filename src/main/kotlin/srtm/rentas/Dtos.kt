@@ -183,6 +183,8 @@ data class Domicilio(
 data class Relacionado(
     val id: String? = null,
     val contribuyente: String? = null,
+    // the backend's: 001, 002... under its contribuyente
+    val codigo: String? = null,
     val tipoRelacionado: String? = null,
     val tipoDocumento: String? = null,
     val numeroDocumento: String? = null,
@@ -190,6 +192,8 @@ data class Relacionado(
     val apellidoPaterno: String? = null,
     val apellidoMaterno: String? = null,
     val nombres: String? = null,
+    // with RUC, instead of the names
+    val razonSocial: String? = null,
     val telefonoCelular: String? = null,
     val telefonoFijo: String? = null,
     val anexo: String? = null,
@@ -229,6 +233,8 @@ data class Sustento(
 data class Transferente(
     val id: String? = null,
     val declaracion: String? = null,
+    // the backend's: 001, 002... under its declaración
+    val codigo: String? = null,
     val porcentajeTransferido: BigDecimal? = null,
     val tipoDocumento: String? = null,
     val numeroDocumento: String? = null,
@@ -236,6 +242,8 @@ data class Transferente(
     val apellidoPaterno: String? = null,
     val apellidoMaterno: String? = null,
     val nombres: String? = null,
+    // with RUC, instead of the names
+    val razonSocial: String? = null,
     val fechaNacimiento: LocalDate? = null,
     val estadoCivil: String? = null,
     val sexo: String? = null,
