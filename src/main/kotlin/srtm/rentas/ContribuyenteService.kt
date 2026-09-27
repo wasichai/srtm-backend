@@ -94,18 +94,29 @@ class ContribuyenteService(
 
     suspend fun relacionados(contribuyente: UUID): List<Relacionado> = hijos(RELACIONADO, Relacionado::class.java, contribuyente)
 
+    // relacionados: coded by the backend under their contribuyente, named by razón social (RUC) or by names
+
     suspend fun agregarRelacionado(
         contribuyente: UUID,
         body: Relacionado
     ): Relacionado {
         get(contribuyente)
-        return agregar(RELACIONADO, Relacionado::class.java, contribuyente, body.copy(estado = body.estado ?: ACTIVO))
+        val codigo = siguienteCodigoLista(relacionados(contribuyente).map { it.codigo })
+        return agregar(RELACIONADO, Relacionado::class.java, contribuyente, relacionado(body).copy(codigo = codigo, estado = body.estado ?: ACTIVO))
     }
 
     suspend fun actualizarRelacionado(
         id: UUID,
         body: Relacionado
-    ): Relacionado = cambiar(RELACIONADO, Relacionado::class.java, id, body)
+    ): Relacionado {
+        val stored = registros.get(RELACIONADO, Relacionado::class.java, id)
+        return cambiar(RELACIONADO, Relacionado::class.java, id, relacionado(body).copy(codigo = stored.codigo))
+    }
+
+    private fun relacionado(body: Relacionado): Relacionado {
+        validarNombre(body.tipoDocumento, body.razonSocial, body.nombres)
+        return body.copy(fuenteInformacion = body.fuenteInformacion ?: FUENTE_MANUAL)
+    }
 
     suspend fun mediosContacto(contribuyente: UUID): List<MedioContacto> = hijos(MEDIO_CONTACTO, MedioContacto::class.java, contribuyente)
 
