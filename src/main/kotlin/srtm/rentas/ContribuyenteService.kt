@@ -54,6 +54,7 @@ class ContribuyenteService(
             derivar(body, stored).copy(
                 // the backend's, and the fiscal domicilio's (kept in step by the domicilios below)
                 codigo = stored.codigo,
+                motivo = motivoAlEditar(stored.motivo),
                 numeroDeclaracion = stored.numeroDeclaracion,
                 fechaRegistro = stored.fechaRegistro,
                 domicilioFiscal = stored.domicilioFiscal,
