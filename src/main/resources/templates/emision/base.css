@@ -1,0 +1,170 @@
+/* the look every emisión document shares (PU, HR): A4, the embedded DejaVu Sans, bordered boxes with a shaded title
+   bar, label/value grids and ruled tables. PdfRenderer inlines it in each template */
+@page {
+    size: A4;
+    margin: 12mm 11mm 16mm 11mm;
+
+    @bottom-left {
+        content: element(pie);
+    }
+
+    @bottom-right {
+        content: 'Página ' counter(page) ' de ' counter(pages);
+        font-family: 'DejaVu Sans', sans-serif;
+        font-size: 7pt;
+        color: #333;
+    }
+}
+
+body {
+    font-family: 'DejaVu Sans', sans-serif;
+    font-size: 7.5pt;
+    color: #000;
+    margin: 0;
+}
+
+.pie {
+    position: running(pie);
+    font-size: 7pt;
+    color: #333;
+}
+
+/* the header: the municipality and the document's name on the left, year and number boxed on the right */
+.cabecera {
+    width: 100%;
+    border: 1.2pt solid #000;
+    border-collapse: collapse;
+    margin-bottom: 3mm;
+}
+
+.cabecera td {
+    padding: 2mm 3mm;
+    vertical-align: middle;
+}
+
+.municipalidad {
+    font-size: 10pt;
+    font-weight: bold;
+}
+
+.documento {
+    font-size: 9pt;
+    font-weight: bold;
+    margin-top: 1mm;
+}
+
+.numero {
+    width: 42mm;
+    border-left: 1.2pt solid #000;
+    text-align: center;
+}
+
+.numero .etiqueta {
+    display: block;
+}
+
+.numero .valor {
+    display: block;
+    font-size: 11pt;
+    margin-bottom: 1mm;
+}
+
+/* a titled, bordered box */
+.bloque {
+    border: 0.8pt solid #000;
+    margin-bottom: 2.5mm;
+}
+
+/* a short box never splits across pages */
+.junto {
+    page-break-inside: avoid;
+}
+
+.bloque > .titulo {
+    background: #d9d9d9;
+    border-bottom: 0.8pt solid #000;
+    font-weight: bold;
+    padding: 1mm 2mm;
+    text-transform: uppercase;
+}
+
+/* label/value pairs: small grey labels over their values */
+.datos {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.datos td {
+    border-right: 0.5pt solid #999;
+    border-bottom: 0.5pt solid #999;
+    padding: 0.8mm 1.5mm;
+    vertical-align: top;
+}
+
+.datos tr:last-child td {
+    border-bottom: none;
+}
+
+.datos td:last-child {
+    border-right: none;
+}
+
+.etiqueta {
+    font-size: 6pt;
+    color: #444;
+    text-transform: uppercase;
+}
+
+.valor {
+    font-weight: bold;
+    min-height: 3mm;
+}
+
+/* ruled tables: niveles, obras */
+.tabla {
+    width: 100%;
+    border-collapse: collapse;
+    -fs-table-paginate: paginate;
+}
+
+.tabla th,
+.tabla td {
+    border: 0.5pt solid #777;
+    padding: 0.7mm 1mm;
+}
+
+.tabla th {
+    background: #efefef;
+    font-size: 6pt;
+    font-weight: bold;
+    text-align: center;
+}
+
+.tabla td {
+    font-size: 6.5pt;
+}
+
+.tabla .num {
+    text-align: right;
+}
+
+.tabla .centro {
+    text-align: center;
+}
+
+.tabla .vacio {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+}
+
+.subtitulo {
+    font-weight: bold;
+    padding: 1.2mm 2mm 0.8mm 2mm;
+    font-size: 7pt;
+}
+
+.importe {
+    text-align: right;
+}

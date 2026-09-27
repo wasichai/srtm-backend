@@ -597,6 +597,7 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET, PUT | `/api/srtm/catastro/{id}` | un lote del catastro, y su edición (polígono incluido) |
 | GET | `/api/gis/objects/{catastro_fiscal\|predio}/features?bbox&geometry=lote_geom` | de wasichai-gis: los lotes del área visible, para el mapa |
 | GET | `/api/srtm/documentos/{tipo}/{numero}` | los apellidos y nombres que RENIEC da de un DNI; 404 si no hay datos o no hay convenio ([PIDE RENIEC](#pide-reniec)) |
+| GET | `/api/srtm/predios/{id}/pu?anio&contribuyente` | la PU del predio en PDF, inline; 404 sin DJ vigente en el año, 409 con `titulares` si hay varios y falta `contribuyente` ([Emisión de documentos](#emisión-de-documentos)) |
 
 Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
 - **Inscripción:** el backend asigna `codigo` (6 dígitos, correlativo), `numero_declaracion` y `fecha_registro`.
@@ -733,6 +734,41 @@ PIDE RENIEC; sin ella (404), se escriben a mano con fuente MANUAL.
 - **Tests:** usan un doble de `ConsultaDocumento` (`ConsultaReniecApiTest`) o un servidor local
   (`PideReniecTest`). Nunca llaman a la PIDE real.
 
+## Emisión de documentos
+
+wasichai no genera PDF en el servidor: el paquete `srtm.emision` trae su propia infraestructura. De la épica
+wasichai/srtm-backend#37, esta es la PU (Predio Urbano); la HR (wasichai/srtm-backend#40) y la emisión masiva
+(wasichai/srtm-backend#41) se construyen encima.
+
+- **`PdfRenderer.render(template, model)`:** una plantilla de `templates/emision/` a PDF.
+  - Thymeleaf standalone (`TemplateEngine` + `ClassLoaderTemplateResolver`, sin MVC: la app es WebFlux) arma el
+    HTML, y openhtmltopdf (el fork mantenido `io.github.openhtmltopdf`, sobre PDFBox 3) lo pasa a PDF.
+  - Hoja A4, con `templates/emision/base.css` en línea en cada plantilla (variable `css`): márgenes, recuadros con
+    título sombreado, grillas de etiqueta y valor, tablas y el pie "Página X de Y".
+  - Fuente DejaVu Sans embebida (`resources/fonts`, con su licencia): tildes y ñ salen iguales en cualquier visor.
+  - El log de openhtmltopdf va por slf4j, en WARN (`logging.level.com.openhtmltopdf`).
+- **`PdfMerger.merge(partes, destino)`:** une PDF en orden con PDFBox, de bytes a un stream o de archivos a un
+  archivo. Usa archivos temporales (`MemoryUsageSetting.setupTempFileOnly()`), para que la masiva no llene la memoria.
+- **`DocumentosPrediales`:** la única fachada para los endpoints y la masiva.
+  - `pu(predioId, contribuyenteId?, anio)` devuelve un `Documento(nombre, bytes)`.
+  - `hr(contribuyenteId, anio)` es por ahora un stub que lanza `NotImplementedError`.
+  - Lee Core como el usuario, a través de `Registros`, y dibuja el PDF fuera del hilo de la petición.
+- **La PU** (`templates/emision/pu.html`, con `HojaPu.kt` que deja cada valor ya formateado):
+  - Una por predio y titular, con sus DJ **vigentes** del año. Cada `secuencia_uso` es una sección "Uso N.°".
+  - Cabecera: la municipalidad (`srtm.municipalidad.nombre`, `SRTM_MUNICIPALIDAD_NOMBRE`), el título, el año y los
+    N.° de declaración.
+  - Contribuyente, ubicación del predio, datos del predio, niveles (con las 7 categorías), obras complementarias y
+    los valores declarados (autoavalúo, valor condominio, deducción, valor afecto).
+  - Muestra los valores declarados, sin revalorizar. Los niveles y obras INACTIVO no salen.
+  - Pie: fecha de emisión y "Página X de Y".
+- **Endpoint** `GET /api/srtm/predios/{id}/pu?anio=&contribuyente=` (sin `anio`, el año en curso):
+  - Responde `application/pdf` con `Content-Disposition: inline; filename="PU-<codigo_predio>-<anio>.pdf"`.
+  - 404 si el predio no tiene DJ vigente ese año (una ANULADA no se emite) o si `contribuyente` no lo declara.
+  - 409 si hay más de un titular y falta `contribuyente`. El problem+json agrega
+    `titulares: [{id, nombre, documento}]` para elegir.
+- **Tiempo:** unos 80 ms por PU de dos usos solo en dibujar el PDF (`HojaPuTest`). `PuApiTest` mide 100 PU seguidas
+  por la API, con las lecturas de Core, y lo imprime en la salida de `integrationTest`.
+
 ## Tests
 
 ```bash
@@ -744,7 +780,8 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 
 - **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`,
   `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…), `Records`,
-  `Registros` y `srtm.pide` (`PideReniecTest`, contra un servidor local).
+  `Registros`, `srtm.pide` (`PideReniecTest`, contra un servidor local) y `srtm.emision` (`PdfRendererTest`,
+  `PdfMergerTest`, `HojaPuTest`, que leen el PDF de vuelta con PDFBox).
 - **Integración** (`@Tag("integration")`): `SrtmSmokeTest` y las clases `*ApiTest`, que llaman a la API del portal
   sobre la app entera y PostGIS. Heredan de `SrtmApiTest`: el modelo aplicado como lo hace `apply.py`, el token del
   admin de desarrollo y las llamadas. Cada endpoint de `RentasController` y `DocumentosController` tiene un caso feliz

@@ -23,6 +23,13 @@ dependencies {
     // lotes of the catastro fiscal and of the predios, the domicilio's point. needs PostGIS (compose.yml)
     implementation("wasichai:wasichai-spring-boot-starter-gis")
 
+    // srtm.emision: html from thymeleaf (standalone, no mvc: the app is webflux) to pdf with openhtmltopdf,
+    // merged with pdfbox
+    implementation(libs.thymeleaf)
+    implementation(libs.openhtmltopdf.pdfbox)
+    implementation(libs.openhtmltopdf.slf4j)
+    implementation(libs.pdfbox)
+
     // WasichaiIntegrationTest; brings spring-boot-starter-test, webflux-test and testcontainers
     testImplementation("wasichai:wasichai-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
@@ -61,6 +68,10 @@ tasks.register<Test>("integrationTest") {
     // gis needs PostGIS: testcontainers starts this image instead of plain postgres:18. an external test db
     // (WASICHAI_TEST_DB_*) must have the postgis extension available
     systemProperty("wasichai.test.db.image", "postgis/postgis:18-3.6")
+    // the app logs to stdout; stderr carries only what a test reports, like PuApiTest's timing of 100 PUs
+    testLogging {
+        events("standard_error")
+    }
     shouldRunAfter(tasks.named("test"))
 }
 

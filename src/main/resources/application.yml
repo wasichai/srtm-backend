@@ -27,7 +27,15 @@ wasichai:
       enabled: ${WASICHAI_GEOSERVER_ENABLED:false}
       url: ${WASICHAI_GEOSERVER_URL:http://localhost:8081/geoserver}
 
+logging:
+  level:
+    # openhtmltopdf logs every render (fonts loaded, stylesheets parsed) at INFO
+    com.openhtmltopdf: WARN
+
 srtm:
+  municipalidad:
+    # the header of the emitted documents (PU, HR)
+    nombre: ${SRTM_MUNICIPALIDAD_NOMBRE:MUNICIPALIDAD DISTRITAL DE PERENÉ}
   pide:
     reniec:
       # the DNI's names from RENIEC through the PIDE (pages 3, 8 and 15). off until the municipality's convenio gives

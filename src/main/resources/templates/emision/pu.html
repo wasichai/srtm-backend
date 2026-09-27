@@ -1,0 +1,241 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <title th:text="|PU ${pu.predio.codigo} ${pu.anio}|">PU</title>
+        <style th:utext="${css}"></style>
+    </head>
+    <body>
+        <div class="pie">
+            <span th:text="|Emitido el ${pu.emitido} · PU del predio ${pu.predio.codigo}|">Emitido el</span>
+        </div>
+
+        <table class="cabecera">
+            <tr>
+                <td>
+                    <div class="municipalidad" th:text="${pu.municipalidad}">MUNICIPALIDAD</div>
+                    <div class="documento">DECLARACIÓN JURADA DEL IMPUESTO PREDIAL — PU</div>
+                    <div class="etiqueta">Predio urbano</div>
+                </td>
+                <td class="numero">
+                    <span class="etiqueta">Año</span>
+                    <span class="valor" th:text="${pu.anio}">2026</span>
+                    <span class="etiqueta">N.° de declaración</span>
+                    <span class="valor" th:text="${pu.declaraciones}">1</span>
+                </td>
+            </tr>
+        </table>
+
+        <div class="bloque junto">
+            <div class="titulo">I. Contribuyente</div>
+            <table class="datos">
+                <tr>
+                    <td style="width: 16%">
+                        <div class="etiqueta">Código</div>
+                        <div class="valor" th:text="${pu.contribuyente.codigo}">000001</div>
+                    </td>
+                    <td style="width: 48%">
+                        <div class="etiqueta">Apellidos y nombres / razón social</div>
+                        <div class="valor" th:text="${pu.contribuyente.nombre}">nombre</div>
+                    </td>
+                    <td style="width: 36%">
+                        <div class="etiqueta">Documento de identidad</div>
+                        <div class="valor" th:text="${pu.contribuyente.documento}">DNI</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="2">
+                        <div class="etiqueta">Domicilio fiscal</div>
+                        <div class="valor" th:text="${pu.contribuyente.domicilioFiscal}">domicilio</div>
+                    </td>
+                    <td>
+                        <div class="etiqueta">Condición de propiedad · % de propiedad</div>
+                        <div class="valor" th:text="|${pu.contribuyente.condicion} · ${pu.contribuyente.porcentaje}|">PROPIETARIO UNICO · 100.00 %</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="bloque junto">
+            <div class="titulo">II. Ubicación del predio</div>
+            <table class="datos">
+                <colgroup>
+                    <col style="width: 22%" />
+                    <col style="width: 39%" />
+                    <col style="width: 39%" />
+                </colgroup>
+                <tr>
+                    <td>
+                        <div class="etiqueta">Código del predio</div>
+                        <div class="valor" th:text="${pu.predio.codigo}">01-01-0001</div>
+                    </td>
+                    <td colspan="2">
+                        <div class="etiqueta">Dirección</div>
+                        <div class="valor" th:text="${pu.predio.direccion}">dirección</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="etiqueta">Sector / manzana / lote</div>
+                        <div class="valor" th:text="${pu.predio.sectorManzanaLote}">01 / 01 / 1</div>
+                    </td>
+                    <td>
+                        <div class="etiqueta">Habilitación urbana</div>
+                        <div class="valor" th:text="${pu.predio.habilitacion}">habilitación</div>
+                    </td>
+                    <td>
+                        <div class="etiqueta">Ubigeo</div>
+                        <div class="valor" th:text="${pu.predio.ubigeo}">ubigeo</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="bloque" th:each="uso : ${pu.usos}">
+            <div class="titulo" th:text="|III. Uso N.° ${uso.secuencia} — declaración N.° ${uso.numeroDeclaracion}|">III. Uso N.° 001</div>
+
+            <div class="subtitulo">Datos del predio</div>
+            <table class="datos">
+                <colgroup>
+                    <col style="width: 20%" />
+                    <col style="width: 20%" />
+                    <col style="width: 15%" />
+                    <col style="width: 15%" />
+                    <col style="width: 15%" />
+                    <col style="width: 15%" />
+                </colgroup>
+                <tr>
+                    <td colspan="2">
+                        <div class="etiqueta">Uso (clase / sub clase / uso)</div>
+                        <div class="valor" th:text="${uso.uso}">uso</div>
+                    </td>
+                    <td colspan="2">
+                        <div class="etiqueta">Clasificación</div>
+                        <div class="valor" th:text="${uso.clasificacion}">clasificación</div>
+                    </td>
+                    <td colspan="2">
+                        <div class="etiqueta">Estado de la construcción</div>
+                        <div class="valor" th:text="${uso.estado}">estado</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="etiqueta">Área de terreno (m²)</div>
+                        <div class="valor" th:text="${uso.areaTerreno}">0.00</div>
+                    </td>
+                    <td>
+                        <div class="etiqueta">Área construida (m²)</div>
+                        <div class="valor" th:text="${uso.areaConstruida}">0.00</div>
+                    </td>
+                    <td>
+                        <div class="etiqueta">Área común (m²)</div>
+                        <div class="valor" th:text="${uso.areaComun}">0.00</div>
+                    </td>
+                    <td>
+                        <div class="etiqueta">Frente (m)</div>
+                        <div class="valor" th:text="${uso.frente}">0.00</div>
+                    </td>
+                    <td colspan="2">
+                        <div class="etiqueta">Condición · % de propiedad</div>
+                        <div class="valor" th:text="|${uso.condicion} · ${uso.porcentaje}|">PROPIETARIO UNICO · 100.00 %</div>
+                    </td>
+                </tr>
+            </table>
+
+            <div class="subtitulo">Niveles de construcción</div>
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th rowspan="2">Tipo</th>
+                        <th rowspan="2">Piso</th>
+                        <th rowspan="2">Mes/año</th>
+                        <th rowspan="2">Material</th>
+                        <th rowspan="2">Conservación</th>
+                        <th colspan="7">Categorías</th>
+                        <th rowspan="2">Área constr. (m²)</th>
+                        <th rowspan="2">Área común (m²)</th>
+                    </tr>
+                    <tr>
+                        <th>Muros</th>
+                        <th>Techos</th>
+                        <th>Pisos</th>
+                        <th>Puertas</th>
+                        <th>Revest.</th>
+                        <th>Baños</th>
+                        <th>Instal.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="n : ${uso.niveles}">
+                        <td th:text="${n.tipo}">PISO</td>
+                        <td class="centro" th:text="${n.piso}">1</td>
+                        <td class="centro" th:text="${n.anioMes}">01/2020</td>
+                        <td th:text="${n.material}">CONCRETO</td>
+                        <td th:text="${n.conservacion}">BUENO</td>
+                        <td class="centro" th:each="c : ${n.categorias}" th:text="${c}">A</td>
+                        <td class="num" th:text="${n.area}">0.00</td>
+                        <td class="num" th:text="${n.areaComun}">0.00</td>
+                    </tr>
+                    <tr th:if="${#lists.isEmpty(uso.niveles)}">
+                        <td class="vacio" colspan="14">Sin niveles de construcción declarados</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="subtitulo">Obras complementarias</div>
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th>Tipo de obra</th>
+                        <th>Partida</th>
+                        <th>Material</th>
+                        <th>Conservación</th>
+                        <th>Mes/año</th>
+                        <th>Cantidad</th>
+                        <th>Metrado</th>
+                        <th>Unidad</th>
+                        <th>Total metrado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="o : ${uso.obras}">
+                        <td th:text="${o.tipo}">MUROS</td>
+                        <td th:text="${o.partida}">partida</td>
+                        <td th:text="${o.material}">LADRILLO</td>
+                        <td th:text="${o.conservacion}">BUENO</td>
+                        <td class="centro" th:text="${o.anioMes}">01/2020</td>
+                        <td class="num" th:text="${o.cantidad}">0.00</td>
+                        <td class="num" th:text="${o.metrado}">0.00</td>
+                        <td class="centro" th:text="${o.unidad}">ML</td>
+                        <td class="num" th:text="${o.total}">0.00</td>
+                    </tr>
+                    <tr th:if="${#lists.isEmpty(uso.obras)}">
+                        <td class="vacio" colspan="9">Sin obras complementarias declaradas</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="subtitulo">Valores declarados</div>
+            <table class="datos junto">
+                <tr>
+                    <td style="width: 25%">
+                        <div class="etiqueta">Autoavalúo</div>
+                        <div class="valor importe" th:text="${uso.valores.autoavaluo}">S/ 0.00</div>
+                    </td>
+                    <td style="width: 25%">
+                        <div class="etiqueta">Valor condominio</div>
+                        <div class="valor importe" th:text="${uso.valores.valorCondominio}">S/ 0.00</div>
+                    </td>
+                    <td style="width: 25%">
+                        <div class="etiqueta">Deducción</div>
+                        <div class="valor importe" th:text="${uso.valores.deduccion}">S/ 0.00</div>
+                    </td>
+                    <td style="width: 25%">
+                        <div class="etiqueta">Valor afecto</div>
+                        <div class="valor importe" th:text="${uso.valores.valorAfecto}">S/ 0.00</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </body>
+</html>
