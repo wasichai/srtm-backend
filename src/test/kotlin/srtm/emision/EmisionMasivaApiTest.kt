@@ -157,7 +157,7 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
         assertEquals(3, terminada["procesados"].asInt())
         val errores = terminada["errores"].iterator().asSequence().toList()
         assertEquals(1, errores.size, terminada.toString())
-        val codigo = tree(send("GET", "/api/srtm/contribuyentes/${e.contribuyentes[1]}", null, HttpStatus.OK))["codigo"].asString()
+        val codigo = e.codigos.getValue(e.contribuyentes[1])
         assertEquals(codigo, errores[0]["contribuyente"].asString())
         assertEquals("Faltan parámetros del año $anio", errores[0]["mensaje"].asString())
     }
@@ -196,20 +196,33 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
     // 3 contribuyentes and 4 predios: A declares P1 and P2, B declares P3, and B and C share P4 (condominio)
     private class Escenario(
         val contribuyentes: List<String>,
+        // each contribuyente's codigo, by id
+        val codigos: Map<String, String>,
         // (predio, titular): one PU each
         val pus: List<Pair<String, String>>
     )
 
     private fun escenario(anio: Int): Escenario {
         uit(anio)
-        val (a, b, c) = List(3) { inscribir() }
+        val inscritos = List(3) { post("/api/srtm/contribuyentes", personaNatural(uniqueDocumento())) }
+        val (a, b, c) = inscritos.map { it["id"].asString() }
         val (p1, p2, p3, p4) = List(4) { predio() }
         declarar(a, p1, anio)
         declarar(a, p2, anio)
         declarar(b, p3, anio)
         declarar(b, p4, anio)
         declarar(c, p4, anio, "porcentaje_condominio" to 40)
-        return Escenario(listOf(a, b, c), listOf(p1 to a, p2 to a, p3 to b, p4 to b, p4 to c))
+        return Escenario(
+            listOf(a, b, c),
+            inscritos.associate { it["id"].asString() to it["codigo"].asString() },
+            listOf(
+                p1 to a,
+                p2 to a,
+                p3 to b,
+                p4 to b,
+                p4 to c
+            )
+        )
     }
 
     private fun declarar(
