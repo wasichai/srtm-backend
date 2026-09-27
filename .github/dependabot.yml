@@ -12,7 +12,7 @@ updates:
       actions:
         patterns: ['*']
 
-  # gradle/libs.versions.toml
+  # build.gradle.kts
   - package-ecosystem: gradle
     directory: /
     schedule:

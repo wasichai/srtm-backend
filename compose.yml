@@ -13,12 +13,12 @@ services:
       # 5433, never 5432: a postgres already running there (another app's) is never touched.
       # loopback only: with a remote DOCKER_HOST this would otherwise open the db on the server's public ip;
       # reach it there through an ssh tunnel (ssh -N -L 5433:localhost:5433 <host>)
-      - "127.0.0.1:${SRTM_PG_PORT:-5433}:5432"
+      - '127.0.0.1:${SRTM_PG_PORT:-5433}:5432'
     volumes:
       # pg18 images want the mount one level up, data lands in a version subdir
       - postgres-data:/var/lib/postgresql
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U srtm -d srtm" ]
+      test: ['CMD-SHELL', 'pg_isready -U srtm -d srtm']
       interval: 5s
       timeout: 5s
       retries: 20
