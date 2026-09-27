@@ -334,6 +334,9 @@ Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
 - **Domicilios:** el backend arma `descripcion` en el orden del SRTM (el portal muestra la misma vista previa).
   - El último domicilio FISCAL activo se copia a `domicilio_fiscal` / `_distrito` / `_provincia` / `_departamento` del
     contribuyente, que es lo que usan las listas.
+- **Código de fila:** domicilios, relacionados, medios de contacto y documentos sustento (y los transferentes de una DJ)
+  reciben `codigo` 001, 002… bajo su padre, el siguiente al mayor (`siguienteCodigoLista`). Se conserva al editar y no
+  se renumera al borrar.
 - **Declaración jurada** (en `DeclaracionService`):
   - Al presentarla, el backend le asigna `numero_declaracion` (correlativo, único).
   - Por defecto: año de la fecha de presentación, secuencia 1, INSCRIPCIÓN, DECLARACIÓN JURADA, FÍSICO.
@@ -401,11 +404,11 @@ registro con una segunda escritura, como el mismo usuario y solo en los campos q
   mano. Lo que el portal ya guardó derivado no se vuelve a escribir.
 - **Solo por el portal:** las reglas que leen otros registros: numeración y códigos (`codigo`, `numero_declaracion`,
   `fecha_registro` del contribuyente; `numero_declaracion` de la DJ; `codigo` y `numero_registro` del predio; `codigo`
-  de un relacionado o un transferente), el domicilio fiscal copiado al contribuyente, el condominio (condición, % y
-  valores de todo el grupo), las validaciones (documento, nombre o razón social de un relacionado o un transferente) y
-  los valores por defecto de una inscripción, una DJ o una fila nueva. También la `direccion`
-  del predio: `normalizar_padron.py` separa por esta API el tipo de vía del padrón y conserva su texto, y el portal la
-  rearma al guardar la ubicación. Desde el admin no se aplican.
+  de un domicilio, relacionado, medio de contacto, documento sustento o transferente), el domicilio fiscal copiado al
+  contribuyente, el condominio (condición, % y valores de todo el grupo), las validaciones (documento, nombre o razón
+  social de un relacionado o un transferente) y los valores por defecto de una inscripción, una DJ o una fila nueva.
+  También la `direccion` del predio: `normalizar_padron.py` separa por esta API el tipo de vía del padrón y conserva su
+  texto, y el portal la rearma al guardar la ubicación. Desde el admin no se aplican.
 
 ## Tests
 

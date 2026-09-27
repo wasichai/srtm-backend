@@ -149,6 +149,8 @@ data class Declaracion(
 data class Domicilio(
     val id: String? = null,
     val contribuyente: String? = null,
+    // the backend's: 001, 002... under its contribuyente
+    val codigo: String? = null,
     val tipoDomicilio: String? = null,
     val tipoPredio: String? = null,
     val ubigeo: String? = null,
@@ -212,6 +214,8 @@ data class Relacionado(
 data class MedioContacto(
     val id: String? = null,
     val contribuyente: String? = null,
+    // the backend's: 001, 002... under its contribuyente
+    val codigo: String? = null,
     val tipo: String? = null,
     val valor: String? = null,
     val anexo: String? = null,
@@ -224,6 +228,8 @@ data class MedioContacto(
 data class Sustento(
     val id: String? = null,
     val contribuyente: String? = null,
+    // the backend's: 001, 002... under its contribuyente (the srtm's número)
+    val codigo: String? = null,
     val documento: String? = null,
     val numeroDocumento: String? = null,
     val tipoPresentacion: String? = null,

@@ -75,7 +75,8 @@ class ContribuyenteService(
         registros.delete(CONTRIBUYENTE, id)
     }
 
-    // domicilios: the description is always rebuilt; an active fiscal one is copied to the contribuyente
+    // domicilios: coded under their contribuyente, the description always rebuilt; an active fiscal one is copied to
+    // the contribuyente
 
     suspend fun domicilios(contribuyente: UUID): List<Domicilio> = hijos(DOMICILIO, Domicilio::class.java, contribuyente)
 
@@ -84,8 +85,9 @@ class ContribuyenteService(
         body: Domicilio
     ): Domicilio {
         get(contribuyente)
-        val nuevo = domicilio(body)
-        exigirFiscal(domicilios(contribuyente), antes = null, despues = nuevo)
+        val otros = domicilios(contribuyente)
+        val nuevo = domicilio(body).copy(codigo = siguienteCodigoLista(otros.map { it.codigo }))
+        exigirFiscal(otros, antes = null, despues = nuevo)
         val saved = agregar(DOMICILIO, Domicilio::class.java, contribuyente, nuevo)
         sincronizarFiscal(contribuyente)
         return saved
@@ -96,7 +98,7 @@ class ContribuyenteService(
         body: Domicilio
     ): Domicilio {
         val stored = registros.get(DOMICILIO, Domicilio::class.java, id)
-        val next = domicilio(body)
+        val next = domicilio(body).copy(codigo = stored.codigo)
         exigirFiscal(otrosDomicilios(stored), antes = stored, despues = next)
         val saved = cambiar(DOMICILIO, Domicilio::class.java, id, next)
         saved.contribuyente?.let { sincronizarFiscal(UUID.fromString(it)) }
@@ -136,6 +138,8 @@ class ContribuyenteService(
         return body.copy(fuenteInformacion = body.fuenteInformacion ?: FUENTE_MANUAL)
     }
 
+    // medios de contacto and documentos sustento: coded by the backend under their contribuyente, like the rest
+
     suspend fun mediosContacto(contribuyente: UUID): List<MedioContacto> = hijos(MEDIO_CONTACTO, MedioContacto::class.java, contribuyente)
 
     suspend fun agregarMedioContacto(
@@ -143,13 +147,17 @@ class ContribuyenteService(
         body: MedioContacto
     ): MedioContacto {
         get(contribuyente)
-        return agregar(MEDIO_CONTACTO, MedioContacto::class.java, contribuyente, body.copy(estado = body.estado ?: ACTIVO))
+        val codigo = siguienteCodigoLista(mediosContacto(contribuyente).map { it.codigo })
+        return agregar(MEDIO_CONTACTO, MedioContacto::class.java, contribuyente, body.copy(codigo = codigo, estado = body.estado ?: ACTIVO))
     }
 
     suspend fun actualizarMedioContacto(
         id: UUID,
         body: MedioContacto
-    ): MedioContacto = cambiar(MEDIO_CONTACTO, MedioContacto::class.java, id, body)
+    ): MedioContacto {
+        val stored = registros.get(MEDIO_CONTACTO, MedioContacto::class.java, id)
+        return cambiar(MEDIO_CONTACTO, MedioContacto::class.java, id, body.copy(codigo = stored.codigo))
+    }
 
     suspend fun sustentos(contribuyente: UUID): List<Sustento> = hijos(SUSTENTO, Sustento::class.java, contribuyente)
 
@@ -158,13 +166,17 @@ class ContribuyenteService(
         body: Sustento
     ): Sustento {
         get(contribuyente)
-        return agregar(SUSTENTO, Sustento::class.java, contribuyente, body.copy(estado = body.estado ?: ACTIVO))
+        val codigo = siguienteCodigoLista(sustentos(contribuyente).map { it.codigo })
+        return agregar(SUSTENTO, Sustento::class.java, contribuyente, body.copy(codigo = codigo, estado = body.estado ?: ACTIVO))
     }
 
     suspend fun actualizarSustento(
         id: UUID,
         body: Sustento
-    ): Sustento = cambiar(SUSTENTO, Sustento::class.java, id, body)
+    ): Sustento {
+        val stored = registros.get(SUSTENTO, Sustento::class.java, id)
+        return cambiar(SUSTENTO, Sustento::class.java, id, body.copy(codigo = stored.codigo))
+    }
 
     suspend fun borrar(
         objectName: String,
