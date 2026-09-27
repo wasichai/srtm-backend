@@ -390,8 +390,8 @@ registro con una segunda escritura, como el mismo usuario y solo en los campos q
   mano. Lo que el portal ya guardó derivado no se vuelve a escribir.
 - **Solo por el portal** (leen otros registros): numeración y códigos (`codigo`, `numero_declaracion`, `fecha_registro`
   del contribuyente; `numero_declaracion` de la DJ; `codigo` y `numero_registro` del predio), el domicilio fiscal
-  copiado al contribuyente, el condominio, la validación del documento (formato y duplicados) y los valores por defecto
-  de una inscripción o una DJ nueva. Desde el admin esas reglas no se aplican.
+  copiado al contribuyente, el condominio (condición, % y valores de todo el grupo), la validación del documento
+  (formato y duplicados) y los valores por defecto de una inscripción o una DJ nueva. Desde el admin no se aplican.
 
 ## Tests
 
