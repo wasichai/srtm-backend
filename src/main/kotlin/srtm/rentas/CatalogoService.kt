@@ -38,6 +38,9 @@ class CatalogoService(
             .map { CategoriaValor((it["columna"] as Number).toInt(), it["categoria"].toString(), it["letra"].toString(), it["descripcion"].toString()) }
             .sortedWith(compareBy({ it.columna }, { it.letra }))
 
+    // the srtm's usos del predio in the order of their codes: the form cascades clase -> sub clase -> uso on its side
+    suspend fun usosPredio(): List<UsoPredio> = registros.all(USO_PREDIO, UsoPredio::class.java).sortedBy { it.codigo }
+
     suspend fun vias(
         q: String?,
         tipo: String?,

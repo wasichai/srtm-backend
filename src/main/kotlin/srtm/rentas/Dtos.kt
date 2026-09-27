@@ -392,6 +392,15 @@ data class ObraCategoria(
     val material: String? = null
 )
 
+// one uso of the srtm's catalog, with its clase and sub clase: the declaración stores the three names
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class UsoPredio(
+    val codigo: String? = null,
+    val clase: String? = null,
+    val subClase: String? = null,
+    val uso: String? = null
+)
+
 data class CategoriaValor(
     val columna: Int,
     val categoria: String,
