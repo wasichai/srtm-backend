@@ -779,6 +779,25 @@
         {"name": "sub_clase", "label": "Sub clase de uso", "type": "ENUM", "enum": "sub_clase_uso", "required": true},
         {"name": "uso", "label": "Uso del predio", "type": "ENUM", "enum": "uso", "required": true}
       ]
+    },
+    {
+      "name": "parametro_tributario",
+      "label": "Parámetro tributario",
+      "pluralLabel": "Parámetros tributarios",
+      "description": "Valores normativos verificados (doble firma) del repositorio normativa: UIT, tramos y mínimo del impuesto predial, deducciones (model/data/parametros-predial.csv). Clave natural: tipo, clave y vigencia_desde.",
+      "fields": [
+        {"name": "tipo", "label": "Tipo", "type": "TEXT", "required": true, "description": "UIT, TRAMO_PREDIAL, TRAMO_PREDIAL_LIMITE, PREDIAL_MINIMO…"},
+        {"name": "clave", "label": "Clave", "type": "TEXT", "description": "El tramo (1, 2, 3); vacía en un tipo de un solo valor, como la UIT."},
+        {"name": "vigencia_desde", "label": "Vigencia desde", "type": "DATE", "required": true},
+        {"name": "vigencia_hasta", "label": "Vigencia hasta", "type": "DATE", "description": "Vacía: sigue vigente."},
+        {"name": "valor_numerico", "label": "Valor numérico", "type": "DECIMAL",
+          "description": "La cifra tal como la imprime la norma: una alícuota o un mínimo en %, un límite en UIT, la UIT en soles."},
+        {"name": "texto", "label": "Texto", "type": "LONG_TEXT", "description": "El valor como lo escribe la norma."},
+        {"name": "norma", "label": "Norma", "type": "LONG_TEXT", "description": "Documento fuente y artículo."},
+        {"name": "fuente", "label": "Fuente", "type": "TEXT", "description": "Archivo del corpus de normativa del que sale la fila."},
+        {"name": "transcribio", "label": "Transcribió", "type": "TEXT", "required": true},
+        {"name": "verifico", "label": "Verificó", "type": "TEXT", "required": true}
+      ]
     }
   ],
   "relationships": [

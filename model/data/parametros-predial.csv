@@ -1,0 +1,22 @@
+# Copia de las filas UIT, TRAMO_PREDIAL, TRAMO_PREDIAL_LIMITE, PREDIAL_MINIMO, DEDUCCION_PENSIONISTA y
+# DEDUCCION_ADULTO_MAYOR de normativa: docs/10-negocio/valores-normativos/publicacion/parametros-2026.csv,
+# el derivado publicable de los archivos verificados (doble firma: transcribió, verificó) uit.md,
+# predial-tramos-y-alicuotas.md, predial-minimo.md y predial-deducciones.md. Ninguna cifra se tecleó: las filas
+# son las del original, sin su última columna (valor_maquina, vacía en todas ellas). Las columnas llevan los
+# nombres de parametro_tributario: valor_texto es texto, documento_fuente es norma y archivo_del_corpus es fuente.
+# valor_numerico va como lo imprime la norma: TRAMO_PREDIAL y PREDIAL_MINIMO en %, TRAMO_PREDIAL_LIMITE y las
+# deducciones en UIT, la UIT en soles.
+tipo,clave,vigencia_desde,vigencia_hasta,valor_numerico,texto,norma,fuente,transcribio,verifico
+UIT,,2022-01-01,2022-12-31,4600.00,,D.S. N.° 398-2021-EF,uit.md,JNA,HNA
+UIT,,2023-01-01,2023-12-31,4950.00,,D.S. N.° 309-2022-EF,uit.md,JNA,HNA
+UIT,,2024-01-01,2024-12-31,5150.00,,D.S. N.° 309-2023-EF,uit.md,JNA,HNA
+UIT,,2025-01-01,2025-12-31,5350.00,,D.S. N.° 260-2024-EF,uit.md,JNA,HNA
+UIT,,2026-01-01,2026-12-31,5500.00,,D.S. N.° 301-2025-EF,uit.md,JNA,HNA
+TRAMO_PREDIAL,1,2004-11-15,,0.2,Hasta 15 UIT; 0.2%,"TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF), artículo 13",predial-tramos-y-alicuotas.md,JNA,HNA
+TRAMO_PREDIAL,2,2004-11-15,,0.6,Más de 15 UIT y hasta 60 UIT; 0.6%,"TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF), artículo 13",predial-tramos-y-alicuotas.md,JNA,HNA
+TRAMO_PREDIAL,3,2004-11-15,,1.0,Más de 60 UIT; 1.0%,"TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF), artículo 13",predial-tramos-y-alicuotas.md,JNA,HNA
+TRAMO_PREDIAL_LIMITE,1,2004-11-15,,15,Hasta 15 UIT,"TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF), artículo 13",predial-tramos-y-alicuotas.md,JNA,HNA
+TRAMO_PREDIAL_LIMITE,2,2004-11-15,,60,Más de 15 UIT y hasta 60 UIT,"TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF), artículo 13",predial-tramos-y-alicuotas.md,JNA,HNA
+DEDUCCION_PENSIONISTA,,2004-11-15,,50,50 UIT,TUO LTM art. 19,predial-deducciones.md,JNA,HNA
+DEDUCCION_ADULTO_MAYOR,,2016-07-21,,50,50 UIT,"Ley N.° 30490, Ley de la Persona Adulta Mayor",predial-deducciones.md,JNA,HNA
+PREDIAL_MINIMO,,2004-11-15,,0.6,0.6% de la UIT vigente al 1 de enero del año al que corresponde el impuesto,"TUO de la Ley de Tributación Municipal (D.S. 156-2004-EF), artículo 13, último párrafo",predial-minimo.md,JNA,HNA
