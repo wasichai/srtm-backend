@@ -9,7 +9,7 @@ spring:
 wasichai:
   database:
     host: ${WASICHAI_DB_HOST:localhost}
-    # compose.yml publishes plain postgres on 5433. never 5432: another app's postgres may live there
+    # compose.yml publishes postgis on 5433. never 5432: another app's postgres may live there
     port: ${WASICHAI_DB_PORT:5433}
     name: ${WASICHAI_DB_NAME:srtm}
     username: ${WASICHAI_DB_USERNAME:srtm}
