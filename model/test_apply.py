@@ -37,7 +37,7 @@ def core_fields(model, obj_name, drop=(), options=None):
     for f in obj["fields"]:
         if f["name"] in drop:
             continue
-        field = {"name": f["name"], "type": f["type"]}
+        field = {"name": f["name"], "label": f["label"], "type": f["type"]}
         if f["type"] == "ENUM":
             field["enumOptions"] = (options or {}).get(f["name"], model["enums"][f["enum"]])
         fields.append(field)
@@ -225,6 +225,29 @@ class RelacionadoTransferenteSyncTests(ApplyCliTestCase):
         ])
         self.assertIn("update field relacionado.nombres (optional)", out)
         self.assertIn("done: 4 created, 2 updated, 25 skipped", out)
+
+
+class RelabelTests(ApplyCliTestCase):
+    """A field model.json labels differently gets model.json's label: predio.condicion was "Condición del predio"."""
+
+    def setUp(self):
+        model = load_model()
+        fields = {o["name"]: core_fields(model, o["name"]) for o in model["objects"]}
+        next(f for f in fields["predio"] if f["name"] == "condicion")["label"] = "Condición del predio"
+        self.core = FakeCore(
+            existing_objects=[o["name"] for o in model["objects"]],
+            existing_relationships=[r["name"] for r in model["relationships"]],
+            existing_fields=fields,
+        )
+        self.addCleanup(self.core.stop)
+
+    def test_relabels_only_what_differs(self):
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0, msg=err)
+        puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "label" in (r[3] or {})]
+        self.assertEqual(puts, [("/api/metadata/objects/predio/fields/condicion", {"label": "Tipo de predio"})])
+        self.assertIn("update field predio.condicion (label)", out)
+        self.assertIn("done: 0 created, 1 updated, 26 skipped", out)
 
 
 class FailureStopsTests(ApplyCliTestCase):
