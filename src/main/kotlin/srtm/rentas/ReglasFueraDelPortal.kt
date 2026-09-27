@@ -1,5 +1,6 @@
 package srtm.rentas
 
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.stereotype.Component
 import wasichai.core.common.ForbiddenException
 import wasichai.core.data.RecordChange
@@ -12,10 +13,11 @@ import java.math.BigDecimal
 
 // core has no hook before a write: its listeners run right after it, inside the caller's request (ADR-0025). so a
 // record saved outside the portal is completed by a second write, as the caller: what completar asks for, on the
-// fields the caller may write. core's update replaces every field the caller may write, so it sends them all
+// fields the caller may write. core's update replaces every field the caller may write, so it sends them all.
+// RecordService is built with its listeners, this one among them: it is looked up on use, not injected
 @Component
 class ReglasFueraDelPortal(
-    private val records: RecordService,
+    private val recordService: ObjectProvider<RecordService>,
     private val metadata: MetadataService
 ) : RecordChangeListener {
     override suspend fun recordChanged(change: RecordChange) {
@@ -30,6 +32,7 @@ class ReglasFueraDelPortal(
                 .mapTo(HashSet()) { it.name }
         val cambios = derivados.filterKeys { it in escribibles }
         if (cambios.isEmpty()) return
+        val records = recordService.getObject()
         val stored = records.get(change.objectName, change.recordId).attributes
         try {
             records.update(change.objectName, change.recordId, RecordRequest(stored.filterKeys { it in escribibles } + cambios))
