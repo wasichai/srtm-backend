@@ -3,7 +3,8 @@
 
 Each feature is a lote: its polygon goes to lote_geom, its properties to the fields. By default a property with a
 field's own name fills it; --map field=property renames (repeatable). A one-part MultiPolygon is taken as its
-Polygon. Idempotent by codigo_cpu: lotes Core already has are skipped.
+Polygon. Idempotent by codigo_cpu: lotes Core already has are skipped. tipo_zona also takes the catastro fiscal's
+TIPO_UU code or ABREV_UU abreviatura (data/tipos_unidad_urbana.csv): --map tipo_zona=TIPO_UU.
 
 A Shapefile converts first: ogr2ogr -f GeoJSON -t_srs EPSG:4326 lotes.geojson lotes.shp
 
@@ -17,7 +18,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from core_client import Client, CoreError
-from import_predios import LoadError
+from import_predios import LoadError, read_tipos_unidad_urbana
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -40,6 +41,22 @@ def parse_map(pairs):
     return mapping
 
 
+def tipo_unidad_urbana_de(valor, tipos):
+    """The model's tipo de unidad urbana for what the catastro carries: a TIPO_UU code (01, or 1 from a numeric column)
+    or an ABREV_UU abreviatura gives its nombre; anything else comes back as it is, for the enum check to report.
+    An abreviatura two types share is read as the first the file lists, as import_predios does."""
+    if valor is None:
+        return None
+    codigo = valor.zfill(2) if valor.isdigit() else valor
+    for t in tipos:
+        if codigo == t["codigo"]:
+            return t["nombre"]
+    for t in tipos:
+        if valor == t["abreviatura"]:
+            return t["nombre"]
+    return valor
+
+
 def polygon_of(geometry):
     """The lote's Polygon, or None when the geometry is not one (a MultiPolygon of one part counts)."""
     if not geometry:
@@ -51,8 +68,9 @@ def polygon_of(geometry):
     return None
 
 
-def lotes_from(collection, mapping, enums):
+def lotes_from(collection, mapping, enums, tipos=None):
     """(lotes, problems). A lote is (feature number, attributes, polygon)."""
+    tipos = read_tipos_unidad_urbana() if tipos is None else tipos
     lotes, problems, seen = [], [], set()
     for n, feature in enumerate(collection.get("features") or [], start=1):
         props = feature.get("properties") or {}
@@ -61,6 +79,7 @@ def lotes_from(collection, mapping, enums):
             value = props.get(mapping[field])
             text = None if value is None else str(value).strip()
             attributes[field] = text or None
+        attributes["tipo_zona"] = tipo_unidad_urbana_de(attributes["tipo_zona"], tipos)
         codigo = attributes["codigo_cpu"]
         polygon = polygon_of(feature.get("geometry"))
         if not codigo:
