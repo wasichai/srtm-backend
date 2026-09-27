@@ -86,7 +86,10 @@ class MotivoApiTest : WasichaiIntegrationTest() {
     @Test
     fun `a declaracion of the padron, edited, is an actualizacion that gets no number`() {
         val contribuyente =
-            core(CONTRIBUYENTE, mapOf("tipo_persona" to "NATURAL", "numero_documento" to uniqueDocumento(), "nombre_completo" to "MENDOZA TAYPE"))
+            core(
+                CONTRIBUYENTE,
+                mapOf("tipo_persona" to "NATURAL", "tipo_documento" to "DNI", "numero_documento" to uniqueDocumento(), "nombre_completo" to "MENDOZA TAYPE")
+            )
         val importada = core(DECLARACION, mapOf("contribuyente" to contribuyente, "predio" to predio(), "anio" to 2026, "secuencia_uso" to "001"))
         val editada = put("/api/srtm/declaraciones/$importada", fields(declaracionDe(importada)) + ("otros_datos" to "EDITADA"))
         assertEquals("ACTUALIZACION", editada["motivo"].asString())
