@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Moves the declaraciones that still hold a grupo de uso of the padrón in `uso` ("RESIDENCIAL - CASA HABITACION",
 "TERRENO"...) to the srtm's clase, sub clase and uso, as import_predios.py now imports them (USOS_DEL_PADRON):
-RESIDENCIAL - CASA HABITACION is RESIDENCIAL / UNIFAMILIAR / CASA HABITACIÓN, any other grupo the clase of its name
-with no sub clase nor uso (the padrón says no more: the portal asks for them when the declaración is edited).
+RESIDENCIAL - CASA HABITACION is RESIDENCIAL / UNIFAMILIAR / CASA HABITACIÓN, ESTACIONAMIENTO the clase GARAGE and any
+other grupo the clase of its name, with no sub clase nor uso (the padrón says no more: the portal asks for them when
+the declaración is edited).
+
+A declaración whose clase_uso is one the catalog renamed (CLASES_RENOMBRADAS: ESTACIONAMIENTO, the clase 09 the
+SNCP's codifier calls GARAGE) gets the new name, its sub clase and uso as they are.
 
 One that already has a clase or a sub clase is not overwritten: it goes to the report, unless its uso is the catalog's
 under them (COMERCIAL and INDUSTRIA are also usos of the catalog). Once no declaración holds a grupo, apply.py drops
@@ -44,12 +48,23 @@ def _row(record, grupo, usos, nota=""):
     }
 
 
+# a clase_uso the catalog renamed -> its name now
+CLASES_RENOMBRADAS = {"ESTACIONAMIENTO": "GARAGE"}
+
+
 def plan(declaraciones, catalogo):
     """Core's declaraciones and the catalog's (clase, sub clase, uso) -> the updates to make and the report's rows."""
     updates = []
     rows = []
     for record in declaraciones:
         stored = record["attributes"]
+        clave = str(stored.get("numero_declaracion") or record["id"])
+        renombrada = CLASES_RENOMBRADAS.get(stored.get("clase_uso"))
+        if renombrada:
+            usos = {**{k: stored.get(k) for k in USO_FIELDS}, "clase_uso": renombrada}
+            rows.append(_row(record, stored["clase_uso"], usos))
+            updates.append(Update("declaracion_predial", record["id"], clave, {**stored, **usos}))
+            continue
         grupo = stored.get("uso")
         usos = uso_del_padron(grupo)
         if usos is None:
@@ -59,7 +74,6 @@ def plan(declaraciones, catalogo):
                 rows.append(_row(record, grupo, stored, NOTA_CON_CLASE))
             continue
         rows.append(_row(record, grupo, usos))
-        clave = str(stored.get("numero_declaracion") or record["id"])
         updates.append(Update("declaracion_predial", record["id"], clave, {**stored, **usos}))
     return updates, rows
 
@@ -95,8 +109,8 @@ def main(argv=None):
         updates, rows = plan(declaraciones, catalogo)
         write_report(args.report, rows)
         print(f"declaraciones: {len(declaraciones)} leídas, {len(updates)} por migrar")
-        for grupo, count in Counter(r["grupo"] for r in rows if not r["nota"]).most_common():
-            destino = " / ".join(v for v in uso_del_padron(grupo).values() if v)
+        destinos = Counter((r["grupo"], " / ".join(r[k] for k in USO_FIELDS if r[k])) for r in rows if not r["nota"])
+        for (grupo, destino), count in destinos.most_common():
             print(f"  {grupo}: {count} -> {destino}")
         print(f"notas: {sum(1 for r in rows if r['nota'])} -> {args.report}")
         if args.dry_run:

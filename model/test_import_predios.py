@@ -300,6 +300,12 @@ class BuildDatasetTests(unittest.TestCase):
             {k: terreno.attributes[k] for k in ("clase_uso", "sub_clase_uso", "uso")},
             {"clase_uso": "TERRENO", "sub_clase_uso": None, "uso": None},
         )
+        # the padrón's ESTACIONAMIENTO is the clase 09, GARAGE in the SNCP's codifier and the catalog
+        [garage] = self.build([row(grupo_uso_desc="ESTACIONAMIENTO")]).declaraciones
+        self.assertEqual(
+            {k: garage.attributes[k] for k in ("clase_uso", "sub_clase_uso", "uso")},
+            {"clase_uso": "GARAGE", "sub_clase_uso": None, "uso": None},
+        )
         [sin_uso] = self.build([row(grupo_uso_desc=None)]).declaraciones
         self.assertEqual((sin_uso.attributes["clase_uso"], sin_uso.attributes["uso"]), (None, None))
 

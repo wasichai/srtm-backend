@@ -7,6 +7,10 @@ data/obras_complementarias.csv, the usos from data/usos_predio.csv (all shipped)
 same `direccion_predio` import_predios.py parses, its `<vía>` and `<habilitación>` parts, split into a type
 (the model's tipo_via / tipo_unidad_urbana) and a name. Idempotent: what Core already has is skipped.
 
+The usos del predio follow the CSV by código: a código Core lacks is created, one whose clase, sub clase or uso
+changed is updated and one the CSV no longer has is deleted. Nothing references their records (a declaración keeps
+the names in its own ENUMs). The other catalogs are only created.
+
 Run: python3 import_catalogos.py [--excel "CODIGO DE PREDIOS AL 2026.xlsx"] [--dry-run]
 Exit: 0 ok, 1 Core refused something.
 """
@@ -105,23 +109,94 @@ def _missing(client, object_name, items, key):
     return [(key(a), i + 1, a) for i, a in enumerate(items) if key(a) not in existing]
 
 
-def load(client, ubigeos, vias, unidades, workers, categorias=(), obras=(), usos=()):
-    """Creates what Core lacks. Returns (created, skipped)."""
+USO_PREDIO = "uso_predio"
+USO_NAMES = ("clase", "sub_clase", "uso")
+
+
+class SyncError(LoadError):
+    """A PUT or DELETE of a uso Core refused."""
+
+    def __init__(self, method, codigo, error):
+        super().__init__(USO_PREDIO, codigo, error)
+        self.method = method
+
+
+def plan_usos(records, usos):
+    """What makes Core's usos the CSV's, by código: (create, update, delete, skipped). create: the usos Core lacks;
+    update: (record, uso) of a código whose clase, sub clase or uso changed; delete: the records of a código the CSV
+    no longer has; skipped: how many are already as the CSV says."""
+    by_codigo = {r["attributes"].get("codigo"): r for r in records}
+    wanted = {u["codigo"]: u for u in usos}
+    create = [u for codigo, u in wanted.items() if codigo not in by_codigo]
+    update = [
+        (by_codigo[codigo], u) for codigo, u in wanted.items()
+        if codigo in by_codigo and any(by_codigo[codigo]["attributes"].get(k) != u[k] for k in USO_NAMES)
+    ]
+    delete = [r for codigo, r in by_codigo.items() if codigo not in wanted]
+    return create, update, delete, len(wanted) - len(create) - len(update)
+
+
+def _names(attributes, keys=USO_NAMES):
+    return " / ".join(str(attributes.get(k)) for k in keys)
+
+
+def sync_usos(client, usos, workers, dry_run=False):
+    """Makes Core's usos del predio the CSV's (see plan_usos). Returns (created, skipped)."""
+    create, update, delete, skipped = plan_usos(client.list_all(USO_PREDIO), usos)
+    if dry_run:
+        print(f"{USO_PREDIO}: {len(create)} to create, {len(update)} to update, {len(delete)} to delete, {skipped} skipped")
+        for u in create:
+            print(f"  create {u['codigo']}: {_names(u)}")
+    for record, u in update:
+        changed = [k for k in USO_NAMES if record["attributes"].get(k) != u[k]]
+        print(f"  update {u['codigo']}: {_names(record['attributes'], changed)} -> {_names(u, changed)}")
+    for record in delete:
+        print(f"  delete {record['attributes'].get('codigo')}: {_names(record['attributes'])}")
+    if dry_run:
+        return len(create), skipped
+    new = post_all(client, USO_PREDIO, [(u["codigo"], u["codigo"], u) for u in create], workers)
+    for record, u in update:
+        try:
+            client.put(f"/api/objects/{USO_PREDIO}/records/{record['id']}", {"attributes": {"codigo": u["codigo"], **{k: u[k] for k in USO_NAMES}}})
+        except CoreError as e:
+            raise SyncError("PUT", u["codigo"], e)
+    for record in delete:
+        try:
+            client.delete(f"/api/objects/{USO_PREDIO}/records/{record['id']}")
+        except CoreError as e:
+            raise SyncError("DELETE", record["attributes"].get("codigo"), e)
+    print(f"{USO_PREDIO}: {len(new)} created, {len(update)} updated, {len(delete)} deleted, {skipped} skipped", flush=True)
+    return len(new), skipped
+
+
+def load(client, ubigeos, vias, unidades, workers, categorias=(), obras=(), usos=(), dry_run=False):
+    """Creates what Core lacks and syncs the usos del predio (only when there are usos: none leaves them as they
+    are). With dry_run, reads Core and says what it would do. Returns (created, skipped)."""
     created = skipped = 0
     plan = [
         ("ubigeo", ubigeos, lambda a: a["codigo"]),
         ("categoria_valor", list(categorias), lambda a: (int(a["columna"]), a["letra"])),
         ("obra_categoria", list(obras), lambda a: (a["tipo_obra"], int(a["numero"]))),
-        ("uso_predio", list(usos), lambda a: a["codigo"]),
+        (USO_PREDIO, list(usos), None),
         ("via", vias, lambda a: (a["tipo_via"], a["nombre"], a.get("ubigeo"))),
         ("unidad_urbana", unidades, lambda a: (a["tipo_unidad_urbana"], a["nombre"], a.get("ubigeo"))),
     ]
     for object_name, items, key in plan:
+        if object_name == USO_PREDIO:
+            if items:
+                new, same = sync_usos(client, items, workers, dry_run)
+                created += new
+                skipped += same
+            continue
         todo = _missing(client, object_name, items, key)
-        new = post_all(client, object_name, todo, workers)
+        if dry_run:
+            print(f"{object_name}: {len(todo)} to create, {len(items) - len(todo)} skipped", flush=True)
+            new = todo
+        else:
+            new = post_all(client, object_name, todo, workers)
+            print(f"{object_name}: {len(new)} created, {len(items) - len(todo)} skipped", flush=True)
         created += len(new)
         skipped += len(items) - len(todo)
-        print(f"{object_name}: {len(new)} created, {len(items) - len(todo)} skipped", flush=True)
     return created, skipped
 
 
@@ -137,7 +212,7 @@ def _parse_args(argv):
     p.add_argument("--core", default=os.environ.get("WASICHAI_CORE", "http://localhost:8090"))
     p.add_argument("--email", default=os.environ.get("WASICHAI_EMAIL", "admin@wasichai.local"))
     p.add_argument("--password", default=os.environ.get("WASICHAI_PASSWORD", "admin"))
-    p.add_argument("--dry-run", action="store_true", help="read and transform only; call nothing")
+    p.add_argument("--dry-run", action="store_true", help="read Core and say what it would do; write nothing")
     p.add_argument("--workers", type=int, default=4, help="parallel POSTs (default 4)")
     return p.parse_args(argv)
 
@@ -157,20 +232,22 @@ def main(argv=None):
     print(f"usos del predio: {len(usos)}")
     print(f"vías: {len(vias)}")
     print(f"unidades urbanas: {len(unidades)}")
-    if args.dry_run:
-        return 0
 
     client = Client(args.core)
     try:
         client.login(args.email, args.password)
-        created, skipped = load(client, ubigeos, vias, unidades, args.workers, categorias, obras, usos)
+        created, skipped = load(client, ubigeos, vias, unidades, args.workers, categorias, obras, usos, args.dry_run)
     except LoadError as e:
-        print(f"error POST /api/objects/{e.object_name}/records (#{e.fila}) -> {e.error.status}\n{e.error.body}", file=sys.stderr)
+        method = getattr(e, "method", "POST")
+        print(f"error {method} /api/objects/{e.object_name}/records (#{e.fila}) -> {e.error.status}\n{e.error.body}", file=sys.stderr)
         return 1
     except CoreError as e:
         print(f"error -> {e.status}\n{e.body}", file=sys.stderr)
         return 1
-    print(f"done: {created} created, {skipped} skipped")
+    if args.dry_run:
+        print(f"dry run: {created} to create, {skipped} skipped; nothing written")
+    else:
+        print(f"done: {created} created, {skipped} skipped")
     return 0
 
 

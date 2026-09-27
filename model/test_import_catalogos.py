@@ -6,7 +6,7 @@ import io
 import json
 import os
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 
 import import_catalogos as ic
 from core_client import Client
@@ -189,27 +189,62 @@ class ShippedUsosTests(unittest.TestCase):
 
     def test_uso_lists_the_catalog_usos_only(self):
         # wasichai/srtm-backend#31: the padrón's grupos de uso left it for the clases. COMERCIAL and INDUSTRIA stay:
-        # they are also usos of the catalog (060806, 090301, 100402; 100301)
+        # they are also usos of the catalog (060806, 100402; 100301)
         usos = ic.read_usos(self.path)
         self.assertEqual(sorted(set(self.enums["uso"]) - {u["uso"] for u in usos}), [])
         self.assertEqual(len(self.enums["uso"]), len(set(self.enums["uso"])))
         self.assertNotIn("RESIDENCIAL - CASA HABITACION", self.enums["uso"])
 
     def test_the_padron_grupos_are_the_clases(self):
+        # the padrón's ESTACIONAMIENTO is the clase 09, GARAGE in the SNCP's codifier; apply.py drops ESTACIONAMIENTO
+        # from Core once migrar_usos_padron.py has moved the declaraciones that hold it
         padron = ["RESIDENCIAL", "TERRENO", "COMERCIAL", "DESOCUPADO", "INSTITUCIONAL", "EQUIPAMIENTO URBANO", "INDUSTRIA",
-                  "RECREACIONAL", "BIENES COMUNES", "ESTACIONAMIENTO"]
+                  "RECREACIONAL", "BIENES COMUNES", "GARAGE"]
         self.assertEqual(sorted(self.enums["clase_uso"]), sorted(padron))
+        self.assertIn(("090000", "GARAGE", "SNCP"), [(r["codigo"], r["descripcion"], r["fuente"]) for r in self._rows()])
         self.assertIn(
             {"codigo": "010101", "clase": "RESIDENCIAL", "sub_clase": "UNIFAMILIAR", "uso": "CASA HABITACIÓN"}, ic.read_usos(self.path)
         )
 
     def test_every_row_says_where_it_comes_from(self):
-        import csv
-        with open(self.path, encoding="utf-8") as f:
-            rows = list(csv.DictReader(f))
-        self.assertEqual({r["fuente"] for r in rows} - {"SRTM", "ARMONIZACION", "INFERIDO"}, set())
+        rows = self._rows()
+        self.assertEqual({r["fuente"] for r in rows} - {"SRTM", "SNCP", "ARMONIZACION", "INFERIDO"}, set())
         self.assertEqual([r["codigo"] for r in rows], sorted(r["codigo"] for r in rows))
         self.assertEqual(len({r["codigo"] for r in rows}), len(rows))
+
+    def test_the_srtm_structure(self):
+        # the srtm's tipo uso predio ids 1-48 are its clases and sub clases: the SNCP codifier's 10 and 38
+        codigos = [r["codigo"] for r in self._rows()]
+        self.assertEqual(len([c for c in codigos if c.endswith("0000")]), 10)
+        self.assertEqual(len([c for c in codigos if c.endswith("00") and not c.endswith("0000")]), 38)
+        # ids 49-58 are its residential usos and 299-303 the terreno's (M21-1-003, pages 263 and 417)
+        self.assertEqual([c for c in codigos if c.startswith("01") and not c.endswith("00")],
+                         ["010101"] + [f"0102{i:02d}" for i in range(1, 10)])
+        self.assertEqual([c for c in codigos if c.startswith("07") and not c.endswith("00")],
+                         ["070101", "070201", "070301", "070401", "070402"])
+
+    def test_the_cascade_is_unambiguous(self):
+        # the portal cascades by name: two sub clases of a clase with one name would be a single option
+        usos = ic.read_usos(self.path)
+        names = [(clase, sub_clase) for (clase, _), sub_clase in
+                 {(u["clase"], u["codigo"][:4]): u["sub_clase"] for u in usos}.items()]
+        self.assertEqual(sorted(n for n in set(names) if names.count(n) > 1), [])
+        triples = [(u["clase"], u["sub_clase"], u["uso"]) for u in usos]
+        self.assertEqual(sorted(t for t in set(triples) if triples.count(t) > 1), [])
+
+    def test_every_name_is_a_valid_enum_option(self):
+        import apply
+        self.assertEqual([r["descripcion"] for r in self._rows() if not apply.enum_option_valid(r["descripcion"])], [])
+
+    def test_sub_clase_lists_the_catalog_sub_clases_only(self):
+        usos = ic.read_usos(self.path)
+        self.assertEqual(sorted(set(self.enums["sub_clase_uso"]) - {u["sub_clase"] for u in usos}), [])
+        self.assertEqual(len(self.enums["sub_clase_uso"]), len(set(self.enums["sub_clase_uso"])))
+
+    def _rows(self):
+        import csv
+        with open(self.path, encoding="utf-8") as f:
+            return list(csv.DictReader(f))
 
 
 class LoadTests(unittest.TestCase):
@@ -259,6 +294,86 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(first, (1, 1))
         self.assertEqual(second, (0, 2))
         self.assertEqual([r["attributes"]["numero"] for r in self.core.records["obra_categoria"]], [3, 17])
+
+
+CASA = {"codigo": "010101", "clase": "RESIDENCIAL", "sub_clase": "UNIFAMILIAR", "uso": "CASA HABITACIÓN"}
+TERCEROS = {"codigo": "070401", "clase": "TERRENO", "sub_clase": "OCUPADO", "uso": "CON CONSTRUCCIÓN DE TERCEROS"}
+COMUN = {"codigo": "100106", "clase": "BIENES COMUNES", "sub_clase": "RESIDENCIAL", "uso": "CASA HABITACIÓN"}
+
+
+class SyncUsosTests(unittest.TestCase):
+    """uso_predio follows the CSV by código: nothing references its records (the declaración keeps the names)."""
+
+    def setUp(self):
+        self.core = FakeCore()
+        self.addCleanup(self.core.stop)
+        self.client = Client(self.core.base_url)
+        self.client.login("admin@wasichai.local", "admin")
+        self.core.add_record("uso_predio", CASA)
+        self.core.add_record("uso_predio", {**TERCEROS, "uso": "CON CONSTRUCCIÓN"})
+        self.core.add_record("uso_predio", {"codigo": "070102", "clase": "TERRENO", "sub_clase": "DESOCUPADO", "uso": "TERRENO ERIAZO"})
+        self.core.add_record("via", {"tipo_via": "AVENIDA", "nombre": "MARGINAL", "ubigeo": "120302"})
+
+    def _load(self, usos):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            result = ic.load(self.client, [], [], [], workers=2, usos=usos)
+        return result, out.getvalue()
+
+    def _usos(self):
+        return sorted((r["attributes"]["codigo"], r["attributes"]["uso"]) for r in self.core.records["uso_predio"])
+
+    def test_creates_updates_and_deletes_by_codigo(self):
+        result, out = self._load([CASA, TERCEROS, COMUN])
+        self.assertIn("uso_predio: 1 created, 1 updated, 1 deleted, 1 skipped", out)
+        self.assertEqual(result, (1, 1))
+        self.assertEqual(self._usos(), [("010101", "CASA HABITACIÓN"), ("070401", "CON CONSTRUCCIÓN DE TERCEROS"),
+                                        ("100106", "CASA HABITACIÓN")])
+        # Core's update replaces every field: all four go
+        [terceros] = [r for r in self.core.records["uso_predio"] if r["attributes"]["codigo"] == "070401"]
+        self.assertEqual(terceros["attributes"], TERCEROS)
+
+    def test_a_second_run_changes_nothing(self):
+        self._load([CASA, TERCEROS, COMUN])
+        writes = len([r for r in self.core.requests if r[0] != "GET"])
+        _, out = self._load([CASA, TERCEROS, COMUN])
+        self.assertIn("uso_predio: 0 created, 0 updated, 0 deleted, 3 skipped", out)
+        self.assertEqual(len([r for r in self.core.requests if r[0] != "GET"]), writes)
+
+    def test_the_other_catalogs_stay_create_only(self):
+        # a via Core has and the list lacks stays; without usos the catalog of usos is not touched
+        result, out = self._load(())
+        self.assertEqual(result, (0, 0))
+        self.assertEqual(len(self.core.records["via"]), 1)
+        self.assertEqual(len(self.core.records["uso_predio"]), 3)
+        self.assertNotIn("uso_predio", out)
+        self.assertEqual([r for r in self.core.requests if r[0] == "DELETE"], [])
+
+    def test_dry_run_reads_core_and_writes_nothing(self):
+        path = write_csv(self, "codigo,descripcion,fuente\n010000,RESIDENCIAL,SRTM\n010100,UNIFAMILIAR,SRTM\n"
+                               "010101,CASA HABITACIÓN,SRTM\n070000,TERRENO,SNCP\n070400,OCUPADO,SRTM\n"
+                               "070401,CON CONSTRUCCIÓN DE TERCEROS,SRTM\n100000,BIENES COMUNES,SNCP\n"
+                               "100100,RESIDENCIAL,SRTM\n100106,CASA HABITACIÓN,SRTM\n")
+        out = io.StringIO()
+        with redirect_stdout(out):
+            code = ic.main(["--usos-csv", path, "--core", self.core.base_url, "--dry-run"])
+        self.assertEqual(code, 0)
+        self.assertEqual({r[0] for r in self.core.requests if r[1] != "/api/auth/login"}, {"GET"})
+        self.assertIn("uso_predio: 1 to create, 1 to update, 1 to delete, 1 skipped", out.getvalue())
+        self.assertIn("  update 070401: CON CONSTRUCCIÓN -> CON CONSTRUCCIÓN DE TERCEROS", out.getvalue())
+        self.assertIn("  delete 070102", out.getvalue())
+        self.assertIn("  create 100106", out.getvalue())
+        self.assertEqual(len(self.core.records["uso_predio"]), 3)
+
+    def test_a_refused_update_names_the_codigo(self):
+        self.core.fail_on_update = "uso_predio"
+        path = write_csv(self, "codigo,descripcion,fuente\n070000,TERRENO,SNCP\n070400,OCUPADO,SRTM\n"
+                               "070401,CON CONSTRUCCIÓN DE TERCEROS,SRTM\n")
+        err = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(err):
+            code = ic.main(["--usos-csv", path, "--core", self.core.base_url])
+        self.assertEqual(code, 1)
+        self.assertIn("error PUT /api/objects/uso_predio/records (#070401) -> 400", err.getvalue())
 
 
 if __name__ == "__main__":
