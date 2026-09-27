@@ -2,6 +2,7 @@ package srtm.rentas
 
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
+import wasichai.core.common.ConflictException
 import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
 import wasichai.core.common.ValidationException
@@ -61,6 +62,17 @@ class ContribuyenteService(
                 domicilioDepartamento = stored.domicilioDepartamento
             )
         return registros.replace(CONTRIBUYENTE, Contribuyente::class.java, id, Records.attributes(next))
+    }
+
+    // only while it declares nothing, vigente or annulled. its four lists go with it, straight: borrarDomicilio would
+    // keep the last fiscal domicilio in step with a contribuyente that is going away
+    suspend fun borrarContribuyente(id: UUID) {
+        get(id)
+        bajaConDeclaraciones("El contribuyente", listas.contar(DECLARACION, PARENT, id))?.let { throw ConflictException(it) }
+        for (lista in listOf(DOMICILIO, RELACIONADO, MEDIO_CONTACTO, SUSTENTO)) {
+            hijos(lista, Map::class.java, id).forEach { registros.delete(lista, UUID.fromString(it["id"].toString())) }
+        }
+        registros.delete(CONTRIBUYENTE, id)
     }
 
     // domicilios: the description is always rebuilt; an active fiscal one is copied to the contribuyente

@@ -26,7 +26,8 @@ class RentasService(
         anio: Int?
     ): ContribuyenteFicha {
         val year = anio ?: anioActual()
-        val declaraciones = declaracionesPor("contribuyente", id, year)
+        // an annulled declaración is listed (declaracionesDeContribuyente) but counts nothing
+        val declaraciones = declaracionesPor("contribuyente", id, year).filter(::vigente)
         return ContribuyenteFicha(
             contribuyente = contribuyentes.get(id),
             anio = year,
@@ -59,7 +60,7 @@ class RentasService(
         anio: Int?
     ): PredioFicha {
         val year = anio ?: anioActual()
-        val declaraciones = declaracionesPor("predio", id, year)
+        val declaraciones = declaracionesPor("predio", id, year).filter(::vigente)
         return PredioFicha(
             predio = predio(id),
             anio = year,

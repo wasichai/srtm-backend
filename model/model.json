@@ -65,7 +65,8 @@
     "tipo_obra": ["MUROS PERIMETRICOS O CERCOS", "PORTONES Y PUERTAS", "TANQUES ELEVADOS", "CISTERNAS", "PISCINAS", "LOSAS DEPORTIVAS",
       "PISOS DE CONCRETO", "OTROS"],
     "unidad_medida": ["M2", "M3", "ML", "UND"],
-    "lado": ["PAR", "IMPAR"]
+    "lado": ["PAR", "IMPAR"],
+    "estado_declaracion": ["VIGENTE", "ANULADA"]
   },
   "objects": [
     {
@@ -213,7 +214,11 @@
         {"name": "clase_uso", "label": "Clase de uso", "type": "ENUM", "enum": "clase_uso"},
         {"name": "sub_clase_uso", "label": "Sub clase de uso", "type": "ENUM", "enum": "sub_clase_uso"},
         {"name": "area_comun_terreno", "label": "Área común del terreno", "type": "DECIMAL"},
-        {"name": "otros_datos", "label": "Otros datos", "type": "LONG_TEXT"}
+        {"name": "otros_datos", "label": "Otros datos", "type": "LONG_TEXT"},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_declaracion",
+          "description": "VIGENTE o ANULADA (descargo). Vacío en las importadas: cuentan como VIGENTE. Una anulada no suma en totales ni en el condominio."},
+        {"name": "motivo_anulacion", "label": "Motivo de la anulación", "type": "LONG_TEXT"},
+        {"name": "fecha_anulacion", "label": "Fecha de anulación", "type": "DATE"}
       ]
     },
     {

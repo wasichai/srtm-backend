@@ -116,6 +116,13 @@ class RentasController(
         @RequestBody body: Contribuyente
     ) = contribuyentes.actualizar(id, body)
 
+    // 409 while it has declaraciones
+    @DeleteMapping("/contribuyentes/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    suspend fun borrarContribuyente(
+        @PathVariable id: UUID
+    ) = contribuyentes.borrarContribuyente(id)
+
     @GetMapping("/contribuyentes/{id}/declaraciones")
     suspend fun declaracionesDeContribuyente(
         @PathVariable id: UUID,
@@ -247,6 +254,13 @@ class RentasController(
         @RequestBody body: Predio
     ) = declaraciones.actualizarPredio(id, body)
 
+    // 409 while it has declaraciones
+    @DeleteMapping("/predios/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    suspend fun borrarPredio(
+        @PathVariable id: UUID
+    ) = declaraciones.borrarPredio(id)
+
     @GetMapping("/predios/{id}/declaraciones")
     suspend fun declaracionesDePredio(
         @PathVariable id: UUID,
@@ -265,11 +279,19 @@ class RentasController(
         @RequestBody body: Declaracion
     ) = declaraciones.actualizar(id, body)
 
+    // 409 while it has transferentes, niveles, obras or otros frentes: then it is annulled instead
     @DeleteMapping("/declaraciones/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     suspend fun borrarDeclaracion(
         @PathVariable id: UUID
     ) = declaraciones.borrarDeclaracion(id)
+
+    // the descargo: {motivo_anulacion}. the declaración stays, read-only, out of totales and condominio
+    @PostMapping("/declaraciones/{id}/anular")
+    suspend fun anularDeclaracion(
+        @PathVariable id: UUID,
+        @RequestBody body: Anulacion
+    ) = declaraciones.anular(id, body)
 
     // "datos de los condóminos": another titular of the declaración's predio, year and secuencia
     @PostMapping("/declaraciones/{id}/condominos")
