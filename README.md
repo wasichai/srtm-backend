@@ -96,11 +96,11 @@ Flags: `--core` (default `http://localhost:8090` o `$WASICHAI_CORE`), `--email`,
 
 ## Cargar los catálogos
 
-Los formularios del portal ofrecen ubigeo, vías y unidades urbanas desde tres objetos catálogo:
+Los formularios del portal ofrecen ubigeo, usos del predio, vías y unidades urbanas desde objetos catálogo:
 
 ```bash
 cd model
-python3 import_catalogos.py                                                           # ubigeo y categorías de valores
+python3 import_catalogos.py                                                           # ubigeo, categorías de valores y usos
 python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run  # cuenta, no llama a Core
 python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"            # ubigeo + vías + unidades urbanas
 ```
@@ -127,6 +127,34 @@ python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"      
   - El archivo **viene solo con la cabecera** (`tipo_obra,numero,descripcion,unidad_medida,material`): gob.pe no deja
     que un script descargue el anexo. Hay que completarlo a mano desde www.gob.pe/vivienda.
   - Mientras está vacío, la categoría de una obra se escribe a mano en el portal.
+- **`uso_predio`:** el *tipo de uso de predio* del SRTM (clase → sub clase → uso), en `model/data/usos_predio.csv`.
+  Las características de la DJ lo ofrecen en cascada (`GET /api/srtm/usos-predio`).
+  - El archivo tiene la forma de la tabla de parámetros del SRTM (*Parámetros / Uso Predio*, exportable a Excel):
+    `codigo,descripcion,fuente`. El código de seis dígitos da el nivel: `XX0000` clase, `XXYY00` sub clase y `XXYYZZ`
+    uso de esa sub clase. Se cargan los usos (112), cada uno con los nombres de su clase y su sub clase; la clave es el
+    código.
+  - **No es la lista oficial completa** (el SRTM tiene 324 filas), que no está en los documentos. `fuente` dice de
+    dónde sale cada fila:
+    - `SRTM`: código y nombre como en la *Presentación2* (págs. 17 y 20: RESIDENCIAL → UNIFAMILIAR → CASA
+      HABITACIÓN) o en el manual *M21-1-003 Parámetros* (§5.2.20-5.2.21 y §5.5.2: las filas 0701xx-1004xx y los usos
+      residenciales CASA HABITACIÓN, EDIFICIO, QUINTA, CALLEJÓN, CORRALÓN, SOLAR, EDIFICIO EN QUINTA, AIRES, TENDAL EN
+      QUINTA y TENDAL EN EDIFICIO).
+    - `ARMONIZACION`: código y nombre del *Formato Padrón Municipal Armonización 2026* (el ejemplo lleno de otra
+      municipalidad, columnas *Código uso* y *Descripción del uso*). Se dejaron fuera sus códigos que contradicen al
+      manual (010103-010105, 0504xx, 0909xx, 153045, 999999). Los nombres van sin comas, barras ni paréntesis (las
+      opciones ENUM de Core no los admiten), con las abreviaturas desarrolladas y con tildes.
+    - `INFERIDO`: el nombre o el código se dedujo. Las clases EQUIPAMIENTO URBANO (05), DESOCUPADO (08) y
+      ESTACIONAMIENTO (09) salen de los diez grupos de uso del padrón de Perené, que calzan con las diez clases; la
+      armonización llama GARAGE a la 09. Las sub clases MULTIFAMILIAR, OFICINAS, SERVICIOS (0205), INDUSTRIA
+      MANUFACTURERA y CULTURAL salen de sus usos. Los nombres cortados en el manual (EN CONST…, CONSTRU…, CON CONS…,
+      COMERCI…, PROFESIO…) y los códigos 010202-010203 y 010206-010209 (por el orden de sus ids en el manual) también.
+  - Para cargar la lista oficial: exportar *Parámetros / Uso Predio* del SRTM, dejar en el CSV código y descripción
+    (`fuente` = `SRTM`), agregar a los enums `clase_uso`, `sub_clase_uso` y `uso` de `model.json` los nombres nuevos
+    (`python3 -m unittest` dice cuáles faltan), `python3 apply.py` y `python3 import_catalogos.py`. Lo cargado no se
+    borra: un uso que desaparezca de la lista se borra a mano desde el admin.
+  - Los campos `clase_uso`, `sub_clase_uso` y `uso` de `declaracion_predial` siguen siendo ENUM (Core no cambia el tipo
+    de un campo) con los nombres del catálogo. `uso` conserva además los diez grupos del padrón
+    (`RESIDENCIAL - CASA HABITACION`, `TERRENO`…), que las DJ importadas tienen sin clase ni sub clase.
 - **Idempotente**, como los otros scripts.
 - Los catálogos se pueden editar después desde el admin.
 
@@ -203,7 +231,7 @@ python3 normalizar_padron.py             # actualiza lo que el reporte lista
 
 ## Modelo
 
-Diecisiete objetos (`model/model.json`):
+Dieciocho objetos (`model/model.json`):
 - **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
   *Formato Padrón Municipal Armonización 2026*.
 - **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
@@ -211,7 +239,7 @@ Diecisiete objetos (`model/model.json`):
 - **Declaración jurada predial del SRTM (fase 2):** `transferente`, `nivel_construccion`, `obra_complementaria` y
   `otro_frente`, cada uno con una relación obligatoria a `declaracion_predial`.
 - **Catastro fiscal (fase 3):** `catastro_fiscal`, un lote por código CPU, con su polígono.
-- **Catálogos:** `ubigeo`, `via`, `unidad_urbana`, `categoria_valor` y `obra_categoria`.
+- **Catálogos:** `ubigeo`, `via`, `unidad_urbana`, `categoria_valor`, `obra_categoria` y `uso_predio`.
 
 Geometrías (wasichai-gis, GeoJSON en EPSG:4326 por la API):
 - `predio.lote_geom` y `catastro_fiscal.lote_geom`: POLYGON, guardados en UTM 18S (EPSG:32718).

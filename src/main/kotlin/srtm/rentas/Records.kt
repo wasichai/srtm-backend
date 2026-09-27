@@ -23,6 +23,7 @@ const val OTRO_FRENTE = "otro_frente"
 const val CATEGORIA_VALOR = "categoria_valor"
 const val CATASTRO_FISCAL = "catastro_fiscal"
 const val OBRA_CATEGORIA = "obra_categoria"
+const val USO_PREDIO = "uso_predio"
 
 // a record's attributes <-> a portal dto. the dtos' json names are the field names, so jackson does the
 // mapping: core reads DATE back as an iso string (LocalDate here), DECIMAL as BigDecimal, INTEGER as Long

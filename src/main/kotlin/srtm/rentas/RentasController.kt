@@ -39,6 +39,9 @@ class RentasController(
     @GetMapping("/categorias-valor")
     suspend fun categoriasValor() = catalogo.categoriasValor()
 
+    @GetMapping("/usos-predio")
+    suspend fun usosPredio() = catalogo.usosPredio()
+
     @GetMapping("/obras-categorias")
     suspend fun obrasCategorias(
         @RequestParam(name = "tipo_obra", required = false) tipoObra: String?
