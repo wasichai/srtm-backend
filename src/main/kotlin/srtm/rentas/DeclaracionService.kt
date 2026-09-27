@@ -99,8 +99,9 @@ class DeclaracionService(
     // a predio of the srtm: its code comes from codigoPredio when blank, its direccion from its ubicación
     suspend fun registrarPredio(body: Predio): Predio =
         conReintento {
-            // on every attempt: a code another clerk took meanwhile (same manzana, same lote) is computed again
-            val codigo = body.codigo?.ifBlank { null } ?: codigoPredio(body)
+            // on every attempt: a code another clerk took meanwhile (same manzana, same lote) is computed again, and
+            // one the client sent turns into a 400
+            val codigo = body.codigo?.ifBlank { null }?.also { codigoLibre(it) } ?: codigoPredio(body)
             val numero = (registros.highest(PREDIO, "numero_registro")?.toIntOrNull() ?: 0) + 1
             registros.create(
                 PREDIO,
@@ -285,6 +286,12 @@ class DeclaracionService(
                 ?.trim()
                 ?.ifEmpty { null } ?: return null
         return codigo.takeIf { registros.all(PREDIO, Predio::class.java, filters = mapOf("codigo" to it)).isEmpty() }
+    }
+
+    // codigo is unique, and the database would answer a duplicate with a 500 after the retries: say it on the field
+    private suspend fun codigoLibre(codigo: String) {
+        val otro = registros.all(PREDIO, Predio::class.java, filters = mapOf("codigo" to codigo)).firstOrNull() ?: return
+        throw ValidationException("Código repetido", "codigo", listOfNotNull("ya es de otro predio", otro.direccion?.ifBlank { null }).joinToString(": "))
     }
 
     private suspend fun existe(id: UUID): UUID {

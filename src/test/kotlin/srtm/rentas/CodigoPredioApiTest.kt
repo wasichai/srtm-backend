@@ -60,6 +60,20 @@ class CodigoPredioApiTest : WasichaiIntegrationTest() {
     }
 
     @Test
+    fun `a code the client sends that another predio has is a 400 on codigo`() {
+        val codigo = "T-${unique()}"
+        post("/api/srtm/predios", mapOf("codigo" to codigo, "direccion" to "S/N"))
+        val (status, body) =
+            exchange(
+                "POST",
+                "/api/srtm/contribuyentes/${inscribir()}/declaraciones-juradas",
+                mapOf("predio" to mapOf("codigo" to codigo, "direccion" to "S/N"))
+            )
+        assertEquals(HttpStatus.BAD_REQUEST, status, body)
+        assertEquals("codigo", tree(body)["errors"][0]["field"].asString())
+    }
+
+    @Test
     fun `two clerks registering predios in the same manzana at once both get a code`() {
         val sector = unique().take(4)
         val manzana = unique().take(2)

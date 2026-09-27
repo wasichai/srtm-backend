@@ -3,8 +3,10 @@ package srtm.rentas
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.mockito.Mockito
 import org.springframework.dao.DataIntegrityViolationException
+import wasichai.core.common.ValidationException
 import wasichai.core.data.RecordService
 import wasichai.core.metadata.MetadataService
 import java.util.UUID
@@ -66,6 +68,22 @@ class CodigoPredioTest {
         registros.rival = Predio(codigo = "5243", numeroRegistro = 1)
         assertEquals("P-000001", registrar(Predio(codigoCpu = "54102166-0001-2")).codigo)
         assertEquals(listOf("5243", "P-000001"), registros.intentos)
+    }
+
+    @Test
+    fun `a code sent by the client is kept while free, and another predio's is a 400 on codigo`() {
+        assertEquals("T-1", registrar(Predio(codigo = "T-1")).codigo)
+        val repetido = assertThrows<ValidationException> { registrar(Predio(codigo = "T-1")) }
+        assertEquals(listOf("codigo"), repetido.violations.map { it.field })
+        assertEquals(listOf("T-1"), registros.intentos)
+    }
+
+    @Test
+    fun `a code sent by the client and taken meanwhile is a 400 on the retry, not a 500`() {
+        registros.rival = Predio(codigo = "5243", numeroRegistro = 1)
+        val repetido = assertThrows<ValidationException> { registrar(Predio(codigo = "5243")) }
+        assertEquals(listOf("codigo"), repetido.violations.map { it.field })
+        assertEquals(listOf("5243"), registros.intentos)
     }
 
     private class RegistrosEnMemoria : Registros(Mockito.mock(RecordService::class.java), Mockito.mock(MetadataService::class.java)) {

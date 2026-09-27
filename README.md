@@ -340,6 +340,8 @@ Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
     2. si no, el `codigo_predio_municipal` del lote de catastro cuyo `codigo_cpu` trae, si ningún predio lo tiene ya;
     3. si no, la serie propia del portal: `P-NNNNNN` (`P-000001`, `P-000002`…). Una letra y un solo guion: no choca
        con `SS-MM-NNNN` (dos guiones, sector de dos caracteres) ni con los códigos del padrón.
+  - Un `codigo` enviado por el cliente se respeta si está libre; si ya es de otro predio, es un 400 sobre `codigo`
+    (Core dejaría que la base lo rechazara con un 500).
   - El código y `numero_registro` se calculan dentro del reintento: si otro funcionario tomó el mismo en ese momento
     (la base rechaza el duplicado), se vuelven a calcular. Si la declaración se rechaza, ese predio se borra.
   - Con `tipo_via`, la dirección del predio se arma de su ubicación. Los importados conservan el texto del padrón hasta
