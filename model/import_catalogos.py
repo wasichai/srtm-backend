@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Loads the catalogs the portal's forms offer: ubigeo (INEI districts), the categories of the official unit-value
-table, the srtm's usos del predio, vías and unidades urbanas.
+table, the partidas of obras complementarias, the srtm's usos del predio, vías and unidades urbanas.
 
-ubigeo comes from data/ubigeo.csv, the categories from data/categorias_valor.csv, the usos from data/usos_predio.csv
-(all shipped). vías and unidades urbanas come from the padrón Excel: the
+ubigeo comes from data/ubigeo.csv, the categories from data/categorias_valor.csv, the obras from
+data/obras_complementarias.csv, the usos from data/usos_predio.csv (all shipped). vías and unidades urbanas come from the padrón Excel: the
 same `direccion_predio` import_predios.py parses, its `<vía>` and `<habilitación>` parts, split into a type
 (the model's tipo_via / tipo_unidad_urbana) and a name. Idempotent: what Core already has is skipped.
 
@@ -17,7 +17,8 @@ import re
 import sys
 
 from core_client import Client, CoreError
-from import_predios import TIPOS_UNIDAD_URBANA, TIPOS_VIA, LoadError, clean_text, parse_address, post_all, read_xlsx, split_tipo
+from import_predios import (TIPOS_UNIDAD_URBANA, TIPOS_VIA, LoadError, clean_decimal, clean_text, parse_address, post_all, read_xlsx,
+                            split_tipo)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -43,8 +44,10 @@ def read_categorias(path):
 
 
 def read_obras(path):
-    """The partidas of the instructivo of obras complementarias (annex III of the yearly R.M. of the MVCS). The file
-    ships with its header only: the annex is published on gob.pe, which does not let scripts download it."""
+    """The partidas of obras complementarias e instalaciones fijas y permanentes: annex III of the yearly R.M. of the
+    MVCS (277-2025-VIVIENDA for 2026), transcribed by hand because gob.pe does not let scripts download it. The unit
+    value is the selva's (III.4, Perené's region), at direct cost: the 0.68 oficialización factor and the depreciation
+    are applied on top."""
     with open(path, encoding="utf-8") as f:
         return [
             {
@@ -53,6 +56,7 @@ def read_obras(path):
                 "descripcion": r["descripcion"],
                 "unidad_medida": r["unidad_medida"],
                 **({"material": r["material"]} if r.get("material") else {}),
+                **({"valor_unitario": clean_decimal(r["valor_unitario"])} if r.get("valor_unitario") else {}),
             }
             for r in csv.DictReader(f)
         ]
@@ -122,7 +126,7 @@ def load(client, ubigeos, vias, unidades, workers, categorias=(), obras=(), usos
 
 
 def _parse_args(argv):
-    p = argparse.ArgumentParser(description="Load srtm's catalogs (ubigeo, usos del predio, vías, unidades urbanas) into wasichai Core.")
+    p = argparse.ArgumentParser(description="Load srtm's catalogs (ubigeo, categorías, obras, usos del predio, vías, unidades urbanas) into wasichai Core.")
     p.add_argument("--ubigeo-csv", default=os.path.join(HERE, "data", "ubigeo.csv"))
     p.add_argument("--categorias-csv", default=os.path.join(HERE, "data", "categorias_valor.csv"))
     p.add_argument("--obras-csv", default=os.path.join(HERE, "data", "obras_complementarias.csv"))

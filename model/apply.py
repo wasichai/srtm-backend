@@ -8,10 +8,11 @@ each required relationship's field required. Today that is 18 objects and 10
 relationships: "done: 28 created" on an empty Core, "28 skipped" on a second run.
 
 On a Core that already has the model it syncs instead: it adds the fields and
-the ENUM options model.json has and Core lacks, relaxes a field model.json no
-longer requires and relabels one labelled differently. It never renames,
-retypes, removes or makes required, so imported records stay valid. --drop
-tears everything down in reverse order (data included).
+the ENUM options model.json has and Core lacks, drops the ENUM options it no
+longer lists and no record uses, relaxes a field model.json no longer requires
+and relabels one labelled differently. It never renames, retypes, makes
+required or removes a field or an option in use, so imported records stay
+valid. --drop tears everything down in reverse order (data included).
 
 GEOMETRY fields (the lotes' polygons, the domicilio's point) are wasichai-gis's:
 srtm installs it, on PostGIS. Adapted from wasichai's
@@ -22,6 +23,7 @@ import json
 import os
 import re
 import sys
+import urllib.parse
 
 from core_client import Client, CoreError
 
@@ -260,6 +262,25 @@ def missing_options(model, field, existing):
     return [o for o in model["enums"][field["enum"]] if o not in have]
 
 
+def dropped_options(model, field, existing):
+    """Options Core has for an ENUM field that model.json no longer lists, in Core's order."""
+    if field["type"] != "ENUM":
+        return []
+    keep = set(model["enums"][field["enum"]])
+    return [o for o in existing.get("enumOptions") or [] if o not in keep]
+
+
+def _records_using(client, object_name, field_name, option):
+    """How many records of the object store the option in the field. An answer without that count (a 404, another
+    shape) is an error, not a zero: the option is never dropped on a guess."""
+    query = urllib.parse.urlencode({"page": 0, "size": 1, field_name: option})
+    data = client.get(f"/api/objects/{object_name}/records?{query}")
+    total = data.get("totalElements") if isinstance(data, dict) else None
+    if not isinstance(total, int):
+        raise CoreError("no record count", json.dumps(data))
+    return total
+
+
 def relationship_payload(rel):
     return {
         "name": rel["name"],
@@ -311,8 +332,9 @@ def _fields_by_name(data):
 
 def sync_object(client, model, obj):
     """An object that already exists: add the fields model.json has and Core lacks, and the ENUM options
-    it lacks, make optional what model.json no longer requires, and relabel what it labels differently. Nothing is
-    renamed, retyped, removed or made required, so imported records stay valid.
+    it lacks, drop the ENUM options model.json no longer lists and no record uses, make optional what model.json no
+    longer requires, and relabel what it labels differently. Nothing is renamed, retyped or made required, and no
+    field or used option is removed, so imported records stay valid.
     Returns (added, updated), or None when Core refused (already reported)."""
     name = obj["name"]
     path = f"/api/metadata/objects/{name}/fields"
@@ -334,15 +356,28 @@ def sync_object(client, model, obj):
             added += 1
             continue
         extra = missing_options(model, field, current)
-        if extra:
-            options = list(current.get("enumOptions") or []) + extra
+        dropped = []
+        for option in dropped_options(model, field, current):
+            try:
+                using = _records_using(client, name, field["name"], option)
+            except CoreError as e:
+                _fatal("GET", f"/api/objects/{name}/records", e)
+                return None
+            if using:
+                records = "1 record uses" if using == 1 else f"{using} records use"
+                print(f"keep   option {name}.{field['name']} {option}: {records} it")
+            else:
+                dropped.append(option)
+        if extra or dropped:
+            options = [o for o in current.get("enumOptions") or [] if o not in dropped] + extra
             field_path = f"{path}/{field['name']}"
             try:
                 client.put(field_path, {"enumOptions": options})
             except CoreError as e:
                 _fatal("PUT", field_path, e)
                 return None
-            print(f"update field {name}.{field['name']} (+{', '.join(extra)})")
+            changes = ([f"+{', '.join(extra)}"] if extra else []) + ([f"-{', '.join(dropped)}"] if dropped else [])
+            print(f"update field {name}.{field['name']} ({'; '.join(changes)})")
             updated += 1
         # a field model.json stopped requiring is relaxed (always safe); one it started requiring is left alone
         if current.get("required") and not field.get("required"):

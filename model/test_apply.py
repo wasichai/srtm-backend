@@ -165,6 +165,67 @@ class SyncTests(ApplyCliTestCase):
         self.assertIn("done: 16 created, 1 updated, 27 skipped", out)
 
 
+class DropOptionsTests(ApplyCliTestCase):
+    """tipo_obra as it was before the annex III groups: the options model.json dropped go, unless a record uses one."""
+
+    OLD_TIPO_OBRA = ["MUROS PERIMETRICOS O CERCOS", "PORTONES Y PUERTAS", "TANQUES ELEVADOS", "CISTERNAS", "PISCINAS",
+                     "LOSAS DEPORTIVAS", "PISOS DE CONCRETO", "OTROS"]
+
+    def setUp(self):
+        model = load_model()
+        self.tipo_obra = model["enums"]["tipo_obra"]
+        fields = {o["name"]: core_fields(model, o["name"]) for o in model["objects"]}
+        for name in ("obra_complementaria", "obra_categoria"):
+            fields[name] = core_fields(model, name, options={"tipo_obra": self.OLD_TIPO_OBRA})
+        self.core = FakeCore(
+            existing_objects=[o["name"] for o in model["objects"]],
+            existing_relationships=[r["name"] for r in model["relationships"]],
+            existing_fields=fields,
+        )
+        self.addCleanup(self.core.stop)
+        self.core.add_record("obra_complementaria", {"tipo_obra": "OTROS", "cantidad": 1})
+
+    def test_drops_the_unused_options_and_keeps_the_used_ones(self):
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0, msg=err)
+        option_puts = dict((r[1].rsplit("/", 3)[1], r[3]["enumOptions"]) for r in self.core.requests
+                           if r[0] == "PUT" and "enumOptions" in (r[3] or {}))
+        kept = ["MUROS PERIMETRICOS O CERCOS", "PORTONES Y PUERTAS", "TANQUES ELEVADOS"]
+        new = [o for o in self.tipo_obra if o not in kept]
+        self.assertEqual(option_puts, {
+            "obra_categoria": kept + new,
+            # a declaración already has an OTROS obra: it stays storable
+            "obra_complementaria": kept + ["OTROS"] + new,
+        })
+        self.assertIn("; -CISTERNAS, PISCINAS, LOSAS DEPORTIVAS, PISOS DE CONCRETO, OTROS)", out)
+        self.assertIn("; -CISTERNAS, PISCINAS, LOSAS DEPORTIVAS, PISOS DE CONCRETO)", out)
+        self.assertIn("keep   option obra_complementaria.tipo_obra OTROS: 1 record uses it", out)
+        self.assertIn("done: 0 created, 2 updated, 26 skipped", out)
+
+    def count_answers(self, status, payload):
+        """The records GET, the count asked before dropping an option, answers this."""
+        records = self.core._records
+        self.core._records = lambda method, *args: (status, payload) if method == "GET" else records(method, *args)
+
+    def assert_drops_nothing(self):
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 1)
+        self.assertIn("error GET /api/objects/obra_complementaria/records", err)
+        self.assertEqual([r for r in self.core.requests if r[0] == "PUT" and "enumOptions" in (r[3] or {})], [])
+
+    def test_a_count_core_refuses_drops_nothing(self):
+        self.count_answers(500, {"message": "boom"})
+        self.assert_drops_nothing()
+
+    def test_a_404_is_not_a_zero(self):
+        self.count_answers(404, {"detail": "not found"})
+        self.assert_drops_nothing()
+
+    def test_an_answer_without_its_count_is_not_a_zero(self):
+        self.count_answers(200, {"content": []})
+        self.assert_drops_nothing()
+
+
 class RelaxRequiredTests(ApplyCliTestCase):
     """A field model.json no longer requires is made optional (SIN DOCUMENTO has no number); nothing is made required."""
 
