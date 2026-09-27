@@ -15,14 +15,15 @@ class TiposUnidadUrbanaApiTest : SrtmApiTest() {
         val nombres = tipos.map { it[1] }
         assertEquals(43, nombres.size)
         assertEquals(nombres.sorted(), nombres)
-        val catalogos = tree(send("GET", "/api/srtm/catalogos", null, HttpStatus.OK))
+        // the field's options as core stores them: /catalogos only lists the objects the portal's selects use
         for ((objeto, campo) in listOf(
             "domicilio" to "tipo_unidad_urbana",
             "predio" to "tipo_zona",
             "unidad_urbana" to "tipo_unidad_urbana",
             "catastro_fiscal" to "tipo_zona"
         )) {
-            assertEquals(nombres, catalogos[objeto][campo].map { it.asString() }, "$objeto.$campo")
+            val field = tree(send("GET", "/api/metadata/objects/$objeto/fields", null, HttpStatus.OK)).first { it["name"].asString() == campo }
+            assertEquals(nombres, field["enumOptions"].map { it.asString() }, "$objeto.$campo")
         }
     }
 
