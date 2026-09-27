@@ -75,8 +75,8 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 28 created, 0 updated, 0 skipped  (18 objetos + 10 relaciones)
-python3 apply.py                   # idempotente: done: 0 created, 0 updated, 28 skipped
+python3 apply.py                   # done: 29 created, 0 updated, 0 skipped  (19 objetos + 10 relaciones)
+python3 apply.py                   # idempotente: done: 0 created, 0 updated, 29 skipped
 python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
 ```
 
@@ -219,6 +219,76 @@ python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"      
 - **Idempotente**, como los otros scripts.
 - Los catálogos se pueden editar después desde el admin. Un uso del predio editado así vuelve a lo que dice el CSV en
   la siguiente importación.
+
+## Impuesto predial
+
+`GET /api/srtm/contribuyentes/{id}/liquidacion?anio=` liquida el impuesto predial de un contribuyente en un año (sin
+`anio`, el año en curso). Lo calcula `srtm.impuesto.ImpuestoPredial`, una función pura, con los parámetros de
+`parametro_tributario`.
+
+**Parámetros.** Son los valores normativos **verificados** (doble firma) del repo `normativa`:
+`docs/10-negocio/valores-normativos/{uit,predial-tramos-y-alicuotas,predial-minimo,predial-deducciones}.md`.
+
+- `model/data/parametros-predial.csv` es una copia de las filas `UIT`, `TRAMO_PREDIAL`, `TRAMO_PREDIAL_LIMITE`,
+  `PREDIAL_MINIMO`, `DEDUCCION_PENSIONISTA` y `DEDUCCION_ADULTO_MAYOR` de su derivado publicable,
+  `publicacion/parametros-2026.csv`.
+  - Ninguna cifra se tecleó: las filas son las del original, sin su última columna (`valor_maquina`, vacía en todas).
+  - La cabecera `#` cita la fuente.
+  - Las columnas llevan los nombres de `parametro_tributario`: `tipo`, `clave`, `vigencia_desde`, `vigencia_hasta`,
+    `valor_numerico`, `texto`, `norma`, `fuente`, `transcribio` y `verifico`.
+- `valor_numerico` va como lo imprime la norma: las alícuotas y el mínimo en %, los límites de los tramos y las
+  deducciones en UIT, y la UIT en soles.
+- **Cada año**, con la UIT nueva de `normativa`, se copia su fila al CSV y se vuelve a cargar. Con
+  `NORMATIVA=/ruta/a/normativa`, o con `normativa` junto a este repo, `python3 -m unittest` compara cada fila con el
+  original.
+
+```bash
+cd model
+python3 import_parametros.py --dry-run   # lee Core y dice qué crearía o actualizaría, sin escribir
+python3 import_parametros.py             # parametro_tributario: 13 created, 0 updated, 0 skipped
+```
+
+`import_parametros.py` es idempotente y usa la clave natural (`tipo`, `clave`, `vigencia_desde`):
+- crea las filas que faltan;
+- actualiza en su lugar las que cambiaron;
+- no borra las que el CSV no tiene;
+- escribe una línea por fila que cambia y un resumen al final;
+- sale con `0` si todo va bien y con `1` si Core rechaza algo.
+
+**Cálculo** (art. 13 y 15 del TUO de la Ley de Tributación Municipal):
+- **Base:** la suma del `valor_afecto` de las DJ **vigentes** del contribuyente en el año. Es la misma suma que los
+  totales de la ficha (`totalesDeContribuyente`): cada condómino cuenta su parte, así que un predio compartido no se
+  cuenta dos veces. Una DJ anulada no suma.
+- **Tramos progresivos en UIT:**
+  - hasta 15 UIT, al 0.2 %;
+  - lo que excede de 15 UIT hasta 60 UIT, al 0.6 %;
+  - lo que excede de 60 UIT, al 1.0 %.
+
+  Cada tramo trae `desde`, `hasta`, `alicuota`, `monto` (la parte de la base que cae en él) e `impuesto`. El
+  impuesto de cada tramo se redondea al céntimo, y `impuestoCalculado` es la suma de los tramos.
+- **Mínimo:** 0.6 % de la UIT. Si la base es mayor que 0, `impuestoAnual` es el mayor entre `impuestoCalculado` y el
+  mínimo, y `minimoAplicado` dice si se usó el mínimo. Con base 0, el impuesto es 0 y no hay mínimo.
+- **Cuotas:** 4, de un cuarto cada una, redondeadas al céntimo (HALF_UP). La 4.ª lleva el residuo, así que las cuatro
+  suman exactamente el anual.
+- **Vencimientos:** el último día hábil de febrero, mayo, agosto y noviembre. Hábil significa de lunes a viernes y
+  que no sea feriado nacional de fecha fija. Los feriados están en una sola lista, `Vencimientos.FERIADOS_NACIONALES`:
+  1-ene, 1-may, 7-jun, 29-jun, 23-jul, 28 y 29-jul, 6-ago, 30-ago, 8-oct, 1-nov, 8-dic, 9-dic y 25-dic. En 2026 los
+  vencimientos son el 27-feb, el 29-may, el 31-ago y el 30-nov.
+- **Parámetros del año:** se usan la UIT, los tramos, los límites y el mínimo vigentes al 1 de enero. Si falta alguno,
+  no se calcula:
+  - `faltan` los nombra (`["UIT 2027"]`);
+  - `uit`, los importes y `minimoAplicado` van en `null`, y `tramos` y `cuotas` van vacíos;
+  - `base` sí se informa.
+
+```json
+{"anio": 2026, "uit": 5500.00, "base": 90000.00,
+ "tramos": [{"tramo": 1, "desde": 0.00, "hasta": 82500.00, "alicuota": 0.2, "monto": 82500.00, "impuesto": 165.00}, …],
+ "impuestoCalculado": 210.00, "minimo": 33.00, "minimoAplicado": false, "impuestoAnual": 210.00,
+ "cuotas": [{"numero": 1, "monto": 52.50, "vencimiento": "2026-02-27"}, …], "faltan": []}
+```
+
+Fuera de alcance: el reajuste de las cuotas 2 a 4 por el IPM, la prórroga de los vencimientos por ordenanza, el derecho
+de emisión y las deducciones (los parámetros ya se cargan, pero la DJ guarda su `deduccion`).
 
 ## Importar el catastro fiscal
 
@@ -389,7 +459,7 @@ python3 apply.py                                  # 3. quita ANEXO, HABILITACION
 
 ## Modelo
 
-Dieciocho objetos (`model/model.json`):
+Diecinueve objetos (`model/model.json`):
 - **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
   *Formato Padrón Municipal Armonización 2026*.
 - **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
@@ -398,6 +468,8 @@ Dieciocho objetos (`model/model.json`):
   `otro_frente`, cada uno con una relación obligatoria a `declaracion_predial`.
 - **Catastro fiscal (fase 3):** `catastro_fiscal`, un lote por código CPU, con su polígono.
 - **Catálogos:** `ubigeo`, `via`, `unidad_urbana`, `categoria_valor`, `obra_categoria` y `uso_predio`.
+- **Parámetros tributarios:** `parametro_tributario`, los valores normativos verificados del repo `normativa` (ver
+  [Impuesto predial](#impuesto-predial)).
 
 Geometrías (wasichai-gis, GeoJSON en EPSG:4326 por la API):
 - `predio.lote_geom` y `catastro_fiscal.lote_geom`: POLYGON, guardados en UTM 18S (EPSG:32718).
@@ -485,7 +557,11 @@ Se descarta `orden2`, que es solo el número de fila.
     obras complementarias.
   - `CatalogoService`: las opciones ENUM y los catálogos (ubigeo, categorías de valores, usos, vías, unidades urbanas).
   - Aparte, `srtm.pide.DocumentosController` (`DocumentoService`) consulta un DNI a RENIEC ([PIDE RENIEC](#pide-reniec)).
+  - Y `srtm.impuesto.LiquidacionController` (`LiquidacionService`) liquida el impuesto predial
+    ([Impuesto predial](#impuesto-predial)).
 - **Claves JSON:** son los nombres de campo del modelo, en snake_case. `Records` convierte atributos ⇄ DTO con Jackson.
+  La liquidación sigue el contrato de la épica de emisión (wasichai/srtm-backend#37), en camelCase
+  (`impuestoCalculado`, `minimoAplicado`…).
 - **Protección:** como la API vive bajo `/api`, el filtro JWT de core ya la protege. `RecordService` aplica los permisos
   del usuario por objeto y por campo, y valida cada escritura. `Registros` envía solo los campos que el usuario puede
   escribir (un campo bloqueado conserva su valor) y `/catalogos` omite los objetos que su rol no puede leer.
@@ -500,6 +576,7 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET, POST | `/api/srtm/contribuyentes?q&page&size` | búsqueda (texto en todos los campos) e inscripción |
 | GET, PUT, DELETE | `/api/srtm/contribuyentes/{id}?anio` | la ficha: datos, nº de predios y totales del año; la edición; y la baja (409 si tiene declaraciones) |
 | GET | `/api/srtm/contribuyentes/{id}/declaraciones?anio` | sus declaraciones, cada una con su predio |
+| GET | `/api/srtm/contribuyentes/{id}/liquidacion?anio` | el impuesto predial del año: base, tramos, mínimo, anual y cuotas con su vencimiento; `faltan` si falta un parámetro ([Impuesto predial](#impuesto-predial)) |
 | GET, POST | `/api/srtm/contribuyentes/{id}/{lista}` | las listas del contribuyente: `domicilios`, `relacionados`, `medios-contacto`, `sustentos` |
 | PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
 | GET, POST | `/api/srtm/predios?q&page&size` | búsqueda y alta |
@@ -665,7 +742,8 @@ cd model && python3 apply.py --validate-only && python3 -m unittest -v
 yarn format:check           # prettier: yaml y json, model.json incluido
 ```
 
-- **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`…), `Records`,
+- **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`,
+  `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…), `Records`,
   `Registros` y `srtm.pide` (`PideReniecTest`, contra un servidor local).
 - **Integración** (`@Tag("integration")`): `SrtmSmokeTest` y las clases `*ApiTest`, que llaman a la API del portal
   sobre la app entera y PostGIS. Heredan de `SrtmApiTest`: el modelo aplicado como lo hace `apply.py`, el token del
@@ -684,7 +762,8 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - **Integraciones:** probar PIDE RENIEC con las credenciales del convenio; PIDE SUNAT (RUC) y MIGRACIONES (carné de
   extranjería) con la misma interfaz `ConsultaDocumento`. El fondo del mapa es OpenStreetMap; una capa WMS/WMTS
   municipal se puede publicar con GeoServer.
-- **Cálculo y cobranza:** impuesto predial (tramos UIT), arbitrios, deuda y cuotas, pagos y recibos.
+- **Cálculo y cobranza:** el reajuste IPM de las cuotas, las prórrogas por ordenanza y el derecho de emisión del
+  predial; arbitrios, deuda, pagos y recibos.
 - **Fiscalización:** el flujo (rol y pantallas) que determina de oficio una declaración: medio de determinación
   FISCALIZACIÓN o DE OFICIO y su modificación de oficio.
 - **En el modelo:** workflows y plantillas de documentos.
