@@ -115,7 +115,7 @@
       "name": "predio",
       "label": "Predio",
       "pluralLabel": "Predios",
-      "description": "Predio urbano o rústico del distrito, identificado por su código sector-manzana-número.",
+      "description": "Predio urbano o rústico del distrito, identificado por su código: sector-manzana-número, el código municipal de su lote o P-NNNNNN.",
       "fields": [
         {"name": "codigo", "label": "Código de predio", "type": "TEXT", "required": true, "unique": true, "source": "codigo_predio"},
         {"name": "sector_catastral", "label": "Sector catastral", "type": "TEXT", "source": "sector_manzana"},

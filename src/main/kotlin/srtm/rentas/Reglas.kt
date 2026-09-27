@@ -183,6 +183,12 @@ fun siguienteCodigoPredio(
     return prefijo + (numero + 1).toString().padStart(4, '0')
 }
 
+// a predio with no sector or manzana (and no lote code to take) gets the portal's own series: P-000001. one dash
+// and a letter, so it never meets a sector-manzana code (two dashes, a two-character sector) nor the padrón's
+const val PREFIJO_PROPIO = "P-"
+
+fun siguienteCodigoPropio(ultimo: String?): String = PREFIJO_PROPIO + siguienteCodigo(ultimo?.removePrefix(PREFIJO_PROPIO))
+
 // the padrón numbers the usos of a predio with three digits (001, 002...): a number typed as 1 is written the same way,
 // none is the first. model/import_predios.py (secuencia_uso) does the same
 const val SECUENCIA_WIDTH = 3

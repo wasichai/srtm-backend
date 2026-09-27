@@ -96,10 +96,12 @@ class DeclaracionService(
         return creada
     }
 
-    // a predio of the srtm: its code comes from sector and manzana when blank, its direccion from its ubicación
-    suspend fun registrarPredio(body: Predio): Predio {
-        val codigo = body.codigo?.ifBlank { null } ?: codigoPredio(body)
-        return conReintento {
+    // a predio of the srtm: its code comes from codigoPredio when blank, its direccion from its ubicación
+    suspend fun registrarPredio(body: Predio): Predio =
+        conReintento {
+            // on every attempt: a code another clerk took meanwhile (same manzana, same lote) is computed again, and
+            // one the client sent turns into a 400
+            val codigo = body.codigo?.ifBlank { null }?.also { codigoLibre(it) } ?: codigoPredio(body)
             val numero = (registros.highest(PREDIO, "numero_registro")?.toIntOrNull() ?: 0) + 1
             registros.create(
                 PREDIO,
@@ -107,7 +109,6 @@ class DeclaracionService(
                 Records.attributes(body.copy(codigo = codigo, numeroRegistro = numero, direccion = describirUbicacion(body)))
             )
         }
-    }
 
     // code and registration number stay what they are
     suspend fun actualizarPredio(
@@ -281,12 +282,34 @@ class DeclaracionService(
         return insert()
     }
 
+    // the next of its sector and manzana (SS-MM-NNNN) when it has both; else the municipal code of its catastro lote,
+    // unless a predio already has it; else the portal's own series (P-NNNNNN)
     private suspend fun codigoPredio(body: Predio): String {
-        val sector = body.sectorCatastral?.ifBlank { null } ?: throw ValidationException("Falta el sector", "sector_catastral", "sin código, el sector lo arma")
-        val manzana =
-            body.manzanaCatastral?.ifBlank { null } ?: throw ValidationException("Falta la manzana", "manzana_catastral", "sin código, la manzana lo arma")
-        val prefijo = prefijoPredio(sector, manzana)
-        return siguienteCodigoPredio(prefijo, registros.highest(PREDIO, "codigo", prefijo))
+        val sector = body.sectorCatastral?.ifBlank { null }
+        val manzana = body.manzanaCatastral?.ifBlank { null }
+        if (sector != null && manzana != null) {
+            val prefijo = prefijoPredio(sector, manzana)
+            return siguienteCodigoPredio(prefijo, registros.highest(PREDIO, "codigo", prefijo))
+        }
+        return codigoDelLote(body.codigoCpu) ?: siguienteCodigoPropio(registros.highest(PREDIO, "codigo", PREFIJO_PROPIO))
+    }
+
+    private suspend fun codigoDelLote(codigoCpu: String?): String? {
+        val cpu = codigoCpu?.trim()?.ifEmpty { null } ?: return null
+        val codigo =
+            registros
+                .all(CATASTRO_FISCAL, CatastroFiscal::class.java, filters = mapOf("codigo_cpu" to cpu))
+                .firstOrNull()
+                ?.codigoPredioMunicipal
+                ?.trim()
+                ?.ifEmpty { null } ?: return null
+        return codigo.takeIf { registros.all(PREDIO, Predio::class.java, filters = mapOf("codigo" to it)).isEmpty() }
+    }
+
+    // codigo is unique, and the database would answer a duplicate with a 500 after the retries: say it on the field
+    private suspend fun codigoLibre(codigo: String) {
+        val otro = registros.all(PREDIO, Predio::class.java, filters = mapOf("codigo" to codigo)).firstOrNull() ?: return
+        throw ValidationException("Código repetido", "codigo", listOfNotNull("ya es de otro predio", otro.direccion?.ifBlank { null }).joinToString(": "))
     }
 
     private suspend fun existe(id: UUID): UUID {
