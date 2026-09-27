@@ -21,3 +21,8 @@ wasichai:
     jwt:
       # development only. a real deployment sets WASICHAI_JWT_SECRET (>= 32 bytes)
       secret: ${WASICHAI_JWT_SECRET:srtm-dev-only-secret-change-me-0123456789}
+  gis:
+    geoserver:
+      # without GeoServer the lotes are served straight from PostGIS; only publishing WMS layers needs it
+      enabled: ${WASICHAI_GEOSERVER_ENABLED:false}
+      url: ${WASICHAI_GEOSERVER_URL:http://localhost:8081/geoserver}

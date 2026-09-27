@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "srtm"
-description = "srtm-backend: rentas municipales on wasichai (core, workflow, documents, views, forms, pages)"
+description = "srtm-backend: rentas municipales on wasichai (core, workflow, documents, views, forms, pages, gis)"
 
 val wasichaiVersion = "0.1.0"
 
@@ -20,6 +20,8 @@ dependencies {
     implementation("wasichai:wasichai-spring-boot-starter-views")
     implementation("wasichai:wasichai-spring-boot-starter-forms")
     implementation("wasichai:wasichai-spring-boot-starter-pages")
+    // lotes of the catastro fiscal and of the predios, the domicilio's point. needs PostGIS (compose.yml)
+    implementation("wasichai:wasichai-spring-boot-starter-gis")
 
     // WasichaiIntegrationTest; brings spring-boot-starter-test, webflux-test and testcontainers
     testImplementation("wasichai:wasichai-test")
@@ -56,6 +58,9 @@ tasks.register<Test>("integrationTest") {
     useJUnitPlatform {
         includeTags("integration")
     }
+    // gis needs PostGIS: testcontainers starts this image instead of plain postgres:18. an external test db
+    // (WASICHAI_TEST_DB_*) must have the postgis extension available
+    systemProperty("wasichai.test.db.image", "postgis/postgis:18-3.6")
     shouldRunAfter(tasks.named("test"))
 }
 

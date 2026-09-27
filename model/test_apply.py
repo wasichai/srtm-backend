@@ -14,11 +14,11 @@ from fake_core import FakeCore
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.json")
 
-OBJECTS = 15
+OBJECTS = 17
 RELATIONSHIPS = 10
 OBJECT_ORDER = ["contribuyente", "predio", "declaracion_predial", "domicilio", "relacionado", "medio_contacto", "sustento",
                 "ubigeo", "via", "unidad_urbana", "transferente", "nivel_construccion", "obra_complementaria", "otro_frente",
-                "categoria_valor"]
+                "categoria_valor", "catastro_fiscal", "obra_categoria"]
 RELATIONSHIP_ORDER = ["declaracion_predial_contribuyente", "declaracion_predial_predio", "domicilio_contribuyente",
                       "relacionado_contribuyente", "medio_contacto_contribuyente", "sustento_contribuyente",
                       "transferente_declaracion", "nivel_construccion_declaracion", "obra_complementaria_declaracion",
@@ -104,7 +104,7 @@ class HappyPathTests(ApplyCliTestCase):
             else:
                 self.assertEqual(auth, "Bearer t")
 
-        self.assertIn("done: 25 created, 0 updated, 0 skipped", out)
+        self.assertIn("done: 27 created, 0 updated, 0 skipped", out)
 
 
 class IdempotencyTests(ApplyCliTestCase):
@@ -123,7 +123,7 @@ class IdempotencyTests(ApplyCliTestCase):
         object_posts = [r for r in self.core.requests if r[1] == "/api/objects" and r[0] == "POST"]
         self.assertEqual(object_posts, [])
         self.assertEqual([r for r in self.core.requests if r[0] == "POST" and "/fields" in r[1]], [])
-        self.assertIn("done: 0 created, 0 updated, 25 skipped", out)
+        self.assertIn("done: 0 created, 0 updated, 27 skipped", out)
 
 
 class SyncTests(ApplyCliTestCase):
@@ -161,7 +161,7 @@ class SyncTests(ApplyCliTestCase):
             "/api/metadata/objects/contribuyente/fields/tipo_documento",
             {"enumOptions": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION", "PASAPORTE"]},
         )])
-        self.assertIn("done: 16 created, 1 updated, 24 skipped", out)
+        self.assertIn("done: 16 created, 1 updated, 26 skipped", out)
 
 
 class FailureStopsTests(ApplyCliTestCase):
@@ -228,7 +228,7 @@ class DropTests(ApplyCliTestCase):
         deletes = [r[1] for r in self.core.requests if r[0] == "DELETE"]
         self.assertEqual(deletes, [f"/api/relationships/{n}" for n in reversed(RELATIONSHIP_ORDER)]
                          + [f"/api/objects/{n}" for n in reversed(OBJECT_ORDER)])
-        self.assertIn("done: 25 deleted, 0 skipped", out)
+        self.assertIn("done: 27 deleted, 0 skipped", out)
 
     def test_drop_dry_run_makes_no_requests(self):
         code, out, err = self.run_cli(["--drop", "--dry-run"])

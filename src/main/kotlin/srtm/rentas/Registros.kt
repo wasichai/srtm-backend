@@ -54,6 +54,16 @@ class Registros(
     ): T = read(type, records.get(objectName, id))
 
     // the records behind a set of relation ids, one query per page of ids instead of one per id
+    // a record with when it was last saved (the srtm's "fecha de actualización")
+    suspend fun <T : Any> getConFecha(
+        objectName: String,
+        type: Class<T>,
+        id: UUID
+    ): Pair<T, java.time.Instant?> {
+        val response = records.get(objectName, id)
+        return read(type, response) to response.updatedAt
+    }
+
     suspend fun <T : Any> byIds(
         objectName: String,
         type: Class<T>,
@@ -70,7 +80,7 @@ class Registros(
         objectName: String,
         type: Class<T>,
         attributes: Map<String, Any?>
-    ): T = read(type, records.create(objectName, RecordRequest(attributes)))
+    ): T = read(type, records.create(objectName, request(attributes)))
 
     // core's update replaces every editable field. the portal sends what its dto knows, merged over what is
     // stored, so a field added in the admin (and absent from the dto) is not blanked by a portal save
@@ -81,7 +91,7 @@ class Registros(
         attributes: Map<String, Any?>
     ): T {
         val stored = records.get(objectName, id).attributes
-        return read(type, records.update(objectName, id, RecordRequest(stored + attributes)))
+        return read(type, records.update(objectName, id, request(stored + attributes)))
     }
 
     suspend fun delete(
@@ -112,8 +122,30 @@ class Registros(
             ?.toString()
     }
 
+    // a geometry travels in core's "geometries" section, not in the attributes: the dtos carry it as one more field
     private fun <T : Any> read(
         type: Class<T>,
         response: RecordResponse
-    ): T = Records.read(type, response.id, response.attributes)
+    ): T = Records.read(type, response.id, response.attributes + response.sections[GEOMETRIES].orEmpty())
+
+    private fun request(attributes: Map<String, Any?>): RecordRequest {
+        val (plain, geometries) = separarGeometrias(attributes)
+        val request = RecordRequest(plain)
+        // a dto always carries its geometry field, null when the form had no map: null keeps the stored geometry
+        // (the portal never clears a lote, it replaces it)
+        if (geometries.isNotEmpty()) request.sections[GEOMETRIES] = geometries
+        return request
+    }
+
+    companion object {
+        // attributes -> (the plain ones, the geometries that carry a value)
+        fun separarGeometrias(attributes: Map<String, Any?>): Pair<Map<String, Any?>, Map<String, Any?>> =
+            (attributes - GEOMETRIAS) to attributes.filter { (key, value) -> key in GEOMETRIAS && value != null }
+
+        // wasichai-gis's section name (wasichai.gis.GEOMETRIES)
+        const val GEOMETRIES = "geometries"
+
+        // the model's geometry fields (model.json, type GEOMETRY)
+        val GEOMETRIAS = setOf("lote_geom", "ubicacion")
+    }
 }

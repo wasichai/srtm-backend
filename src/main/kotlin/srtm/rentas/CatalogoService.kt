@@ -76,7 +76,9 @@ class CatalogoService(
                 TRANSFERENTE,
                 NIVEL_CONSTRUCCION,
                 OBRA_COMPLEMENTARIA,
-                OTRO_FRENTE
+                OTRO_FRENTE,
+                CATASTRO_FISCAL,
+                OBRA_CATEGORIA
             )
         const val SUGERENCIAS = 20
     }

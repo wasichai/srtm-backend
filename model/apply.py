@@ -58,11 +58,14 @@ MAX_OBJECT_NAME = 39
 MAX_FIELD_NAME = 49
 MAX_RELATIONSHIP_NAME = 35
 
-# core's scalar types. GEOMETRY belongs to wasichai-gis, which srtm does not install
+# core's scalar types, plus GEOMETRY from wasichai-gis (srtm installs it: the lotes and the domicilio's point)
 FIELD_TYPES = frozenset({
     "TEXT", "LONG_TEXT", "INTEGER", "DECIMAL", "BOOLEAN", "DATE", "DATETIME",
-    "ENUM", "EMAIL", "URL", "UUID",
+    "ENUM", "EMAIL", "URL", "UUID", "GEOMETRY",
 })
+
+# mirror wasichai-gis's GeometryFieldType: a geometry names its shape; srid 1..999999 (default 4326), 2d or 3d
+GEOMETRY_TYPES = frozenset({"POINT", "LINESTRING", "POLYGON", "MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON"})
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +150,17 @@ def validate(model):
             elif ftype not in FIELD_TYPES:
                 errors.append(f"{flabel}: unknown type '{ftype}'")
 
+            if ftype == "GEOMETRY":
+                if str(field.get("geometryType", "")).upper() not in GEOMETRY_TYPES:
+                    errors.append(f"{flabel}: geometryType must be one of {', '.join(sorted(GEOMETRY_TYPES))}")
+                srid = field.get("srid", 4326)
+                if not isinstance(srid, int) or not 1 <= srid <= 999999:
+                    errors.append(f"{flabel}: srid must be an integer between 1 and 999999")
+                if field.get("dimension", 2) not in (2, 3):
+                    errors.append(f"{flabel}: dimension must be 2 or 3")
+                if field.get("unique") or field.get("required"):
+                    errors.append(f"{flabel}: a geometry can be neither unique nor required here")
+
             if ftype == "ENUM":
                 enum_name = field.get("enum")
                 if not enum_name or enum_name not in enums:
@@ -212,6 +226,10 @@ def field_payload(model, f):
         field["description"] = f["description"]
     if f["type"] == "ENUM":
         field["enumOptions"] = model["enums"][f["enum"]]
+    if f["type"] == "GEOMETRY":
+        field["geometryType"] = f["geometryType"].upper()
+        field["srid"] = f.get("srid", 4326)
+        field["dimension"] = f.get("dimension", 2)
     return field
 
 

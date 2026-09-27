@@ -32,7 +32,8 @@ class SrtmSmokeTest : WasichaiIntegrationTest() {
             "/api/objects/$name/forms",
             "/api/pages",
             "/api/objects/$name/document-types",
-            "/api/objects/$name/records/${UUID.randomUUID()}/transitions"
+            "/api/objects/$name/records/${UUID.randomUUID()}/transitions",
+            "/api/gis/layers"
         ).forEach { path ->
             client
                 .get()
@@ -42,7 +43,7 @@ class SrtmSmokeTest : WasichaiIntegrationTest() {
                 .expectStatus()
                 .isOk
         }
-        listOf("/api/gis/layers", "/api/automation-runs", "/api/agent/status").forEach { path ->
+        listOf("/api/automation-runs", "/api/agent/status").forEach { path ->
             client
                 .get()
                 .uri(path)

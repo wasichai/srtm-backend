@@ -155,7 +155,11 @@
         {"name": "descripcion_sub_zona", "label": "Descripción de la sub zona", "type": "TEXT"},
         {"name": "partida_registral", "label": "Partida registral", "type": "TEXT"},
         {"name": "referencia", "label": "Referencia", "type": "TEXT"},
-        {"name": "codigo_cpu", "label": "Código CPU", "type": "TEXT", "description": "Código del predio en el catastro fiscal."}
+        {"name": "codigo_cpu", "label": "Código CPU", "type": "TEXT", "description": "Código del predio en el catastro fiscal."},
+        {"name": "numero_registro", "label": "Número de registro de predio", "type": "INTEGER", "unique": true,
+          "description": "Autogenerado al registrar el predio en el portal. Vacío en los importados del padrón."},
+        {"name": "lote_geom", "label": "Lote", "type": "GEOMETRY", "geometryType": "POLYGON", "srid": 32718,
+          "description": "Polígono del lote (UTM 18S). Copiado del catastro fiscal o dibujado en el portal."}
       ]
     },
     {
@@ -208,7 +212,8 @@
         {"name": "inhabitable_fecha_inicio", "label": "Fecha de inicio de resolución", "type": "DATE"},
         {"name": "clase_uso", "label": "Clase de uso", "type": "ENUM", "enum": "clase_uso"},
         {"name": "sub_clase_uso", "label": "Sub clase de uso", "type": "ENUM", "enum": "sub_clase_uso"},
-        {"name": "area_comun_terreno", "label": "Área común del terreno", "type": "DECIMAL"}
+        {"name": "area_comun_terreno", "label": "Área común del terreno", "type": "DECIMAL"},
+        {"name": "otros_datos", "label": "Otros datos", "type": "LONG_TEXT"}
       ]
     },
     {
@@ -245,7 +250,9 @@
         {"name": "descripcion_sub_zona", "label": "Descripción de la sub zona", "type": "TEXT"},
         {"name": "referencia", "label": "Referencia", "type": "TEXT"},
         {"name": "descripcion", "label": "Descripción del domicilio", "type": "TEXT", "description": "Armada por el backend con los campos de arriba."},
-        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"}
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"},
+        {"name": "ubicacion", "label": "Ubicación en el mapa", "type": "GEOMETRY", "geometryType": "POINT", "srid": 4326,
+          "description": "Punto marcado con \"Buscar dirección\"."}
       ]
     },
     {
@@ -435,6 +442,43 @@
         {"name": "categoria", "label": "Categoría", "type": "TEXT", "required": true},
         {"name": "letra", "label": "Letra", "type": "ENUM", "enum": "letra_categoria", "required": true},
         {"name": "descripcion", "label": "Descripción", "type": "LONG_TEXT", "required": true}
+      ]
+    },
+    {
+      "name": "catastro_fiscal",
+      "label": "Lote del catastro fiscal",
+      "pluralLabel": "Catastro fiscal",
+      "description": "Lotes del catastro fiscal, con su código CPU y su polígono (model/import_catastro.py, o dibujados en el portal).",
+      "fields": [
+        {"name": "codigo_cpu", "label": "Código CPU", "type": "TEXT", "required": true, "unique": true},
+        {"name": "codigo_predio_municipal", "label": "Código de predio municipal", "type": "TEXT",
+          "description": "El código del predio en el padrón tributario (predio.codigo)."},
+        {"name": "partida_registral", "label": "Partida registral", "type": "TEXT"},
+        {"name": "tipo_predio", "label": "Tipo de predio", "type": "ENUM", "enum": "tipo_predio"},
+        {"name": "ubigeo", "label": "Ubigeo", "type": "TEXT"},
+        {"name": "tipo_via", "label": "Tipo de vía", "type": "ENUM", "enum": "tipo_via"},
+        {"name": "via", "label": "Descripción de la vía", "type": "TEXT"},
+        {"name": "numero", "label": "Número principal", "type": "TEXT"},
+        {"name": "tipo_zona", "label": "Zona", "type": "ENUM", "enum": "tipo_unidad_urbana"},
+        {"name": "zona", "label": "Descripción de la zona", "type": "TEXT"},
+        {"name": "manzana", "label": "Manzana", "type": "TEXT"},
+        {"name": "lote", "label": "Lote", "type": "TEXT"},
+        {"name": "kilometro", "label": "Kilómetro", "type": "TEXT"},
+        {"name": "direccion", "label": "Dirección de catastro fiscal", "type": "TEXT"},
+        {"name": "lote_geom", "label": "Polígono del lote", "type": "GEOMETRY", "geometryType": "POLYGON", "srid": 32718}
+      ]
+    },
+    {
+      "name": "obra_categoria",
+      "label": "Categoría de obra complementaria",
+      "pluralLabel": "Categorías de obras complementarias",
+      "description": "Partidas del instructivo de obras complementarias e instalaciones fijas y permanentes (model/data/obras_complementarias.csv).",
+      "fields": [
+        {"name": "tipo_obra", "label": "Tipo de obra", "type": "ENUM", "enum": "tipo_obra", "required": true},
+        {"name": "numero", "label": "Número", "type": "INTEGER", "required": true},
+        {"name": "descripcion", "label": "Descripción", "type": "LONG_TEXT", "required": true},
+        {"name": "unidad_medida", "label": "Unidad de medida", "type": "ENUM", "enum": "unidad_medida", "required": true},
+        {"name": "material", "label": "Material predominante", "type": "ENUM", "enum": "material"}
       ]
     }
   ],

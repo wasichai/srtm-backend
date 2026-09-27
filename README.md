@@ -2,20 +2,20 @@
 
 Backend básico de **rentas municipales** (Perené) sobre [wasichai](https://github.com/wasichai/wasichai): un servidor
 Spring Boot armado solo con starters de wasichai, más un modelo de metadata (contribuyentes, predios, declaraciones
-prediales) que se carga por REST, y un importador del padrón de predios en Excel. Sigue la forma de
-`wasichai/examples/gis-sample`, pero **sin GIS**: corre sobre PostgreSQL plano.
+prediales, catastro fiscal) que se carga por REST, e importadores del padrón de predios (Excel) y del catastro
+(GeoJSON). Sigue la forma de `gis-sample`: con **GIS** (wasichai-gis), sobre PostGIS.
 
 | | |
 |---|---|
-| Módulos | core, workflow, documents, views, forms, pages |
+| Módulos | core, workflow, documents, views, forms, pages, gis |
 | Servidor | `src/`, puerto 8090 |
-| Base de datos | PostgreSQL 18 (`compose.yml`, puerto 5433, base `srtm`) |
+| Base de datos | PostgreSQL 18 con PostGIS 3.6 (`compose.yml`, imagen `postgis/postgis:18-3.6`, puerto 5433, base `srtm`) |
 | Modelo e importador | `model/` (Python 3.11+, solo stdlib) |
 | Login de desarrollo | `admin@wasichai.local` / `admin` (seed de desarrollo, `WASICHAI_SEED_DEV=true` por defecto) |
 
 ## Requisitos
 
-- JDK 25 y Docker (para PostgreSQL y para los tests de integración con Testcontainers).
+- JDK 25 y Docker (para PostGIS y para los tests de integración con Testcontainers).
 - Python 3.11+ para `model/`.
 - Las librerías de wasichai (`wasichai:wasichai-bom:0.1.0` y los starters). Se resuelven desde:
   1. **GitHub Packages** (`https://maven.pkg.github.com/wasichai/wasichai`). Pide un token aunque sea para leer
@@ -36,7 +36,7 @@ La guía completa de desarrollo local (variables, base, IDE, tests, front) está
 ```bash
 cp develop/example.env develop/.env  # variables de ejemplo; develop/.env no se versiona
 set -a; source develop/.env; set +a
-docker compose up -d                 # postgres:18 en localhost:5433, base srtm (usuario/clave srtm)
+docker compose up -d                 # postgis 18-3.6 en localhost:5433, base srtm (usuario/clave srtm)
 ./gradlew bootRun                    # servidor en http://localhost:8090
 ```
 
@@ -50,6 +50,20 @@ ese puerto queda en el loopback del servidor: llega por un túnel, `ssh -N -L 54
 | `WASICHAI_SEED_DEV` | `true` | crea el admin de desarrollo; apagarlo fuera de desarrollo |
 | `WASICHAI_JWT_SECRET` | un valor solo para desarrollo | poner uno propio (>= 32 bytes) en cualquier entorno real |
 | `SRTM_PG_PORT` | `5433` | puerto publicado por `compose.yml` |
+| `WASICHAI_GEOSERVER_ENABLED` / `_URL` | `false` / `http://localhost:8081/geoserver` | solo para publicar capas WMS |
+
+### Pasar una base existente a PostGIS
+
+Hasta la fase 3 la base era PostgreSQL 18 plano. `compose.yml` usa ahora `postgis/postgis:18-3.6`, que es el mismo
+PostgreSQL 18, así que el volumen `postgres-data` sirve tal cual. La primera migración de wasichai-gis crea la
+extensión `postgis` sola (el usuario `srtm` es superusuario).
+
+```bash
+docker compose exec postgres pg_dump -U srtm -Fc srtm > srtm-antes-de-postgis.dump   # respaldo, por si acaso
+docker compose up -d                 # recrea el contenedor con la imagen de postgis, mismo volumen
+./gradlew bootRun                    # la migración de wasichai-gis instala postgis
+cd model && python3 apply.py         # crea catastro_fiscal, obra_categoria y los campos de geometría
+```
 
 ## Cargar el modelo
 
@@ -102,8 +116,34 @@ python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"      
   - En las unidades urbanas se descartan los restos de lote delante del tipo ("03-B CERCADO III MESETA").
   - Se asignan al distrito de `--distrito` (por defecto `120302`, Perené).
   - Con el Excel de 2026 salen 904 vías y 306 unidades urbanas.
+- **`obra_categoria`:** las partidas del instructivo de obras complementarias e instalaciones fijas y permanentes
+  (anexo III de la R.M. N.° 277-2025-VIVIENDA), en `model/data/obras_complementarias.csv`.
+  - El archivo **viene solo con la cabecera** (`tipo_obra,numero,descripcion,unidad_medida,material`): gob.pe no deja
+    que un script descargue el anexo. Hay que completarlo a mano desde www.gob.pe/vivienda.
+  - Mientras está vacío, la categoría de una obra se escribe a mano en el portal.
 - **Idempotente**, como los otros scripts.
-- Los tres catálogos se pueden editar después desde el admin.
+- Los catálogos se pueden editar después desde el admin.
+
+## Importar el catastro fiscal
+
+Los lotes del catastro fiscal (código CPU y polígono) se cargan desde un GeoJSON en EPSG:4326. También se pueden
+dibujar o corregir a mano en el portal.
+
+```bash
+cd model
+ogr2ogr -f GeoJSON -t_srs EPSG:4326 lotes.geojson lotes.shp                     # si viene en Shapefile
+python3 import_catastro.py --geojson lotes.geojson --map codigo_cpu=CPU --dry-run   # revisa, no llama a Core
+python3 import_catastro.py --geojson lotes.geojson --map codigo_cpu=CPU --map codigo_predio_municipal=COD_MUN
+```
+
+- **Mapeo:** cada propiedad del GeoJSON cuyo nombre coincide con un campo lo llena. `--map campo=propiedad` renombra
+  (se puede repetir). Campos: `codigo_cpu` (obligatorio), `codigo_predio_municipal`, `partida_registral`,
+  `tipo_predio`, `ubigeo`, `tipo_via`, `via`, `numero`, `tipo_zona`, `zona`, `manzana`, `lote`, `kilometro`,
+  `direccion`.
+- **Geometría:** un MultiPolygon de una sola parte se toma como Polygon. wasichai-gis lo guarda en UTM 18S (EPSG:32718)
+  y lo devuelve en EPSG:4326.
+- **Idempotente** por `codigo_cpu`.
+- **Salida:** `0` ok, `1` Core rechazó algo, `2` el archivo tiene lotes que no encajan en el modelo (no se envía nada).
 
 ## Importar el padrón de predios
 
@@ -130,14 +170,19 @@ Con el Excel de 2026 el resultado esperado es 11 840 contribuyentes, 14 947 pred
 
 ## Modelo
 
-Quince objetos (`model/model.json`):
+Diecisiete objetos (`model/model.json`):
 - **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
   *Formato Padrón Municipal Armonización 2026*.
 - **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
   con una relación obligatoria a `contribuyente`.
 - **Declaración jurada predial del SRTM (fase 2):** `transferente`, `nivel_construccion`, `obra_complementaria` y
   `otro_frente`, cada uno con una relación obligatoria a `declaracion_predial`.
-- **Catálogos:** `ubigeo`, `via`, `unidad_urbana` y `categoria_valor`.
+- **Catastro fiscal (fase 3):** `catastro_fiscal`, un lote por código CPU, con su polígono.
+- **Catálogos:** `ubigeo`, `via`, `unidad_urbana`, `categoria_valor` y `obra_categoria`.
+
+Geometrías (wasichai-gis, GeoJSON en EPSG:4326 por la API):
+- `predio.lote_geom` y `catastro_fiscal.lote_geom`: POLYGON, guardados en UTM 18S (EPSG:32718).
+- `domicilio.ubicacion`: POINT, en EPSG:4326 ("Buscar dirección").
 
 En la fase 1, `contribuyente` ganó los campos de la pantalla "Nuevo contribuyente" del SRTM:
 - código y número de declaración autogenerados, fecha del registro;
@@ -237,6 +282,11 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET, POST | `/api/srtm/declaraciones/{id}/{lista}` | las listas de la DJ: `transferentes`, `niveles`, `obras`, `frentes` |
 | PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
 | GET | `/api/srtm/categorias-valor` | las letras de las siete columnas del cuadro de valores, con su descripción |
+| GET | `/api/srtm/obras-categorias?tipo_obra` | las partidas del instructivo de obras complementarias |
+| GET | `/api/srtm/predios/buscar?…` | "Buscar en Tributario" (pág. 13) |
+| GET, POST | `/api/srtm/catastro?…` | "Buscar en Catastro Fiscal" (pág. 13), y el alta de un lote |
+| GET, PUT | `/api/srtm/catastro/{id}` | un lote del catastro, y su edición (polígono incluido) |
+| GET | `/api/gis/objects/{catastro_fiscal\|predio}/features?bbox&geometry=lote_geom` | de wasichai-gis: los lotes del área visible, para el mapa |
 
 Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
 - **Inscripción:** el backend asigna `codigo` (6 dígitos, correlativo), `numero_declaracion` y `fecha_registro`.
@@ -257,6 +307,15 @@ Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
   - Con `tipo_via`, la dirección del predio se arma de su ubicación. Los importados conservan el texto del padrón hasta
     que alguien completa su ubicación.
   - El total metrado de una obra complementaria es cantidad × metrado.
+- **Búsqueda de predios** (`BusquedaPredios.kt`): los filtros de la pág. 13 son tipo de predio, código, código CPU,
+  partida registral, tipo de vía, vía, tipo de zona, zona, número, manzana, lote y kilómetro.
+  - Un texto se busca contenido, sin distinguir mayúsculas; un ENUM, exacto. Los valores van ligados, nunca en el SQL.
+  - Página de 5 por defecto, como el SRTM.
+- **Predio registrado en el portal:** recibe `numero_registro` (correlativo, único). Código y número de registro se
+  conservan en cada edición.
+- **Geometrías:** viajan como un campo más del DTO (`lote_geom`, `ubicacion`); `Registros` las separa hacia la
+  sección `geometries` de Core. Un DTO siempre lleva su geometría, `null` si el formulario no tenía mapa: por eso
+  `null` **conserva** la geometría guardada. El portal la reemplaza, nunca la borra.
 - **Lo que no se edita:** en una edición, `codigo`, `numero_declaracion`, `fecha_registro` y el domicilio fiscal se
   conservan aunque el cuerpo diga otra cosa. Una fila de una lista nunca cambia de contribuyente.
 - **Escrituras:** el `update` de Core reemplaza **todos** los campos editables. Por eso el portal fusiona lo que envía
@@ -269,20 +328,21 @@ Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
 
 ```bash
 ./gradlew build             # ktlint + tests unitarios (mapeo y reglas del portal)
-./gradlew integrationTest   # smoke test y API del portal contra Testcontainers postgres:18 (o WASICHAI_TEST_DB_*)
+./gradlew integrationTest   # smoke test y API del portal contra Testcontainers postgis/postgis:18-3.6 (o WASICHAI_TEST_DB_*)
 cd model && python3 -m unittest -v
 ```
 
 Con un Docker remoto, Testcontainers no llega a los puertos publicados. En ese caso se usa una base de test externa
 tunelizada: `WASICHAI_TEST_DB_HOST`, `_PORT`, `_NAME` (debe terminar en `_test`, porque la suite la limpia),
-`_USERNAME` y `_PASSWORD`, y se corre `./gradlew integrationTest --rerun`. Detalles en
+`_USERNAME` y `_PASSWORD`, y se corre `./gradlew integrationTest --rerun`. Esa base debe tener PostGIS. Detalles en
 `wasichai/docs/development/getting-started.md#integration-tests`.
 
 ## Siguientes pasos (fuera de este alcance)
 
-- **Catálogo de obras complementarias:** las partidas del instructivo del MVCS, para la categoría de una obra. Hoy
-  es texto libre.
-- **Integraciones:** PIDE RENIEC, y catastro fiscal (código CPU y mapa).
+- **Datos:** completar `model/data/obras_complementarias.csv` con el anexo oficial, y cargar el GeoJSON del catastro
+  fiscal cuando esté disponible.
+- **Integraciones:** PIDE RENIEC. El fondo del mapa es OpenStreetMap; una capa WMS/WMTS municipal se puede publicar
+  con GeoServer.
 - **Cálculo y cobranza:** impuesto predial (tramos UIT), arbitrios, deuda y cuotas, pagos y recibos.
 - **En el modelo:** workflows y plantillas de documentos.
 
