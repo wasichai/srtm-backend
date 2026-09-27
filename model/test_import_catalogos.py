@@ -11,6 +11,7 @@ from contextlib import redirect_stdout
 import import_catalogos as ic
 from core_client import Client
 from fake_core import FakeCore
+from import_predios import TIPOS_UNIDAD_URBANA
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -25,25 +26,26 @@ class SplitTipoTests(unittest.TestCase):
         self.assertEqual(ic.split_tipo("SECTOR IPANEMA", ic.TIPOS_VIA), ("OTROS", "SECTOR IPANEMA"))
 
     def test_unidad_urbana_types_longest_first(self):
-        tipos = ic.TIPOS_UNIDAD_URBANA
+        tipos = TIPOS_UNIDAD_URBANA
         self.assertEqual(ic.split_tipo("ASOCIACION DE VIVIENDA HERMANAS PAUCAR", tipos), ("ASOCIACION DE VIVIENDA", "HERMANAS PAUCAR"))
         self.assertEqual(ic.split_tipo("ASOCIACION AGRARIA", tipos), ("ASOCIACION", "AGRARIA"))
-        self.assertEqual(ic.split_tipo("ANEXO - CENTRO POBLADO MIRICHARO", tipos), ("ANEXO", "CENTRO POBLADO MIRICHARO"))
-        self.assertEqual(ic.split_tipo("CERCADO", tipos), ("OTROS", "CERCADO"))
+        # the padrón's ANEXO is a CENTRO POBLADO, and the name says it again
+        self.assertEqual(ic.split_tipo("ANEXO - CENTRO POBLADO MIRICHARO", tipos), ("CENTRO POBLADO", "MIRICHARO"))
+        self.assertEqual(ic.split_tipo("CERCADO", tipos, default=None), (None, "CERCADO"))
 
     def test_unidad_urbana_after_lot_leftovers(self):
-        tipos = ic.TIPOS_UNIDAD_URBANA
+        tipos = TIPOS_UNIDAD_URBANA
         self.assertEqual(ic.split_tipo("03-B CERCADO III MESETA", tipos, anywhere=True), ("CERCADO", "III MESETA"))
         self.assertEqual(ic.split_tipo("- MZ.B ASOCIACION DE VIVIENDA LAS VEGAS", tipos, anywhere=True),
                          ("ASOCIACION DE VIVIENDA", "LAS VEGAS"))
-        self.assertEqual(ic.split_tipo("ANEXO - CENTRO POBLADO MIRICHARO", tipos, anywhere=True), ("ANEXO", "CENTRO POBLADO MIRICHARO"))
-        self.assertEqual(ic.split_tipo("VILLA SOL", tipos, anywhere=True), ("OTROS", "VILLA SOL"))
+        self.assertEqual(ic.split_tipo("ANEXO - CENTRO POBLADO MIRICHARO", tipos, anywhere=True), ("CENTRO POBLADO", "MIRICHARO"))
+        self.assertEqual(ic.split_tipo("VILLA SOL", tipos, default=None, anywhere=True), (None, "VILLA SOL"))
 
     def test_every_type_is_a_model_option(self):
         with open(os.path.join(HERE, "model.json"), encoding="utf-8") as f:
             enums = json.load(f)["enums"]
         self.assertTrue({t for _, t in ic.TIPOS_VIA} | {"OTROS"} <= set(enums["tipo_via"]))
-        self.assertTrue({t for _, t in ic.TIPOS_UNIDAD_URBANA} | {"OTROS"} <= set(enums["tipo_unidad_urbana"]))
+        self.assertTrue({t for _, t in TIPOS_UNIDAD_URBANA} <= set(enums["tipo_unidad_urbana"]))
 
 
 class CatalogsFromRowsTests(unittest.TestCase):

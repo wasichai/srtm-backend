@@ -79,7 +79,7 @@ class NormalizarPredioTests(unittest.TestCase):
 class NotasTests(unittest.TestCase):
     def test_what_needs_a_look(self):
         self.assertEqual(npad.notas_predio({"via": "SECTOR IPANEMA"}), ["vía sin tipo reconocido: queda OTROS"])
-        self.assertEqual(npad.notas_predio({"habilitacion_urbana": "VILLA SOL"}), ["zona sin tipo reconocido: queda OTROS"])
+        self.assertEqual(npad.notas_predio({"habilitacion_urbana": "VILLA SOL"}), ["zona sin tipo reconocido: queda sin tipo"])
         self.assertEqual(npad.notas_predio({"habilitacion_urbana": "03-B CERCADO III MESETA"}), ["se descartan restos de lote de la zona: 03-B"])
         self.assertEqual(npad.notas_predio(PADRON), [])
         # a misspelled type is read whole, nothing is left over

@@ -77,9 +77,9 @@ class TipoUnidadUrbanaSrtmTests(ApplyCliTestCase):
         code, out, err = self.run_cli([])
         self.assertEqual(code, 0, msg=err)
         option_puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "enumOptions" in (r[3] or {})]
-        # after the options Core has, as apply.py adds any option
+        # in model.json's order, page 5's, as apply.py writes any option list it changes
         self.assertEqual(option_puts, [
-            (f"/api/metadata/objects/{objeto}/fields/{campo}", {"enumOptions": self.antes + UNIDADES_NUEVAS})
+            (f"/api/metadata/objects/{objeto}/fields/{campo}", {"enumOptions": load_model()["enums"]["tipo_unidad_urbana"]})
             for objeto, campo in self.campos
         ])
         for objeto, campo in self.campos:

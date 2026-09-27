@@ -163,15 +163,13 @@ class SplitUbicacionTests(unittest.TestCase):
                 self.assertEqual(ip.split_tipo(via, ip.TIPOS_VIA), ("CARROZABLE", "TUPAC AMARU"))
 
     def test_every_abbreviation_of_the_address_is_read_back(self):
-        # the tables Reglas.kt (srtm-backend) and forms/direccion.ts (srtm-ui) write addresses with
+        # the table Reglas.kt (srtm-backend) and forms/direccion.ts (srtm-ui) write vías with. the unidades urbanas'
+        # (data/tipos_unidad_urbana.csv) are test_tipos_unidad_urbana's; AA.VV. is the one the portal wrote before them
         vias = {"AVENIDA": "AV.", "CALLE": "CA.", "JIRON": "JR.", "PASAJE": "PSJE.", "PROLONGACION": "PROL.", "CARRETERA": "CARR."}
-        unidades = {"ASENTAMIENTO HUMANO": "AA.HH.", "ASOCIACION DE VIVIENDA": "AA.VV.", "CENTRO POBLADO": "C.P.", "URBANIZACION": "URB."}
         for tipo, sigla in vias.items():
             with self.subTest(sigla=sigla):
                 self.assertEqual(ip.split_tipo(f"{sigla} LOS PINOS", ip.TIPOS_VIA), (tipo, "LOS PINOS"))
-        for tipo, sigla in unidades.items():
-            with self.subTest(sigla=sigla):
-                self.assertEqual(ip.split_tipo(f"{sigla} LOS PINOS", ip.TIPOS_UNIDAD_URBANA, anywhere=True), (tipo, "LOS PINOS"))
+        self.assertEqual(ip.split_tipo("AA.VV. LOS PINOS", ip.TIPOS_UNIDAD_URBANA, anywhere=True), ("ASOCIACION DE VIVIENDA", "LOS PINOS"))
 
 
 class SecuenciaUsoTests(unittest.TestCase):

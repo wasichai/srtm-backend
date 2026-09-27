@@ -83,7 +83,8 @@ python3 apply.py --drop            # lo borra, en orden inverso (¡borra tambié
 Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
 - **Campos:** añade a los objetos existentes los que `model.json` tiene y Core no.
 - **Opciones ENUM:** añade las opciones que falten, y quita las que `model.json` ya no lista si ningún registro las usa
-  (la que alguno usa se queda, con un aviso `keep option …`).
+  (la que alguno usa se queda, con un aviso `keep option …`). La lista que cambia queda en el orden de `model.json`,
+  con las que se conservan por estar en uso al final.
 - **Obligatoriedad:** deja opcional el campo que `model.json` ya no exige (`contribuyente.numero_documento`, vacío con
   SIN DOCUMENTO); nunca vuelve obligatorio uno existente.
 - **Etiquetas:** pone la etiqueta de `model.json` al campo que Core etiqueta distinto (`predio.condicion`: "Tipo de
@@ -94,13 +95,10 @@ registros importados siguen siendo válidos. Por ejemplo, sobre la base del padr
 - añade los campos nuevos de `contribuyente`, `predio` y `declaracion_predial`;
 - amplía `tipo_documento` (`PASAPORTE`, y `PTP-CPP`, `CI` y `OTROS` de los manuales del SRTM) y `condicion_propiedad`
   (`SOCIEDAD CONYUGAL`, `POSEEDOR`);
-- amplía `tipo_unidad_urbana` con las dos opciones que la presentación del SRTM corta en la pág. 5
-  ("ASOCIACION DE VIVIENDA D…", "…E I…"): `ASOCIACION DE VIVIENDA DE INTERES SOCIAL` y
-  `ASOCIACION DE VIVIENDA E INTERES SOCIAL`.
-  - Los nombres son los del dominio `TIPO_UU` del catastro fiscal del MEF (códigos 53 y 48), la lista de la que el SRTM
-    importa sus zonas urbanas. Se leyeron de la geodatabase de Perené (`120302_MD_Perene_ECF.gdb`) con
-    `ogrinfo -ro <gdb> -fielddomain TIPO_UU`. Ordenado alfabéticamente, ese dominio da las seis filas de la pág. 5.
-  - Sobre una base que ya tiene la lista, quedan después de `OTROS`, como toda opción que se añade.
+- cambia `tipo_unidad_urbana` a los 43 tipos del dominio oficial `TIPO_UU`
+  ([Tipos de unidad urbana](#tipos-de-unidad-urbana)): agrega los 28 que faltaban y quita `COMUNIDAD CAMPESINA` y
+  `COMUNIDAD NATIVA`. `ANEXO`, `HABILITACION URBANA` y `OTROS` salen cuando ya no los usa nadie
+  ([Migrar los tipos de unidad urbana](#migrar-los-tipos-de-unidad-urbana));
 - cambia `tipo_obra` a los grupos del anexo III de obras complementarias (quita `CISTERNAS`, `PISCINAS`,
   `LOSAS DEPORTIVAS`, `PISOS DE CONCRETO` y `OTROS`) y añade `PZA` a `unidad_medida`;
 - quita de `clase_uso` y `sub_clase_uso` las opciones de antes del catálogo de usos del SRTM (`INDUSTRIAL`,
@@ -136,11 +134,13 @@ python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"      
 - **`via` y `unidad_urbana`:** salen de `direccion_predio` del padrón, las mismas partes `<vía>` y `<habilitación>` que
   lee `import_predios.py`.
   - El tipo sale del primer término (CALLE, JIRÓN, CARROZABLE… / ASOCIACIÓN DE VIVIENDA, CENTRO POBLADO, CERCADO…).
+    Los de unidad urbana son los de [`TIPO_UU`](#tipos-de-unidad-urbana), con las palabras propias del padrón.
   - En las unidades urbanas se descartan los restos de lote delante del tipo ("03-B CERCADO III MESETA").
+  - Una habilitación sin tipo reconocido no entra al catálogo: el tipo de la unidad urbana es obligatorio.
   - Se asignan al distrito de `--distrito` (por defecto `120302`, Perené).
   - Se leen también las abreviaturas con que el portal escribe las direcciones (JR., AV., CA., PSJE., PROL., CARR.;
-    AA.HH., AA.VV., C.P., URB.) y las erratas de CARROZABLE del padrón.
-  - Con el Excel de 2026 salen 903 vías y 306 unidades urbanas.
+    las de `ABREV_UU` y AA.VV.) y las erratas de CARROZABLE del padrón.
+  - Con el Excel de 2026 salen 903 vías y 292 unidades urbanas.
 - **`obra_categoria`:** las 96 partidas de obras complementarias e instalaciones fijas y permanentes del anexo III de
   la R.M. N.° 277-2025-VIVIENDA, en `model/data/obras_complementarias.csv`
   (`tipo_obra,numero,descripcion,unidad_medida,material,valor_unitario`).
@@ -223,8 +223,9 @@ Con el Excel de 2026 el resultado esperado es 11 840 contribuyentes, 14 947 pred
 
 Cada predio llega con su ubicación separada como la pide el formulario del SRTM: `via` "JIRON LIMA" se guarda como
 `tipo_via` JIRON y `via` LIMA, `habilitacion_urbana` "CERCADO II MESETA" como `tipo_zona` CERCADO y
-`habilitacion_urbana` II MESETA, y `kilometro` sale de "Km.:". `direccion` guarda el texto del padrón. La secuencia de
-uso tiene tres dígitos ("001"), también en el portal.
+`habilitacion_urbana` II MESETA, y `kilometro` sale de "Km.:". El tipo de la zona es uno de
+[`TIPO_UU`](#tipos-de-unidad-urbana): "ANEXO - CENTRO POBLADO MIRICHARO" se guarda como CENTRO POBLADO y MIRICHARO.
+`direccion` guarda el texto del padrón. La secuencia de uso tiene tres dígitos ("001"), también en el portal.
 
 **El Excel y los reportes no se versionan**: traen DNI, nombres y domicilios. `*.xlsx` y `model/reports/` están en
 `.gitignore`.
@@ -242,9 +243,9 @@ python3 normalizar_padron.py --dry-run   # lee Core y escribe el reporte; no cam
 python3 normalizar_padron.py             # actualiza lo que el reporte lista
 ```
 
-- **Predios del padrón** (sin `tipo_via`): separa tipo y nombre de `via` y de `habilitacion_urbana` (sin tipo
-  reconocido queda OTROS) y lee `kilometro` de `direccion`. `direccion` no cambia: el portal la rearma, con las
-  abreviaturas del SRTM, al guardar la ubicación.
+- **Predios del padrón** (sin `tipo_via`): separa tipo y nombre de `via` y de `habilitacion_urbana` (una vía sin tipo
+  reconocido queda OTROS; una zona, sin tipo) y lee `kilometro` de `direccion`. `direccion` no cambia: el portal la
+  rearma, con las abreviaturas del SRTM, al guardar la ubicación.
 - **Declaraciones:** `secuencia_uso` con tres dígitos ("1" → "001").
 - **Reporte** (`model/reports/normalizar_padron.csv`): cada campo que cambia (antes y después) y lo que conviene mirar a
   mano: tipos no reconocidos, restos de lote que salen de la zona, direcciones guardadas desde el portal que repiten el
@@ -281,6 +282,69 @@ python3 apply.py                          # 3. quita de `uso` los grupos, que ya
   no cambia nada.
 - Flags: `--dry-run`, `--report`, `--workers` (PUTs en paralelo, default 4), `--core`, `--email`, `--password`.
   Salida: `0` ok, `1` Core rechazó algo (se muestra el número de la declaración, o su id si no tiene).
+
+## Tipos de unidad urbana
+
+La lista de *tipo de unidad urbana* del SRTM (pág. 5) es el dominio `TIPO_UU` del catastro fiscal del MEF: 43 tipos,
+cada uno con su abreviatura del dominio `ABREV_UU` (mismo código).
+- **Dato:** `model/data/tipos_unidad_urbana.csv` (`codigo,nombre,abreviatura`), en orden alfabético, el de la pág. 5.
+  El enum `tipo_unidad_urbana` de `model.json` es la misma lista, y `test_tipos_unidad_urbana.py` lo verifica.
+- **Fuente:** la geodatabase del catastro fiscal de Perené (`120302_MD_Perene_ECF.gdb`), leída con
+  `ogrinfo -ro <gdb> -fielddomain TIPO_UU` y `-fielddomain ABREV_UU`. Los nombres van como en el dominio, sin tildes,
+  salvo dos erratas corregidas: 56 `RESINDENCIAL` es `RESIDENCIAL` y 38 `PROGRAM MUNICIP'AL DE VIVIENDA` es
+  `PROGRAMA MUNICIPAL DE VIVIENDA` (el apóstrofo tampoco cabe en una opción ENUM de Core).
+- **Abreviaturas:** la dirección que arma el backend (`describir` y `describirUbicacion` en `Reglas.kt`) y la vista
+  previa del portal (`forms/direccion.ts` en srtm-ui) escriben cada tipo con la suya: `A.P.V. LOS PINOS`,
+  `CER II MESETA`, `C.P. MIRICHARO`. Las dos tablas son iguales y tienen los mismos casos de prueba. 48 y 53 comparten
+  `ASOC.VIS.`; al leer una dirección, `ASOC.VIS.` es la 53, ASOCIACION DE VIVIENDA DE INTERES SOCIAL.
+- **Padrón** (`import_predios.py`, `import_catalogos.py` y `normalizar_padron.py`, con la misma tabla):
+  - `ANEXO` es CENTRO POBLADO, `HABILITACION URBANA` es URBANIZACION y `CENTRO URBANO INFORMAL` es POSESION INFORMAL,
+    salvo que el nombre empiece con su propio tipo, escrito entero: "ANEXO - CENTRO POBLADO MIRICHARO" es CENTRO
+    POBLADO MIRICHARO y "HABILITACION URBANA SECTOR 10 DE OCTUBRE" es SECTOR 10 DE OCTUBRE.
+  - Un tipo escrito entero gana a una abreviatura: en "LOT 2A CENTRO POBLADO SAN FERNANDO DE KIVINAKI", LOT es el lote.
+  - `OTROS` no es un tipo: una habilitación sin tipo reconocido se guarda sin tipo.
+
+## Migrar los tipos de unidad urbana
+
+En una base con registros de antes de `TIPO_UU` (con `ANEXO`, `HABILITACION URBANA` u `OTROS`), en este orden:
+
+```bash
+cd model
+python3 apply.py                                  # 1. agrega los 28 tipos que faltan
+python3 migrar_tipos_unidad_urbana.py --dry-run   # 2. lee Core y escribe el reporte, sin cambiar nada: revisarlo
+python3 migrar_tipos_unidad_urbana.py             #    y migrar (borra las unidades urbanas repetidas)
+python3 apply.py                                  # 3. quita ANEXO, HABILITACION URBANA y OTROS, que ya no usa nadie
+```
+
+- **El paso 1** conserva `ANEXO`, `HABILITACION URBANA` y `OTROS` mientras algún registro los use, con un aviso
+  `keep option …`, y quita `COMUNIDAD CAMPESINA` y `COMUNIDAD NATIVA`, que nadie usa. Deja la lista en el orden de la
+  pág. 5, con las antiguas al final.
+- **Migración**, como lee hoy el padrón, en `predio` (`tipo_zona`, `habilitacion_urbana`), `unidad_urbana`
+  (`tipo_unidad_urbana`, `nombre`), `domicilio` (`tipo_unidad_urbana`, `unidad_urbana`) y `catastro_fiscal`
+  (`tipo_zona`, `zona`):
+  - `ANEXO` / CENTRO POBLADO MIRICHARO pasa a CENTRO POBLADO / MIRICHARO, y `ANEXO` / VILLA ANASHIRONI a CENTRO
+    POBLADO / VILLA ANASHIRONI;
+  - `HABILITACION URBANA` / SECTOR 10 DE OCTUBRE pasa a SECTOR / 10 DE OCTUBRE, / RESIDENCIAL IPANEMA a RESIDENCIAL /
+    IPANEMA, y LA LUZ DEL VALLE DE PICHANAKI, 10 DE OCTUBRE y LOS COCOS a URBANIZACION con el mismo nombre;
+  - `OTROS` / CENTRO URBANO INFORMAL VISTA ALEGRE pasa a POSESION INFORMAL / VISTA ALEGRE.
+- **Unidades urbanas repetidas:** la que quedaría igual a otra (tipo, nombre y ubigeo) se **borra**, y la otra queda.
+  Con el padrón de 2026 son 14 `ANEXO` cuyo centro poblado ya estaba como CENTRO POBLADO (MIRICHARO, LA
+  ESPERANZA…): el padrón escribe el mismo lugar con y sin ANEXO. Ningún registro enlaza una unidad urbana (predios y
+  domicilios guardan el nombre), así que borrarla no deja nada colgado.
+- **No se cambia** lo que no tiene un tipo del SRTM (`OTROS` con otro nombre, una `COMUNIDAD NATIVA`): queda en el
+  reporte con su tipo antiguo, y el paso 3 conserva esa opción, con su aviso.
+- La salida dice, por objeto, cuántos registros cambian de cada tipo a cuál (`ANEXO -> CENTRO POBLADO: 4531`) y
+  cuántas unidades urbanas se borran por repetidas (`ANEXO -> CENTRO POBLADO, ya existía (se borra): 14`). El
+  **reporte** (`model/reports/migrar_tipos_unidad_urbana.csv`) tiene una fila por registro con un tipo antiguo: la
+  acción (`migrado`, `borrado duplicado` o `sin cambio`), el tipo y el nombre antes y después, el id de la unidad
+  urbana que queda (`queda_id`) cuando se borra una repetida y, si no cambia, por qué.
+- La `direccion` de un predio no cambia: el portal la rearma al guardar la ubicación. La `descripcion` de un domicilio
+  se rearma sola al migrarlo; el `domicilio_fiscal` del contribuyente, al volver a grabar el domicilio.
+- Actualiza cada registro con todos sus campos (el update de Core los reemplaza todos) y, recién cuando todos pasaron,
+  borra las repetidas. `--dry-run` solo escribe el reporte. **Idempotente:** una segunda corrida no cambia nada.
+- Flags: `--dry-run`, `--report`, `--workers` (PUTs en paralelo, default 4), `--model`, `--core`, `--email`,
+  `--password`. Salida: `0` ok, `1` Core rechazó algo (se muestra la clave del registro que actualizaba o el id del que
+  borraba).
 
 ## Modelo
 

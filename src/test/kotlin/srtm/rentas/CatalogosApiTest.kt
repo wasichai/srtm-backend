@@ -68,7 +68,7 @@ class CatalogosApiTest : SrtmApiTest() {
 
     @Test
     fun `a tipo the catalog does not have is a 400 on its field`() {
-        rejected("GET", "/api/srtm/unidades-urbanas?tipo=BARRIO", null, "tipo_unidad_urbana")
+        rejected("GET", "/api/srtm/unidades-urbanas?tipo=ANEXO", null, "tipo_unidad_urbana")
         rejected("GET", "/api/srtm/vias?tipo=AUTOPISTA", null, "tipo_via")
         rejected("GET", "/api/srtm/obras-categorias?tipo_obra=HORNOS", null, "tipo_obra")
     }

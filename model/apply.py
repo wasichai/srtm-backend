@@ -9,8 +9,9 @@ relationships: "done: 28 created" on an empty Core, "28 skipped" on a second run
 
 On a Core that already has the model it syncs instead: it adds the fields and
 the ENUM options model.json has and Core lacks, drops the ENUM options it no
-longer lists and no record uses, relaxes a field model.json no longer requires
-and relabels one labelled differently. It never renames, retypes, makes
+longer lists and no record uses (a list it changes takes model.json's order, the
+options kept for being in use last), relaxes a field model.json no longer
+requires and relabels one labelled differently. It never renames, retypes, makes
 required or removes a field or an option in use, so imported records stay
 valid. --drop tears everything down in reverse order (data included).
 
@@ -369,7 +370,9 @@ def sync_object(client, model, obj):
             else:
                 dropped.append(option)
         if extra or dropped:
-            options = [o for o in current.get("enumOptions") or [] if o not in dropped] + extra
+            # model.json's order (page 5 sorts the tipos de unidad urbana), then what it no longer lists and a record uses
+            kept = [o for o in dropped_options(model, field, current) if o not in dropped]
+            options = model["enums"][field["enum"]] + kept
             field_path = f"{path}/{field['name']}"
             try:
                 client.put(field_path, {"enumOptions": options})
