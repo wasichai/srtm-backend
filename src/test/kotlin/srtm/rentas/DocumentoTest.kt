@@ -52,4 +52,15 @@ class DocumentoTest {
         assertNull(numeroDocumento("SIN DOCUMENTO", "00012"))
         assertNull(numeroDocumento("SIN DOCUMENTO", null))
     }
+
+    @Test
+    fun `a sin documento from the padron keeps its number, whatever is sent`() {
+        val importado = Contribuyente(tipoDocumento = "SIN DOCUMENTO", numeroDocumento = "SD-0001")
+        assertEquals("SD-0001", numeroDocumento("SIN DOCUMENTO", "otro", importado))
+        assertEquals("SD-0001", numeroDocumento("SIN DOCUMENTO", null, importado))
+        // one that had none keeps none; one that had another tipo loses its number; another tipo takes what is sent
+        assertNull(numeroDocumento("SIN DOCUMENTO", "00012", Contribuyente(tipoDocumento = "SIN DOCUMENTO")))
+        assertNull(numeroDocumento("SIN DOCUMENTO", "43554564", Contribuyente(tipoDocumento = "DNI", numeroDocumento = "43554564")))
+        assertEquals("43554564", numeroDocumento("DNI", "43554564", importado))
+    }
 }

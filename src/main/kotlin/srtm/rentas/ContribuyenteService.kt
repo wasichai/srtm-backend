@@ -50,7 +50,7 @@ class ContribuyenteService(
         val stored = get(id)
         documentoLibre(body, except = id)
         val next =
-            derivar(body).copy(
+            derivar(body, stored).copy(
                 // the backend's, and the fiscal domicilio's (kept in step by the domicilios below)
                 codigo = stored.codigo,
                 numeroDeclaracion = stored.numeroDeclaracion,
@@ -181,10 +181,13 @@ class ContribuyenteService(
         )
     }
 
-    private fun derivar(body: Contribuyente): Contribuyente =
+    private fun derivar(
+        body: Contribuyente,
+        stored: Contribuyente? = null
+    ): Contribuyente =
         body.copy(
             tipoPersona = tipoPersona(body.tipoContribuyente) ?: body.tipoPersona,
-            numeroDocumento = numeroDocumento(body.tipoDocumento, body.numeroDocumento),
+            numeroDocumento = numeroDocumento(body.tipoDocumento, body.numeroDocumento, stored),
             nombreCompleto = nombreCompleto(body)
         )
 

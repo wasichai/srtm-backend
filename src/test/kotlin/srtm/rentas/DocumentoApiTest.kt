@@ -13,7 +13,8 @@ import java.io.File
 import java.util.UUID
 
 // the contribuyente's document against the real model: the number its tipo takes (a 400 on numero_documento
-// otherwise), and none at all for SIN DOCUMENTO, which the unique constraint allows as many times as needed
+// otherwise), and none for a new SIN DOCUMENTO, which the unique constraint allows as many times as needed. one
+// from the padrón keeps its number: import_predios.py knows it by it
 class DocumentoApiTest : WasichaiIntegrationTest() {
     private lateinit var token: String
 
@@ -52,6 +53,24 @@ class DocumentoApiTest : WasichaiIntegrationTest() {
         val inscrito = inscribir(persona("DNI", digits(8)))
         val body = fields(inscrito) + ("tipo_documento" to "SIN DOCUMENTO")
         assertTrue(sinNumero(put("/api/srtm/contribuyentes/${inscrito["id"].asString()}", body)))
+    }
+
+    @Test
+    fun `a sin documento from the padron keeps its number after an edit`() {
+        // as import_predios.py loads it: straight into core, with the padrón's number, not checked
+        val numero = "SD-" + digits(6)
+        val importado =
+            mapOf(
+                "tipo_persona" to "NATURAL",
+                "tipo_documento" to "SIN DOCUMENTO",
+                "numero_documento" to numero,
+                "nombre_completo" to "MENDOZA TAYPE TEODOCIO"
+            )
+        val id = tree(send("POST", "/api/objects/$CONTRIBUYENTE/records", mapOf("attributes" to importado), HttpStatus.CREATED))["id"].asString()
+        // whatever the body says of the number
+        val editado = put("/api/srtm/contribuyentes/$id", persona("SIN DOCUMENTO", "00099") + ("observacion" to "EDITADO"))
+        assertEquals(numero, editado["numero_documento"].asString())
+        assertEquals("EDITADO", editado["observacion"].asString())
     }
 
     private fun persona(

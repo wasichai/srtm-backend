@@ -26,11 +26,18 @@ fun nombreCompleto(c: Contribuyente): String? {
 
 const val SIN_DOCUMENTO = "SIN DOCUMENTO"
 
-// the number as it is stored: trimmed, and none at all for SIN DOCUMENTO
+// the number as it is stored: trimmed, and none for SIN DOCUMENTO. one that already was SIN DOCUMENTO keeps the number
+// it has, whatever is sent: the padrón's, the key import_predios.py knows it by. one that becomes SIN DOCUMENTO loses its
 fun numeroDocumento(
     tipo: String?,
-    numero: String?
-): String? = if (tipo == SIN_DOCUMENTO) null else numero?.trim()?.ifEmpty { null }
+    numero: String?,
+    anterior: Contribuyente? = null
+): String? =
+    when {
+        tipo != SIN_DOCUMENTO -> numero?.trim()?.ifEmpty { null }
+        anterior?.tipoDocumento == SIN_DOCUMENTO -> anterior.numeroDocumento
+        else -> null
+    }
 
 private val RUC_PESOS = listOf(5, 4, 3, 2, 7, 6, 5, 4, 3, 2)
 
