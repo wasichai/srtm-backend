@@ -388,9 +388,10 @@ registro con una segunda escritura, como el mismo usuario y solo en los campos q
   Uno editado recibe los que cambian porque cambió aquello de lo que salen, salvo que esa misma escritura los fije a
   mano. Lo que el portal ya guardó derivado no se vuelve a escribir.
 - **Solo por el portal:** las reglas que leen otros registros: numeración y códigos (`codigo`, `numero_declaracion`,
-  `fecha_registro` del contribuyente; `numero_declaracion` de la DJ; `codigo` y `numero_registro` del predio), el
-  domicilio fiscal copiado al contribuyente, el condominio (condición, % y valores de todo el grupo), la validación del
-  documento (formato y duplicados) y los valores por defecto de una inscripción o una DJ nueva. También la `direccion`
+  `fecha_registro` del contribuyente; `numero_declaracion` de la DJ; `codigo` y `numero_registro` del predio; `codigo`
+  de un relacionado o un transferente), el domicilio fiscal copiado al contribuyente, el condominio (condición, % y
+  valores de todo el grupo), las validaciones (documento, nombre o razón social de un relacionado o un transferente) y
+  los valores por defecto de una inscripción, una DJ o una fila nueva. También la `direccion`
   del predio: `normalizar_padron.py` separa por esta API el tipo de vía del padrón y conserva su texto, y el portal la
   rearma al guardar la ubicación. Desde el admin no se aplican.
 
