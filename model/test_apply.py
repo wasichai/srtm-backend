@@ -164,6 +164,31 @@ class SyncTests(ApplyCliTestCase):
         self.assertIn("done: 16 created, 1 updated, 26 skipped", out)
 
 
+class RelaxRequiredTests(ApplyCliTestCase):
+    """A field model.json no longer requires is made optional (SIN DOCUMENTO has no number); nothing is made required."""
+
+    def setUp(self):
+        model = load_model()
+        fields = {o["name"]: core_fields(model, o["name"]) for o in model["objects"]}
+        for f in fields["contribuyente"]:
+            # Core as the first model left it: numero_documento required. tipo_persona is required in both
+            f["required"] = f["name"] in ("numero_documento", "tipo_persona")
+        self.core = FakeCore(
+            existing_objects=[o["name"] for o in model["objects"]],
+            existing_relationships=[r["name"] for r in model["relationships"]],
+            existing_fields=fields,
+        )
+        self.addCleanup(self.core.stop)
+
+    def test_relaxes_required_only(self):
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0, msg=err)
+        puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "/api/metadata/objects/contribuyente/" in r[1]]
+        self.assertEqual(puts, [("/api/metadata/objects/contribuyente/fields/numero_documento", {"required": False})])
+        self.assertIn("update field contribuyente.numero_documento (optional)", out)
+        self.assertIn("done: 0 created, 1 updated, 26 skipped", out)
+
+
 class FailureStopsTests(ApplyCliTestCase):
     def setUp(self):
         self.core = FakeCore(fail_on_post_object="predio")

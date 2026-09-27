@@ -80,8 +80,10 @@ python3 apply.py --drop            # lo borra, en orden inverso (¡borra tambié
 Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
 - **Campos:** añade a los objetos existentes los que `model.json` tiene y Core no.
 - **Opciones ENUM:** añade las opciones que falten.
+- **Obligatoriedad:** deja opcional el campo que `model.json` ya no exige (`contribuyente.numero_documento`, vacío con
+  SIN DOCUMENTO); nunca vuelve obligatorio uno existente.
 
-Solo añade: no renombra, no cambia tipos y no borra, así los registros importados siguen siendo válidos. Por ejemplo,
+Solo añade o relaja: no renombra, no cambia tipos y no borra, así los registros importados siguen siendo válidos. Por ejemplo,
 sobre la base del padrón:
 - añade los campos nuevos de `contribuyente`, `predio` y `declaracion_predial`;
 - amplía `tipo_documento` (`PASAPORTE`) y `condicion_propiedad` (`SOCIEDAD CONYUGAL`, `POSEEDOR`);

@@ -32,7 +32,8 @@ class ShippedModelTests(unittest.TestCase):
 
     def test_new_contribuyente_fields_are_optional(self):
         # 11 840 contribuyentes came from the padron without them: a required field would be refused by Core
-        first = {"tipo_persona", "tipo_documento", "numero_documento", "nombre_completo"}
+        # numero_documento neither: SIN DOCUMENTO has none (it stays unique: many nulls are allowed)
+        first = {"tipo_persona", "tipo_documento", "nombre_completo"}
         contribuyente = next(o for o in self.model["objects"] if o["name"] == "contribuyente")
         required = {f["name"] for f in contribuyente["fields"] if f.get("required")}
         self.assertEqual(required, first)
