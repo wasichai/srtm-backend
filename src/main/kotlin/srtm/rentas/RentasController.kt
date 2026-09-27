@@ -1,6 +1,7 @@
 package srtm.rentas
 
 import org.springframework.http.HttpStatus
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -18,26 +19,55 @@ import java.util.UUID
 @RestController
 @RequestMapping("/api/srtm")
 class RentasController(
-    private val rentas: RentasService
+    private val rentas: RentasService,
+    private val contribuyentes: ContribuyenteService,
+    private val declaraciones: DeclaracionService,
+    private val catalogo: CatalogoService
 ) {
     @GetMapping("/resumen")
     suspend fun resumen() = rentas.resumen()
 
+    // catalogs
+
     @GetMapping("/catalogos")
-    suspend fun catalogos() = rentas.catalogos()
+    suspend fun catalogos() = catalogo.opciones()
+
+    @GetMapping("/ubigeos")
+    suspend fun ubigeos() = catalogo.ubigeos()
+
+    @GetMapping("/categorias-valor")
+    suspend fun categoriasValor() = catalogo.categoriasValor()
+
+    @GetMapping("/vias")
+    suspend fun vias(
+        @RequestParam(required = false) q: String?,
+        @RequestParam(required = false) tipo: String?,
+        @RequestParam(required = false) ubigeo: String?,
+        @RequestParam(required = false) size: Int?
+    ) = catalogo.vias(q, tipo, ubigeo, size)
+
+    @GetMapping("/unidades-urbanas")
+    suspend fun unidadesUrbanas(
+        @RequestParam(required = false) q: String?,
+        @RequestParam(required = false) tipo: String?,
+        @RequestParam(required = false) ubigeo: String?,
+        @RequestParam(required = false) size: Int?
+    ) = catalogo.unidadesUrbanas(q, tipo, ubigeo, size)
+
+    // contribuyentes
 
     @GetMapping("/contribuyentes")
     suspend fun contribuyentes(
         @RequestParam(required = false) q: String?,
         @RequestParam(required = false) page: Int?,
         @RequestParam(required = false) size: Int?
-    ) = rentas.contribuyentes(q, page, size)
+    ) = contribuyentes.buscar(q, page, size)
 
     @PostMapping("/contribuyentes")
     @ResponseStatus(HttpStatus.CREATED)
-    suspend fun crearContribuyente(
+    suspend fun inscribir(
         @RequestBody body: Contribuyente
-    ) = rentas.crearContribuyente(body)
+    ) = contribuyentes.inscribir(body)
 
     @GetMapping("/contribuyentes/{id}")
     suspend fun contribuyente(
@@ -49,13 +79,113 @@ class RentasController(
     suspend fun actualizarContribuyente(
         @PathVariable id: UUID,
         @RequestBody body: Contribuyente
-    ) = rentas.actualizarContribuyente(id, body)
+    ) = contribuyentes.actualizar(id, body)
 
     @GetMapping("/contribuyentes/{id}/declaraciones")
     suspend fun declaracionesDeContribuyente(
         @PathVariable id: UUID,
         @RequestParam(required = false) anio: Int?
     ) = rentas.declaracionesDeContribuyente(id, anio)
+
+    // the contribuyente's lists: listed and added under it, changed and removed by their own id
+
+    @GetMapping("/contribuyentes/{id}/domicilios")
+    suspend fun domicilios(
+        @PathVariable id: UUID
+    ) = contribuyentes.domicilios(id)
+
+    @PostMapping("/contribuyentes/{id}/domicilios")
+    @ResponseStatus(HttpStatus.CREATED)
+    suspend fun agregarDomicilio(
+        @PathVariable id: UUID,
+        @RequestBody body: Domicilio
+    ) = contribuyentes.agregarDomicilio(id, body)
+
+    @PutMapping("/domicilios/{id}")
+    suspend fun actualizarDomicilio(
+        @PathVariable id: UUID,
+        @RequestBody body: Domicilio
+    ) = contribuyentes.actualizarDomicilio(id, body)
+
+    @DeleteMapping("/domicilios/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    suspend fun borrarDomicilio(
+        @PathVariable id: UUID
+    ) = contribuyentes.borrarDomicilio(id)
+
+    @GetMapping("/contribuyentes/{id}/relacionados")
+    suspend fun relacionados(
+        @PathVariable id: UUID
+    ) = contribuyentes.relacionados(id)
+
+    @PostMapping("/contribuyentes/{id}/relacionados")
+    @ResponseStatus(HttpStatus.CREATED)
+    suspend fun agregarRelacionado(
+        @PathVariable id: UUID,
+        @RequestBody body: Relacionado
+    ) = contribuyentes.agregarRelacionado(id, body)
+
+    @PutMapping("/relacionados/{id}")
+    suspend fun actualizarRelacionado(
+        @PathVariable id: UUID,
+        @RequestBody body: Relacionado
+    ) = contribuyentes.actualizarRelacionado(id, body)
+
+    @DeleteMapping("/relacionados/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    suspend fun borrarRelacionado(
+        @PathVariable id: UUID
+    ) = contribuyentes.borrar(RELACIONADO, id)
+
+    @GetMapping("/contribuyentes/{id}/medios-contacto")
+    suspend fun mediosContacto(
+        @PathVariable id: UUID
+    ) = contribuyentes.mediosContacto(id)
+
+    @PostMapping("/contribuyentes/{id}/medios-contacto")
+    @ResponseStatus(HttpStatus.CREATED)
+    suspend fun agregarMedioContacto(
+        @PathVariable id: UUID,
+        @RequestBody body: MedioContacto
+    ) = contribuyentes.agregarMedioContacto(id, body)
+
+    @PutMapping("/medios-contacto/{id}")
+    suspend fun actualizarMedioContacto(
+        @PathVariable id: UUID,
+        @RequestBody body: MedioContacto
+    ) = contribuyentes.actualizarMedioContacto(id, body)
+
+    @DeleteMapping("/medios-contacto/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    suspend fun borrarMedioContacto(
+        @PathVariable id: UUID
+    ) = contribuyentes.borrar(MEDIO_CONTACTO, id)
+
+    @GetMapping("/contribuyentes/{id}/sustentos")
+    suspend fun sustentos(
+        @PathVariable id: UUID
+    ) = contribuyentes.sustentos(id)
+
+    @PostMapping("/contribuyentes/{id}/sustentos")
+    @ResponseStatus(HttpStatus.CREATED)
+    suspend fun agregarSustento(
+        @PathVariable id: UUID,
+        @RequestBody body: Sustento
+    ) = contribuyentes.agregarSustento(id, body)
+
+    @PutMapping("/sustentos/{id}")
+    suspend fun actualizarSustento(
+        @PathVariable id: UUID,
+        @RequestBody body: Sustento
+    ) = contribuyentes.actualizarSustento(id, body)
+
+    @DeleteMapping("/sustentos/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    suspend fun borrarSustento(
+        @PathVariable id: UUID
+    ) = contribuyentes.borrar(SUSTENTO, id)
+
+    // predios and declaraciones
 
     @GetMapping("/predios")
     suspend fun predios(
@@ -68,7 +198,7 @@ class RentasController(
     @ResponseStatus(HttpStatus.CREATED)
     suspend fun crearPredio(
         @RequestBody body: Predio
-    ) = rentas.crearPredio(body)
+    ) = declaraciones.registrarPredio(body)
 
     @GetMapping("/predios/{id}")
     suspend fun predio(
@@ -80,7 +210,7 @@ class RentasController(
     suspend fun actualizarPredio(
         @PathVariable id: UUID,
         @RequestBody body: Predio
-    ) = rentas.actualizarPredio(id, body)
+    ) = declaraciones.actualizarPredio(id, body)
 
     @GetMapping("/predios/{id}/declaraciones")
     suspend fun declaracionesDePredio(
@@ -92,11 +222,121 @@ class RentasController(
     @ResponseStatus(HttpStatus.CREATED)
     suspend fun crearDeclaracion(
         @RequestBody body: Declaracion
-    ) = rentas.crearDeclaracion(body)
+    ) = declaraciones.crear(body)
 
     @PutMapping("/declaraciones/{id}")
     suspend fun actualizarDeclaracion(
         @PathVariable id: UUID,
         @RequestBody body: Declaracion
-    ) = rentas.actualizarDeclaracion(id, body)
+    ) = declaraciones.actualizar(id, body)
+
+    // the declaración jurada predial: presented from its contribuyente, then its ficha and its lists
+
+    @PostMapping("/contribuyentes/{id}/declaraciones-juradas")
+    @ResponseStatus(HttpStatus.CREATED)
+    suspend fun presentar(
+        @PathVariable id: UUID,
+        @RequestBody body: NuevaDeclaracion
+    ) = declaraciones.presentar(id, body)
+
+    @GetMapping("/declaraciones/{id}")
+    suspend fun declaracion(
+        @PathVariable id: UUID
+    ) = declaraciones.ficha(id)
+
+    @GetMapping("/declaraciones/{id}/transferentes")
+    suspend fun transferentes(
+        @PathVariable id: UUID
+    ) = declaraciones.transferentes(id)
+
+    @PostMapping("/declaraciones/{id}/transferentes")
+    @ResponseStatus(HttpStatus.CREATED)
+    suspend fun agregarTransferente(
+        @PathVariable id: UUID,
+        @RequestBody body: Transferente
+    ) = declaraciones.agregarTransferente(id, body)
+
+    @PutMapping("/transferentes/{id}")
+    suspend fun actualizarTransferente(
+        @PathVariable id: UUID,
+        @RequestBody body: Transferente
+    ) = declaraciones.actualizarTransferente(id, body)
+
+    @DeleteMapping("/transferentes/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    suspend fun borrarTransferente(
+        @PathVariable id: UUID
+    ) = declaraciones.borrar(TRANSFERENTE, id)
+
+    @GetMapping("/declaraciones/{id}/niveles")
+    suspend fun niveles(
+        @PathVariable id: UUID
+    ) = declaraciones.niveles(id)
+
+    @PostMapping("/declaraciones/{id}/niveles")
+    @ResponseStatus(HttpStatus.CREATED)
+    suspend fun agregarNivel(
+        @PathVariable id: UUID,
+        @RequestBody body: NivelConstruccion
+    ) = declaraciones.agregarNivel(id, body)
+
+    @PutMapping("/niveles/{id}")
+    suspend fun actualizarNivel(
+        @PathVariable id: UUID,
+        @RequestBody body: NivelConstruccion
+    ) = declaraciones.actualizarNivel(id, body)
+
+    @DeleteMapping("/niveles/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    suspend fun borrarNivel(
+        @PathVariable id: UUID
+    ) = declaraciones.borrar(NIVEL_CONSTRUCCION, id)
+
+    @GetMapping("/declaraciones/{id}/obras")
+    suspend fun obras(
+        @PathVariable id: UUID
+    ) = declaraciones.obras(id)
+
+    @PostMapping("/declaraciones/{id}/obras")
+    @ResponseStatus(HttpStatus.CREATED)
+    suspend fun agregarObra(
+        @PathVariable id: UUID,
+        @RequestBody body: ObraComplementaria
+    ) = declaraciones.agregarObra(id, body)
+
+    @PutMapping("/obras/{id}")
+    suspend fun actualizarObra(
+        @PathVariable id: UUID,
+        @RequestBody body: ObraComplementaria
+    ) = declaraciones.actualizarObra(id, body)
+
+    @DeleteMapping("/obras/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    suspend fun borrarObra(
+        @PathVariable id: UUID
+    ) = declaraciones.borrar(OBRA_COMPLEMENTARIA, id)
+
+    @GetMapping("/declaraciones/{id}/frentes")
+    suspend fun frentes(
+        @PathVariable id: UUID
+    ) = declaraciones.frentes(id)
+
+    @PostMapping("/declaraciones/{id}/frentes")
+    @ResponseStatus(HttpStatus.CREATED)
+    suspend fun agregarFrente(
+        @PathVariable id: UUID,
+        @RequestBody body: OtroFrente
+    ) = declaraciones.agregarFrente(id, body)
+
+    @PutMapping("/frentes/{id}")
+    suspend fun actualizarFrente(
+        @PathVariable id: UUID,
+        @RequestBody body: OtroFrente
+    ) = declaraciones.actualizarFrente(id, body)
+
+    @DeleteMapping("/frentes/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    suspend fun borrarFrente(
+        @PathVariable id: UUID
+    ) = declaraciones.borrar(OTRO_FRENTE, id)
 }

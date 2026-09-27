@@ -14,8 +14,34 @@ from fake_core import FakeCore
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.json")
 
-OBJECTS = 3
-RELATIONSHIPS = 2
+OBJECTS = 15
+RELATIONSHIPS = 10
+OBJECT_ORDER = ["contribuyente", "predio", "declaracion_predial", "domicilio", "relacionado", "medio_contacto", "sustento",
+                "ubigeo", "via", "unidad_urbana", "transferente", "nivel_construccion", "obra_complementaria", "otro_frente",
+                "categoria_valor"]
+RELATIONSHIP_ORDER = ["declaracion_predial_contribuyente", "declaracion_predial_predio", "domicilio_contribuyente",
+                      "relacionado_contribuyente", "medio_contacto_contribuyente", "sustento_contribuyente",
+                      "transferente_declaracion", "nivel_construccion_declaracion", "obra_complementaria_declaracion",
+                      "otro_frente_declaracion"]
+
+
+def load_model():
+    with open(MODEL_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def core_fields(model, obj_name, drop=(), options=None):
+    """What Core answers for an object that has model.json's fields, minus `drop`; `options` overrides enum options."""
+    obj = next(o for o in model["objects"] if o["name"] == obj_name)
+    fields = []
+    for f in obj["fields"]:
+        if f["name"] in drop:
+            continue
+        field = {"name": f["name"], "type": f["type"]}
+        if f["type"] == "ENUM":
+            field["enumOptions"] = (options or {}).get(f["name"], model["enums"][f["enum"]])
+        fields.append(field)
+    return fields
 
 
 class ApplyCliTestCase(unittest.TestCase):
@@ -52,16 +78,24 @@ class HappyPathTests(ApplyCliTestCase):
         self.assertEqual(code, 0, msg=err)
 
         object_posts = [r[3]["name"] for r in self.core.requests if r[1] == "/api/objects" and r[0] == "POST"]
-        self.assertEqual(object_posts, ["contribuyente", "predio", "declaracion_predial"])
+        self.assertEqual(object_posts, OBJECT_ORDER)
 
         rel_posts = [r[3]["name"] for r in self.core.requests if r[1] == "/api/relationships" and r[0] == "POST"]
-        self.assertEqual(rel_posts, ["declaracion_predial_contribuyente", "declaracion_predial_predio"])
+        self.assertEqual(rel_posts, RELATIONSHIP_ORDER)
 
-        # both relations are required: one PUT each, right after its POST
+        # every relation is required: one PUT each, right after its POST
         puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT"]
         self.assertEqual(puts, [
             ("/api/metadata/objects/declaracion_predial/fields/contribuyente", {"required": True}),
             ("/api/metadata/objects/declaracion_predial/fields/predio", {"required": True}),
+            ("/api/metadata/objects/domicilio/fields/contribuyente", {"required": True}),
+            ("/api/metadata/objects/relacionado/fields/contribuyente", {"required": True}),
+            ("/api/metadata/objects/medio_contacto/fields/contribuyente", {"required": True}),
+            ("/api/metadata/objects/sustento/fields/contribuyente", {"required": True}),
+            ("/api/metadata/objects/transferente/fields/declaracion", {"required": True}),
+            ("/api/metadata/objects/nivel_construccion/fields/declaracion", {"required": True}),
+            ("/api/metadata/objects/obra_complementaria/fields/declaracion", {"required": True}),
+            ("/api/metadata/objects/otro_frente/fields/declaracion", {"required": True}),
         ])
 
         for method, path, auth, body in self.core.requests:
@@ -70,16 +104,16 @@ class HappyPathTests(ApplyCliTestCase):
             else:
                 self.assertEqual(auth, "Bearer t")
 
-        self.assertIn("done: 5 created, 0 skipped", out)
+        self.assertIn("done: 25 created, 0 updated, 0 skipped", out)
 
 
 class IdempotencyTests(ApplyCliTestCase):
     def setUp(self):
-        with open(MODEL_PATH, encoding="utf-8") as f:
-            model = json.load(f)
+        model = load_model()
         self.core = FakeCore(
             existing_objects=[o["name"] for o in model["objects"]],
             existing_relationships=[r["name"] for r in model["relationships"]],
+            existing_fields={o["name"]: core_fields(model, o["name"]) for o in model["objects"]},
         )
         self.addCleanup(self.core.stop)
 
@@ -88,7 +122,46 @@ class IdempotencyTests(ApplyCliTestCase):
         self.assertEqual(code, 0, msg=err)
         object_posts = [r for r in self.core.requests if r[1] == "/api/objects" and r[0] == "POST"]
         self.assertEqual(object_posts, [])
-        self.assertIn("done: 0 created, 5 skipped", out)
+        self.assertEqual([r for r in self.core.requests if r[0] == "POST" and "/fields" in r[1]], [])
+        self.assertIn("done: 0 created, 0 updated, 25 skipped", out)
+
+
+class SyncTests(ApplyCliTestCase):
+    """contribuyente as the first model left it: its new fields and one new enum option are added, nothing else."""
+
+    NEW_FIELDS = ["codigo", "numero_declaracion", "fecha_registro", "motivo", "medio_determinacion", "medio_presentacion",
+                  "modificacion_oficio", "fecha_presentacion", "tipo_contribuyente", "codigo_anterior", "fuente_informacion",
+                  "fecha_nacimiento", "fecha_fallecimiento", "estado_civil", "sexo", "observacion"]
+
+    def setUp(self):
+        model = load_model()
+        fields = {o["name"]: core_fields(model, o["name"]) for o in model["objects"]}
+        fields["contribuyente"] = core_fields(
+            model, "contribuyente", drop=self.NEW_FIELDS,
+            options={"tipo_documento": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION"]},
+        )
+        self.core = FakeCore(
+            existing_objects=[o["name"] for o in model["objects"]],
+            existing_relationships=[r["name"] for r in model["relationships"]],
+            existing_fields=fields,
+        )
+        self.addCleanup(self.core.stop)
+
+    def test_adds_missing_fields_and_enum_options_only(self):
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0, msg=err)
+        added = [r[3]["name"] for r in self.core.requests
+                 if r[0] == "POST" and r[1] == "/api/metadata/objects/contribuyente/fields"]
+        self.assertEqual(added, self.NEW_FIELDS)
+        motivo = next(r[3] for r in self.core.requests if r[0] == "POST" and r[3] and r[3].get("name") == "motivo")
+        self.assertEqual(motivo["enumOptions"], ["INSCRIPCION", "ACTUALIZACION", "DESCARGO"])
+        self.assertFalse(motivo["required"])
+        option_puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "enumOptions" in (r[3] or {})]
+        self.assertEqual(option_puts, [(
+            "/api/metadata/objects/contribuyente/fields/tipo_documento",
+            {"enumOptions": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION", "PASAPORTE"]},
+        )])
+        self.assertIn("done: 16 created, 1 updated, 24 skipped", out)
 
 
 class FailureStopsTests(ApplyCliTestCase):
@@ -153,14 +226,9 @@ class DropTests(ApplyCliTestCase):
         code, out, err = self.run_cli(["--drop"])
         self.assertEqual(code, 0, msg=err)
         deletes = [r[1] for r in self.core.requests if r[0] == "DELETE"]
-        self.assertEqual(deletes, [
-            "/api/relationships/declaracion_predial_predio",
-            "/api/relationships/declaracion_predial_contribuyente",
-            "/api/objects/declaracion_predial",
-            "/api/objects/predio",
-            "/api/objects/contribuyente",
-        ])
-        self.assertIn("done: 5 deleted, 0 skipped", out)
+        self.assertEqual(deletes, [f"/api/relationships/{n}" for n in reversed(RELATIONSHIP_ORDER)]
+                         + [f"/api/objects/{n}" for n in reversed(OBJECT_ORDER)])
+        self.assertIn("done: 25 deleted, 0 skipped", out)
 
     def test_drop_dry_run_makes_no_requests(self):
         code, out, err = self.run_cli(["--drop", "--dry-run"])

@@ -1,10 +1,10 @@
 {
   "enums": {
     "tipo_persona": ["NATURAL", "JURIDICA", "SUCESION"],
-    "tipo_documento": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION"],
+    "tipo_documento": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION", "PASAPORTE"],
     "condicion_predio": ["URBANO", "RUSTICO"],
     "ubicacion_area_verde": ["FRENTE A PARQUE", "MEDIANAMENTE CERCANO A AREAS VERDES", "FRENTE A BERMA", "OTRAS UBICACIONES"],
-    "condicion_propiedad": ["PROPIETARIO UNICO", "CONDOMINO"],
+    "condicion_propiedad": ["PROPIETARIO UNICO", "CONDOMINO", "SOCIEDAD CONYUGAL", "POSEEDOR"],
     "uso": [
       "RESIDENCIAL - CASA HABITACION",
       "TERRENO",
@@ -23,7 +23,49 @@
       "CLINICAS HOSPITALES CINES INDUSTRIAS COLEGIOS TALLERES",
       "EDIFICIO-OFICINAS"
     ],
-    "estado_construccion": ["TERMINADO", "EN CONSTRUCCION", "TERRENO SIN CONSTRUIR", "EN RUINAS"]
+    "estado_construccion": ["TERMINADO", "EN CONSTRUCCION", "TERRENO SIN CONSTRUIR", "EN RUINAS"],
+    "tipo_contribuyente": ["PERSONA NATURAL", "PERSONA JURIDICA", "SOCIEDAD CONYUGAL", "SUCESION INDIVISA", "SOCIEDAD IRREGULAR",
+      "OTROS PATRIMONIOS AUTONOMOS"],
+    "motivo_declaracion": ["INSCRIPCION", "ACTUALIZACION", "DESCARGO"],
+    "medio_determinacion": ["DECLARACION JURADA", "FISCALIZACION", "DE OFICIO"],
+    "medio_presentacion": ["FISICO", "VIRTUAL"],
+    "modificacion_oficio": ["FISCALIZACION", "CRUCE DE INFORMACION", "RESOLUCION"],
+    "fuente_informacion": ["MANUAL", "PIDE RENIEC", "PIDE SUNAT", "PIDE MIGRACIONES"],
+    "estado_civil": ["SOLTERO", "CASADO", "VIUDO", "DIVORCIADO", "CONVIVIENTE"],
+    "sexo": ["HOMBRE", "MUJER"],
+    "estado_registro": ["ACTIVO", "INACTIVO"],
+    "tipo_domicilio": ["FISCAL", "REAL", "PROCESAL", "OTRO"],
+    "tipo_predio": ["PREDIO URBANO", "PREDIO RUSTICO"],
+    "tipo_unidad_urbana": ["AGRUPACION", "ANEXO", "ASENTAMIENTO HUMANO", "ASOCIACION", "ASOCIACION DE VIVIENDA", "CASERIO",
+      "CENTRO POBLADO", "CERCADO", "COMUNIDAD CAMPESINA", "COMUNIDAD NATIVA", "COOPERATIVA", "HABILITACION URBANA", "LOTIZACION",
+      "PUEBLO JOVEN", "SECTOR", "URBANIZACION", "ZONA", "OTROS"],
+    "tipo_via": ["AVENIDA", "CALLE", "JIRON", "PASAJE", "CARRETERA", "CARROZABLE", "PROLONGACION", "MALECON", "ALAMEDA", "TROCHA",
+      "CAMINO", "OTROS"],
+    "edificacion": ["EDIFICIO", "CONDOMINIO", "TORRE", "BLOCK", "PABELLON", "GALERIA", "CENTRO COMERCIAL", "MERCADO", "OTROS"],
+    "interior": ["DEPARTAMENTO", "OFICINA", "TIENDA", "STAND", "PUESTO", "LOCAL", "DEPOSITO", "OTROS"],
+    "sub_zona": ["ETAPA", "SECTOR", "GRUPO", "BARRIO", "OTROS"],
+    "tipo_relacionado": ["CONYUGE", "REPRESENTANTE LEGAL", "APODERADO", "CONVIVIENTE", "HEREDERO"],
+    "tipo_medio_contacto": ["TELEFONO CELULAR", "TELEFONO FIJO", "CORREO ELECTRONICO", "OTRO"],
+    "documento_sustento": ["VIGENCIA DE PODER", "PODER ESPECIAL", "PARTIDA REGISTRAL", "RECIBO DE SERVICIOS", "PARTIDA DE DEFUNCION",
+      "SUCESION INTESTADA", "TESTAMENTO", "DOCUMENTO DE IDENTIDAD", "OTROS"],
+    "tipo_presentacion": ["ORIGINAL", "COPIA SIMPLE", "COPIA LEGALIZADA", "COPIA FEDATEADA"],
+    "tipo_adquisicion": ["COMPRA", "DONACION", "HERENCIA", "ANTICIPO DE LEGITIMA", "ADJUDICACION", "PERMUTA", "PRESCRIPCION ADQUISITIVA",
+      "DACION EN PAGO", "APORTE", "OTROS"],
+    "condicion_especial": ["PENSIONISTA", "ADULTO MAYOR NO PENSIONISTA", "INAFECTO", "EXONERADO", "PREDIO EN LITIGIO", "OTROS"],
+    "documento_condicion": ["RESOLUCION", "CONSTANCIA", "CERTIFICADO", "OTROS"],
+    "documento_inhabitable": ["RESOLUCION", "INFORME TECNICO", "OTROS"],
+    "region": ["COSTA", "SIERRA", "SELVA"],
+    "clase_uso": ["RESIDENCIAL", "COMERCIAL", "INDUSTRIAL", "SERVICIOS", "INSTITUCIONAL", "AGRICOLA", "OTROS"],
+    "sub_clase_uso": ["UNIFAMILIAR", "MULTIFAMILIAR", "BODEGA", "TIENDA", "OFICINA", "TALLER", "ALMACEN", "OTROS"],
+    "tipo_nivel": ["PISO", "SOTANO", "MEZANINE", "AZOTEA"],
+    "material": ["CONCRETO", "LADRILLO", "ADOBE", "MADERA", "QUINCHA", "DRYWALL", "ESTERA", "METAL", "OTROS"],
+    "estado_conservacion": ["MUY BUENO", "BUENO", "REGULAR", "MALO", "MUY MALO"],
+    "letra_categoria": ["A", "B", "C", "D", "E", "F", "G", "H", "I"],
+    "ingreso_obra": ["POR CATEGORIAS", "CON VALORIZACION"],
+    "tipo_obra": ["MUROS PERIMETRICOS O CERCOS", "PORTONES Y PUERTAS", "TANQUES ELEVADOS", "CISTERNAS", "PISCINAS", "LOSAS DEPORTIVAS",
+      "PISOS DE CONCRETO", "OTROS"],
+    "unidad_medida": ["M2", "M3", "ML", "UND"],
+    "lado": ["PAR", "IMPAR"]
   },
   "objects": [
     {
@@ -48,7 +90,25 @@
         {"name": "domicilio_fiscal", "label": "Domicilio fiscal", "type": "TEXT", "source": "domicilio_fiscal"},
         {"name": "domicilio_distrito", "label": "Distrito del domicilio", "type": "TEXT", "source": "domicilio_fiscal"},
         {"name": "domicilio_provincia", "label": "Provincia del domicilio", "type": "TEXT", "source": "domicilio_fiscal"},
-        {"name": "domicilio_departamento", "label": "Departamento del domicilio", "type": "TEXT", "source": "domicilio_fiscal"}
+        {"name": "domicilio_departamento", "label": "Departamento del domicilio", "type": "TEXT", "source": "domicilio_fiscal"},
+        {"name": "codigo", "label": "Código de contribuyente", "type": "TEXT", "unique": true,
+          "description": "Autogenerado al inscribir en el portal (6 dígitos). Vacío en los contribuyentes importados del padrón."},
+        {"name": "numero_declaracion", "label": "Número de declaración", "type": "INTEGER", "description": "Autogenerado al inscribir."},
+        {"name": "fecha_registro", "label": "Fecha del registro", "type": "DATE", "description": "Autogenerada al inscribir."},
+        {"name": "motivo", "label": "Motivo", "type": "ENUM", "enum": "motivo_declaracion"},
+        {"name": "medio_determinacion", "label": "Medio de determinación", "type": "ENUM", "enum": "medio_determinacion"},
+        {"name": "medio_presentacion", "label": "Medio de presentación", "type": "ENUM", "enum": "medio_presentacion"},
+        {"name": "modificacion_oficio", "label": "Modificación de oficio", "type": "ENUM", "enum": "modificacion_oficio"},
+        {"name": "fecha_presentacion", "label": "Fecha de presentación", "type": "DATE"},
+        {"name": "tipo_contribuyente", "label": "Tipo de contribuyente", "type": "ENUM", "enum": "tipo_contribuyente",
+          "description": "El del SRTM. tipo_persona se deriva de él."},
+        {"name": "codigo_anterior", "label": "Código de contribuyente anterior", "type": "TEXT"},
+        {"name": "fuente_informacion", "label": "Fuente de información", "type": "ENUM", "enum": "fuente_informacion"},
+        {"name": "fecha_nacimiento", "label": "Fecha de nacimiento", "type": "DATE"},
+        {"name": "fecha_fallecimiento", "label": "Fecha de fallecimiento", "type": "DATE"},
+        {"name": "estado_civil", "label": "Estado civil", "type": "ENUM", "enum": "estado_civil"},
+        {"name": "sexo", "label": "Sexo", "type": "ENUM", "enum": "sexo"},
+        {"name": "observacion", "label": "Observación", "type": "LONG_TEXT"}
       ]
     },
     {
@@ -68,7 +128,34 @@
         {"name": "lote", "label": "Lote", "type": "TEXT", "source": "direccion_predio"},
         {"name": "habilitacion_urbana", "label": "Habilitación urbana", "type": "TEXT", "source": "direccion_predio"},
         {"name": "ubicacion_area_verde", "label": "Ubicación respecto a áreas verdes", "type": "ENUM", "enum": "ubicacion_area_verde",
-          "source": "ubicacion_parque"}
+          "source": "ubicacion_parque"},
+        {"name": "ubigeo", "label": "Ubigeo", "type": "TEXT", "description": "Código INEI del distrito."},
+        {"name": "departamento", "label": "Departamento", "type": "TEXT"},
+        {"name": "provincia", "label": "Provincia", "type": "TEXT"},
+        {"name": "distrito", "label": "Distrito", "type": "TEXT"},
+        {"name": "region", "label": "Región", "type": "ENUM", "enum": "region",
+          "description": "Costa, sierra o selva: elige el cuadro de valores unitarios."},
+        {"name": "tipo_via", "label": "Tipo de vía", "type": "ENUM", "enum": "tipo_via",
+          "description": "Con tipo de vía, la ubicación es la del SRTM y el backend arma direccion."},
+        {"name": "numero_alterno", "label": "Número alterno", "type": "TEXT"},
+        {"name": "letra1", "label": "Letra 1", "type": "TEXT"},
+        {"name": "letra2", "label": "Letra 2", "type": "TEXT"},
+        {"name": "ucv", "label": "UCV", "type": "TEXT", "description": "Unidad catastral vecinal."},
+        {"name": "sub_lote", "label": "Sub lote", "type": "TEXT"},
+        {"name": "kilometro", "label": "Kilómetro", "type": "TEXT"},
+        {"name": "edificacion", "label": "Edificación", "type": "ENUM", "enum": "edificacion"},
+        {"name": "descripcion_edificacion", "label": "Descripción de la edificación", "type": "TEXT"},
+        {"name": "interior", "label": "Interior", "type": "ENUM", "enum": "interior"},
+        {"name": "descripcion_interior", "label": "Descripción del interior", "type": "TEXT"},
+        {"name": "piso", "label": "Piso", "type": "TEXT"},
+        {"name": "ingreso", "label": "Ingreso / Puerta", "type": "TEXT"},
+        {"name": "tipo_zona", "label": "Zona", "type": "ENUM", "enum": "tipo_unidad_urbana",
+          "description": "Tipo de la habilitación urbana (descripción de la zona)."},
+        {"name": "sub_zona", "label": "Sub zona", "type": "ENUM", "enum": "sub_zona"},
+        {"name": "descripcion_sub_zona", "label": "Descripción de la sub zona", "type": "TEXT"},
+        {"name": "partida_registral", "label": "Partida registral", "type": "TEXT"},
+        {"name": "referencia", "label": "Referencia", "type": "TEXT"},
+        {"name": "codigo_cpu", "label": "Código CPU", "type": "TEXT", "description": "Código del predio en el catastro fiscal."}
       ]
     },
     {
@@ -97,7 +184,257 @@
           "description": "Parte del autoavalúo que corresponde a este titular."},
         {"name": "deduccion", "label": "Deducción", "type": "DECIMAL", "source": "deduccion"},
         {"name": "valor_afecto", "label": "Valor afecto", "type": "DECIMAL", "source": "autoavaluo_afecto",
-          "description": "valor_condominio - deduccion."}
+          "description": "valor_condominio - deduccion."},
+        {"name": "numero_declaracion", "label": "Número de declaración jurada", "type": "INTEGER", "unique": true,
+          "description": "Autogenerado al presentar la declaración en el portal. Vacío en las importadas del padrón."},
+        {"name": "motivo", "label": "Motivo de modificación", "type": "ENUM", "enum": "motivo_declaracion"},
+        {"name": "medio_determinacion", "label": "Medio de determinación", "type": "ENUM", "enum": "medio_determinacion"},
+        {"name": "medio_presentacion", "label": "Medio de presentación", "type": "ENUM", "enum": "medio_presentacion"},
+        {"name": "modificacion_oficio", "label": "Modificación de oficio", "type": "ENUM", "enum": "modificacion_oficio"},
+        {"name": "fecha_presentacion", "label": "Fecha de presentación", "type": "DATE"},
+        {"name": "tipo_adquisicion", "label": "Tipo de adquisición", "type": "ENUM", "enum": "tipo_adquisicion"},
+        {"name": "fecha_adquisicion", "label": "Fecha de adquisición", "type": "DATE"},
+        {"name": "documentos_sustento", "label": "Documentos de sustento", "type": "TEXT", "description": "Varios, separados por coma."},
+        {"name": "folios", "label": "Folios", "type": "INTEGER"},
+        {"name": "condicion_especial", "label": "Condición del predio", "type": "ENUM", "enum": "condicion_especial"},
+        {"name": "condicion_tipo_documento", "label": "Tipo de documento de sustento", "type": "ENUM", "enum": "documento_condicion"},
+        {"name": "condicion_numero_documento", "label": "Número de documento de sustento", "type": "TEXT"},
+        {"name": "condicion_fecha_documento", "label": "Fecha del documento de sustento", "type": "DATE"},
+        {"name": "condicion_fecha_inicio", "label": "Fecha de inicio de condición", "type": "DATE"},
+        {"name": "condicion_fecha_fin", "label": "Fecha fin de condición", "type": "DATE"},
+        {"name": "inhabitable_tipo_documento", "label": "Tipo de documento (inhabitable)", "type": "ENUM", "enum": "documento_inhabitable"},
+        {"name": "inhabitable_numero_resolucion", "label": "Número de resolución", "type": "TEXT"},
+        {"name": "inhabitable_fecha_resolucion", "label": "Fecha de resolución", "type": "DATE"},
+        {"name": "inhabitable_fecha_inicio", "label": "Fecha de inicio de resolución", "type": "DATE"},
+        {"name": "clase_uso", "label": "Clase de uso", "type": "ENUM", "enum": "clase_uso"},
+        {"name": "sub_clase_uso", "label": "Sub clase de uso", "type": "ENUM", "enum": "sub_clase_uso"},
+        {"name": "area_comun_terreno", "label": "Área común del terreno", "type": "DECIMAL"}
+      ]
+    },
+    {
+      "name": "domicilio",
+      "label": "Domicilio",
+      "pluralLabel": "Domicilios",
+      "description": "Domicilio de un contribuyente: fiscal, real o procesal. El fiscal activo se copia a contribuyente.domicilio_fiscal.",
+      "fields": [
+        {"name": "tipo_domicilio", "label": "Tipo de domicilio", "type": "ENUM", "enum": "tipo_domicilio", "required": true},
+        {"name": "tipo_predio", "label": "Tipo de predio", "type": "ENUM", "enum": "tipo_predio", "required": true},
+        {"name": "ubigeo", "label": "Ubigeo", "type": "TEXT", "description": "Código INEI del distrito."},
+        {"name": "departamento", "label": "Departamento", "type": "TEXT", "required": true},
+        {"name": "provincia", "label": "Provincia", "type": "TEXT", "required": true},
+        {"name": "distrito", "label": "Distrito", "type": "TEXT", "required": true},
+        {"name": "tipo_unidad_urbana", "label": "Tipo de unidad urbana", "type": "ENUM", "enum": "tipo_unidad_urbana"},
+        {"name": "unidad_urbana", "label": "Descripción de la unidad urbana", "type": "TEXT"},
+        {"name": "tipo_via", "label": "Tipo de vía", "type": "ENUM", "enum": "tipo_via"},
+        {"name": "via", "label": "Descripción de la vía", "type": "TEXT"},
+        {"name": "numero", "label": "Número principal", "type": "TEXT"},
+        {"name": "numero_alterno", "label": "Número alterno", "type": "TEXT"},
+        {"name": "letra1", "label": "Letra 1", "type": "TEXT"},
+        {"name": "letra2", "label": "Letra 2", "type": "TEXT"},
+        {"name": "manzana", "label": "Manzana", "type": "TEXT"},
+        {"name": "lote", "label": "Lote", "type": "TEXT"},
+        {"name": "sub_lote", "label": "Sub lote", "type": "TEXT"},
+        {"name": "kilometro", "label": "Kilómetro", "type": "TEXT"},
+        {"name": "edificacion", "label": "Edificación", "type": "ENUM", "enum": "edificacion"},
+        {"name": "nombre_edificacion", "label": "Nombre de la edificación", "type": "TEXT"},
+        {"name": "interior", "label": "Interior", "type": "ENUM", "enum": "interior"},
+        {"name": "descripcion_interior", "label": "Descripción del interior", "type": "TEXT"},
+        {"name": "piso", "label": "Piso", "type": "TEXT"},
+        {"name": "ingreso", "label": "Ingreso / Puerta", "type": "TEXT"},
+        {"name": "sub_zona", "label": "Sub zona", "type": "ENUM", "enum": "sub_zona"},
+        {"name": "descripcion_sub_zona", "label": "Descripción de la sub zona", "type": "TEXT"},
+        {"name": "referencia", "label": "Referencia", "type": "TEXT"},
+        {"name": "descripcion", "label": "Descripción del domicilio", "type": "TEXT", "description": "Armada por el backend con los campos de arriba."},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"}
+      ]
+    },
+    {
+      "name": "relacionado",
+      "label": "Relacionado",
+      "pluralLabel": "Relacionados",
+      "description": "Cónyuge, representante legal, apoderado, conviviente o heredero de un contribuyente.",
+      "fields": [
+        {"name": "tipo_relacionado", "label": "Tipo de relacionado", "type": "ENUM", "enum": "tipo_relacionado", "required": true},
+        {"name": "tipo_documento", "label": "Tipo de documento", "type": "ENUM", "enum": "tipo_documento", "required": true},
+        {"name": "numero_documento", "label": "Número de documento", "type": "TEXT"},
+        {"name": "fuente_informacion", "label": "Fuente de información", "type": "ENUM", "enum": "fuente_informacion"},
+        {"name": "apellido_paterno", "label": "Apellido paterno", "type": "TEXT"},
+        {"name": "apellido_materno", "label": "Apellido materno", "type": "TEXT"},
+        {"name": "nombres", "label": "Nombres", "type": "TEXT", "required": true},
+        {"name": "telefono_celular", "label": "Teléfono celular", "type": "TEXT"},
+        {"name": "telefono_fijo", "label": "Teléfono fijo", "type": "TEXT"},
+        {"name": "anexo", "label": "Anexo", "type": "TEXT"},
+        {"name": "correo", "label": "Correo electrónico", "type": "EMAIL"},
+        {"name": "fecha_inicio", "label": "Fecha de inicio", "type": "DATE"},
+        {"name": "fecha_fin", "label": "Fecha de fin", "type": "DATE"},
+        {"name": "fecha_fallecimiento", "label": "Fecha de fallecimiento", "type": "DATE"},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"}
+      ]
+    },
+    {
+      "name": "medio_contacto",
+      "label": "Medio de contacto",
+      "pluralLabel": "Medios de contacto",
+      "description": "Teléfono o correo de un contribuyente.",
+      "fields": [
+        {"name": "tipo", "label": "Tipo", "type": "ENUM", "enum": "tipo_medio_contacto", "required": true},
+        {"name": "valor", "label": "Número o dirección", "type": "TEXT", "required": true},
+        {"name": "anexo", "label": "Anexo", "type": "TEXT"},
+        {"name": "principal", "label": "Principal", "type": "BOOLEAN"},
+        {"name": "observacion", "label": "Observación", "type": "TEXT"},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"}
+      ]
+    },
+    {
+      "name": "sustento",
+      "label": "Documento sustento",
+      "pluralLabel": "Documentos sustento",
+      "description": "Documento que respalda la inscripción o un cambio del contribuyente.",
+      "fields": [
+        {"name": "documento", "label": "Documento", "type": "ENUM", "enum": "documento_sustento", "required": true},
+        {"name": "numero_documento", "label": "Número de documento", "type": "TEXT", "required": true},
+        {"name": "tipo_presentacion", "label": "Tipo de presentación", "type": "ENUM", "enum": "tipo_presentacion", "required": true},
+        {"name": "folios", "label": "Folios", "type": "INTEGER"},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"}
+      ]
+    },
+    {
+      "name": "ubigeo",
+      "label": "Ubigeo",
+      "pluralLabel": "Ubigeos",
+      "description": "Catálogo INEI de distritos (model/data/ubigeo.csv, cargado por import_catalogos.py).",
+      "fields": [
+        {"name": "codigo", "label": "Código INEI", "type": "TEXT", "required": true, "unique": true},
+        {"name": "departamento", "label": "Departamento", "type": "TEXT", "required": true},
+        {"name": "provincia", "label": "Provincia", "type": "TEXT", "required": true},
+        {"name": "distrito", "label": "Distrito", "type": "TEXT", "required": true}
+      ]
+    },
+    {
+      "name": "via",
+      "label": "Vía",
+      "pluralLabel": "Vías",
+      "description": "Catálogo de vías del distrito, sacado de las direcciones del padrón (import_catalogos.py).",
+      "fields": [
+        {"name": "tipo_via", "label": "Tipo de vía", "type": "ENUM", "enum": "tipo_via", "required": true},
+        {"name": "nombre", "label": "Nombre", "type": "TEXT", "required": true},
+        {"name": "ubigeo", "label": "Ubigeo", "type": "TEXT"}
+      ]
+    },
+    {
+      "name": "unidad_urbana",
+      "label": "Unidad urbana",
+      "pluralLabel": "Unidades urbanas",
+      "description": "Catálogo de habilitaciones urbanas del distrito, sacado del padrón (import_catalogos.py).",
+      "fields": [
+        {"name": "tipo_unidad_urbana", "label": "Tipo de unidad urbana", "type": "ENUM", "enum": "tipo_unidad_urbana", "required": true},
+        {"name": "nombre", "label": "Nombre", "type": "TEXT", "required": true},
+        {"name": "ubigeo", "label": "Ubigeo", "type": "TEXT"}
+      ]
+    },
+    {
+      "name": "transferente",
+      "label": "Transferente",
+      "pluralLabel": "Transferentes",
+      "description": "Quien transfirió el predio al declarante, con el porcentaje de propiedad que transfirió.",
+      "fields": [
+        {"name": "porcentaje_transferido", "label": "% de propiedad transferido", "type": "DECIMAL", "required": true},
+        {"name": "tipo_documento", "label": "Tipo de documento", "type": "ENUM", "enum": "tipo_documento", "required": true},
+        {"name": "numero_documento", "label": "Número de documento", "type": "TEXT", "required": true},
+        {"name": "fuente_informacion", "label": "Fuente de información", "type": "ENUM", "enum": "fuente_informacion"},
+        {"name": "apellido_paterno", "label": "Apellido paterno", "type": "TEXT"},
+        {"name": "apellido_materno", "label": "Apellido materno", "type": "TEXT"},
+        {"name": "nombres", "label": "Nombres", "type": "TEXT", "required": true},
+        {"name": "fecha_nacimiento", "label": "Fecha de nacimiento", "type": "DATE"},
+        {"name": "estado_civil", "label": "Estado civil", "type": "ENUM", "enum": "estado_civil"},
+        {"name": "sexo", "label": "Sexo", "type": "ENUM", "enum": "sexo"},
+        {"name": "fecha_fallecimiento", "label": "Fecha de fallecimiento", "type": "DATE"},
+        {"name": "telefono_fijo", "label": "Teléfono fijo", "type": "TEXT"},
+        {"name": "telefono_celular", "label": "Teléfono celular", "type": "TEXT"},
+        {"name": "correo", "label": "Correo electrónico", "type": "EMAIL"},
+        {"name": "ubigeo", "label": "Ubigeo", "type": "TEXT"},
+        {"name": "departamento", "label": "Departamento", "type": "TEXT", "required": true},
+        {"name": "provincia", "label": "Provincia", "type": "TEXT", "required": true},
+        {"name": "distrito", "label": "Distrito", "type": "TEXT", "required": true},
+        {"name": "descripcion_domicilio", "label": "Descripción del domicilio", "type": "TEXT", "required": true},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"}
+      ]
+    },
+    {
+      "name": "nivel_construccion",
+      "label": "Nivel de construcción",
+      "pluralLabel": "Niveles de construcción",
+      "description": "Un piso (o sótano, mezanine, azotea) declarado, con las letras de sus siete categorías del cuadro de valores unitarios.",
+      "fields": [
+        {"name": "tipo_nivel", "label": "Tipo de nivel", "type": "ENUM", "enum": "tipo_nivel", "required": true},
+        {"name": "numero_piso", "label": "Número de piso", "type": "INTEGER", "required": true},
+        {"name": "anio_construccion", "label": "Año de construcción", "type": "INTEGER", "required": true},
+        {"name": "mes_construccion", "label": "Mes de construcción", "type": "INTEGER", "required": true},
+        {"name": "material", "label": "Material predominante", "type": "ENUM", "enum": "material", "required": true},
+        {"name": "estado_conservacion", "label": "Estado de conservación", "type": "ENUM", "enum": "estado_conservacion", "required": true},
+        {"name": "area_construida", "label": "Área construida (m2)", "type": "DECIMAL", "required": true},
+        {"name": "area_comun", "label": "Área común construida (m2)", "type": "DECIMAL"},
+        {"name": "porcentaje_area_comun", "label": "% área común construida", "type": "DECIMAL"},
+        {"name": "muros_columnas", "label": "Muros y columnas", "type": "ENUM", "enum": "letra_categoria"},
+        {"name": "techos", "label": "Techos", "type": "ENUM", "enum": "letra_categoria"},
+        {"name": "pisos", "label": "Pisos", "type": "ENUM", "enum": "letra_categoria"},
+        {"name": "puertas_ventanas", "label": "Puertas y ventanas", "type": "ENUM", "enum": "letra_categoria"},
+        {"name": "revestimientos", "label": "Revestimientos", "type": "ENUM", "enum": "letra_categoria"},
+        {"name": "banos", "label": "Baños", "type": "ENUM", "enum": "letra_categoria"},
+        {"name": "instalaciones", "label": "Instalaciones eléctricas y sanitarias", "type": "ENUM", "enum": "letra_categoria"},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"}
+      ]
+    },
+    {
+      "name": "obra_complementaria",
+      "label": "Obra complementaria",
+      "pluralLabel": "Obras complementarias",
+      "description": "Cerco, portón, tanque, piscina u otra obra complementaria o instalación fija y permanente.",
+      "fields": [
+        {"name": "ingreso", "label": "Ingreso", "type": "ENUM", "enum": "ingreso_obra", "required": true},
+        {"name": "material", "label": "Material predominante", "type": "ENUM", "enum": "material", "required": true},
+        {"name": "tipo_obra", "label": "Tipo de obra", "type": "ENUM", "enum": "tipo_obra", "required": true},
+        {"name": "estado_conservacion", "label": "Estado de conservación", "type": "ENUM", "enum": "estado_conservacion", "required": true},
+        {"name": "anio_construccion", "label": "Año de construcción", "type": "INTEGER", "required": true},
+        {"name": "mes_construccion", "label": "Mes de construcción", "type": "INTEGER", "required": true},
+        {"name": "categoria", "label": "Categoría", "type": "TEXT",
+          "description": "La partida del instructivo de obras complementarias del MVCS (ingreso por categorías)."},
+        {"name": "valor", "label": "Valor (S/)", "type": "DECIMAL", "description": "Ingreso con valorización."},
+        {"name": "numero_piso", "label": "Número de piso", "type": "INTEGER", "required": true},
+        {"name": "cantidad", "label": "Cantidad", "type": "DECIMAL", "required": true},
+        {"name": "metrado", "label": "Metrado", "type": "DECIMAL", "required": true},
+        {"name": "unidad_medida", "label": "Unidad de medida", "type": "ENUM", "enum": "unidad_medida"},
+        {"name": "total_metrado", "label": "Total metrado", "type": "DECIMAL", "description": "cantidad x metrado, lo calcula el backend."},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"}
+      ]
+    },
+    {
+      "name": "otro_frente",
+      "label": "Otro frente",
+      "pluralLabel": "Otros frentes",
+      "description": "Un frente del predio a otra vía, además de la principal.",
+      "fields": [
+        {"name": "tipo_via", "label": "Tipo de vía", "type": "ENUM", "enum": "tipo_via", "required": true},
+        {"name": "via", "label": "Descripción de la vía", "type": "TEXT", "required": true},
+        {"name": "numero", "label": "N° principal", "type": "TEXT"},
+        {"name": "numero_alterno", "label": "N° alterno", "type": "TEXT"},
+        {"name": "frontis", "label": "Frontis (m)", "type": "DECIMAL", "required": true},
+        {"name": "lote", "label": "Lote", "type": "TEXT"},
+        {"name": "cuadra", "label": "Cuadra", "type": "TEXT"},
+        {"name": "lado", "label": "Lado", "type": "ENUM", "enum": "lado"},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"}
+      ]
+    },
+    {
+      "name": "categoria_valor",
+      "label": "Categoría de valor unitario",
+      "pluralLabel": "Categorías de valores unitarios",
+      "description": "Descripción de cada letra (A-I) de las siete columnas del cuadro de valores unitarios oficiales de edificación (model/data/categorias_valor.csv).",
+      "fields": [
+        {"name": "columna", "label": "Columna", "type": "INTEGER", "required": true},
+        {"name": "categoria", "label": "Categoría", "type": "TEXT", "required": true},
+        {"name": "letra", "label": "Letra", "type": "ENUM", "enum": "letra_categoria", "required": true},
+        {"name": "descripcion", "label": "Descripción", "type": "LONG_TEXT", "required": true}
       ]
     }
   ],
@@ -118,6 +455,78 @@
       "source": "declaracion_predial",
       "target": "predio",
       "fieldName": "predio",
+      "required": true
+    },
+    {
+      "name": "domicilio_contribuyente",
+      "label": "Contribuyente",
+      "inverseLabel": "Domicilios",
+      "source": "domicilio",
+      "target": "contribuyente",
+      "fieldName": "contribuyente",
+      "required": true
+    },
+    {
+      "name": "relacionado_contribuyente",
+      "label": "Contribuyente",
+      "inverseLabel": "Relacionados",
+      "source": "relacionado",
+      "target": "contribuyente",
+      "fieldName": "contribuyente",
+      "required": true
+    },
+    {
+      "name": "medio_contacto_contribuyente",
+      "label": "Contribuyente",
+      "inverseLabel": "Medios de contacto",
+      "source": "medio_contacto",
+      "target": "contribuyente",
+      "fieldName": "contribuyente",
+      "required": true
+    },
+    {
+      "name": "sustento_contribuyente",
+      "label": "Contribuyente",
+      "inverseLabel": "Documentos sustento",
+      "source": "sustento",
+      "target": "contribuyente",
+      "fieldName": "contribuyente",
+      "required": true
+    },
+    {
+      "name": "transferente_declaracion",
+      "label": "Declaración",
+      "inverseLabel": "Transferentes",
+      "source": "transferente",
+      "target": "declaracion_predial",
+      "fieldName": "declaracion",
+      "required": true
+    },
+    {
+      "name": "nivel_construccion_declaracion",
+      "label": "Declaración",
+      "inverseLabel": "Niveles de construcción",
+      "source": "nivel_construccion",
+      "target": "declaracion_predial",
+      "fieldName": "declaracion",
+      "required": true
+    },
+    {
+      "name": "obra_complementaria_declaracion",
+      "label": "Declaración",
+      "inverseLabel": "Obras complementarias",
+      "source": "obra_complementaria",
+      "target": "declaracion_predial",
+      "fieldName": "declaracion",
+      "required": true
+    },
+    {
+      "name": "otro_frente_declaracion",
+      "label": "Declaración",
+      "inverseLabel": "Otros frentes",
+      "source": "otro_frente",
+      "target": "declaracion_predial",
+      "fieldName": "declaracion",
       "required": true
     }
   ]

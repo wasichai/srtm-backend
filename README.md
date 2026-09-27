@@ -58,13 +58,52 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 5 created, 0 skipped  (3 objetos + 2 relaciones)
-python3 apply.py                   # idempotente: done: 0 created, 5 skipped
+python3 apply.py                   # done: 25 created, 0 updated, 0 skipped  (15 objetos + 10 relaciones)
+python3 apply.py                   # idempotente: done: 0 created, 0 updated, 25 skipped
 python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
 ```
 
+Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
+- **Campos:** añade a los objetos existentes los que `model.json` tiene y Core no.
+- **Opciones ENUM:** añade las opciones que falten.
+
+Solo añade: no renombra, no cambia tipos y no borra, así los registros importados siguen siendo válidos. Por ejemplo,
+sobre la base del padrón:
+- añade los campos nuevos de `contribuyente`, `predio` y `declaracion_predial`;
+- amplía `tipo_documento` (`PASAPORTE`) y `condicion_propiedad` (`SOCIEDAD CONYUGAL`, `POSEEDOR`);
+- crea los objetos y relaciones de las fases 1 y 2.
+
 Flags: `--core` (default `http://localhost:8090` o `$WASICHAI_CORE`), `--email`, `--password`, `--dry-run`,
 `--drop`, `--validate-only`. Salida: `0` ok, `1` error de Core, `2` `model.json` inválido.
+
+## Cargar los catálogos
+
+Los formularios del portal ofrecen ubigeo, vías y unidades urbanas desde tres objetos catálogo:
+
+```bash
+cd model
+python3 import_catalogos.py                                                           # ubigeo y categorías de valores
+python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run  # cuenta, no llama a Core
+python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"            # ubigeo + vías + unidades urbanas
+```
+
+- **`ubigeo`:** los 1 893 distritos del INEI, de `model/data/ubigeo.csv`. El archivo es un recorte de
+  [ubigeo-peru-aumentado](https://github.com/jmcastagnetto/ubigeo-peru-aumentado): código INEI, departamento,
+  provincia y distrito.
+- **`categoria_valor`:** las 57 descripciones de las letras A–I de las siete columnas del *Cuadro de valores
+  unitarios oficiales de edificación*, en `model/data/categorias_valor.csv`.
+  - Están transcritas del cuadro vigente al 01/01/2026 (R.D. N° 00015-2025-VIVIENDA/VMVU-DGPRVU), publicado por el
+    [Colegio de Arquitectos del Perú](https://cap.org.pe/wp-content/uploads/2026/01/CVU_ENERO_SIERRA_2026.pdf). Las
+    descripciones son las mismas en costa, sierra y selva.
+  - Los valores en soles, que sí cambian por región y mes, no se cargan: el cálculo del impuesto no es de esta fase.
+- **`via` y `unidad_urbana`:** salen de `direccion_predio` del padrón, las mismas partes `<vía>` y `<habilitación>` que
+  lee `import_predios.py`.
+  - El tipo sale del primer término (CALLE, JIRÓN, CARROZABLE… / ASOCIACIÓN DE VIVIENDA, CENTRO POBLADO, CERCADO…).
+  - En las unidades urbanas se descartan los restos de lote delante del tipo ("03-B CERCADO III MESETA").
+  - Se asignan al distrito de `--distrito` (por defecto `120302`, Perené).
+  - Con el Excel de 2026 salen 904 vías y 306 unidades urbanas.
+- **Idempotente**, como los otros scripts.
+- Los tres catálogos se pueden editar después desde el admin.
 
 ## Importar el padrón de predios
 
@@ -91,7 +130,32 @@ Con el Excel de 2026 el resultado esperado es 11 840 contribuyentes, 14 947 pred
 
 ## Modelo
 
-Tres objetos (`model/model.json`). Los nombres de campo siguen el *Formato Padrón Municipal Armonización 2026*.
+Quince objetos (`model/model.json`):
+- **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
+  *Formato Padrón Municipal Armonización 2026*.
+- **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
+  con una relación obligatoria a `contribuyente`.
+- **Declaración jurada predial del SRTM (fase 2):** `transferente`, `nivel_construccion`, `obra_complementaria` y
+  `otro_frente`, cada uno con una relación obligatoria a `declaracion_predial`.
+- **Catálogos:** `ubigeo`, `via`, `unidad_urbana` y `categoria_valor`.
+
+En la fase 1, `contribuyente` ganó los campos de la pantalla "Nuevo contribuyente" del SRTM:
+- código y número de declaración autogenerados, fecha del registro;
+- motivo, medios de determinación y de presentación, modificación de oficio, fecha de presentación;
+- tipo de contribuyente, código anterior, fuente de información;
+- fechas de nacimiento y de fallecimiento, estado civil, sexo y observación.
+
+En la fase 2 ganaron campos:
+- **`declaracion_predial`:**
+  - datos del predio: número de DJ autogenerado, motivo, medios, fecha de presentación;
+  - adquisición: tipo, fecha, documentos de sustento, folios;
+  - condición especial y predio inhabitable;
+  - clase y sub clase de uso, área común.
+- **`predio`:** la ubicación del SRTM (ubigeo, región, tipo de vía, letras, UCV, edificación, interior, zona, sub zona,
+  partida registral, código CPU…).
+
+Ninguno es obligatorio en Core, porque los registros importados del padrón no los tienen. El portal los exige al
+guardar.
 
 **`contribuyente`**: una persona natural, persona jurídica o sucesión. `numero_documento` es único.
 
@@ -144,33 +208,67 @@ Se descarta `orden2`, que es solo el número de fila.
 
 ## API del portal
 
-`srtm.rentas` expone la API que usa el portal de `srtm-ui`. No hay BFF: `RentasController` llama en proceso a los
-servicios de wasichai (`RecordService`, `MetadataService`) y devuelve DTOs tipados. Las claves JSON son los nombres de
-campo del modelo, en snake_case. Como vive bajo `/api`, el filtro JWT de core ya la protege. `RecordService` aplica los
-permisos del usuario por objeto y por campo, y valida cada escritura. Los errores salen como problem+json, con
-`errors[].field` igual al nombre del campo.
+`srtm.rentas` expone la API que usa el portal de `srtm-ui`. No hay BFF:
+- **Capas:** `RentasController` llama a tres servicios (`ContribuyenteService`, `RentasService`, `CatalogoService`).
+  Estos usan en proceso los servicios de wasichai (`RecordService`, `MetadataService`), a través de `Registros`, y
+  devuelven DTOs tipados.
+- **Claves JSON:** son los nombres de campo del modelo, en snake_case. `Records` convierte atributos ⇄ DTO con Jackson.
+- **Protección:** como la API vive bajo `/api`, el filtro JWT de core ya la protege. `RecordService` aplica los permisos
+  del usuario por objeto y por campo, y valida cada escritura.
+- **Errores:** salen como problem+json, con `errors[].field` igual al nombre del campo.
 
 | Método | Ruta | |
 |---|---|---|
 | GET | `/api/srtm/resumen` | totales del padrón |
 | GET | `/api/srtm/catalogos` | opciones ENUM por objeto y campo |
-| GET, POST | `/api/srtm/contribuyentes?q&page&size` | búsqueda (texto en todos los campos) y alta |
+| GET | `/api/srtm/ubigeos` | la lista INEI completa; la cascada departamento → provincia → distrito se hace en el portal |
+| GET | `/api/srtm/vias?q&tipo&ubigeo`, `/api/srtm/unidades-urbanas?q&tipo&ubigeo` | sugerencias del catálogo |
+| GET, POST | `/api/srtm/contribuyentes?q&page&size` | búsqueda (texto en todos los campos) e inscripción |
 | GET, PUT | `/api/srtm/contribuyentes/{id}?anio` | la ficha: datos, nº de predios y totales del año; y la edición |
 | GET | `/api/srtm/contribuyentes/{id}/declaraciones?anio` | sus declaraciones, cada una con su predio |
+| GET, POST | `/api/srtm/contribuyentes/{id}/{lista}` | las listas del contribuyente: `domicilios`, `relacionados`, `medios-contacto`, `sustentos` |
+| PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
 | GET, POST | `/api/srtm/predios?q&page&size` | búsqueda y alta |
 | GET, PUT | `/api/srtm/predios/{id}?anio` | la ficha: datos, nº de titulares y totales del año; y la edición |
 | GET | `/api/srtm/predios/{id}/declaraciones?anio` | sus declaraciones, cada una con su contribuyente |
-| POST | `/api/srtm/declaraciones` | alta (`contribuyente` y `predio` son ids) |
-| PUT | `/api/srtm/declaraciones/{id}` | edición |
+| POST | `/api/srtm/declaraciones` | alta corta, desde la ficha del predio (`contribuyente` y `predio` son ids) |
+| POST | `/api/srtm/contribuyentes/{id}/declaraciones-juradas` | presenta una DJ: `{declaracion, predio_id}` sobre un predio del padrón, o `{declaracion, predio}` registrando uno |
+| GET, PUT | `/api/srtm/declaraciones/{id}` | la DJ con su predio y su contribuyente; y la edición |
+| GET, POST | `/api/srtm/declaraciones/{id}/{lista}` | las listas de la DJ: `transferentes`, `niveles`, `obras`, `frentes` |
+| PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
+| GET | `/api/srtm/categorias-valor` | las letras de las siete columnas del cuadro de valores, con su descripción |
 
-- Sin `anio`, la ficha usa el año en curso y las declaraciones traen todos los años.
-- Un PUT reemplaza el registro: un campo enviado como `null` se borra.
-- Las declaraciones embebidas se leen en una sola consulta por ids, sin N+1.
+Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
+- **Inscripción:** el backend asigna `codigo` (6 dígitos, correlativo), `numero_declaracion` y `fecha_registro`.
+  - Por defecto pone INSCRIPCIÓN, DECLARACIÓN JURADA, FÍSICO, fecha de presentación de hoy y fuente MANUAL.
+  - Un documento ya inscrito es un 400 sobre `numero_documento`: Core dejaría que la base de datos lo rechazara con un
+    500.
+- **Derivados:** `tipo_persona` sale de `tipo_contribuyente`. `nombre_completo` son apellidos y nombres (persona natural)
+  o la razón social.
+- **Domicilios:** el backend arma `descripcion` en el orden del SRTM (el portal muestra la misma vista previa).
+  - El último domicilio FISCAL activo se copia a `domicilio_fiscal` / `_distrito` / `_provincia` / `_departamento` del
+    contribuyente, que es lo que usan las listas.
+- **Declaración jurada** (en `DeclaracionService`):
+  - Al presentarla, el backend le asigna `numero_declaracion` (correlativo, único).
+  - Por defecto: año de la fecha de presentación, secuencia 1, INSCRIPCIÓN, DECLARACIÓN JURADA, FÍSICO, PROPIETARIO
+    ÚNICO al 100 %.
+  - Un predio nuevo sin código lo recibe de su sector y manzana (`SS-MM-NNNN`, el siguiente de esa manzana, como el
+    padrón). Si la declaración se rechaza, ese predio se borra.
+  - Con `tipo_via`, la dirección del predio se arma de su ubicación. Los importados conservan el texto del padrón hasta
+    que alguien completa su ubicación.
+  - El total metrado de una obra complementaria es cantidad × metrado.
+- **Lo que no se edita:** en una edición, `codigo`, `numero_declaracion`, `fecha_registro` y el domicilio fiscal se
+  conservan aunque el cuerpo diga otra cosa. Una fila de una lista nunca cambia de contribuyente.
+- **Escrituras:** el `update` de Core reemplaza **todos** los campos editables. Por eso el portal fusiona lo que envía
+  con el registro guardado: un campo añadido desde el admin, que el DTO no conoce, no se borra al guardar desde el
+  portal. Un campo enviado como `null`, en cambio, sí se borra.
+- **Sin anio:** la ficha usa el año en curso y las declaraciones traen todos los años.
+- **Declaraciones embebidas:** se leen en una sola consulta por ids, sin N+1.
 
 ## Tests
 
 ```bash
-./gradlew build             # ktlint + tests unitarios (mapeo del portal)
+./gradlew build             # ktlint + tests unitarios (mapeo y reglas del portal)
 ./gradlew integrationTest   # smoke test y API del portal contra Testcontainers postgres:18 (o WASICHAI_TEST_DB_*)
 cd model && python3 -m unittest -v
 ```
@@ -182,5 +280,10 @@ tunelizada: `WASICHAI_TEST_DB_HOST`, `_PORT`, `_NAME` (debe terminar en `_test`,
 
 ## Siguientes pasos (fuera de este alcance)
 
-Cálculo del impuesto predial (tramos UIT), arbitrios, deuda y cuotas, pagos y recibos, workflows y plantillas de
-documentos en el modelo. El frontend web está en `srtm-ui`.
+- **Catálogo de obras complementarias:** las partidas del instructivo del MVCS, para la categoría de una obra. Hoy
+  es texto libre.
+- **Integraciones:** PIDE RENIEC, y catastro fiscal (código CPU y mapa).
+- **Cálculo y cobranza:** impuesto predial (tramos UIT), arbitrios, deuda y cuotas, pagos y recibos.
+- **En el modelo:** workflows y plantillas de documentos.
+
+El frontend web está en `srtm-ui`.
