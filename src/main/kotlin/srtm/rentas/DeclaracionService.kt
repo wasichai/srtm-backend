@@ -2,19 +2,22 @@ package srtm.rentas
 
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
+import srtm.pide.ConsultasReniec
 import wasichai.core.common.ConflictException
 import wasichai.core.common.ValidationException
+import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
 
 // the srtm's declaración jurada predial: datos del predio, ubicación (the predio's), transferentes, características
 // (niveles de construcción, obras complementarias), condóminos (the other declarations of the predio) and otros frentes.
-// every write of a declaración recomputes its condominio (Condominio.kt)
+// every write of a declaración recomputes its condominio (Condominio.kt). reniec: as ContribuyenteService's
 @Service
 class DeclaracionService(
     private val registros: Registros,
     private val listas: Listas,
-    private val contribuyentes: ContribuyenteService
+    private val contribuyentes: ContribuyenteService,
+    private val reniec: ConsultasReniec = ConsultasReniec(Duration.ZERO)
 ) {
     suspend fun ficha(id: UUID): DeclaracionJurada {
         val (declaracion, actualizado) = registros.getConFecha(DECLARACION, Declaracion::class.java, id)
@@ -164,7 +167,7 @@ class DeclaracionService(
             Transferente::class.java,
             PARENT,
             id,
-            transferente(body).copy(codigo = codigo, estado = body.estado ?: Listas.ACTIVO)
+            transferente(body, null).copy(codigo = codigo, estado = body.estado ?: Listas.ACTIVO)
         )
     }
 
@@ -174,11 +177,15 @@ class DeclaracionService(
     ): Transferente {
         deVigente(TRANSFERENTE, id)
         val stored = registros.get(TRANSFERENTE, Transferente::class.java, id)
-        return listas.cambiar(TRANSFERENTE, Transferente::class.java, PARENT, id, transferente(body).copy(codigo = stored.codigo))
+        return listas.cambiar(TRANSFERENTE, Transferente::class.java, PARENT, id, transferente(body, stored).copy(codigo = stored.codigo))
     }
 
-    private fun transferente(body: Transferente): Transferente {
+    private fun transferente(
+        body: Transferente,
+        stored: Transferente?
+    ): Transferente {
         validarNombre(body.tipoDocumento, body.razonSocial, body.nombres)
+        reniec.respaldar(body.persona(), stored?.persona())
         return body.copy(fuenteInformacion = body.fuenteInformacion ?: FUENTE_MANUAL)
     }
 
