@@ -164,6 +164,14 @@ class ReglasTest {
     }
 
     @Test
+    fun `a predio without sector or manzana takes the next code of its own series`() {
+        assertEquals("P-000001", siguienteCodigoPropio(null))
+        assertEquals("P-000013", siguienteCodigoPropio("P-000012"))
+        // a sector-manzana code never starts the series: the sector takes two characters
+        assertFalse(prefijoPredio("P", "1").startsWith(PREFIJO_PROPIO))
+    }
+
+    @Test
     fun `an obra's total metrado is cantidad times metrado`() {
         assertEquals(java.math.BigDecimal("100"), totalMetrado(ObraComplementaria(cantidad = java.math.BigDecimal("2"), metrado = java.math.BigDecimal("50"))))
         assertEquals(null, totalMetrado(ObraComplementaria(cantidad = java.math.BigDecimal("2"))))

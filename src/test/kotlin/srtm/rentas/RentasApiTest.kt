@@ -342,22 +342,6 @@ class RentasApiTest : WasichaiIntegrationTest() {
     }
 
     @Test
-    fun `a new predio without code, sector or manzana is a 400`() {
-        val contribuyente = inscribir(uniqueDocumento())["id"].asString()
-        client
-            .post()
-            .uri("/api/srtm/contribuyentes/$contribuyente/declaraciones-juradas")
-            .header(HttpHeaders.AUTHORIZATION, token)
-            .bodyValue(mapOf("predio" to mapOf("direccion" to "S/N")))
-            .exchange()
-            .expectStatus()
-            .isBadRequest
-            .expectBody()
-            .jsonPath("$.errors[0].field")
-            .isEqualTo("sector_catastral")
-    }
-
-    @Test
     fun `the official unit-value categories are served column by column`() {
         post(
             "/api/objects/categoria_valor/records",
