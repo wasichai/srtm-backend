@@ -23,7 +23,13 @@ class TiposUnidadUrbanaApiTest : SrtmApiTest() {
             "catastro_fiscal" to "tipo_zona"
         )) {
             val field = tree(send("GET", "/api/metadata/objects/$objeto/fields", null, HttpStatus.OK)).first { it["name"].asString() == campo }
-            assertEquals(nombres, field["enumOptions"].map { it.asString() }, "$objeto.$campo")
+            val opciones =
+                field["enumOptions"]
+                    .iterator()
+                    .asSequence()
+                    .map { it.asString() }
+                    .toList()
+            assertEquals(nombres, opciones, "$objeto.$campo")
         }
     }
 
