@@ -27,7 +27,7 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 15)
+        self.assertEqual(len(names), 17)
         self.assertEqual(len(self.model["relationships"]), 10)
 
     def test_new_contribuyente_fields_are_optional(self):
@@ -50,9 +50,29 @@ class ShippedModelTests(unittest.TestCase):
         self.assertTrue(fields["contribuyente"]["numero_documento"]["unique"])
         self.assertTrue(fields["predio"]["codigo"]["unique"])
 
-    def test_no_geometry(self):
-        types = {f["type"] for o in self.model["objects"] for f in o["fields"]}
-        self.assertNotIn("GEOMETRY", types)
+    def test_geometries_are_the_lotes_and_the_domicilio_point(self):
+        geometries = {(o["name"], f["name"]): (f["geometryType"], f["srid"])
+                      for o in self.model["objects"] for f in o["fields"] if f["type"] == "GEOMETRY"}
+        self.assertEqual(geometries, {
+            ("predio", "lote_geom"): ("POLYGON", 32718),
+            ("catastro_fiscal", "lote_geom"): ("POLYGON", 32718),
+            ("domicilio", "ubicacion"): ("POINT", 4326),
+        })
+
+    def test_geometry_payload_carries_its_shape(self):
+        obj = next(o for o in self.model["objects"] if o["name"] == "catastro_fiscal")
+        lote = next(f for f in object_payload(self.model, obj)["fields"] if f["name"] == "lote_geom")
+        self.assertEqual((lote["type"], lote["geometryType"], lote["srid"], lote["dimension"]), ("GEOMETRY", "POLYGON", 32718, 2))
+
+    def test_a_bad_geometry_is_refused(self):
+        model = copy.deepcopy(self.model)
+        obj = next(o for o in model["objects"] if o["name"] == "catastro_fiscal")
+        lote = next(f for f in obj["fields"] if f["name"] == "lote_geom")
+        lote["geometryType"] = "CIRCLE"
+        lote["srid"] = 0
+        errors = validate(model)
+        self.assertTrue(any("geometryType" in e for e in errors), errors)
+        self.assertTrue(any("srid" in e for e in errors), errors)
 
 
 class PayloadTests(unittest.TestCase):
@@ -98,9 +118,9 @@ class ValidationTests(unittest.TestCase):
         errors = self.mutate(lambda m: m["enums"]["uso"].append("X" * 65))
         self.assertTrue(any("invalid characters or length" in e for e in errors))
 
-    def test_geometry_is_refused(self):
+    def test_geometry_without_its_shape_is_refused(self):
         errors = self.mutate(lambda m: m["objects"][1]["fields"].append({"name": "geom", "label": "G", "type": "GEOMETRY"}))
-        self.assertTrue(any("unknown type 'GEOMETRY'" in e for e in errors))
+        self.assertTrue(any("geometryType must be one of" in e for e in errors))
 
     def test_target_after_source_is_refused(self):
         errors = self.mutate(lambda m: m["objects"].reverse())

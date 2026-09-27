@@ -75,8 +75,10 @@ class FakeCore:
         self.server.shutdown()
         self.server.server_close()
 
-    def add_record(self, object_name, attributes):
+    def add_record(self, object_name, attributes, geometries=None):
         record = {"id": str(uuid.uuid4()), "attributes": dict(attributes)}
+        if geometries is not None:
+            record["geometries"] = dict(geometries)
         self.records.setdefault(object_name, []).append(record)
         return record
 
@@ -85,7 +87,7 @@ class FakeCore:
         if method == "POST":
             if self.fail_on_record == name:
                 return 400, {"detail": "Invalid option", "errors": [{"field": "uso", "message": "boom-record"}]}
-            return 201, self.add_record(name, body["attributes"])
+            return 201, self.add_record(name, body["attributes"], body.get("geometries"))
         params = {k: v[0] for k, v in urllib.parse.parse_qs(query).items()}
         page = int(params.pop("page", 0))
         size = int(params.pop("size", 25))

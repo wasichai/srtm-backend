@@ -85,6 +85,22 @@ class ShippedCategoriasTests(unittest.TestCase):
         self.assertIn("ALBAÑILERÍA ARMADA", muros_c["descripcion"])
 
 
+class ObrasTests(unittest.TestCase):
+    def test_reads_partidas_and_every_value_fits_the_model(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write("tipo_obra,numero,descripcion,unidad_medida,material\n")
+            f.write("MUROS PERIMETRICOS O CERCOS,3,MURO DE LADRILLO,M2,LADRILLO\n")
+            f.write("TANQUES ELEVADOS,1,TANQUE DE CONCRETO,M3,\n")
+        self.addCleanup(os.unlink, f.name)
+        obras = ic.read_obras(f.name)
+        self.assertEqual(obras[0], {"tipo_obra": "MUROS PERIMETRICOS O CERCOS", "numero": 3, "descripcion": "MURO DE LADRILLO",
+                                    "unidad_medida": "M2", "material": "LADRILLO"})
+        self.assertNotIn("material", obras[1])
+        # the shipped file is the template: header only
+        self.assertEqual(ic.read_obras(os.path.join(HERE, "data", "obras_complementarias.csv")), [])
+
+
 class LoadTests(unittest.TestCase):
     def setUp(self):
         self.core = FakeCore()

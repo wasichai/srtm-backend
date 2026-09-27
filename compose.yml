@@ -1,9 +1,10 @@
 name: srtm
 
 services:
-  # plain postgres: srtm installs no gis, so no postgis
+  # postgis: wasichai-gis keeps the lotes' polygons. same pg18 as plain postgres, so an existing volume carries over
+  # (wasichai-gis's first migration creates the extension). back the database up before switching the image
   postgres:
-    image: postgres:18
+    image: postgis/postgis:18-3.6
     container_name: srtm-postgres
     environment:
       POSTGRES_USER: srtm

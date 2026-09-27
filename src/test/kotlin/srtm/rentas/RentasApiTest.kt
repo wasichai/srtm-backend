@@ -370,6 +370,89 @@ class RentasApiTest : WasichaiIntegrationTest() {
     }
 
     @Test
+    fun `a lote of the catastro fiscal is found by its filters and on the map`() {
+        val cpu = "CPU-${uniqueDocumento()}"
+        val via = "CACERES ${uniqueDocumento()}"
+        val lote =
+            post(
+                "/api/srtm/catastro",
+                mapOf(
+                    "codigo_cpu" to cpu,
+                    "codigo_predio_municipal" to "01-02-0019",
+                    "tipo_predio" to "PREDIO URBANO",
+                    "tipo_via" to "AVENIDA",
+                    "via" to via,
+                    "manzana" to "C",
+                    "lote" to "19",
+                    "lote_geom" to SQUARE
+                )
+            )
+        assertEquals("Polygon", lote["lote_geom"]["type"].asString())
+        get("/api/srtm/catastro?via=${via.takeLast(8)}&tipo_via=AVENIDA&tipo_predio=PREDIO URBANO")
+            .expectBody()
+            .jsonPath("$.totalElements")
+            .isEqualTo(1)
+            .jsonPath("$.content[0].codigo_cpu")
+            .isEqualTo(cpu)
+            .jsonPath("$.content[0].lote_geom.type")
+            .isEqualTo("Polygon")
+        get("/api/srtm/catastro?via=${via.takeLast(8)}&tipo_via=CALLE")
+            .expectBody()
+            .jsonPath("$.totalElements")
+            .isEqualTo(0)
+        // the map reads wasichai-gis's features, by bbox
+        get("/api/gis/objects/catastro_fiscal/features?bbox=-75.23,-10.95,-75.22,-10.94&geometry=lote_geom&codigo_cpu=$cpu")
+            .expectBody()
+            .jsonPath("$.features[0].properties.codigo_cpu")
+            .isEqualTo(cpu)
+        get("/api/gis/objects/catastro_fiscal/features?bbox=-70.1,-10.1,-70.0,-10.0&geometry=lote_geom&codigo_cpu=$cpu")
+            .expectBody()
+            .jsonPath("$.features.length()")
+            .isEqualTo(0)
+    }
+
+    @Test
+    fun `a predio registered in the portal gets a registration number and keeps its lote`() {
+        val sector = uniqueDocumento().take(2)
+        val first = post("/api/srtm/predios", mapOf("sector_catastral" to sector, "manzana_catastral" to "01", "direccion" to "S/N", "lote_geom" to SQUARE))
+        val second = post("/api/srtm/predios", mapOf("sector_catastral" to sector, "manzana_catastral" to "01", "direccion" to "S/N"))
+        assertEquals(first["numero_registro"].asInt() + 1, second["numero_registro"].asInt())
+        assertEquals("Polygon", first["lote_geom"]["type"].asString())
+        get("/api/srtm/predios/buscar?codigo=${first["codigo"].asString()}")
+            .expectBody()
+            .jsonPath("$.content[0].numero_registro")
+            .isEqualTo(first["numero_registro"].asInt())
+        // an update keeps code, number, and a lote it sends as null (a form without a map)
+        val id = first["id"].asString()
+        val kept = put("/api/srtm/predios/$id", fields(first) + mapOf("codigo" to "X", "numero_registro" to 1, "lote_geom" to null))
+        assertEquals(first["codigo"].asString(), kept["codigo"].asString())
+        assertEquals(first["numero_registro"].asInt(), kept["numero_registro"].asInt())
+        assertEquals("Polygon", kept["lote_geom"]["type"].asString())
+    }
+
+    @Test
+    fun `a domicilio is located on the map`() {
+        val id = inscribir(uniqueDocumento())["id"].asString()
+        val domicilio =
+            post(
+                "/api/srtm/contribuyentes/$id/domicilios",
+                mapOf(
+                    "tipo_domicilio" to "FISCAL",
+                    "tipo_predio" to "PREDIO URBANO",
+                    "departamento" to "JUNIN",
+                    "provincia" to "CHANCHAMAYO",
+                    "distrito" to "PERENE",
+                    "ubicacion" to mapOf("type" to "Point", "coordinates" to listOf(-75.2247, -10.9475))
+                )
+            )
+        assertEquals("Point", domicilio["ubicacion"]["type"].asString())
+        get("/api/srtm/contribuyentes/$id/domicilios")
+            .expectBody()
+            .jsonPath("$[0].ubicacion.coordinates[0]")
+            .isEqualTo(-75.2247)
+    }
+
+    @Test
     fun `a missing required field is a 400 naming that field`() {
         client
             .post()
@@ -464,6 +547,10 @@ class RentasApiTest : WasichaiIntegrationTest() {
                 put("required", field["required"]?.asBoolean() ?: false)
                 put("unique", field["unique"]?.asBoolean() ?: false)
                 if (field["type"].asString() == "ENUM") put("enumOptions", options(field))
+                if (field["type"].asString() == "GEOMETRY") {
+                    put("geometryType", field["geometryType"].asString())
+                    put("srid", field["srid"]?.asInt() ?: 4326)
+                }
             }
 
         val existing: Set<String> = tree(send("GET", "/api/objects", null, HttpStatus.OK)).names()
@@ -565,5 +652,21 @@ class RentasApiTest : WasichaiIntegrationTest() {
 
     private companion object {
         val json: JsonMapper = JsonMapper.builder().build()
+
+        // a small lote in Perené, GeoJSON in EPSG:4326
+        val SQUARE =
+            mapOf(
+                "type" to "Polygon",
+                "coordinates" to
+                    listOf(
+                        listOf(
+                            listOf(-75.2250, -10.9480),
+                            listOf(-75.2245, -10.9480),
+                            listOf(-75.2245, -10.9475),
+                            listOf(-75.2250, -10.9475),
+                            listOf(-75.2250, -10.9480)
+                        )
+                    )
+            )
     }
 }

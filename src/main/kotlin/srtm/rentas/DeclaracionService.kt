@@ -16,11 +16,12 @@ class DeclaracionService(
     private val contribuyentes: ContribuyenteService
 ) {
     suspend fun ficha(id: UUID): DeclaracionJurada {
-        val declaracion = registros.get(DECLARACION, Declaracion::class.java, id)
+        val (declaracion, actualizado) = registros.getConFecha(DECLARACION, Declaracion::class.java, id)
         return DeclaracionJurada(
             declaracion = declaracion,
             predio = registros.get(PREDIO, Predio::class.java, UUID.fromString(declaracion.predio)),
-            contribuyente = contribuyentes.get(UUID.fromString(declaracion.contribuyente))
+            contribuyente = contribuyentes.get(UUID.fromString(declaracion.contribuyente)),
+            actualizado = actualizado
         )
     }
 
@@ -62,13 +63,25 @@ class DeclaracionService(
     // a predio of the srtm: its code comes from sector and manzana when blank, its direccion from its ubicación
     suspend fun registrarPredio(body: Predio): Predio {
         val codigo = body.codigo?.ifBlank { null } ?: codigoPredio(body)
-        return registros.create(PREDIO, Predio::class.java, Records.attributes(body.copy(codigo = codigo, direccion = describirUbicacion(body))))
+        return conReintento {
+            val numero = (registros.highest(PREDIO, "numero_registro")?.toIntOrNull() ?: 0) + 1
+            registros.create(
+                PREDIO,
+                Predio::class.java,
+                Records.attributes(body.copy(codigo = codigo, numeroRegistro = numero, direccion = describirUbicacion(body)))
+            )
+        }
     }
 
+    // code and registration number stay what they are
     suspend fun actualizarPredio(
         id: UUID,
         body: Predio
-    ): Predio = registros.replace(PREDIO, Predio::class.java, id, Records.attributes(body.copy(direccion = describirUbicacion(body))))
+    ): Predio {
+        val stored = registros.get(PREDIO, Predio::class.java, id)
+        val next = body.copy(codigo = stored.codigo, numeroRegistro = stored.numeroRegistro, direccion = describirUbicacion(body))
+        return registros.replace(PREDIO, Predio::class.java, id, Records.attributes(next))
+    }
 
     // the lists of the declaration
 
@@ -148,15 +161,19 @@ class DeclaracionService(
     }
 
     // numero_declaracion is unique: two clerks presenting at once may pick the same one. read it again and retry
-    private suspend fun numerar(build: suspend () -> Declaracion): Declaracion {
+    private suspend fun numerar(build: suspend () -> Declaracion): Declaracion =
+        conReintento { registros.create(DECLARACION, Declaracion::class.java, Records.attributes(build())) }
+
+    // a numbered insert: when the number was taken meanwhile (the database refuses the duplicate), number it again
+    private suspend fun <T> conReintento(insert: suspend () -> T): T {
         repeat(ATTEMPTS - 1) {
             try {
-                return registros.create(DECLARACION, Declaracion::class.java, Records.attributes(build()))
+                return insert()
             } catch (_: DataIntegrityViolationException) {
                 // taken meanwhile
             }
         }
-        return registros.create(DECLARACION, Declaracion::class.java, Records.attributes(build()))
+        return insert()
     }
 
     private suspend fun codigoPredio(body: Predio): String {

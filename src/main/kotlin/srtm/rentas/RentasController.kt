@@ -22,6 +22,7 @@ class RentasController(
     private val rentas: RentasService,
     private val contribuyentes: ContribuyenteService,
     private val declaraciones: DeclaracionService,
+    private val predios: PredioService,
     private val catalogo: CatalogoService
 ) {
     @GetMapping("/resumen")
@@ -37,6 +38,40 @@ class RentasController(
 
     @GetMapping("/categorias-valor")
     suspend fun categoriasValor() = catalogo.categoriasValor()
+
+    @GetMapping("/obras-categorias")
+    suspend fun obrasCategorias(
+        @RequestParam(name = "tipo_obra", required = false) tipoObra: String?
+    ) = predios.obrasCategorias(tipoObra)
+
+    // "buscar predios" (page 13): in the padrón (tributario) and in the catastro fiscal, same filters
+
+    @GetMapping("/predios/buscar")
+    suspend fun buscarPredios(
+        @RequestParam params: Map<String, String>
+    ) = predios.buscarPredios(FiltrosPredio.of(params), params["page"]?.toIntOrNull(), params["size"]?.toIntOrNull())
+
+    @GetMapping("/catastro")
+    suspend fun buscarCatastro(
+        @RequestParam params: Map<String, String>
+    ) = predios.buscarCatastro(FiltrosPredio.of(params), params["page"]?.toIntOrNull(), params["size"]?.toIntOrNull())
+
+    @PostMapping("/catastro")
+    @ResponseStatus(HttpStatus.CREATED)
+    suspend fun crearLote(
+        @RequestBody body: CatastroFiscal
+    ) = predios.crearLote(body)
+
+    @GetMapping("/catastro/{id}")
+    suspend fun lote(
+        @PathVariable id: UUID
+    ) = predios.lote(id)
+
+    @PutMapping("/catastro/{id}")
+    suspend fun actualizarLote(
+        @PathVariable id: UUID,
+        @RequestBody body: CatastroFiscal
+    ) = predios.actualizarLote(id, body)
 
     @GetMapping("/vias")
     suspend fun vias(

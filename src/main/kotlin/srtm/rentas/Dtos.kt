@@ -83,7 +83,11 @@ data class Predio(
     val descripcionSubZona: String? = null,
     val partidaRegistral: String? = null,
     val referencia: String? = null,
-    val codigoCpu: String? = null
+    val codigoCpu: String? = null,
+    // the backend's, when the portal registers the predio
+    val numeroRegistro: Int? = null,
+    // the lote's polygon, GeoJSON in EPSG:4326 (stored in UTM 18S by wasichai-gis)
+    val loteGeom: Map<String, Any?>? = null
 )
 
 // contribuyente and predio are the related records' ids
@@ -131,7 +135,8 @@ data class Declaracion(
     // características
     val claseUso: String? = null,
     val subClaseUso: String? = null,
-    val areaComunTerreno: BigDecimal? = null
+    val areaComunTerreno: BigDecimal? = null,
+    val otrosDatos: String? = null
 )
 
 // the contribuyente's children. contribuyente is the parent's id: the path sets it, a body never moves one
@@ -169,7 +174,9 @@ data class Domicilio(
     val referencia: String? = null,
     // built by the backend (describir), whatever the body says
     val descripcion: String? = null,
-    val estado: String? = null
+    val estado: String? = null,
+    // "buscar dirección": the point marked on the map, GeoJSON
+    val ubicacion: Map<String, Any?>? = null
 )
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
@@ -308,7 +315,9 @@ data class OtroFrente(
 data class DeclaracionJurada(
     val declaracion: Declaracion,
     val predio: Predio,
-    val contribuyente: Contribuyente
+    val contribuyente: Contribuyente,
+    // the srtm's "fecha de actualización": when the declaration was last saved
+    val actualizado: java.time.Instant? = null
 )
 
 // presenting one: an existing predio (predio_id) or a new one (predio, its code generated when blank)
@@ -319,7 +328,38 @@ data class NuevaDeclaracion(
     val predioId: String? = null
 )
 
+// a lote of the catastro fiscal
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class CatastroFiscal(
+    val id: String? = null,
+    val codigoCpu: String? = null,
+    val codigoPredioMunicipal: String? = null,
+    val partidaRegistral: String? = null,
+    val tipoPredio: String? = null,
+    val ubigeo: String? = null,
+    val tipoVia: String? = null,
+    val via: String? = null,
+    val numero: String? = null,
+    val tipoZona: String? = null,
+    val zona: String? = null,
+    val manzana: String? = null,
+    val lote: String? = null,
+    val kilometro: String? = null,
+    val direccion: String? = null,
+    val loteGeom: Map<String, Any?>? = null
+)
+
 // catalogs
+
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class ObraCategoria(
+    val id: String? = null,
+    val tipoObra: String? = null,
+    val numero: Int? = null,
+    val descripcion: String? = null,
+    val unidadMedida: String? = null,
+    val material: String? = null
+)
 
 data class CategoriaValor(
     val columna: Int,

@@ -56,11 +56,12 @@ el servidor arranca aunque no cargues nada. `develop/.env` sirve para cambiarlas
 ## 3. Base de datos
 
 ```bash
-docker compose up -d          # postgres:18, contenedor srtm-postgres, 127.0.0.1:5433, base srtm
+docker compose up -d          # postgis/postgis:18-3.6, contenedor srtm-postgres, 127.0.0.1:5433, base srtm
 docker compose ps             # debe salir healthy
 ```
 
-- Es PostgreSQL plano, sin PostGIS: srtm no instala el módulo gis.
+- Es PostgreSQL 18 con PostGIS 3.6: srtm instala el módulo gis (lotes del catastro, del predio y el punto del
+  domicilio). Para pasar una base existente, ver "Pasar una base existente a PostGIS" en el README.
 - Al arrancar, el servidor crea el esquema con las migraciones Flyway de wasichai. No hay migraciones propias.
 - Para empezar de cero: `docker compose down -v`, que borra el volumen con todos los datos.
 
@@ -107,7 +108,7 @@ python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"
 ```bash
 ./gradlew build                  # ktlint + tests unitarios
 ./gradlew ktlintFormat           # formatea el Kotlin según .editorconfig
-./gradlew integrationTest        # Testcontainers postgres:18: necesita un Docker local
+./gradlew integrationTest        # Testcontainers postgis/postgis:18-3.6: necesita un Docker local
 cd model && python3 -m unittest -v
 ```
 
