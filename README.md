@@ -82,17 +82,22 @@ python3 apply.py --drop            # lo borra, en orden inverso (¡borra tambié
 
 Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
 - **Campos:** añade a los objetos existentes los que `model.json` tiene y Core no.
-- **Opciones ENUM:** añade las opciones que falten.
+- **Opciones ENUM:** añade las opciones que falten, y quita las que `model.json` ya no lista si ningún registro las usa
+  (la que alguno usa se queda, con un aviso `keep option …`).
 - **Obligatoriedad:** deja opcional el campo que `model.json` ya no exige (`contribuyente.numero_documento`, vacío con
   SIN DOCUMENTO); nunca vuelve obligatorio uno existente.
 - **Etiquetas:** pone la etiqueta de `model.json` al campo que Core etiqueta distinto (`predio.condicion`: "Tipo de
   predio"). Es solo lo que muestra el admin.
 
-Solo añade, relaja o reetiqueta: no renombra, no cambia tipos y no borra, así los registros importados siguen siendo válidos. Por ejemplo,
-sobre la base del padrón:
+Solo añade, relaja, reetiqueta o quita opciones sin uso: no renombra, no cambia tipos y no borra campos, así los
+registros importados siguen siendo válidos. Por ejemplo, sobre la base del padrón:
 - añade los campos nuevos de `contribuyente`, `predio` y `declaracion_predial`;
 - amplía `tipo_documento` (`PASAPORTE`, y `PTP-CPP`, `CI` y `OTROS` de los manuales del SRTM) y `condicion_propiedad`
   (`SOCIEDAD CONYUGAL`, `POSEEDOR`);
+- cambia `tipo_obra` a los grupos del anexo III de obras complementarias (quita `CISTERNAS`, `PISCINAS`,
+  `LOSAS DEPORTIVAS`, `PISOS DE CONCRETO` y `OTROS`) y añade `PZA` a `unidad_medida`;
+- quita de `clase_uso` y `sub_clase_uso` las opciones de antes del catálogo de usos del SRTM (`INDUSTRIAL`,
+  `SERVICIOS`, `AGRICOLA`, `OTROS`; `BODEGA`, `TIENDA`, `OFICINA`, `TALLER`, `ALMACEN`, `OTROS`) que ninguna DJ usa;
 - crea los objetos y relaciones de las fases 1 y 2.
 
 Flags: `--core` (default `http://localhost:8090` o `$WASICHAI_CORE`), `--email`, `--password`, `--dry-run`,
@@ -127,11 +132,15 @@ python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"      
   - Se leen también las abreviaturas con que el portal escribe las direcciones (JR., AV., CA., PSJE., PROL., CARR.;
     AA.HH., AA.VV., C.P., URB.) y las erratas de CARROZABLE del padrón.
   - Con el Excel de 2026 salen 903 vías y 306 unidades urbanas.
-- **`obra_categoria`:** las partidas del instructivo de obras complementarias e instalaciones fijas y permanentes
-  (anexo III de la R.M. N.° 277-2025-VIVIENDA), en `model/data/obras_complementarias.csv`.
-  - El archivo **viene solo con la cabecera** (`tipo_obra,numero,descripcion,unidad_medida,material`): gob.pe no deja
-    que un script descargue el anexo. Hay que completarlo a mano desde www.gob.pe/vivienda.
-  - Mientras está vacío, la categoría de una obra se escribe a mano en el portal.
+- **`obra_categoria`:** las 96 partidas de obras complementarias e instalaciones fijas y permanentes del anexo III de
+  la R.M. N.° 277-2025-VIVIENDA, en `model/data/obras_complementarias.csv`
+  (`tipo_obra,numero,descripcion,unidad_medida,material,valor_unitario`).
+  - Transcrito a mano del anexo III.4 (selva, la región de Perené): gob.pe no deja que un script lo descargue. Las
+    partidas son las mismas en las cuatro regiones; solo cambia el valor.
+  - `valor_unitario` es el V.U. 2026 a costo directo: se le aplica el factor de oficialización 0,68 y la depreciación.
+  - `tipo_obra` es el grupo del anexo en mayúsculas sin tildes, con las comas cambiadas por ` - ` (las opciones ENUM de
+    Core no las admiten). El único de más de 64 caracteres queda `LOSAS DEPORTIVAS - ESTACIONAMIENTOS - PATIOS - VEREDAS`.
+  - Cada año, con la R.M. nueva, se actualizan los valores (y las partidas, si cambian).
 - **`uso_predio`:** el *tipo de uso de predio* del SRTM (clase → sub clase → uso), en `model/data/usos_predio.csv`.
   Las características de la DJ lo ofrecen en cascada (`GET /api/srtm/usos-predio`).
   - El archivo tiene la forma de la tabla de parámetros del SRTM (*Parámetros / Uso Predio*, exportable a Excel):
@@ -361,7 +370,7 @@ Se descarta `orden2`, que es solo el número de fila.
 | PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
 | GET | `/api/srtm/categorias-valor` | las letras de las siete columnas del cuadro de valores, con su descripción |
 | GET | `/api/srtm/usos-predio` | los usos del predio del SRTM, cada uno con su clase y su sub clase, en el orden de sus códigos |
-| GET | `/api/srtm/obras-categorias?tipo_obra` | las partidas del instructivo de obras complementarias |
+| GET | `/api/srtm/obras-categorias?tipo_obra` | las partidas de obras complementarias, con su unidad y valor unitario |
 | GET | `/api/srtm/predios/buscar?…` | "Buscar en Tributario" (pág. 13) |
 | GET, POST | `/api/srtm/catastro?…` | "Buscar en Catastro Fiscal" (pág. 13), y el alta de un lote |
 | GET, PUT | `/api/srtm/catastro/{id}` | un lote del catastro, y su edición (polígono incluido) |
@@ -526,9 +535,8 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 
 ## Siguientes pasos (fuera de este alcance)
 
-- **Datos:** completar `model/data/obras_complementarias.csv` con el anexo oficial, y cargar el GeoJSON del catastro
-  fiscal cuando esté disponible. Si se decide, asignar código y número a los contribuyentes y declaraciones importados
-  del padrón.
+- **Datos:** cargar el GeoJSON del catastro fiscal cuando esté disponible. Si se decide, asignar código y número a los
+  contribuyentes y declaraciones importados del padrón.
 - **Integraciones:** probar PIDE RENIEC con las credenciales del convenio; PIDE SUNAT (RUC) y MIGRACIONES (carné de
   extranjería) con la misma interfaz `ConsultaDocumento`. El fondo del mapa es OpenStreetMap; una capa WMS/WMTS
   municipal se puede publicar con GeoServer.

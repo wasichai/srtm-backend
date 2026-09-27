@@ -89,16 +89,51 @@ class ObrasTests(unittest.TestCase):
     def test_reads_partidas_and_every_value_fits_the_model(self):
         import tempfile
         with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
-            f.write("tipo_obra,numero,descripcion,unidad_medida,material\n")
-            f.write("MUROS PERIMETRICOS O CERCOS,3,MURO DE LADRILLO,M2,LADRILLO\n")
-            f.write("TANQUES ELEVADOS,1,TANQUE DE CONCRETO,M3,\n")
+            f.write("tipo_obra,numero,descripcion,unidad_medida,material,valor_unitario\n")
+            f.write("MUROS PERIMETRICOS O CERCOS,3,MURO DE LADRILLO,M2,LADRILLO,387.38\n")
+            f.write("TANQUES ELEVADOS,1,TANQUE DE CONCRETO,M3,,1328.5\n")
+            f.write("TANQUES ELEVADOS,2,TANQUE DE PLÁSTICO,M3,,\n")
         self.addCleanup(os.unlink, f.name)
         obras = ic.read_obras(f.name)
         self.assertEqual(obras[0], {"tipo_obra": "MUROS PERIMETRICOS O CERCOS", "numero": 3, "descripcion": "MURO DE LADRILLO",
-                                    "unidad_medida": "M2", "material": "LADRILLO"})
+                                    "unidad_medida": "M2", "material": "LADRILLO", "valor_unitario": "387.38"})
         self.assertNotIn("material", obras[1])
-        # the shipped file is the template: header only
-        self.assertEqual(ic.read_obras(os.path.join(HERE, "data", "obras_complementarias.csv")), [])
+        self.assertEqual(obras[1]["valor_unitario"], "1328.50")
+        self.assertNotIn("valor_unitario", obras[2])
+
+
+class ShippedObrasTests(unittest.TestCase):
+    """The partidas of annex III.4 (selva) of R.M. 277-2025-VIVIENDA, the one for Perené."""
+
+    def setUp(self):
+        self.obras = ic.read_obras(os.path.join(HERE, "data", "obras_complementarias.csv"))
+        with open(os.path.join(HERE, "model.json"), encoding="utf-8") as f:
+            self.enums = json.load(f)["enums"]
+
+    def test_the_96_items_of_the_annex(self):
+        self.assertEqual([o["numero"] for o in self.obras], list(range(1, 97)))
+        self.assertEqual(len({(o["tipo_obra"], o["numero"]) for o in self.obras}), 96)
+
+    def test_every_value_is_an_option_of_its_enum(self):
+        self.assertEqual(sorted({o["tipo_obra"] for o in self.obras} - set(self.enums["tipo_obra"])), [])
+        self.assertEqual(sorted({o["unidad_medida"] for o in self.obras} - set(self.enums["unidad_medida"])), [])
+        self.assertEqual(sorted({o["material"] for o in self.obras if "material" in o} - set(self.enums["material"])), [])
+
+    def test_every_group_of_the_annex_is_used(self):
+        # "Losas deportivas, estacionamientos, patios de maniobras, superficie de rodadura, veredas" does not fit Core's
+        # 64 characters (nor its commas): it is LOSAS DEPORTIVAS - ESTACIONAMIENTOS - PATIOS - VEREDAS
+        self.assertEqual(sorted(set(self.enums["tipo_obra"]) - {o["tipo_obra"] for o in self.obras}), [])
+        self.assertEqual(len(self.enums["tipo_obra"]), 31)
+
+    def test_every_item_has_its_unit_value(self):
+        self.assertTrue(all(float(o["valor_unitario"]) > 0 for o in self.obras))
+        by_numero = {o["numero"]: o for o in self.obras}
+        muro = by_numero[3]
+        self.assertEqual((muro["tipo_obra"], muro["unidad_medida"], muro["material"], muro["valor_unitario"]),
+                         ("MUROS PERIMETRICOS O CERCOS", "M2", "LADRILLO", "387.38"))
+        self.assertTrue(muro["descripcion"].startswith("MURO DE LADRILLO DE ARCILLA O SIMILAR, TARRAJEADO"))
+        self.assertEqual(by_numero[17]["valor_unitario"], "1328.49")
+        self.assertEqual(by_numero[74]["unidad_medida"], "PZA")
 
 
 def write_csv(test, text):
@@ -196,6 +231,21 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(first, (1, 1))
         self.assertEqual(second, (0, 2))
         self.assertEqual([r["attributes"]["codigo"] for r in self.core.records["uso_predio"]], ["010101", "100106"])
+
+    def test_obras_by_tipo_and_numero_once(self):
+        obras = [
+            {"tipo_obra": "MUROS PERIMETRICOS O CERCOS", "numero": 3, "descripcion": "MURO DE LADRILLO", "unidad_medida": "M2",
+             "material": "LADRILLO", "valor_unitario": "387.38"},
+            {"tipo_obra": "TANQUES ELEVADOS", "numero": 17, "descripcion": "TANQUE DE CONCRETO", "unidad_medida": "M3",
+             "valor_unitario": "1328.49"},
+        ]
+        self.core.add_record("obra_categoria", obras[0])
+        with redirect_stdout(io.StringIO()):
+            first = ic.load(self.client, [], [], [], workers=2, obras=obras)
+            second = ic.load(self.client, [], [], [], workers=2, obras=obras)
+        self.assertEqual(first, (1, 1))
+        self.assertEqual(second, (0, 2))
+        self.assertEqual([r["attributes"]["numero"] for r in self.core.records["obra_categoria"]], [3, 17])
 
 
 if __name__ == "__main__":

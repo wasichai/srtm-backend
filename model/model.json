@@ -162,9 +162,16 @@
     "estado_conservacion": ["MUY BUENO", "BUENO", "REGULAR", "MALO", "MUY MALO"],
     "letra_categoria": ["A", "B", "C", "D", "E", "F", "G", "H", "I"],
     "ingreso_obra": ["POR CATEGORIAS", "CON VALORIZACION"],
-    "tipo_obra": ["MUROS PERIMETRICOS O CERCOS", "PORTONES Y PUERTAS", "TANQUES ELEVADOS", "CISTERNAS", "PISCINAS", "LOSAS DEPORTIVAS",
-      "PISOS DE CONCRETO", "OTROS"],
-    "unidad_medida": ["M2", "M3", "ML", "UND"],
+    "tipo_obra": ["MUROS PERIMETRICOS O CERCOS", "PORTONES Y PUERTAS", "TANQUES ELEVADOS",
+      "CISTERNAS - POZOS SUMIDEROS - TANQUES SEPTICOS", "PISCINAS - ESPEJOS DE AGUA",
+      "LOSAS DEPORTIVAS - ESTACIONAMIENTOS - PATIOS - VEREDAS", "HORNOS - CHIMENEAS - INCINERADORES",
+      "TORRES DE VIGILANCIA", "BOVEDAS", "BALANZAS INDUSTRIALES", "POSTES DE ALUMBRADO", "BASES DE SOPORTE DE MAQUINAS",
+      "CAJAS DE REGISTRO DE CONCRETO", "BUZON DE CONCRETO", "PARAPETO", "RAMPAS - GRADAS Y ESCALERAS DE CONCRETO",
+      "MURO DE CONTENCION DE CONCRETO ARMADO", "ESCALERA METALICA", "PASTORAL", "PROYECTORES LUMINARIA",
+      "TUBERIAS DE CONCRETO", "CANALETA DE CONCRETO ARMADO", "ZANJAS DE CONCRETO", "POSTES DE CONCRETO ARMADO",
+      "CUBIERTAS", "PASAMANO METALICO", "CERCOS METALICOS", "COLUMNAS ESTRUCTURAS O SIMILARES DE FIERRO", "SARDINEL",
+      "PISTA O PAVIMENTO DE CONCRETO", "TRAMPA DE CONCRETO PARA GRASA"],
+    "unidad_medida": ["M2", "M3", "ML", "UND", "PZA"],
     "lado": ["PAR", "IMPAR"],
     "estado_declaracion": ["VIGENTE", "ANULADA"]
   },
@@ -589,13 +596,15 @@
       "name": "obra_categoria",
       "label": "Categoría de obra complementaria",
       "pluralLabel": "Categorías de obras complementarias",
-      "description": "Partidas del instructivo de obras complementarias e instalaciones fijas y permanentes (model/data/obras_complementarias.csv).",
+      "description": "Partidas de obras complementarias e instalaciones fijas y permanentes del anexo III de la R.M. 277-2025-VIVIENDA (model/data/obras_complementarias.csv).",
       "fields": [
         {"name": "tipo_obra", "label": "Tipo de obra", "type": "ENUM", "enum": "tipo_obra", "required": true},
         {"name": "numero", "label": "Número", "type": "INTEGER", "required": true},
         {"name": "descripcion", "label": "Descripción", "type": "LONG_TEXT", "required": true},
         {"name": "unidad_medida", "label": "Unidad de medida", "type": "ENUM", "enum": "unidad_medida", "required": true},
-        {"name": "material", "label": "Material predominante", "type": "ENUM", "enum": "material"}
+        {"name": "material", "label": "Material predominante", "type": "ENUM", "enum": "material"},
+        {"name": "valor_unitario", "label": "Valor unitario (S/)", "type": "DECIMAL",
+          "description": "V.U. 2026 a costo directo para la selva (anexo III.4 de la R.M. 277-2025-VIVIENDA); se aplica con el factor de oficialización 0.68 y la depreciación."}
       ]
     },
     {

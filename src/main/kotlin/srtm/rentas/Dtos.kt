@@ -389,7 +389,9 @@ data class ObraCategoria(
     val numero: Int? = null,
     val descripcion: String? = null,
     val unidadMedida: String? = null,
-    val material: String? = null
+    val material: String? = null,
+    // the selva's V.U. of annex III.4, at direct cost (before the 0.68 oficialización factor and the depreciation)
+    val valorUnitario: BigDecimal? = null
 )
 
 // one uso of the srtm's catalog, with its clase and sub clase: the declaración stores the three names
