@@ -12,15 +12,18 @@ class CatalogoService(
     private val registros: Registros,
     private val metadata: MetadataService
 ) {
-    // enum options by object and field
-    suspend fun opciones(): Map<String, Map<String, List<String>>> =
-        OBJETOS.associateWith { name ->
+    // enum options by object and field, for the objects the caller may read: one their role cannot see is left
+    // out, not a 403 for the whole answer (the portal keeps this answer for good)
+    suspend fun opciones(): Map<String, Map<String, List<String>>> {
+        val legibles = metadata.listObjects().mapTo(HashSet()) { it.name }
+        return OBJETOS.filter { it in legibles }.associateWith { name ->
             metadata
                 .definitionOf(name)
                 .fields
                 .filter { it.enumOptions != null }
                 .associate { it.name to it.enumOptions!! }
         }
+    }
 
     // the whole INEI list (under 1 900 rows): the form cascades departamento -> provincia -> distrito on its side
     suspend fun ubigeos(): List<Ubigeo> =

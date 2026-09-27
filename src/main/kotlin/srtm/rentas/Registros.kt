@@ -8,13 +8,17 @@ import wasichai.core.data.RecordQuery
 import wasichai.core.data.RecordRequest
 import wasichai.core.data.RecordResponse
 import wasichai.core.data.RecordService
+import wasichai.core.metadata.MetadataService
+import wasichai.core.metadata.ObjectDefinition
 import java.util.UUID
 
 // wasichai's RecordService with the portal's dtos on it. RecordService checks the caller's object and field
-// permissions and validates every write, so nothing here repeats that
+// permissions and validates every write, so nothing here repeats that. a dto carries every field, though, and
+// core refuses a whole write that names a field the caller may not write: writes send only the writable ones
 @Component
 class Registros(
-    private val records: RecordService
+    private val records: RecordService,
+    private val metadata: MetadataService
 ) {
     suspend fun <T : Any> page(
         objectName: String,
@@ -80,10 +84,12 @@ class Registros(
         objectName: String,
         type: Class<T>,
         attributes: Map<String, Any?>
-    ): T = read(type, records.create(objectName, request(attributes)))
+    ): T = read(type, records.create(objectName, request(escribibles(objectName, attributes))))
 
-    // core's update replaces every editable field. the portal sends what its dto knows, merged over what is
-    // stored, so a field added in the admin (and absent from the dto) is not blanked by a portal save
+    // core's update replaces every field the caller may write: one left out of the request is cleared. the
+    // portal sends what its dto knows, merged over what is stored, so a field added in the admin (and absent
+    // from the dto) is not blanked by a portal save. a field the caller's roles lock is left out of the request
+    // (core would refuse the whole save) and core leaves it out of its update, so it keeps its stored value
     suspend fun <T : Any> replace(
         objectName: String,
         type: Class<T>,
@@ -91,7 +97,7 @@ class Registros(
         attributes: Map<String, Any?>
     ): T {
         val stored = records.get(objectName, id).attributes
-        return read(type, records.update(objectName, id, request(stored + attributes)))
+        return read(type, records.update(objectName, id, request(escribibles(objectName, stored + attributes))))
     }
 
     suspend fun delete(
@@ -128,6 +134,11 @@ class Registros(
         response: RecordResponse
     ): T = Records.read(type, response.id, response.attributes + response.sections[GEOMETRIES].orEmpty())
 
+    private suspend fun escribibles(
+        objectName: String,
+        attributes: Map<String, Any?>
+    ) = soloEscribibles(metadata.definitionOf(objectName), attributes)
+
     private fun request(attributes: Map<String, Any?>): RecordRequest {
         val (plain, geometries) = separarGeometrias(attributes)
         val request = RecordRequest(plain)
@@ -138,6 +149,18 @@ class Registros(
     }
 
     companion object {
+        // the attributes the caller may write, by the object as they see it (MetadataService.definitionOf): a
+        // field their roles lock comes locked (editable = false, as does one the admin made read-only), one they
+        // cannot read does not come at all (core never lets a role write what it cannot read). a key that is no
+        // field goes too: core ignores it
+        fun soloEscribibles(
+            definition: ObjectDefinition,
+            attributes: Map<String, Any?>
+        ): Map<String, Any?> {
+            val escribibles = definition.fields.filter { it.editable }.mapTo(HashSet()) { it.name }
+            return attributes.filterKeys { it in escribibles }
+        }
+
         // attributes -> (the plain ones, the geometries that carry a value)
         fun separarGeometrias(attributes: Map<String, Any?>): Pair<Map<String, Any?>, Map<String, Any?>> =
             (attributes - GEOMETRIAS) to attributes.filter { (key, value) -> key in GEOMETRIAS && value != null }
