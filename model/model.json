@@ -227,6 +227,8 @@
       "pluralLabel": "Domicilios",
       "description": "Domicilio de un contribuyente: fiscal, real o procesal. El fiscal activo se copia a contribuyente.domicilio_fiscal.",
       "fields": [
+        {"name": "codigo", "label": "Código", "type": "TEXT",
+          "description": "Autogenerado por el backend: correlativo del contribuyente (001, 002...)."},
         {"name": "tipo_domicilio", "label": "Tipo de domicilio", "type": "ENUM", "enum": "tipo_domicilio", "required": true},
         {"name": "tipo_predio", "label": "Tipo de predio", "type": "ENUM", "enum": "tipo_predio", "required": true},
         {"name": "ubigeo", "label": "Ubigeo", "type": "TEXT", "description": "Código INEI del distrito."},
@@ -292,6 +294,8 @@
       "pluralLabel": "Medios de contacto",
       "description": "Teléfono o correo de un contribuyente.",
       "fields": [
+        {"name": "codigo", "label": "Código", "type": "TEXT",
+          "description": "Autogenerado por el backend: correlativo del contribuyente (001, 002...)."},
         {"name": "tipo", "label": "Tipo", "type": "ENUM", "enum": "tipo_medio_contacto", "required": true},
         {"name": "valor", "label": "Número o dirección", "type": "TEXT", "required": true},
         {"name": "anexo", "label": "Anexo", "type": "TEXT"},
@@ -306,6 +310,8 @@
       "pluralLabel": "Documentos sustento",
       "description": "Documento que respalda la inscripción o un cambio del contribuyente.",
       "fields": [
+        {"name": "codigo", "label": "Número", "type": "TEXT",
+          "description": "Autogenerado por el backend: correlativo del contribuyente (001, 002...)."},
         {"name": "documento", "label": "Documento", "type": "ENUM", "enum": "documento_sustento", "required": true},
         {"name": "numero_documento", "label": "Número de documento", "type": "TEXT", "required": true},
         {"name": "tipo_presentacion", "label": "Tipo de presentación", "type": "ENUM", "enum": "tipo_presentacion", "required": true},
