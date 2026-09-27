@@ -301,16 +301,17 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET | `/api/srtm/ubigeos` | la lista INEI completa; la cascada departamento → provincia → distrito se hace en el portal |
 | GET | `/api/srtm/vias?q&tipo&ubigeo`, `/api/srtm/unidades-urbanas?q&tipo&ubigeo` | sugerencias del catálogo |
 | GET, POST | `/api/srtm/contribuyentes?q&page&size` | búsqueda (texto en todos los campos) e inscripción |
-| GET, PUT | `/api/srtm/contribuyentes/{id}?anio` | la ficha: datos, nº de predios y totales del año; y la edición |
+| GET, PUT, DELETE | `/api/srtm/contribuyentes/{id}?anio` | la ficha: datos, nº de predios y totales del año; la edición; y la baja (409 si tiene declaraciones) |
 | GET | `/api/srtm/contribuyentes/{id}/declaraciones?anio` | sus declaraciones, cada una con su predio |
 | GET, POST | `/api/srtm/contribuyentes/{id}/{lista}` | las listas del contribuyente: `domicilios`, `relacionados`, `medios-contacto`, `sustentos` |
 | PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
 | GET, POST | `/api/srtm/predios?q&page&size` | búsqueda y alta |
-| GET, PUT | `/api/srtm/predios/{id}?anio` | la ficha: datos, nº de titulares y totales del año; y la edición |
+| GET, PUT, DELETE | `/api/srtm/predios/{id}?anio` | la ficha: datos, nº de titulares y totales del año; la edición; y la baja (409 si tiene declaraciones) |
 | GET | `/api/srtm/predios/{id}/declaraciones?anio` | sus declaraciones, cada una con su contribuyente |
 | POST | `/api/srtm/declaraciones` | alta corta, desde la ficha del predio (`contribuyente` y `predio` son ids) |
 | POST | `/api/srtm/contribuyentes/{id}/declaraciones-juradas` | presenta una DJ: `{declaracion, predio_id}` sobre un predio del padrón, o `{declaracion, predio}` registrando uno |
-| GET, PUT, DELETE | `/api/srtm/declaraciones/{id}` | la DJ con su predio y su contribuyente; la edición; y la baja, con sus listas |
+| GET, PUT, DELETE | `/api/srtm/declaraciones/{id}` | la DJ con su predio y su contribuyente; la edición; y la baja (409 si alguna de sus listas tiene filas) |
+| POST | `/api/srtm/declaraciones/{id}/anular` | el descargo: `{motivo_anulacion}` la deja ANULADA |
 | POST | `/api/srtm/declaraciones/{id}/condominos` | "Datos de los condóminos": `{contribuyente, porcentaje_condominio}` agrega otro titular del mismo predio, año y secuencia |
 | GET, POST | `/api/srtm/declaraciones/{id}/{lista}` | las listas de la DJ: `transferentes`, `niveles`, `obras`, `frentes` |
 | PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
@@ -360,6 +361,17 @@ Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
     autoavalúo, inhabitabilidad, niveles, obras y otros frentes), no lo del titular (adquisición, documentos, condición
     especial, deducción, transferentes).
   - Los transferentes son dueños anteriores: no cambian ningún %.
+- **Anulación y baja** (`Anulacion.kt`, con sus tests):
+  - Anular una DJ es su descargo: `estado` ANULADA, `motivo` DESCARGO, `motivo_anulacion` (obligatorio, si no 400) y
+    `fecha_anulacion` de hoy. Sin `estado` (las importadas) una DJ es VIGENTE; la nueva nace VIGENTE y la edición no
+    cambia su estado.
+  - Una anulada sale de su condominio (el resto se recalcula: el titular que queda solo vuelve a PROPIETARIO ÚNICO al
+    100 %) y de los totales y conteos de las fichas, pero sigue en las listas de declaraciones. Es de solo lectura: su
+    edición, la de sus listas, agregar un condómino desde ella o anularla otra vez son un 400 sobre `estado`.
+  - Baja protegida: un predio o un contribuyente con declaraciones (vigentes o anuladas) no se borra (409 con el
+    motivo). Sin ellas, el contribuyente se borra con sus domicilios, relacionados, medios de contacto y sustentos. Una
+    DJ con transferentes, niveles, obras u otros frentes tampoco (409: se anula). Core respondería un 500 por la clave
+    foránea: la comprobación va antes.
 - **Búsqueda de predios** (`BusquedaPredios.kt`): los filtros de la pág. 13 son tipo de predio, código, código CPU,
   partida registral, tipo de vía, vía, tipo de zona, zona, número, manzana, lote y kilómetro.
   - Un texto se busca contenido, sin distinguir mayúsculas; un ENUM, exacto. Los valores van ligados, nunca en el SQL.

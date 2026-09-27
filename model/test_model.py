@@ -38,6 +38,16 @@ class ShippedModelTests(unittest.TestCase):
         required = {f["name"] for f in contribuyente["fields"] if f.get("required")}
         self.assertEqual(required, first)
 
+    def test_declaracion_estado_is_optional(self):
+        # the imported declarations have none: they count as VIGENTE. anular sets the three
+        declaracion = next(o for o in self.model["objects"] if o["name"] == "declaracion_predial")
+        fields = {f["name"]: f for f in declaracion["fields"]}
+        self.assertEqual(fields["estado"]["enum"], "estado_declaracion")
+        self.assertEqual(self.model["enums"]["estado_declaracion"], ["VIGENTE", "ANULADA"])
+        self.assertEqual(fields["fecha_anulacion"]["type"], "DATE")
+        self.assertIn("DESCARGO", self.model["enums"]["motivo_declaracion"])
+        self.assertFalse(any(fields[f].get("required") for f in ("estado", "motivo_anulacion", "fecha_anulacion")))
+
     def test_every_enum_option_passes_core_regex(self):
         for name, options in self.model["enums"].items():
             for opt in options:

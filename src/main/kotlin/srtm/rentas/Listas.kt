@@ -2,6 +2,8 @@ package srtm.rentas
 
 import org.springframework.stereotype.Component
 import wasichai.core.common.NotFoundException
+import wasichai.core.common.PageRequest
+import wasichai.core.data.RecordQuery
 import java.util.UUID
 
 // the lists that hang from a record (a contribuyente's domicilios, a declaración's niveles...): listed under the
@@ -42,6 +44,16 @@ class Listas(
         objectName: String,
         id: UUID
     ) = registros.delete(objectName, id)
+
+    // how many rows name the parent: one query, however many there are
+    suspend fun contar(
+        objectName: String,
+        parentField: String,
+        parent: UUID
+    ): Long =
+        registros
+            .page(objectName, Map::class.java, RecordQuery(page = PageRequest.of(0, 1), filters = mapOf(parentField to parent.toString())))
+            .totalElements
 
     companion object {
         const val ACTIVO = "ACTIVO"

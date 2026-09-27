@@ -2,6 +2,7 @@ package srtm.rentas
 
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
+import wasichai.core.common.ConflictException
 import wasichai.core.common.ValidationException
 import java.time.LocalDate
 import java.util.UUID
@@ -51,13 +52,22 @@ class DeclaracionService(
         return registrar(nueva(body, UUID.fromString(contribuyente), UUID.fromString(predio)))
     }
 
-    // a declaración that moves to another predio, year or secuencia joins that condominio and leaves its own
+    // a declaración that moves to another predio, year or secuencia joins that condominio and leaves its own. only a
+    // vigente one changes, and its estado is anular's
     suspend fun actualizar(
         id: UUID,
         body: Declaracion
     ): Declaracion {
         val stored = registros.get(DECLARACION, Declaracion::class.java, id)
-        val next = body.copy(numeroDeclaracion = stored.numeroDeclaracion, secuenciaUso = secuenciaUso(body.secuenciaUso))
+        modificable(stored)
+        val next =
+            body.copy(
+                numeroDeclaracion = stored.numeroDeclaracion,
+                secuenciaUso = secuenciaUso(body.secuenciaUso),
+                estado = stored.estado,
+                motivoAnulacion = stored.motivoAnulacion,
+                fechaAnulacion = stored.fechaAnulacion
+            )
         val seUne = grupoDe(next) != grupoDe(stored)
         val otros = titulares(next).filter { it.id != id.toString() }
         val grupo = condominioCon(next, otros, seUne)
@@ -67,12 +77,22 @@ class DeclaracionService(
         return saved
     }
 
-    // with its own lists; the condóminos left are recomputed
+    // the srtm's descargo: the declaración stays, read-only, out of its condominio (the rest is recomputed) and out of
+    // the fichas' totales
+    suspend fun anular(
+        id: UUID,
+        body: Anulacion
+    ): Declaracion {
+        val stored = registros.get(DECLARACION, Declaracion::class.java, id)
+        val saved = registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(anulada(stored, body.motivoAnulacion, LocalDate.now())))
+        recalcular(stored)
+        return saved
+    }
+
+    // only while none of its lists has a row: one with content is annulled instead. the condóminos left are recomputed
     suspend fun borrarDeclaracion(id: UUID) {
         val stored = registros.get(DECLARACION, Declaracion::class.java, id)
-        for (lista in listOf(TRANSFERENTE, NIVEL_CONSTRUCCION, OBRA_COMPLEMENTARIA, OTRO_FRENTE)) {
-            listas.listar(lista, Map::class.java, PARENT, id).forEach { registros.delete(lista, UUID.fromString(it["id"].toString())) }
-        }
+        bajaDeDeclaracion(LISTAS.filter { listas.contar(it, PARENT, id) > 0 })?.let { throw ConflictException(it) }
         registros.delete(DECLARACION, id)
         recalcular(stored)
     }
@@ -84,6 +104,7 @@ class DeclaracionService(
         body: NuevoCondomino
     ): Declaracion {
         val origen = registros.get(DECLARACION, Declaracion::class.java, id)
+        modificable(origen)
         val contribuyente =
             body.contribuyente?.let { runCatching { UUID.fromString(it) }.getOrNull() }
                 ?: throw ValidationException("Falta el contribuyente", "contribuyente", "elige un contribuyente")
@@ -120,6 +141,13 @@ class DeclaracionService(
         return registros.replace(PREDIO, Predio::class.java, id, Records.attributes(next))
     }
 
+    // only while no declaración, vigente or annulled, names it
+    suspend fun borrarPredio(id: UUID) {
+        registros.get(PREDIO, Map::class.java, id)
+        bajaConDeclaraciones("El predio", listas.contar(DECLARACION, "predio", id))?.let { throw ConflictException(it) }
+        registros.delete(PREDIO, id)
+    }
+
     // the lists of the declaration
 
     suspend fun transferentes(id: UUID) = listas.listar(TRANSFERENTE, Transferente::class.java, PARENT, id)
@@ -143,6 +171,7 @@ class DeclaracionService(
         id: UUID,
         body: Transferente
     ): Transferente {
+        deVigente(TRANSFERENTE, id)
         val stored = registros.get(TRANSFERENTE, Transferente::class.java, id)
         return listas.cambiar(TRANSFERENTE, Transferente::class.java, PARENT, id, transferente(body).copy(codigo = stored.codigo))
     }
@@ -162,7 +191,10 @@ class DeclaracionService(
     suspend fun actualizarNivel(
         id: UUID,
         body: NivelConstruccion
-    ) = listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id, body)
+    ): NivelConstruccion {
+        deVigente(NIVEL_CONSTRUCCION, id)
+        return listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id, body)
+    }
 
     suspend fun obras(id: UUID) = listas.listar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, id)
 
@@ -174,7 +206,10 @@ class DeclaracionService(
     suspend fun actualizarObra(
         id: UUID,
         body: ObraComplementaria
-    ) = listas.cambiar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, id, obra(body))
+    ): ObraComplementaria {
+        deVigente(OBRA_COMPLEMENTARIA, id)
+        return listas.cambiar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, id, obra(body))
+    }
 
     suspend fun frentes(id: UUID) = listas.listar(OTRO_FRENTE, OtroFrente::class.java, PARENT, id)
 
@@ -186,12 +221,18 @@ class DeclaracionService(
     suspend fun actualizarFrente(
         id: UUID,
         body: OtroFrente
-    ) = listas.cambiar(OTRO_FRENTE, OtroFrente::class.java, PARENT, id, body)
+    ): OtroFrente {
+        deVigente(OTRO_FRENTE, id)
+        return listas.cambiar(OTRO_FRENTE, OtroFrente::class.java, PARENT, id, body)
+    }
 
     suspend fun borrar(
         objectName: String,
         id: UUID
-    ) = listas.borrar(objectName, id)
+    ) {
+        deVigente(objectName, id)
+        listas.borrar(objectName, id)
+    }
 
     // the srtm's defaults. condición and % are the condominio's (registrar)
     private fun nueva(
@@ -208,7 +249,10 @@ class DeclaracionService(
             motivo = body.motivo ?: "INSCRIPCION",
             medioDeterminacion = body.medioDeterminacion ?: "DECLARACION JURADA",
             medioPresentacion = body.medioPresentacion ?: "FISICO",
-            fechaPresentacion = presentacion
+            fechaPresentacion = presentacion,
+            estado = VIGENTE,
+            motivoAnulacion = null,
+            fechaAnulacion = null
         )
     }
 
@@ -222,13 +266,13 @@ class DeclaracionService(
     }
 
     // the declaraciones of a condominio: same predio, year and secuencia de uso. the secuencia is compared here, not in
-    // the query: one stored as "1" before model/normalizar_padron.py ran is the same as "001"
+    // the query: one stored as "1" before model/normalizar_padron.py ran is the same as "001". an annulled one is out
     private suspend fun titulares(d: Declaracion): List<Declaracion> {
         val (predio, anio, secuencia) = grupoDe(d)
         if (predio == null || anio == null || secuencia == null) return emptyList()
         return registros
             .all(DECLARACION, Declaracion::class.java, filters = mapOf("predio" to predio, "anio" to anio.toString()))
-            .filter { grupoDe(it) == grupoDe(d) }
+            .filter { grupoDe(it) == grupoDe(d) && vigente(it) }
     }
 
     // what is left of a condominio a declaración went away from
@@ -312,9 +356,19 @@ class DeclaracionService(
         throw ValidationException("Código repetido", "codigo", listOfNotNull("ya es de otro predio", otro.direccion?.ifBlank { null }).joinToString(": "))
     }
 
+    // a list is added to only while its declaración is vigente
     private suspend fun existe(id: UUID): UUID {
-        registros.get(DECLARACION, Map::class.java, id)
+        modificable(registros.get(DECLARACION, Declaracion::class.java, id))
         return id
+    }
+
+    // and a row of it changed or removed
+    private suspend fun deVigente(
+        objectName: String,
+        id: UUID
+    ) {
+        val declaracion = registros.get(objectName, Map::class.java, id)[PARENT]?.toString() ?: return
+        modificable(registros.get(DECLARACION, Declaracion::class.java, UUID.fromString(declaracion)))
     }
 
     private fun obra(body: ObraComplementaria) = body.copy(estado = body.estado ?: Listas.ACTIVO, totalMetrado = totalMetrado(body))
@@ -322,5 +376,6 @@ class DeclaracionService(
     private companion object {
         const val PARENT = "declaracion"
         const val ATTEMPTS = 3
+        val LISTAS = listOf(TRANSFERENTE, NIVEL_CONSTRUCCION, OBRA_COMPLEMENTARIA, OTRO_FRENTE)
     }
 }

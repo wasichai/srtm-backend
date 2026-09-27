@@ -136,7 +136,11 @@ data class Declaracion(
     val claseUso: String? = null,
     val subClaseUso: String? = null,
     val areaComunTerreno: BigDecimal? = null,
-    val otrosDatos: String? = null
+    val otrosDatos: String? = null,
+    // VIGENTE or ANULADA (none, in the imported ones, is VIGENTE): the backend's, set by anular
+    val estado: String? = null,
+    val motivoAnulacion: String? = null,
+    val fechaAnulacion: LocalDate? = null
 )
 
 // the contribuyente's children. contribuyente is the parent's id: the path sets it, a body never moves one
@@ -334,6 +338,12 @@ data class NuevaDeclaracion(
     val declaracion: Declaracion = Declaracion(),
     val predio: Predio? = null,
     val predioId: String? = null
+)
+
+// annulling a declaración (a descargo): why
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class Anulacion(
+    val motivoAnulacion: String? = null
 )
 
 // a condómino added from a declaración ("datos de los condóminos"): who, and its % of the predio

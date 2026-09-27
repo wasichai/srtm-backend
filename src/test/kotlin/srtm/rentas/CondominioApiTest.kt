@@ -108,9 +108,8 @@ class CondominioApiTest : WasichaiIntegrationTest() {
     fun `when a condomino's declaration goes, the other is propietario unico at 100 percent again`() {
         val predio = predio()
         val a = declarar(inscribir(), predio)["id"].asString()
+        // one without lists: one with them is annulled instead (AnulacionApiTest)
         val b = declarar(inscribir(), predio, "porcentaje_condominio" to 40)["id"].asString()
-        // its lists go with it
-        post("/api/srtm/declaraciones/$b/frentes", mapOf("tipo_via" to "AVENIDA", "via" to "MARGINAL", "frontis" to 7))
 
         delete("/api/srtm/declaraciones/$b")
 
