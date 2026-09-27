@@ -280,7 +280,8 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET | `/api/srtm/predios/{id}/declaraciones?anio` | sus declaraciones, cada una con su contribuyente |
 | POST | `/api/srtm/declaraciones` | alta corta, desde la ficha del predio (`contribuyente` y `predio` son ids) |
 | POST | `/api/srtm/contribuyentes/{id}/declaraciones-juradas` | presenta una DJ: `{declaracion, predio_id}` sobre un predio del padrón, o `{declaracion, predio}` registrando uno |
-| GET, PUT | `/api/srtm/declaraciones/{id}` | la DJ con su predio y su contribuyente; y la edición |
+| GET, PUT, DELETE | `/api/srtm/declaraciones/{id}` | la DJ con su predio y su contribuyente; la edición; y la baja, con sus listas |
+| POST | `/api/srtm/declaraciones/{id}/condominos` | "Datos de los condóminos": `{contribuyente, porcentaje_condominio}` agrega otro titular del mismo predio, año y secuencia |
 | GET, POST | `/api/srtm/declaraciones/{id}/{lista}` | las listas de la DJ: `transferentes`, `niveles`, `obras`, `frentes` |
 | PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
 | GET | `/api/srtm/categorias-valor` | las letras de las siete columnas del cuadro de valores, con su descripción |
@@ -302,13 +303,25 @@ Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
     contribuyente, que es lo que usan las listas.
 - **Declaración jurada** (en `DeclaracionService`):
   - Al presentarla, el backend le asigna `numero_declaracion` (correlativo, único).
-  - Por defecto: año de la fecha de presentación, secuencia 1, INSCRIPCIÓN, DECLARACIÓN JURADA, FÍSICO, PROPIETARIO
-    ÚNICO al 100 %.
+  - Por defecto: año de la fecha de presentación, secuencia 1, INSCRIPCIÓN, DECLARACIÓN JURADA, FÍSICO.
   - Un predio nuevo sin código lo recibe de su sector y manzana (`SS-MM-NNNN`, el siguiente de esa manzana, como el
     padrón). Si la declaración se rechaza, ese predio se borra.
   - Con `tipo_via`, la dirección del predio se arma de su ubicación. Los importados conservan el texto del padrón hasta
     que alguien completa su ubicación.
   - El total metrado de una obra complementaria es cantidad × metrado.
+- **Condominio** (`Condominio.kt`, con sus tests): las declaraciones de un mismo predio, año y secuencia de uso. Tras
+  cada alta, edición o baja de una de ellas el backend recalcula todo el grupo:
+  - Un solo titular: PROPIETARIO ÚNICO (o la SOCIEDAD CONYUGAL / POSEEDOR que haya declarado) al 100 %. Dos o más:
+    CONDÓMINO, cada uno con el % que declara.
+  - `valor_condominio` = `valor_autoavaluo` × % / 100 (al céntimo, redondeo hacia arriba desde 0,5) y `valor_afecto` =
+    `valor_condominio` − `deduccion`, nunca menos de 0.
+  - Quien se suma a un predio de un titular único toma su % del 100 % de ese titular (0 < % < 100). Con dos o más, los %
+    no pueden sumar más de 100: si no, 400 sobre `porcentaje_condominio`. Un contribuyente declara un predio, año y
+    secuencia una sola vez (400 sobre `contribuyente`).
+  - Un condómino agregado desde una DJ copia lo que esta declara del predio (año, secuencia, características,
+    autoavalúo, inhabitabilidad, niveles, obras y otros frentes), no lo del titular (adquisición, documentos, condición
+    especial, deducción, transferentes).
+  - Los transferentes son dueños anteriores: no cambian ningún %.
 - **Búsqueda de predios** (`BusquedaPredios.kt`): los filtros de la pág. 13 son tipo de predio, código, código CPU,
   partida registral, tipo de vía, vía, tipo de zona, zona, número, manzana, lote y kilómetro.
   - Un texto se busca contenido, sin distinguir mayúsculas; un ENUM, exacto. Los valores van ligados, nunca en el SQL.

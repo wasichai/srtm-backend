@@ -28,11 +28,11 @@ class TotalesApiTest : WasichaiIntegrationTest() {
         val b = inscribir()
         val compartido = predio()
         val propio = predio()
-        // a predio of 10000.50: 6000.25 is a's, 4000.25 b's
-        declarar(a, compartido, "CONDOMINO", autoavaluo = 10000.50, condominio = 6000.25, afecto = 6000.25)
-        declarar(b, compartido, "CONDOMINO", autoavaluo = 10000.50, condominio = 4000.25, afecto = 4000.25)
+        // a predio of 10000.50, 40 % b's: the backend derives the parts, 6000.30 a's and 4000.20 b's
+        declarar(a, compartido, autoavaluo = 10000.50, porcentaje = null)
+        declarar(b, compartido, autoavaluo = 10000.50, porcentaje = 40)
         // a's own predio: no condominio, the whole autoavalúo is a's
-        declarar(a, propio, "PROPIETARIO UNICO", autoavaluo = 5000.50, condominio = null, afecto = 5000.50)
+        declarar(a, propio, autoavaluo = 5000.50, porcentaje = null)
 
         get("/api/srtm/contribuyentes/$a?anio=2026")
             .expectBody()
@@ -41,15 +41,15 @@ class TotalesApiTest : WasichaiIntegrationTest() {
             .jsonPath("$.totales.declaraciones")
             .isEqualTo(2)
             .jsonPath("$.totales.autoavaluo")
-            .isEqualTo(11000.75)
+            .isEqualTo(11000.80)
             .jsonPath("$.totales.valor_afecto")
-            .isEqualTo(11000.75)
+            .isEqualTo(11000.80)
         get("/api/srtm/contribuyentes/$b?anio=2026")
             .expectBody()
             .jsonPath("$.totales.autoavaluo")
-            .isEqualTo(4000.25)
+            .isEqualTo(4000.20)
             .jsonPath("$.totales.valor_afecto")
-            .isEqualTo(4000.25)
+            .isEqualTo(4000.20)
         get("/api/srtm/predios/$compartido?anio=2026")
             .expectBody()
             .jsonPath("$.titulares")
@@ -83,10 +83,8 @@ class TotalesApiTest : WasichaiIntegrationTest() {
     private fun declarar(
         contribuyente: String,
         predio: String,
-        condicion: String,
         autoavaluo: Double,
-        condominio: Double?,
-        afecto: Double
+        porcentaje: Int?
     ) {
         post(
             "/api/srtm/declaraciones",
@@ -95,10 +93,8 @@ class TotalesApiTest : WasichaiIntegrationTest() {
                 "predio" to predio,
                 "anio" to 2026,
                 "secuencia_uso" to "1",
-                "condicion_propiedad" to condicion,
-                "valor_autoavaluo" to autoavaluo,
-                "valor_condominio" to condominio,
-                "valor_afecto" to afecto
+                "porcentaje_condominio" to porcentaje,
+                "valor_autoavaluo" to autoavaluo
             )
         )
     }

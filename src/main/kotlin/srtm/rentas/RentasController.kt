@@ -265,6 +265,20 @@ class RentasController(
         @RequestBody body: Declaracion
     ) = declaraciones.actualizar(id, body)
 
+    @DeleteMapping("/declaraciones/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    suspend fun borrarDeclaracion(
+        @PathVariable id: UUID
+    ) = declaraciones.borrarDeclaracion(id)
+
+    // "datos de los condóminos": another titular of the declaración's predio, year and secuencia
+    @PostMapping("/declaraciones/{id}/condominos")
+    @ResponseStatus(HttpStatus.CREATED)
+    suspend fun agregarCondomino(
+        @PathVariable id: UUID,
+        @RequestBody body: NuevoCondomino
+    ) = declaraciones.agregarCondomino(id, body)
+
     // the declaración jurada predial: presented from its contribuyente, then its ficha and its lists
 
     @PostMapping("/contribuyentes/{id}/declaraciones-juradas")
