@@ -247,7 +247,7 @@ class RelabelTests(ApplyCliTestCase):
         puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "label" in (r[3] or {})]
         self.assertEqual(puts, [("/api/metadata/objects/predio/fields/condicion", {"label": "Tipo de predio"})])
         self.assertIn("update field predio.condicion (label)", out)
-        self.assertIn("done: 0 created, 1 updated, 26 skipped", out)
+        self.assertIn("done: 0 created, 1 updated, 27 skipped", out)
 
 
 class FailureStopsTests(ApplyCliTestCase):
