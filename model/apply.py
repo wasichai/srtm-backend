@@ -302,8 +302,8 @@ def _fields_by_name(data):
 
 def sync_object(client, model, obj):
     """An object that already exists: add the fields model.json has and Core lacks, and the ENUM options
-    it lacks, and make optional what model.json no longer requires. Nothing is renamed, retyped, removed or made
-    required, so imported records stay valid.
+    it lacks, make optional what model.json no longer requires, and relabel what it labels differently. Nothing is
+    renamed, retyped, removed or made required, so imported records stay valid.
     Returns (added, updated), or None when Core refused (already reported)."""
     name = obj["name"]
     path = f"/api/metadata/objects/{name}/fields"
@@ -344,6 +344,16 @@ def sync_object(client, model, obj):
                 _fatal("PUT", field_path, e)
                 return None
             print(f"update field {name}.{field['name']} (optional)")
+            updated += 1
+        # a label is only what the admin shows: model.json's wins
+        if current.get("label") != field["label"]:
+            field_path = f"{path}/{field['name']}"
+            try:
+                client.put(field_path, {"label": field["label"]})
+            except CoreError as e:
+                _fatal("PUT", field_path, e)
+                return None
+            print(f"update field {name}.{field['name']} (label)")
             updated += 1
     return added, updated
 

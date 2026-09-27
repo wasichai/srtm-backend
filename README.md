@@ -82,8 +82,10 @@ Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
 - **Opciones ENUM:** añade las opciones que falten.
 - **Obligatoriedad:** deja opcional el campo que `model.json` ya no exige (`contribuyente.numero_documento`, vacío con
   SIN DOCUMENTO); nunca vuelve obligatorio uno existente.
+- **Etiquetas:** pone la etiqueta de `model.json` al campo que Core etiqueta distinto (`predio.condicion`: "Tipo de
+  predio"). Es solo lo que muestra el admin.
 
-Solo añade o relaja: no renombra, no cambia tipos y no borra, así los registros importados siguen siendo válidos. Por ejemplo,
+Solo añade, relaja o reetiqueta: no renombra, no cambia tipos y no borra, así los registros importados siguen siendo válidos. Por ejemplo,
 sobre la base del padrón:
 - añade los campos nuevos de `contribuyente`, `predio` y `declaracion_predial`;
 - amplía `tipo_documento` (`PASAPORTE`) y `condicion_propiedad` (`SOCIEDAD CONYUGAL`, `POSEEDOR`);
@@ -388,6 +390,22 @@ Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
   portal. Un campo enviado como `null`, en cambio, sí se borra.
 - **Sin anio:** la ficha usa el año en curso y las declaraciones traen todos los años.
 - **Declaraciones embebidas:** se leen en una sola consulta por ids, sin N+1.
+
+Guardado fuera del portal (el admin, la API de registros de Core; `ReglasFueraDelPortal.kt`): Core no tiene un gancho
+antes de escribir, sus `RecordChangeListener` corren justo después, dentro de la misma petición. El listener completa el
+registro con una segunda escritura, como el mismo usuario y solo en los campos que puede escribir:
+- **Derivados de un solo registro:** `tipo_persona` y `nombre_completo` del contribuyente, `descripcion` del domicilio y
+  `total_metrado` de la obra complementaria, con las mismas funciones de `Reglas.kt` que usan los servicios.
+- **Cuándo:** un registro nuevo recibe solo los derivados que dejó vacíos (el importador conserva el texto del padrón).
+  Uno editado recibe los que cambian porque cambió aquello de lo que salen, salvo que esa misma escritura los fije a
+  mano. Lo que el portal ya guardó derivado no se vuelve a escribir.
+- **Solo por el portal:** las reglas que leen otros registros: numeración y códigos (`codigo`, `numero_declaracion`,
+  `fecha_registro` del contribuyente; `numero_declaracion` de la DJ; `codigo` y `numero_registro` del predio; `codigo`
+  de un relacionado o un transferente), el domicilio fiscal copiado al contribuyente, el condominio (condición, % y
+  valores de todo el grupo), las validaciones (documento, nombre o razón social de un relacionado o un transferente) y
+  los valores por defecto de una inscripción, una DJ o una fila nueva. También la `direccion`
+  del predio: `normalizar_padron.py` separa por esta API el tipo de vía del padrón y conserva su texto, y el portal la
+  rearma al guardar la ubicación. Desde el admin no se aplican.
 
 ## Tests
 

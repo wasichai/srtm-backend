@@ -121,7 +121,7 @@
         {"name": "codigo", "label": "Código de predio", "type": "TEXT", "required": true, "unique": true, "source": "codigo_predio"},
         {"name": "sector_catastral", "label": "Sector catastral", "type": "TEXT", "source": "sector_manzana"},
         {"name": "manzana_catastral", "label": "Manzana catastral", "type": "TEXT", "source": "sector_manzana"},
-        {"name": "condicion", "label": "Condición del predio", "type": "ENUM", "enum": "condicion_predio", "source": "tipo_pupr_desc"},
+        {"name": "condicion", "label": "Tipo de predio", "type": "ENUM", "enum": "condicion_predio", "source": "tipo_pupr_desc"},
         {"name": "direccion", "label": "Dirección", "type": "TEXT", "required": true, "source": "direccion_predio"},
         {"name": "via", "label": "Vía", "type": "TEXT", "source": "direccion_predio"},
         {"name": "numero", "label": "Número", "type": "TEXT", "source": "direccion_predio"},
