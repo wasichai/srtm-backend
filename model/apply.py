@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
 """Apply model/model.json to a wasichai Core (srtm-backend).
 
-Reads a JSON metadata model (objects, fields, relationships, enums) and
-creates it in Core via the REST API, in file order (so relationship targets
-already exist), or tears it down with --drop in reverse order.
+Reads a JSON metadata model (objects, fields, relationships, enums), checks it
+against Core's rules (--validate-only stops there) and creates it in Core via
+the REST API, in file order (so relationship targets already exist), marking
+each required relationship's field required. Today that is 18 objects and 10
+relationships: "done: 28 created" on an empty Core, "28 skipped" on a second run.
 
-Adapted from wasichai's examples/gis-sample/perene/apply.py, without geometry:
-srtm installs no gis. Stdlib only. See README.md.
+On a Core that already has the model it syncs instead: it adds the fields and
+the ENUM options model.json has and Core lacks, relaxes a field model.json no
+longer requires and relabels one labelled differently. It never renames,
+retypes, removes or makes required, so imported records stay valid. --drop
+tears everything down in reverse order (data included).
+
+GEOMETRY fields (the lotes' polygons, the domicilio's point) are wasichai-gis's:
+srtm installs it, on PostGIS. Adapted from wasichai's
+examples/gis-sample/perene/apply.py. Stdlib only. See README.md.
 """
 import argparse
 import json

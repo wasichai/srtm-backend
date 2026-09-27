@@ -5,8 +5,8 @@ import org.springframework.http.HttpHeaders
 import wasichai.test.WasichaiIntegrationTest
 import java.util.UUID
 
-// the app itself (SrtmApplication) on plain postgres: the modules it installs answer, the ones it leaves out
-// do not, and the shape model/model.json relies on (enum, unique text, required many-to-one) works end to end
+// the app itself (SrtmApplication) on PostGIS: the modules it installs answer, the ones it leaves out do not, and
+// the shape model/model.json relies on (enum, unique text, required many-to-one) works end to end
 class SrtmSmokeTest : WasichaiIntegrationTest() {
     @Test
     fun `health is up`() {

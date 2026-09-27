@@ -92,7 +92,7 @@ Con el servidor corriendo y `develop/.env` cargado:
 
 ```bash
 cd model
-python3 apply.py                                   # 3 objetos + 2 relaciones; idempotente
+python3 apply.py                                   # 18 objetos + 10 relaciones; idempotente
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --limit 200
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"
@@ -107,23 +107,52 @@ python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"
 ## 6. Tests
 
 ```bash
-./gradlew build                  # ktlint + tests unitarios
-./gradlew ktlintFormat           # formatea el Kotlin según .editorconfig
-./gradlew integrationTest        # Testcontainers postgis/postgis:18-3.6: necesita un Docker local
-cd model && python3 -m unittest -v
+./gradlew build --no-daemon                  # ktlint + tests unitarios (excluye los de integración)
+./gradlew ktlintFormat                       # formatea el Kotlin según .editorconfig
+./gradlew compileTestKotlin                  # compila también los tests de integración, sin correrlos
+./gradlew integrationTest                    # tests de integración: Testcontainers, necesita un Docker local
+./gradlew integrationTest --tests 'srtm.rentas.ListasApiTest'   # una sola clase
+cd model && python3 apply.py --validate-only && python3 -m unittest -v
+yarn format:check                            # prettier: yaml y json, model.json incluido (yarn format lo arregla)
 ```
 
-**Tests de integración con Docker remoto.** Testcontainers no llega a los puertos publicados en otro servidor. En ese
-caso se usa una base externa ya levantada y tunelizada. Descomenta `WASICHAI_TEST_DB_*` en `develop/.env`. El nombre
-de la base **debe terminar en `_test`**, porque la suite la limpia entera. Luego:
+**Qué son los tests de integración.** Las clases `*ApiTest` de `src/test/kotlin/srtm/rentas` y `SrtmSmokeTest`, con
+`@Tag("integration")`: `build` las excluye y `integrationTest` las corre. Cada una levanta la app entera
+(`SrtmApplication`, en un puerto aleatorio) contra un PostgreSQL con PostGIS (`postgis/postgis:18-3.6`, la propiedad
+`wasichai.test.db.image` de `build.gradle.kts`) y la llama por HTTP, como el portal.
 
-```bash
-set -a; source develop/.env; set +a
-./gradlew integrationTest --rerun
-```
+- **`SrtmApiTest`** es la base de las de la API. Antes de cada test entra como el admin de desarrollo y aplica
+  `model/model.json` como `apply.py`: crea los objetos, campos (geometrías incluidas) y relaciones que falten, añade las
+  opciones ENUM que falten y relaja lo que el modelo ya no exige. Da además las llamadas (`send`, `get`, `post`, `put`,
+  `delete`, `rejected` para un 400 sobre un campo) y registros de prueba (`inscribir()`, `predio()`,
+  `nuevaDeclaracion()`).
+- **La base se comparte** entre todas las clases de una corrida: cada test crea sus propios registros, con documentos y
+  códigos únicos (`uniqueDocumento()`), y no supone que la base está vacía.
+- **Una clase nueva** hereda de `SrtmApiTest`. Si necesita un doble de un bean (RENIEC, por ejemplo), lo declara en una
+  `@TestConfiguration` anidada, como `ConsultaReniecApiTest`.
 
-`--rerun` evita que la caché de Gradle devuelva un resultado verde viejo. Detalles en
-`wasichai/docs/development/getting-started.md#integration-tests`.
+**En el CI.** El job *Integration tests* de `.github/workflows/ci.yml` los corre en cada PR y en `main`, en un runner
+de GitHub que tiene Docker local. Si fallan, el job sube `build/reports/tests/` (artefacto
+`integration-test-reports`).
+
+**Por qué no corren en local con un Docker remoto.** Testcontainers crea el contenedor en el daemon al que apunta
+`DOCKER_HOST`, pero lo busca en `localhost:<puerto publicado>`. Con un Docker remoto (otro servidor, o su socket
+reenviado por SSH, como `unix:///tmp/docker.sock`), el contenedor y sus puertos quedan en ese servidor: ni Ryuk ni
+PostgreSQL responden en `localhost` y la suite falla al arrancar, aunque `docker info` funcione. Entonces:
+
+1. Lo habitual: compilarlos (`./gradlew compileTestKotlin`) y dejar que los corra el CI del PR.
+2. O usar una base externa ya levantada en ese servidor y tunelizada. Descomenta `WASICHAI_TEST_DB_*` en
+   `develop/.env`. Esa base debe tener PostGIS, y su nombre **debe terminar en `_test`**, porque la suite la limpia
+   entera al empezar. Luego:
+
+   ```bash
+   set -a; source develop/.env; set +a
+   ./gradlew integrationTest --rerun
+   ```
+
+   `--rerun` evita que la caché de Gradle devuelva un resultado verde viejo. Dos suites contra la misma base no se
+   pisan: la segunda espera a que termine la primera. Detalles en
+   `wasichai/docs/development/getting-started.md#integration-tests`.
 
 ## 7. Con el front (`../srtm-ui`)
 
@@ -150,3 +179,4 @@ Entra con `admin@wasichai.local` / `admin`. El front necesita que el modelo est�
 | El servidor no arranca: falta `wasichai.security.jwt.secret` | `WASICHAI_JWT_SECRET` vacío en `develop/.env` |
 | `apply.py`: `connection failed` | el servidor no está en `WASICHAI_CORE` |
 | Puerto 8090 ocupado | otro backend corriendo: `lsof -iTCP:8090 -sTCP:LISTEN` |
+| `integrationTest` no arranca (Ryuk o PostgreSQL no responden) | un Docker remoto: Testcontainers no llega a sus puertos (ver 6) |

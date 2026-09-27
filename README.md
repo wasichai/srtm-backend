@@ -75,8 +75,8 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 25 created, 0 updated, 0 skipped  (15 objetos + 10 relaciones)
-python3 apply.py                   # idempotente: done: 0 created, 0 updated, 25 skipped
+python3 apply.py                   # done: 28 created, 0 updated, 0 skipped  (18 objetos + 10 relaciones)
+python3 apply.py                   # idempotente: done: 0 created, 0 updated, 28 skipped
 python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
 ```
 
@@ -100,11 +100,12 @@ Flags: `--core` (default `http://localhost:8090` o `$WASICHAI_CORE`), `--email`,
 
 ## Cargar los catálogos
 
-Los formularios del portal ofrecen ubigeo, usos del predio, vías y unidades urbanas desde objetos catálogo:
+Los formularios del portal ofrecen ubigeo, usos del predio, vías, unidades urbanas, categorías de valores y partidas de
+obras complementarias desde objetos catálogo:
 
 ```bash
 cd model
-python3 import_catalogos.py                                                           # ubigeo, categorías de valores y usos
+python3 import_catalogos.py                                                           # ubigeo, categorías, partidas de obras y usos
 python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run  # cuenta, no llama a Core
 python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"            # ubigeo + vías + unidades urbanas
 ```
@@ -319,9 +320,18 @@ Se descarta `orden2`, que es solo el número de fila.
 ## API del portal
 
 `srtm.rentas` expone la API que usa el portal de `srtm-ui`. No hay BFF:
-- **Capas:** `RentasController` llama a tres servicios (`ContribuyenteService`, `RentasService`, `CatalogoService`).
-  Estos usan en proceso los servicios de wasichai (`RecordService`, `MetadataService`), a través de `Registros`, y
-  devuelven DTOs tipados.
+- **Capas:** `RentasController` llama a cinco servicios, que usan en proceso los servicios de wasichai
+  (`RecordService`, `MetadataService`) a través de `Registros` (las listas, a través de `Listas`) y devuelven DTOs
+  tipados:
+  - `ContribuyenteService`: el registro de contribuyente y sus cuatro listas (domicilios, relacionados, medios de
+    contacto, documentos sustento).
+  - `DeclaracionService`: la declaración jurada y sus cuatro listas (transferentes, niveles, obras, otros frentes), el
+    predio que registra el portal, el condominio, los condóminos, la anulación y las bajas.
+  - `RentasService`: el resumen, las fichas con sus totales y la búsqueda de predios por texto.
+  - `PredioService`: "Buscar predios" en el padrón y en el catastro fiscal, los lotes del catastro y las partidas de
+    obras complementarias.
+  - `CatalogoService`: las opciones ENUM y los catálogos (ubigeo, categorías de valores, usos, vías, unidades urbanas).
+  - Aparte, `srtm.pide.DocumentosController` (`DocumentoService`) consulta un DNI a RENIEC ([PIDE RENIEC](#pide-reniec)).
 - **Claves JSON:** son los nombres de campo del modelo, en snake_case. `Records` convierte atributos ⇄ DTO con Jackson.
 - **Protección:** como la API vive bajo `/api`, el filtro JWT de core ya la protege. `RecordService` aplica los permisos
   del usuario por objeto y por campo, y valida cada escritura. `Registros` envía solo los campos que el usuario puede
@@ -350,6 +360,7 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET, POST | `/api/srtm/declaraciones/{id}/{lista}` | las listas de la DJ: `transferentes`, `niveles`, `obras`, `frentes` |
 | PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
 | GET | `/api/srtm/categorias-valor` | las letras de las siete columnas del cuadro de valores, con su descripción |
+| GET | `/api/srtm/usos-predio` | los usos del predio del SRTM, cada uno con su clase y su sub clase, en el orden de sus códigos |
 | GET | `/api/srtm/obras-categorias?tipo_obra` | las partidas del instructivo de obras complementarias |
 | GET | `/api/srtm/predios/buscar?…` | "Buscar en Tributario" (pág. 13) |
 | GET, POST | `/api/srtm/catastro?…` | "Buscar en Catastro Fiscal" (pág. 13), y el alta de un lote |
@@ -447,13 +458,19 @@ registro con una segunda escritura, como el mismo usuario y solo en los campos q
 - **Cuándo:** un registro nuevo recibe solo los derivados que dejó vacíos (el importador conserva el texto del padrón).
   Uno editado recibe los que cambian porque cambió aquello de lo que salen, salvo que esa misma escritura los fije a
   mano. Lo que el portal ya guardó derivado no se vuelve a escribir.
-- **Solo por el portal:** las reglas que leen otros registros: numeración y códigos (`codigo`, `numero_declaracion`,
-  `fecha_registro` del contribuyente; `numero_declaracion` de la DJ; `codigo` y `numero_registro` del predio; `codigo`
-  de un domicilio, relacionado, medio de contacto, documento sustento o transferente), el domicilio fiscal copiado al
-  contribuyente, el condominio (condición, % y valores de todo el grupo), las validaciones (documento, nombre o razón
-  social de un relacionado o un transferente) y los valores por defecto de una inscripción, una DJ o una fila nueva.
-  También la `direccion` del predio: `normalizar_padron.py` separa por esta API el tipo de vía del padrón y conserva su
-  texto, y el portal la rearma al guardar la ubicación. Desde el admin no se aplican.
+- **Solo por el portal** (desde el admin no se aplican):
+  - Las reglas que leen otros registros: numeración y códigos (`codigo`, `numero_declaracion`, `fecha_registro` del
+    contribuyente; `numero_declaracion` de la DJ; `codigo` y `numero_registro` del predio; `codigo` de un domicilio,
+    relacionado, medio de contacto, documento sustento o transferente), el domicilio fiscal copiado al contribuyente y
+    la regla del único domicilio fiscal activo, el condominio (condición, % y valores de todo el grupo) y la baja
+    protegida (409).
+  - Las validaciones: documento, nombre o razón social de un relacionado o un transferente, y la fuente PIDE RENIEC
+    respaldada por una consulta.
+  - El ciclo de la declaración: los valores por defecto de una inscripción, una DJ o una fila nueva, el motivo
+    ACTUALIZACIÓN al editar, el estado VIGENTE y la anulación (una DJ anulada es de solo lectura en el portal, no en el
+    admin).
+  - La `direccion` del predio: `normalizar_padron.py` separa por esta API el tipo de vía del padrón y conserva su texto,
+    y el portal la rearma al guardar la ubicación.
 
 ## PIDE RENIEC
 
@@ -491,13 +508,21 @@ PIDE RENIEC; sin ella (404), se escriben a mano con fuente MANUAL.
 ```bash
 ./gradlew build             # ktlint + tests unitarios (mapeo y reglas del portal)
 ./gradlew integrationTest   # smoke test y API del portal contra Testcontainers postgis/postgis:18-3.6 (o WASICHAI_TEST_DB_*)
-cd model && python3 -m unittest -v
+cd model && python3 apply.py --validate-only && python3 -m unittest -v
+yarn format:check           # prettier: yaml y json, model.json incluido
 ```
 
-Con un Docker remoto, Testcontainers no llega a los puertos publicados. En ese caso se usa una base de test externa
-tunelizada: `WASICHAI_TEST_DB_HOST`, `_PORT`, `_NAME` (debe terminar en `_test`, porque la suite la limpia),
-`_USERNAME` y `_PASSWORD`, y se corre `./gradlew integrationTest --rerun`. Esa base debe tener PostGIS. Detalles en
-`wasichai/docs/development/getting-started.md#integration-tests`.
+- **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`…), `Records`,
+  `Registros` y `srtm.pide` (`PideReniecTest`, contra un servidor local).
+- **Integración** (`@Tag("integration")`): `SrtmSmokeTest` y las clases `*ApiTest`, que llaman a la API del portal
+  sobre la app entera y PostGIS. Heredan de `SrtmApiTest`: el modelo aplicado como lo hace `apply.py`, el token del
+  admin de desarrollo y las llamadas. Cada endpoint de `RentasController` y `DocumentosController` tiene un caso feliz
+  y uno de error donde aplica, repartidos por tema: `RentasApiTest` (el recorrido completo), `ListasApiTest` (las
+  filas de las ocho listas), `DeclaracionJuradaApiTest` (una DJ rechazada no deja nada a medias), `FichasApiTest`,
+  `CatalogosApiTest`, `CatastroApiTest`, `CondominioApiTest`, `AnulacionApiTest`, `MotivoApiTest`…
+- Los de integración corren en el CI de cada PR. Con un Docker remoto no corren en local tal cual (Testcontainers no
+  llega a sus puertos): se usa una base de test externa tunelizada, con PostGIS y un nombre que termine en `_test`.
+  Cómo, en [docs/develop/README.md](docs/develop/README.md#6-tests).
 
 ## Siguientes pasos (fuera de este alcance)
 

@@ -1,29 +1,14 @@
 package srtm.rentas
 
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import tools.jackson.databind.JsonNode
-import tools.jackson.databind.json.JsonMapper
-import wasichai.test.WasichaiIntegrationTest
-import java.io.File
 import java.util.UUID
 
 // a lote of the catastro fiscal kept from the portal's lote editor: read and replaced by its id, polygon included
-// (setup as in RentasApiTest)
-class CatastroApiTest : WasichaiIntegrationTest() {
-    private lateinit var token: String
-
-    @BeforeEach
-    fun model() {
-        token = bearer()
-        applyModel()
-    }
-
+class CatastroApiTest : SrtmApiTest() {
     @Test
     fun `a lote is read by its id, with its polygon`() {
         val cpu = "CPU-${uniqueDocumento()}"
@@ -110,145 +95,7 @@ class CatastroApiTest : WasichaiIntegrationTest() {
             )
         )
 
-    // a response as a request body: every field it came with
-    private fun fields(node: JsonNode): Map<String, Any?> = json.convertValue(node, Map::class.java).entries.associate { it.key.toString() to it.value }
-
-    private fun post(
-        path: String,
-        body: Map<String, Any?>
-    ): JsonNode = tree(send("POST", path, body, HttpStatus.CREATED))
-
-    private fun put(
-        path: String,
-        body: Map<String, Any?>
-    ): JsonNode = tree(send("PUT", path, body, HttpStatus.OK))
-
-    // model/apply.py in kotlin, as RentasApiTest does it: what is missing gets created, what exists is left alone
-    private fun applyModel() {
-        val model = json.readTree(File("model/model.json"))
-        val enums = model["enums"]
-
-        fun options(field: JsonNode) =
-            enums[field["enum"].asString()]
-                .iterator()
-                .asSequence()
-                .map { it.asString() }
-                .toList()
-
-        fun payload(field: JsonNode) =
-            buildMap {
-                put("name", field["name"].asString())
-                put("label", field["label"].asString())
-                put("type", field["type"].asString())
-                put("required", field["required"]?.asBoolean() ?: false)
-                put("unique", field["unique"]?.asBoolean() ?: false)
-                if (field["type"].asString() == "ENUM") put("enumOptions", options(field))
-                if (field["type"].asString() == "GEOMETRY") {
-                    put("geometryType", field["geometryType"].asString())
-                    put("srid", field["srid"]?.asInt() ?: 4326)
-                }
-            }
-
-        val existing: Set<String> = tree(send("GET", "/api/objects", null, HttpStatus.OK)).names()
-        for (obj in model["objects"]) {
-            val name = obj["name"].asString()
-            val fields = obj["fields"].iterator().asSequence().toList()
-            if (name !in existing) {
-                send(
-                    "POST",
-                    "/api/objects",
-                    mapOf(
-                        "name" to name,
-                        "label" to obj["label"].asString(),
-                        "pluralLabel" to obj["pluralLabel"].asString(),
-                        "fields" to fields.map(::payload)
-                    ),
-                    HttpStatus.CREATED
-                )
-                continue
-            }
-            val stored =
-                tree(
-                    send("GET", "/api/metadata/objects/$name/fields", null, HttpStatus.OK)
-                ).iterator().asSequence().associateBy { it["name"].asString() }
-            for (field in fields) {
-                val current = stored[field["name"].asString()]
-                if (current == null) {
-                    send("POST", "/api/metadata/objects/$name/fields", payload(field), HttpStatus.CREATED)
-                } else if (field["type"].asString() == "ENUM") {
-                    val have =
-                        current["enumOptions"]
-                            .iterator()
-                            .asSequence()
-                            .map { it.asString() }
-                            .toList()
-                    val missing = options(field) - have.toSet()
-                    if (missing.isNotEmpty()) {
-                        send("PUT", "/api/metadata/objects/$name/fields/${field["name"].asString()}", mapOf("enumOptions" to have + missing), HttpStatus.OK)
-                    }
-                }
-            }
-        }
-        val relationships: Set<String> = tree(send("GET", "/api/relationships", null, HttpStatus.OK)).names()
-        for (rel in model["relationships"]) {
-            if (rel["name"].asString() in relationships) continue
-            send(
-                "POST",
-                "/api/relationships",
-                listOf("name", "label", "inverseLabel", "source", "target", "fieldName").associateWith { rel[it].asString() } +
-                    ("type" to "MANY_TO_ONE"),
-                HttpStatus.CREATED
-            )
-            send(
-                "PUT",
-                "/api/metadata/objects/${rel["source"].asString()}/fields/${rel["fieldName"].asString()}",
-                mapOf("required" to true),
-                HttpStatus.OK
-            )
-        }
-    }
-
-    private fun send(
-        method: String,
-        path: String,
-        body: Any?,
-        status: HttpStatus
-    ): String {
-        val spec =
-            when (method) {
-                "GET" -> client.get().uri(path)
-                "PUT" -> client.put().uri(path).bodyValue(body!!)
-                else -> client.post().uri(path).bodyValue(body!!)
-            }
-        return spec
-            .header(HttpHeaders.AUTHORIZATION, token)
-            .exchange()
-            .expectStatus()
-            .isEqualTo(status)
-            .expectBody(String::class.java)
-            .returnResult()
-            .responseBody ?: ""
-    }
-
-    private fun JsonNode.names(): Set<String> = iterator().asSequence().map { it["name"].asString() }.toSet()
-
-    private fun tree(body: String): JsonNode = json.readValue(body, JsonNode::class.java)
-
-    private fun uniqueDocumento(): String {
-        val digits =
-            UUID
-                .randomUUID()
-                .toString()
-                .filter { it.isDigit() }
-                .padEnd(8, '0')
-                .take(8)
-        assertNotEquals("", digits)
-        return digits
-    }
-
     private companion object {
-        val json: JsonMapper = JsonMapper.builder().build()
-
         private fun square(west: Double) =
             mapOf(
                 "type" to "Polygon",
