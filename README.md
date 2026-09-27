@@ -117,7 +117,9 @@ python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"      
   - El tipo sale del primer término (CALLE, JIRÓN, CARROZABLE… / ASOCIACIÓN DE VIVIENDA, CENTRO POBLADO, CERCADO…).
   - En las unidades urbanas se descartan los restos de lote delante del tipo ("03-B CERCADO III MESETA").
   - Se asignan al distrito de `--distrito` (por defecto `120302`, Perené).
-  - Con el Excel de 2026 salen 904 vías y 306 unidades urbanas.
+  - Se leen también las abreviaturas con que el portal escribe las direcciones (JR., AV., CA., PSJE., PROL., CARR.;
+    AA.HH., AA.VV., C.P., URB.) y las erratas de CARROZABLE del padrón.
+  - Con el Excel de 2026 salen 903 vías y 306 unidades urbanas.
 - **`obra_categoria`:** las partidas del instructivo de obras complementarias e instalaciones fijas y permanentes
   (anexo III de la R.M. N.° 277-2025-VIVIENDA), en `model/data/obras_complementarias.csv`.
   - El archivo **viene solo con la cabecera** (`tipo_obra,numero,descripcion,unidad_medida,material`): gob.pe no deja
@@ -164,11 +166,38 @@ algo (se muestra la fila del Excel), `2` el Excel tiene valores que no encajan e
 
 Con el Excel de 2026 el resultado esperado es 11 840 contribuyentes, 14 947 predios y 15 644 declaraciones.
 
+Cada predio llega con su ubicación separada como la pide el formulario del SRTM: `via` "JIRON LIMA" se guarda como
+`tipo_via` JIRON y `via` LIMA, `habilitacion_urbana` "CERCADO II MESETA" como `tipo_zona` CERCADO y
+`habilitacion_urbana` II MESETA, y `kilometro` sale de "Km.:". `direccion` guarda el texto del padrón. La secuencia de
+uso tiene tres dígitos ("001"), también en el portal.
+
 **El Excel y los reportes no se versionan**: traen DNI, nombres y domicilios. `*.xlsx` y `model/reports/` están en
 `.gitignore`.
 
 `model/reports/nombres_dudosos.csv` lista los nombres cuya separación en apellidos y nombres conviene revisar a mano
 (con coma, con ` Y `, `SN`, menos de 3 palabras o sin nombres). `nombre_completo` siempre guarda el texto original.
+
+## Normalizar el padrón importado
+
+Un padrón importado antes de que `import_predios.py` separara los tipos se normaliza en Core, sin volver a importar:
+
+```bash
+cd model
+python3 normalizar_padron.py --dry-run   # lee Core y escribe el reporte; no cambia nada
+python3 normalizar_padron.py             # actualiza lo que el reporte lista
+```
+
+- **Predios del padrón** (sin `tipo_via`): separa tipo y nombre de `via` y de `habilitacion_urbana` (sin tipo
+  reconocido queda OTROS) y lee `kilometro` de `direccion`. `direccion` no cambia: el portal la rearma, con las
+  abreviaturas del SRTM, al guardar la ubicación.
+- **Declaraciones:** `secuencia_uso` con tres dígitos ("1" → "001").
+- **Reporte** (`model/reports/normalizar_padron.csv`): cada campo que cambia (antes y después) y lo que conviene mirar a
+  mano: tipos no reconocidos, restos de lote que salen de la zona, direcciones guardadas desde el portal que repiten el
+  tipo ("JIRON JR. LIMA") y secuencias que coinciden con otra declaración.
+- Actualiza cada registro con todos sus campos (el update de Core los reemplaza todos). **Idempotente:** una segunda
+  corrida no cambia nada.
+- Flags: `--report`, `--workers` (PUTs en paralelo, default 4), `--core`, `--email`, `--password`. Salida: `0` ok, `1`
+  Core rechazó algo (se muestra el código del predio o el número de la declaración).
 
 ## Modelo
 
