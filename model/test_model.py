@@ -27,7 +27,7 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 17)
+        self.assertEqual(len(names), 18)
         self.assertEqual(len(self.model["relationships"]), 10)
 
     def test_new_contribuyente_fields_are_optional(self):

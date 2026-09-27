@@ -101,6 +101,69 @@ class ObrasTests(unittest.TestCase):
         self.assertEqual(ic.read_obras(os.path.join(HERE, "data", "obras_complementarias.csv")), [])
 
 
+def write_csv(test, text):
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(text)
+    test.addCleanup(os.unlink, f.name)
+    return f.name
+
+
+class UsosPredioTests(unittest.TestCase):
+    def test_reads_the_hierarchy_by_code(self):
+        path = write_csv(self, "codigo,descripcion,fuente\n"
+                               "010000,RESIDENCIAL,SRTM\n010100,UNIFAMILIAR,SRTM\n010101,CASA HABITACIÓN,SRTM\n"
+                               "090000,ESTACIONAMIENTO,INFERIDO\n090100,RESIDENCIAL,SRTM\n090101,CASA HABITACIÓN,SRTM\n"
+                               "090200,RESIDENCIAL,SRTM\n090201,EDIFICIO,SRTM\n")
+        self.assertEqual(ic.read_usos(path), [
+            {"codigo": "010101", "clase": "RESIDENCIAL", "sub_clase": "UNIFAMILIAR", "uso": "CASA HABITACIÓN"},
+            {"codigo": "090101", "clase": "ESTACIONAMIENTO", "sub_clase": "RESIDENCIAL", "uso": "CASA HABITACIÓN"},
+            {"codigo": "090201", "clase": "ESTACIONAMIENTO", "sub_clase": "RESIDENCIAL", "uso": "EDIFICIO"},
+        ])
+
+    def test_a_uso_without_its_sub_clase_is_refused(self):
+        path = write_csv(self, "codigo,descripcion,fuente\n010000,RESIDENCIAL,SRTM\n010201,EDIFICIO,SRTM\n")
+        with self.assertRaisesRegex(ValueError, "010201"):
+            ic.read_usos(path)
+
+    def test_a_bad_code_is_refused(self):
+        path = write_csv(self, "codigo,descripcion,fuente\n10101,CASA HABITACIÓN,SRTM\n")
+        with self.assertRaisesRegex(ValueError, "10101"):
+            ic.read_usos(path)
+
+
+class ShippedUsosTests(unittest.TestCase):
+    def setUp(self):
+        self.path = os.path.join(HERE, "data", "usos_predio.csv")
+        with open(os.path.join(HERE, "model.json"), encoding="utf-8") as f:
+            self.enums = json.load(f)["enums"]
+
+    def test_the_srtm_example_is_there(self):
+        usos = ic.read_usos(self.path)
+        self.assertIn({"codigo": "010101", "clase": "RESIDENCIAL", "sub_clase": "UNIFAMILIAR", "uso": "CASA HABITACIÓN"}, usos)
+        self.assertEqual(len({u["codigo"] for u in usos}), len(usos))
+
+    def test_every_name_is_an_option_of_its_enum(self):
+        # the declaración's clase_uso, sub_clase_uso and uso are ENUMs: what the cascade offers must be storable
+        usos = ic.read_usos(self.path)
+        self.assertEqual(sorted({u["clase"] for u in usos} - set(self.enums["clase_uso"])), [])
+        self.assertEqual(sorted({u["sub_clase"] for u in usos} - set(self.enums["sub_clase_uso"])), [])
+        self.assertEqual(sorted({u["uso"] for u in usos} - set(self.enums["uso"])), [])
+
+    def test_the_padron_usos_stay_storable(self):
+        padron = ["RESIDENCIAL - CASA HABITACION", "TERRENO", "COMERCIAL", "DESOCUPADO", "INSTITUCIONAL",
+                  "EQUIPAMIENTO URBANO", "INDUSTRIA", "RECREACIONAL", "BIENES COMUNES", "ESTACIONAMIENTO"]
+        self.assertTrue(set(padron) <= set(self.enums["uso"]))
+
+    def test_every_row_says_where_it_comes_from(self):
+        import csv
+        with open(self.path, encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        self.assertEqual({r["fuente"] for r in rows} - {"SRTM", "ARMONIZACION", "INFERIDO"}, set())
+        self.assertEqual([r["codigo"] for r in rows], sorted(r["codigo"] for r in rows))
+        self.assertEqual(len({r["codigo"] for r in rows}), len(rows))
+
+
 class LoadTests(unittest.TestCase):
     def setUp(self):
         self.core = FakeCore()
@@ -120,6 +183,19 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(second, (0, 3))
         self.assertEqual(len(self.core.records["ubigeo"]), 1)
         self.assertEqual(len(self.core.records["via"]), 1)
+
+    def test_usos_by_codigo_once(self):
+        usos = [
+            {"codigo": "010101", "clase": "RESIDENCIAL", "sub_clase": "UNIFAMILIAR", "uso": "CASA HABITACIÓN"},
+            {"codigo": "100106", "clase": "BIENES COMUNES", "sub_clase": "RESIDENCIAL", "uso": "CASA HABITACIÓN"},
+        ]
+        self.core.add_record("uso_predio", usos[0])
+        with redirect_stdout(io.StringIO()):
+            first = ic.load(self.client, [], [], [], workers=2, usos=usos)
+            second = ic.load(self.client, [], [], [], workers=2, usos=usos)
+        self.assertEqual(first, (1, 1))
+        self.assertEqual(second, (0, 2))
+        self.assertEqual([r["attributes"]["codigo"] for r in self.core.records["uso_predio"]], ["010101", "100106"])
 
 
 if __name__ == "__main__":
