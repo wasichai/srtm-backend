@@ -102,9 +102,9 @@ registros importados siguen siendo válidos. Por ejemplo, sobre la base del padr
 - cambia `tipo_obra` a los grupos del anexo III de obras complementarias (quita `CISTERNAS`, `PISCINAS`,
   `LOSAS DEPORTIVAS`, `PISOS DE CONCRETO` y `OTROS`) y añade `PZA` a `unidad_medida`;
 - quita de `clase_uso` y `sub_clase_uso` las opciones de antes del catálogo de usos del SRTM (`INDUSTRIAL`,
-  `SERVICIOS`, `AGRICOLA`, `OTROS`; `BODEGA`, `TIENDA`, `OFICINA`, `TALLER`, `ALMACEN`, `OTROS`) que ninguna DJ usa;
-- quita de `uso` los grupos de uso del padrón (`RESIDENCIAL - CASA HABITACION`, `TERRENO`…) una vez migradas las DJ
-  que los usan ([Migrar los usos del padrón](#migrar-los-usos-del-padrón));
+  `SERVICIOS`, `AGRICOLA`, `OTROS`; `BODEGA`, `TIENDA`, `TALLER`, `ALMACEN`, `OTROS`) que ninguna DJ usa;
+- quita de `uso` los grupos de uso del padrón (`RESIDENCIAL - CASA HABITACION`, `TERRENO`…) y de `clase_uso`
+  `ESTACIONAMIENTO` una vez migradas las DJ que los usan ([Migrar los usos del padrón](#migrar-los-usos-del-padrón));
 - crea los objetos y relaciones de las fases 1 y 2.
 
 Flags: `--core` (default `http://localhost:8090` o `$WASICHAI_CORE`), `--email`, `--password`, `--dry-run`,
@@ -118,7 +118,7 @@ obras complementarias desde objetos catálogo:
 ```bash
 cd model
 python3 import_catalogos.py                                                           # ubigeo, categorías, partidas de obras y usos
-python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run  # cuenta, no llama a Core
+python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run  # lee Core y dice qué haría
 python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"            # ubigeo + vías + unidades urbanas
 ```
 
@@ -154,34 +154,71 @@ python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"      
   Las características de la DJ lo ofrecen en cascada (`GET /api/srtm/usos-predio`).
   - El archivo tiene la forma de la tabla de parámetros del SRTM (*Parámetros / Uso Predio*, exportable a Excel):
     `codigo,descripcion,fuente`. El código de seis dígitos da el nivel: `XX0000` clase, `XXYY00` sub clase y `XXYYZZ`
-    uso de esa sub clase. Se cargan los usos (112), cada uno con los nombres de su clase y su sub clase; la clave es el
+    uso de esa sub clase. Se cargan los usos (276), cada uno con los nombres de su clase y su sub clase; la clave es el
     código.
-  - **No es la lista oficial completa** (el SRTM tiene 324 filas), que no está en los documentos. `fuente` dice de
-    dónde sale cada fila:
-    - `SRTM`: código y nombre como en la *Presentación2* (págs. 17 y 20: RESIDENCIAL → UNIFAMILIAR → CASA
-      HABITACIÓN) o en el manual *M21-1-003 Parámetros* (§5.2.20-5.2.21 y §5.5.2: las filas 0701xx-1004xx y los usos
-      residenciales CASA HABITACIÓN, EDIFICIO, QUINTA, CALLEJÓN, CORRALÓN, SOLAR, EDIFICIO EN QUINTA, AIRES, TENDAL EN
-      QUINTA y TENDAL EN EDIFICIO).
-    - `ARMONIZACION`: código y nombre del *Formato Padrón Municipal Armonización 2026* (el ejemplo lleno de otra
-      municipalidad, columnas *Código uso* y *Descripción del uso*). Se dejaron fuera sus códigos que contradicen al
-      manual (010103-010105, 0504xx, 0909xx, 153045, 999999). Los nombres van sin comas, barras ni paréntesis (las
-      opciones ENUM de Core no los admiten), con las abreviaturas desarrolladas y con tildes.
-    - `INFERIDO`: el nombre o el código se dedujo. Las clases EQUIPAMIENTO URBANO (05), DESOCUPADO (08) y
-      ESTACIONAMIENTO (09) salen de los diez grupos de uso del padrón de Perené, que calzan con las diez clases; la
-      armonización llama GARAGE a la 09. Las sub clases MULTIFAMILIAR, OFICINAS, SERVICIOS (0205), INDUSTRIA
-      MANUFACTURERA y CULTURAL salen de sus usos. Los nombres cortados en el manual (EN CONST…, CONSTRU…, CON CONS…,
-      COMERCI…, PROFESIO…) y los códigos 010202-010203 y 010206-010209 (por el orden de sus ids en el manual) también.
-  - Para cargar la lista oficial: exportar *Parámetros / Uso Predio* del SRTM, dejar en el CSV código y descripción
-    (`fuente` = `SRTM`), agregar a los enums `clase_uso`, `sub_clase_uso` y `uso` de `model.json` los nombres nuevos
-    (`python3 -m unittest` dice cuáles faltan), `python3 apply.py` y `python3 import_catalogos.py`. Lo cargado no se
-    borra: un uso que desaparezca de la lista se borra a mano desde el admin.
+  - **Es la tabla del SRTM hasta donde la muestran los documentos públicos:** el *codificador de usos* del SNCP, del
+    que sale la del SRTM, más los cuatro usos residenciales que el SRTM le agrega (010206-010209). 324 filas: 10
+    clases, 38 sub clases y 276 usos.
+    - El SRTM tiene 323 (*M21-1-003*, pág. 262: "1 a 10 de 323 registros"). Sus ids 1-48 son las 10 clases y las 38
+      sub clases del SNCP, en su orden; los usos van del 49 (010101) al 323 (100403).
+    - Sobra uno de los usos 02xxxx-06xxxx: en el SRTM son los ids 49-298 (250 usos) y aquí 251. No se sabe cuál.
+  - `fuente` dice de dónde sale cada fila:
+    - `SRTM` (72): código y nombre completos en un documento del SRTM.
+      - *Presentación2*, págs. 17 y 20.
+      - Manual *M21-1-003 Parámetros*: §5.2.20 (págs. 259-263: la lista, ids 314-323, y el Excel exportado, ids
+        298-323), el uso predio pensionista (pág. 52: los usos residenciales, ids 49-58, que van en el orden de los
+        códigos) y §5.5.2 (págs. 411-417).
+      - Manuales del SRTM de escritorio (SIAF-GL, módulo de rentas, MEF: `mef.gob.pe/contenidos/siafgl/manuales/`):
+        v2.2.0 pág. 9, v3.0.0 (`Manual_Rentas_V300_Arbitrios.pdf`) págs. 13-14 y 21, v3.1.0
+        (`Manual_Rentas_Proceso_Masivo_Version310.pdf`) pág. 8.
+    - `SNCP` (171): el *Codificador de usos y actividades económicas*, Anexo 04 de las *Instrucciones para el llenado
+      de las fichas catastrales* del SNCP.
+      - SUNARP lo publica en `sunarp.gob.pe/transparencia.asp?ID=1230`, que no abre desde fuera del Perú. Se leyó la
+        copia de `idoc.pub/documents/instrucciones-para-el-llenado-de-fichas-catastrales-con-anexos-en5ko617vpno`.
+      - Todos los códigos que muestran los documentos del SRTM tienen ahí el mismo nombre.
+      - El SNCP imprime los códigos 040301, 040303, 040302…: cada nombre va con el código de su fila (040303 BINGO O
+        CASINO DE JUEGO, 040302 PINBALL O SIMILAR).
+      - Imprime cinco renglones para los cuatro códigos 060201-060204 (los manuales del SRTM confirman
+        060207-060209): se leyó 060202 COMISARÍA ESTACIÓN DE LA POLICÍA NACIONAL.
+    - `ARMONIZACION` (81): el nombre del *Formato Padrón Municipal Armonización 2026* (el ejemplo lleno de Catacaos,
+      columnas *Código uso* y *Descripción del uso*), del mismo código y sentido que en el SNCP.
+      - Se dejaron fuera sus códigos propios: 010103-010105, 020108, 040211, 050117, 0504xx, 070102-070103 (el Excel
+        del SRTM pasa de 070101, id 299, a 070201, id 300), 0909xx, 153045 y 999999.
+      - También los nombres que el SNCP contradice: 020100 COMERCIAL (ALMACÉN), 020515 DE ESPARCIMIENTO NO
+        ESPECIFICADO, 020517 TALLER y 040310 RESTAURANTE.
+    - `INFERIDO` (0): un nombre o un código deducido. Ya no queda ninguno.
+  - La clase 09 es GARAGE, como la llaman el SNCP y la armonización. El padrón de Perené la llama ESTACIONAMIENTO:
+    `import_predios.py` guarda ese grupo como GARAGE y `migrar_usos_padron.py` pasa a GARAGE las DJ con esa clase.
+  - Los nombres van en mayúsculas, con tildes y sin comas, barras, paréntesis ni punto final (las opciones ENUM de Core
+    no los admiten). Se quitan los ejemplos entre paréntesis (DE ALIMENTACIÓN Y BEBIDAS). Si el último elemento de una
+    lista no lleva "y", va con "O" (BINGO O CASINO DE JUEGO). Los de más de 64 caracteres se acortan.
+  - **Los usos siguen al CSV por código**, y los otros catálogos solo se crean. `import_catalogos.py`:
+    - crea los códigos que Core no tiene;
+    - actualiza los que cambiaron de clase, sub clase o uso;
+    - borra los que el CSV ya no tiene. Ningún registro apunta a un uso: la DJ guarda los nombres en sus ENUM.
+    - Con `--dry-run` lee Core y lista lo que haría, sin escribir.
+    - Imprime `uso_predio: N created, M updated, K deleted, S skipped`.
+  - Para cambiar el catálogo (la lista oficial del SRTM, por ejemplo), en este orden:
+    1. Dejar en el CSV código y descripción (`fuente` = `SRTM` si viene del *Exportar a Excel* de *Parámetros / Uso
+       Predio*).
+    2. Poner en los enums `sub_clase_uso` y `uso` de `model.json` los nombres del catálogo (`python3 -m unittest` dice
+       cuáles faltan o sobran).
+    3. `python3 apply.py` agrega las opciones nuevas.
+    4. `python3 import_catalogos.py --dry-run`: revisar lo que va a cambiar. Después, sin `--dry-run`.
+    5. Si cambió el nombre de una clase que las DJ usan, agregarla a `CLASES_RENOMBRADAS` de `migrar_usos_padron.py` y
+       migrar (ver [Migrar los usos del padrón](#migrar-los-usos-del-padrón)).
+    6. `python3 apply.py` otra vez quita las opciones que ya nadie usa.
+  - Un Core con el catálogo anterior (154 filas) pasa a este con 169 usos creados, 17 actualizados y 5 borrados
+    (020108, 040211, 050117, 070102 y 070103). Después, `migrar_usos_padron.py` pasa a GARAGE las DJ con la clase
+    ESTACIONAMIENTO, y `apply.py` la quita de `clase_uso`.
   - Los campos `clase_uso`, `sub_clase_uso` y `uso` de `declaracion_predial` siguen siendo ENUM (Core no cambia el tipo
     de un campo) con los nombres del catálogo, y nada más: `uso` lista solo los usos del catálogo. Los diez grupos de
     uso del padrón son las diez clases: `RESIDENCIAL - CASA HABITACION` se guarda como RESIDENCIAL / UNIFAMILIAR / CASA
-    HABITACIÓN y cualquier otro grupo como la clase de su nombre, sin sub clase ni uso, que el portal pide al editar la
-    DJ (ver [Migrar los usos del padrón](#migrar-los-usos-del-padrón)).
+    HABITACIÓN, `ESTACIONAMIENTO` como GARAGE y cualquier otro grupo como la clase de su nombre, sin sub clase ni uso,
+    que el portal pide al editar la DJ (ver [Migrar los usos del padrón](#migrar-los-usos-del-padrón)).
 - **Idempotente**, como los otros scripts.
-- Los catálogos se pueden editar después desde el admin.
+- Los catálogos se pueden editar después desde el admin. Un uso del predio editado así vuelve a lo que dice el CSV en
+  la siguiente importación.
 
 ## Importar el catastro fiscal
 
@@ -258,26 +295,30 @@ python3 normalizar_padron.py             # actualiza lo que el reporte lista
 ## Migrar los usos del padrón
 
 Las DJ importadas antes de que `import_predios.py` guardara el grupo de uso del padrón como clase tienen el grupo en
-`uso` (`RESIDENCIAL - CASA HABITACION`, `TERRENO`…) y ninguna clase. En una base así, en este orden:
+`uso` (`RESIDENCIAL - CASA HABITACION`, `TERRENO`…) y ninguna clase. Las migradas antes de que la clase 09 se llamara
+GARAGE tienen la clase `ESTACIONAMIENTO`. En una base así, en este orden:
 
 ```bash
 cd model
 python3 apply.py                          # 1. agrega opciones y campos, y quita las opciones sin uso
 python3 migrar_usos_padron.py --dry-run   # 2. lee Core y escribe el reporte, sin cambiar nada: revisarlo
 python3 migrar_usos_padron.py             #    y migrar
-python3 apply.py                          # 3. quita de `uso` los grupos, que ya no usa nadie
+python3 apply.py                          # 3. quita los grupos y ESTACIONAMIENTO, que ya no usa nadie
 ```
 
-- **El paso 1** conserva los grupos que alguna DJ usa, con un aviso `keep option declaracion_predial.uso …`.
+- **El paso 1** conserva los grupos y la clase ESTACIONAMIENTO mientras alguna DJ los usa, con un aviso
+  `keep option declaracion_predial.uso …` o `… clase_uso ESTACIONAMIENTO …`.
 - **Migración:** `RESIDENCIAL - CASA HABITACION` pasa a `clase_uso` RESIDENCIAL, `sub_clase_uso` UNIFAMILIAR y `uso`
-  CASA HABITACIÓN. Los otros nueve grupos pasan a `clase_uso` del mismo nombre, con `sub_clase_uso` y `uso` vacíos: el
-  padrón no dice más, y el portal los pide al editar la DJ.
+  CASA HABITACIÓN, y `ESTACIONAMIENTO` a `clase_uso` GARAGE. Los otros ocho grupos pasan a `clase_uso` del mismo
+  nombre. En todos, `sub_clase_uso` y `uso` quedan vacíos: el padrón no dice más, y el portal los pide al editar la
+  DJ.
+- Una DJ con `clase_uso` ESTACIONAMIENTO pasa a GARAGE, con su sub clase y su uso como están (`CLASES_RENOMBRADAS`).
 - Una DJ que ya tiene clase o sub clase **no se pisa**: queda en el reporte, salvo que su `uso` sea el del catálogo
   bajo esa clase y sub clase (COMERCIAL e INDUSTRIA también son usos del catálogo). Un grupo que siga en uso lo
   conserva el paso 3, con su aviso.
-- La salida dice cuántas DJ hay por migrar de cada grupo (`TERRENO: 6562 -> TERRENO`). El **reporte**
-  (`model/reports/migrar_usos_padron.csv`) tiene una fila por DJ con un grupo: el grupo, la clase, sub clase y uso con
-  que queda y, si no se migra, por qué.
+- La salida dice cuántas DJ hay por migrar de cada grupo (`TERRENO: 6562 -> TERRENO`, `ESTACIONAMIENTO: 1 -> GARAGE`).
+  El **reporte** (`model/reports/migrar_usos_padron.csv`) tiene una fila por DJ con un grupo o una clase renombrada:
+  el grupo (o la clase de antes), la clase, sub clase y uso con que queda y, si no se migra, por qué.
 - Actualiza cada DJ con todos sus campos (el update de Core los reemplaza todos). **Idempotente:** una segunda corrida
   no cambia nada.
 - Flags: `--dry-run`, `--report`, `--workers` (PUTs en paralelo, default 4), `--core`, `--email`, `--password`.
@@ -411,7 +452,7 @@ guardar.
 | `secuencia_uso` | `secuencia_uso` |
 | `condicion_propiedad` (PROPIETARIO UNICO, CONDOMINO) | derivado: CONDOMINO si el predio tiene más de un titular |
 | `porcentaje_condominio` | derivado: `valor_condominio / valor_autoavaluo × 100` |
-| `clase_uso`, `sub_clase_uso`, `uso` | `grupo_uso_desc`: `RESIDENCIAL - CASA HABITACION` es RESIDENCIAL / UNIFAMILIAR / CASA HABITACIÓN; otro grupo, la clase de su nombre, sin sub clase ni uso |
+| `clase_uso`, `sub_clase_uso`, `uso` | `grupo_uso_desc`: `RESIDENCIAL - CASA HABITACION` es RESIDENCIAL / UNIFAMILIAR / CASA HABITACIÓN; `ESTACIONAMIENTO`, la clase GARAGE; otro grupo, la clase de su nombre, sin sub clase ni uso |
 | `clasificacion` | `clasificacion_predio_desc`, acortado a 64 caracteres sin comas (límite de las opciones ENUM de Core) |
 | `estado_construccion` | `estado_construccion_desc` |
 | `area_terreno`, `area_construida`, `longitud_frente` | columnas con el mismo nombre |

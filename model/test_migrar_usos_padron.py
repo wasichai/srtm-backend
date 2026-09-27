@@ -68,10 +68,30 @@ class PlanTests(unittest.TestCase):
 
     def test_a_second_run_changes_nothing(self):
         declaraciones = [dj(f"d{i}", uso=grupo) for i, grupo in enumerate(USOS_DEL_PADRON)]
+        declaraciones.append(dj("e1", clase_uso="ESTACIONAMIENTO", sub_clase_uso="RESIDENCIAL UNIFAMILIAR", uso="CASA HABITACIÓN"))
         updates, _ = mup.plan(declaraciones, CATALOGO)
-        self.assertEqual(len(updates), 10)
+        self.assertEqual(len(updates), 11)
         migradas = [{"id": u.record_id, "attributes": u.attributes} for u in updates]
         self.assertEqual(mup.plan(migradas, CATALOGO), ([], []))
+
+    def test_the_clase_estacionamiento_is_garage(self):
+        # the grupo ESTACIONAMIENTO went to the clase of its name (#31); the catalog calls the clase 09 GARAGE
+        updates, rows = mup.plan([
+            dj("d1", numero_declaracion=7, clase_uso="ESTACIONAMIENTO", area_terreno="15.00"),
+            dj("d2", clase_uso="ESTACIONAMIENTO", sub_clase_uso="RESIDENCIAL UNIFAMILIAR", uso="CASA HABITACIÓN"),
+            dj("d3", uso="ESTACIONAMIENTO"),
+            dj("d4", clase_uso="GARAGE"),
+        ], CATALOGO)
+        self.assertEqual({u.record_id: u.attributes for u in updates}, {
+            "d1": {"anio": 2026, "secuencia_uso": "001", "numero_declaracion": 7, "area_terreno": "15.00",
+                   "clase_uso": "GARAGE", "sub_clase_uso": None, "uso": None},
+            "d2": {"anio": 2026, "secuencia_uso": "001",
+                   "clase_uso": "GARAGE", "sub_clase_uso": "RESIDENCIAL UNIFAMILIAR", "uso": "CASA HABITACIÓN"},
+            "d3": {"anio": 2026, "secuencia_uso": "001", "clase_uso": "GARAGE", "sub_clase_uso": None, "uso": None},
+        })
+        self.assertEqual([(r["id"], r["grupo"], r["clase_uso"], r["nota"]) for r in rows], [
+            ("d1", "ESTACIONAMIENTO", "GARAGE", ""), ("d2", "ESTACIONAMIENTO", "GARAGE", ""), ("d3", "ESTACIONAMIENTO", "GARAGE", ""),
+        ])
 
 
 class MigrarCliTests(unittest.TestCase):
@@ -152,6 +172,15 @@ class MigrarCliTests(unittest.TestCase):
         self.assertIn("declaraciones: 5 leídas, 0 por migrar", out)
         self.assertIn("done: 0 updated", out)
 
+    def test_dry_run_counts_the_clase_estacionamiento(self):
+        self.core.add_record("declaracion_predial", {"anio": 2026, "secuencia_uso": "001", "clase_uso": "ESTACIONAMIENTO"})
+        code, out, err = self.run_main("--dry-run")
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(self.puts(), [])
+        self.assertIn("declaraciones: 6 leídas, 4 por migrar", out)
+        self.assertIn("  ESTACIONAMIENTO: 1 -> GARAGE", out)
+        self.assertIn(("ESTACIONAMIENTO", "GARAGE"), [(r["grupo"], r["clase_uso"]) for r in self.report_rows()])
+
     def test_a_refusal_stops_with_the_record(self):
         self.core.fail_on_update = "declaracion_predial"
         code, _, err = self.run_main()
@@ -168,8 +197,10 @@ class WithApplyTests(ApplyCliTestCase):
         # the uso enum as Core has it before: the ten grupos, then the catalog's usos
         antes = list(USOS_DEL_PADRON) + [u for u in model["enums"]["uso"] if u not in USOS_DEL_PADRON]
         fields = {o["name"]: core_fields(model, o["name"]) for o in model["objects"]}
-        for name in ("declaracion_predial", "uso_predio"):
-            fields[name] = core_fields(model, name, options={"uso": antes})
+        # and the clase 09 as the padrón named it, before the catalog called it GARAGE
+        clases = ["ESTACIONAMIENTO" if c == "GARAGE" else c for c in model["enums"]["clase_uso"]]
+        fields["declaracion_predial"] = core_fields(model, "declaracion_predial", options={"uso": antes, "clase_uso": clases})
+        fields["uso_predio"] = core_fields(model, "uso_predio", options={"uso": antes, "clase": clases})
         self.core = FakeCore(
             existing_objects=[o["name"] for o in model["objects"]],
             existing_relationships=[r["name"] for r in model["relationships"]],
@@ -178,6 +209,7 @@ class WithApplyTests(ApplyCliTestCase):
         self.addCleanup(self.core.stop)
         for grupo in ("RESIDENCIAL - CASA HABITACION", "TERRENO", "TERRENO", "COMERCIAL"):
             self.core.add_record("declaracion_predial", {"anio": 2026, "secuencia_uso": "001", "uso": grupo})
+        self.core.add_record("declaracion_predial", {"anio": 2026, "secuencia_uso": "001", "clase_uso": "ESTACIONAMIENTO"})
         self.core.add_record("uso_predio", {"codigo": "010101", "clase": "RESIDENCIAL", "sub_clase": "UNIFAMILIAR", "uso": "CASA HABITACIÓN"})
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -206,7 +238,7 @@ class WithApplyTests(ApplyCliTestCase):
         with redirect_stdout(out), redirect_stderr(err):
             code = mup.main(["--core", self.core.base_url, "--report", self.report])
         self.assertEqual(code, 0, msg=err.getvalue())
-        self.assertIn("declaraciones: 4 leídas, 4 por migrar", out.getvalue())
+        self.assertIn("declaraciones: 5 leídas, 5 por migrar", out.getvalue())
         self.core.requests.clear()
 
         code, out, err = self.run_cli([])
@@ -217,6 +249,28 @@ class WithApplyTests(ApplyCliTestCase):
         # COMERCIAL and INDUSTRIA are usos of the catalog too: they stay
         self.assertIn("COMERCIAL", puts[declaracion])
         self.assertIn("INDUSTRIA", puts[declaracion])
+
+    def test_estacionamiento_leaves_the_clases_once_garage(self):
+        clase = "/api/metadata/objects/declaracion_predial/fields/clase_uso"
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0, msg=err)
+        self.assertIn("keep   option declaracion_predial.clase_uso ESTACIONAMIENTO: 1 record uses it", out)
+        self.assertIn("GARAGE", self.core_puts(clase))
+
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = mup.main(["--core", self.core.base_url, "--report", self.report])
+        self.assertEqual(code, 0, msg=err.getvalue())
+        self.core.requests.clear()
+
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0, msg=err)
+        self.assertNotIn("ESTACIONAMIENTO", self.core_puts(clase))
+
+    def core_puts(self, path):
+        [options] = [r[3]["enumOptions"] for r in self.core.requests if r[0] == "PUT" and r[1] == path]
+        self.core.requests.clear()
+        return options
 
 
 if __name__ == "__main__":

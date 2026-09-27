@@ -42,8 +42,10 @@ USOS_DEL_PADRON = {
     "RESIDENCIAL - CASA HABITACION": ("RESIDENCIAL", "UNIFAMILIAR", "CASA HABITACIÓN"),
     **{clase: (clase, None, None) for clase in (
         "COMERCIAL", "INDUSTRIA", "RECREACIONAL", "EQUIPAMIENTO URBANO", "INSTITUCIONAL", "TERRENO", "DESOCUPADO",
-        "ESTACIONAMIENTO", "BIENES COMUNES",
+        "BIENES COMUNES",
     )},
+    # the clase 09: GARAGE in the SNCP's codifier the srtm's catalog comes from
+    "ESTACIONAMIENTO": ("GARAGE", None, None),
 }
 USO_FIELDS = ("clase_uso", "sub_clase_uso", "uso")
 
