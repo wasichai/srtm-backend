@@ -89,7 +89,7 @@ class CondominioApiTest : WasichaiIntegrationTest() {
         assertEquals(b, nuevo["contribuyente"].asString())
         assertEquals(predio, nuevo["predio"].asString())
         assertEquals(2026, nuevo["anio"].asInt())
-        assertEquals("1", nuevo["secuencia_uso"].asString())
+        assertEquals("001", nuevo["secuencia_uso"].asString())
         assertEquals("COMERCIAL", nuevo["uso"].asString())
         assertDecimal("200", nuevo["area_terreno"])
         assertTrue(nuevo["tipo_adquisicion"] == null || nuevo["tipo_adquisicion"].isNull)

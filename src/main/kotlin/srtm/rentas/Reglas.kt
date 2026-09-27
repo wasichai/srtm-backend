@@ -64,15 +64,50 @@ fun errorDocumento(
     }
 }
 
+// the srtm writes the common types of vía and unidad urbana abbreviated (AV. ANDRES AVELINO CACERES): the records keep
+// the model's word, the address its abbreviation; a type not here goes whole. the same two tables are in srtm-ui
+// (forms/direccion.ts), and model/import_predios.py (split_tipo) reads each abbreviation back: change the three together
+val ABREVIATURA_VIA =
+    mapOf(
+        "AVENIDA" to "AV.",
+        "CALLE" to "CA.",
+        "JIRON" to "JR.",
+        "PASAJE" to "PSJE.",
+        "PROLONGACION" to "PROL.",
+        "CARRETERA" to "CARR."
+    )
+
+val ABREVIATURA_UNIDAD_URBANA =
+    mapOf(
+        "ASENTAMIENTO HUMANO" to "AA.HH.",
+        "ASOCIACION DE VIVIENDA" to "AA.VV.",
+        "CENTRO POBLADO" to "C.P.",
+        "URBANIZACION" to "URB."
+    )
+
+// a vía or unidad urbana with its type in front, abbreviated. OTROS is not a word of the address, and a name that
+// already starts with its type (a padrón's "JR. LIMA" not yet normalized) does not get it twice
+fun conTipo(
+    tipo: String?,
+    nombre: String?,
+    abreviaturas: Map<String, String>
+): String? {
+    val palabra = tipo?.trim()?.ifEmpty { null }?.takeIf { it != "OTROS" }
+    val sigla = palabra?.let { abreviaturas[it] ?: it }
+    val texto = nombre?.trim()?.ifEmpty { null }
+    val repetido = palabra != null && texto != null && listOf(sigla, palabra).any { texto.startsWith("$it ") }
+    return listOfNotNull(if (repetido) null else sigla, texto).joinToString(" ").ifEmpty { null }
+}
+
 // the one-line address of a domicilio, in the srtm's order: vía and number, the building, the lot,
 // the unidad urbana, the sub zona, then DEPARTAMENTO-PROVINCIA-DISTRITO. the portal previews the same text
-// (describirDomicilio in srtm-ui): change both together
+// (describirDomicilio in srtm-ui's forms/direccion.ts): change both together
 fun describir(d: Domicilio): String {
     fun join(vararg parts: String?) = parts.mapNotNull { it?.trim()?.ifEmpty { null } }.joinToString(" ").ifEmpty { null }
     val numero = join(d.numero, d.letra1, d.letra2)
     val partes =
         listOf(
-            join(if (d.tipoVia == "OTROS") null else d.tipoVia, d.via),
+            conTipo(d.tipoVia, d.via, ABREVIATURA_VIA),
             numero?.let { "N° $it" },
             d.numeroAlterno?.ifBlank { null }?.let { "N° ALT. $it" },
             join(if (d.edificacion == "OTROS") null else d.edificacion, d.nombreEdificacion),
@@ -83,7 +118,7 @@ fun describir(d: Domicilio): String {
             d.lote?.ifBlank { null }?.let { "LT. $it" },
             d.subLote?.ifBlank { null }?.let { "SUB LT. $it" },
             d.kilometro?.ifBlank { null }?.let { "KM. $it" },
-            join(if (d.tipoUnidadUrbana == "OTROS") null else d.tipoUnidadUrbana, d.unidadUrbana),
+            conTipo(d.tipoUnidadUrbana, d.unidadUrbana, ABREVIATURA_UNIDAD_URBANA),
             join(if (d.subZona == "OTROS") null else d.subZona, d.descripcionSubZona),
             listOfNotNull(d.departamento, d.provincia, d.distrito).filter { it.isNotBlank() }.joinToString("-").ifEmpty { null }
         )
@@ -98,8 +133,9 @@ const val CODIGO_WIDTH = 6
 
 fun siguienteCodigo(ultimo: String?): String = ((ultimo?.toIntOrNull() ?: 0) + 1).toString().padStart(CODIGO_WIDTH, '0')
 
-// a predio's direccion from its srtm ubicación, in the same order as a domicilio's. only for a predio whose ubicación
-// is the srtm's (tipo_via set): an imported one keeps the padrón's text until someone fills its ubicación
+// a predio's direccion from its srtm ubicación, in the same order as a domicilio's (srtm-ui previews it:
+// describirUbicacion). only for a predio whose ubicación is the srtm's (tipo_via set): an imported one not yet
+// normalized (model/normalizar_padron.py) keeps the padrón's text until someone fills its ubicación
 fun describirUbicacion(p: Predio): String? =
     if (p.tipoVia == null) {
         p.direccion
@@ -145,6 +181,15 @@ fun siguienteCodigoPredio(
 ): String {
     val numero = ultimo?.removePrefix(prefijo)?.toIntOrNull() ?: 0
     return prefijo + (numero + 1).toString().padStart(4, '0')
+}
+
+// the padrón numbers the usos of a predio with three digits (001, 002...): a number typed as 1 is written the same way,
+// none is the first. model/import_predios.py (secuencia_uso) does the same
+const val SECUENCIA_WIDTH = 3
+
+fun secuenciaUso(valor: String?): String {
+    val texto = valor?.trim()?.ifEmpty { null } ?: "1"
+    return if (texto.all { it.isDigit() }) texto.padStart(SECUENCIA_WIDTH, '0') else texto
 }
 
 // what an obra complementaria declares in all: cantidad x metrado, once both are there

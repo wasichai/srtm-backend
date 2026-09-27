@@ -26,7 +26,7 @@ class ReglasTest {
         assertEquals("X", nombreCompleto(Contribuyente(nombreCompleto = "X")))
     }
 
-    // the same case is in srtm-ui (describirDomicilio): both sides must print the same line
+    // the same cases are in srtm-ui (src/portal/direccion.test.tsx): both sides must print the same line
     @Test
     fun `a domicilio's one-line description`() {
         val domicilio =
@@ -44,7 +44,7 @@ class ReglasTest {
                 distrito = "PERENE"
             )
         assertEquals(
-            "CALLE ADELA DELGADO DE VELEZMORO, N° 234 A, MZ. C, LT. 19, ASENTAMIENTO HUMANO SANTO TORIBIO DE MOGROVEJO, JUNIN-CHANCHAMAYO-PERENE",
+            "CA. ADELA DELGADO DE VELEZMORO, N° 234 A, MZ. C, LT. 19, AA.HH. SANTO TORIBIO DE MOGROVEJO, JUNIN-CHANCHAMAYO-PERENE",
             describir(domicilio)
         )
         // OTROS is not a word of the address, blanks are skipped
@@ -52,6 +52,33 @@ class ReglasTest {
             "SECTOR IPANEMA, KM. 12, JUNIN",
             describir(Domicilio(tipoVia = "OTROS", via = "SECTOR IPANEMA", kilometro = "12", numero = " ", departamento = "JUNIN"))
         )
+    }
+
+    @Test
+    fun `the srtm abbreviates the common types of via and unidad urbana, the rest go whole`() {
+        assertEquals(
+            listOf("AV. A", "CA. A", "JR. A", "PSJE. A", "PROL. A", "CARR. A", "CARROZABLE A", "MALECON A", "A"),
+            listOf("AVENIDA", "CALLE", "JIRON", "PASAJE", "PROLONGACION", "CARRETERA", "CARROZABLE", "MALECON", "OTROS").map {
+                describir(Domicilio(tipoVia = it, via = "A"))
+            }
+        )
+        assertEquals(
+            listOf("AA.HH. B", "AA.VV. B", "C.P. B", "URB. B", "CERCADO B", "B"),
+            listOf("ASENTAMIENTO HUMANO", "ASOCIACION DE VIVIENDA", "CENTRO POBLADO", "URBANIZACION", "CERCADO", "OTROS").map {
+                describir(Domicilio(tipoUnidadUrbana = it, unidadUrbana = "B"))
+            }
+        )
+    }
+
+    @Test
+    fun `a via or zona that already starts with its type does not get it twice`() {
+        assertEquals("JR. LIMA", describir(Domicilio(tipoVia = "JIRON", via = "JR. LIMA")))
+        assertEquals("JIRON LIMA", describir(Domicilio(tipoVia = "JIRON", via = "JIRON LIMA")))
+        assertEquals("URB. LOS PINOS", describir(Domicilio(tipoUnidadUrbana = "URBANIZACION", unidadUrbana = "URB. LOS PINOS")))
+        // a word that only starts like the type is the name's
+        assertEquals("CA. CALLEJON OSCURO", describir(Domicilio(tipoVia = "CALLE", via = "CALLEJON OSCURO")))
+        // a type alone, with no name, is still written
+        assertEquals("AV.", describir(Domicilio(tipoVia = "AVENIDA")))
     }
 
     @Test
@@ -84,8 +111,49 @@ class ReglasTest {
                 distrito = "PERENE",
                 direccion = "lo que diga el cliente"
             )
-        assertEquals("AVENIDA ANDRES AVELINO CACERES, MZ. C, LT. 19, URBANIZACION SOL DE LA ALAMEDA, JUNIN-CHANCHAMAYO-PERENE", describirUbicacion(ubicacion))
+        assertEquals("AV. ANDRES AVELINO CACERES, MZ. C, LT. 19, URB. SOL DE LA ALAMEDA, JUNIN-CHANCHAMAYO-PERENE", describirUbicacion(ubicacion))
         assertEquals("JR. LIMA Nro.: 12", describirUbicacion(Predio(direccion = "JR. LIMA Nro.: 12", via = "JR. LIMA")))
+    }
+
+    @Test
+    fun `a predio of the padron, normalized, reads as the srtm writes it`() {
+        // what model/normalizar_padron.py leaves of "JIRON LIMA Nro.: 12 Mz.: A Lt.: 5 Km.: 1 CERCADO II MESETA"
+        val padron =
+            Predio(
+                direccion = "JIRON LIMA Nro.: 12 Mz.: A Lt.: 5 Km.: 1 CERCADO II MESETA",
+                tipoVia = "JIRON",
+                via = "LIMA",
+                numero = "12",
+                manzana = "A",
+                lote = "5",
+                kilometro = "1",
+                tipoZona = "CERCADO",
+                habilitacionUrbana = "II MESETA",
+                departamento = "JUNIN",
+                provincia = "CHANCHAMAYO",
+                distrito = "PERENE"
+            )
+        assertEquals("JR. LIMA, N° 12, MZ. A, LT. 5, KM. 1, CERCADO II MESETA, JUNIN-CHANCHAMAYO-PERENE", describirUbicacion(padron))
+    }
+
+    @Test
+    fun `the secuencia de uso has the padron's three digits`() {
+        assertEquals("001", secuenciaUso(null))
+        assertEquals("001", secuenciaUso(" "))
+        assertEquals("001", secuenciaUso("1"))
+        assertEquals("012", secuenciaUso(" 12 "))
+        assertEquals("002", secuenciaUso("002"))
+        assertEquals("0001", secuenciaUso("0001"))
+        // not a number: kept as written
+        assertEquals("A", secuenciaUso("A"))
+    }
+
+    @Test
+    fun `a secuencia stored before the padding is the same condominio and the same autoavaluo`() {
+        val antes = Declaracion(predio = "P", anio = 2026, secuenciaUso = "1", valorAutoavaluo = java.math.BigDecimal("1000"))
+        val despues = antes.copy(secuenciaUso = "001")
+        assertEquals(grupoDe(antes), grupoDe(despues))
+        assertEquals(java.math.BigDecimal("1000"), totalesDePredio(listOf(antes, despues)).autoavaluo)
     }
 
     @Test
