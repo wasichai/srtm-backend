@@ -261,13 +261,14 @@ Se descarta `orden2`, que es solo el número de fila.
   devuelven DTOs tipados.
 - **Claves JSON:** son los nombres de campo del modelo, en snake_case. `Records` convierte atributos ⇄ DTO con Jackson.
 - **Protección:** como la API vive bajo `/api`, el filtro JWT de core ya la protege. `RecordService` aplica los permisos
-  del usuario por objeto y por campo, y valida cada escritura.
+  del usuario por objeto y por campo, y valida cada escritura. `Registros` envía solo los campos que el usuario puede
+  escribir (un campo bloqueado conserva su valor) y `/catalogos` omite los objetos que su rol no puede leer.
 - **Errores:** salen como problem+json, con `errors[].field` igual al nombre del campo.
 
 | Método | Ruta | |
 |---|---|---|
 | GET | `/api/srtm/resumen` | totales del padrón |
-| GET | `/api/srtm/catalogos` | opciones ENUM por objeto y campo |
+| GET | `/api/srtm/catalogos` | opciones ENUM por objeto y campo, de los objetos que el rol puede leer |
 | GET | `/api/srtm/ubigeos` | la lista INEI completa; la cascada departamento → provincia → distrito se hace en el portal |
 | GET | `/api/srtm/vias?q&tipo&ubigeo`, `/api/srtm/unidades-urbanas?q&tipo&ubigeo` | sugerencias del catálogo |
 | GET, POST | `/api/srtm/contribuyentes?q&page&size` | búsqueda (texto en todos los campos) e inscripción |

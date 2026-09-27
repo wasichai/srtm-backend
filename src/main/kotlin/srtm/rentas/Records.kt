@@ -47,7 +47,8 @@ object Records {
         attributes: Map<String, Any?>
     ): T = read(T::class.java, id, attributes)
 
-    // every field of the dto, null included: core's update is a full replace
+    // every field of the dto, null included: core's update is a full replace. Registros sends only the ones
+    // the caller may write
     @Suppress("UNCHECKED_CAST")
     fun attributes(dto: Any): Map<String, Any?> = (json.convertValue(dto, Map::class.java) as Map<String, Any?>) - "id"
 }
