@@ -27,7 +27,7 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 19)
+        self.assertEqual(len(names), 20)
         self.assertEqual(len(self.model["relationships"]), 10)
 
     def test_new_contribuyente_fields_are_optional(self):
@@ -60,6 +60,21 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(fields["vigencia_hasta"]["type"], "DATE")
         self.assertEqual(fields["valor_numerico"]["type"], "DECIMAL")
         self.assertFalse(any(f.get("unique") for f in fields.values()))
+
+    def test_emision_masiva_is_the_job_of_the_contract(self):
+        # wasichai/srtm-backend#41: the masiva's job, with the fields of the epic's contract (wasichai/srtm-backend#37).
+        # errores is a json list [{contribuyente, mensaje}]; archivo the file's name under srtm.emision.dir
+        emision = next(o for o in self.model["objects"] if o["name"] == "emision_masiva")
+        fields = {f["name"]: f for f in emision["fields"]}
+        self.assertEqual(list(fields), ["anio", "formato", "estado", "total", "procesados", "errores", "archivo", "tamano",
+                                        "mensaje", "iniciado", "terminado"])
+        types = {n: f["type"] for n, f in fields.items()}
+        self.assertEqual(types, {"anio": "INTEGER", "formato": "ENUM", "estado": "ENUM", "total": "INTEGER",
+                                 "procesados": "INTEGER", "errores": "LONG_TEXT", "archivo": "TEXT", "tamano": "INTEGER",
+                                 "mensaje": "LONG_TEXT", "iniciado": "DATETIME", "terminado": "DATETIME"})
+        self.assertEqual(self.model["enums"][fields["formato"]["enum"]], ["PDF", "ZIP"])
+        self.assertEqual(self.model["enums"][fields["estado"]["enum"]], ["PENDIENTE", "EN_PROCESO", "TERMINADA", "FALLIDA"])
+        self.assertEqual({n for n, f in fields.items() if f.get("required")}, {"anio", "formato", "estado"})
 
     def test_every_enum_option_passes_core_regex(self):
         for name, options in self.model["enums"].items():

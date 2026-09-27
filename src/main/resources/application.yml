@@ -49,3 +49,6 @@ srtm:
       timeout: ${SRTM_PIDE_RENIEC_TIMEOUT:5s}
       # how long a consulta backs a save with fuente PIDE RENIEC
       vigencia: 30m
+  emision:
+    # the emisiones masivas' files (emision-<anio>-<id>.pdf|zip). a real deployment points it at a persistent volume
+    dir: ${SRTM_EMISION_DIR:./data/emisiones}
