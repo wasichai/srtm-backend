@@ -35,3 +35,6 @@ __pycache__/
 *.xls
 # import reports carry the same personal data
 model/reports/
+
+# node tooling (commitlint, husky, prettier)
+node_modules/
