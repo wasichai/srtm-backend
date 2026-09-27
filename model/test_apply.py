@@ -159,7 +159,8 @@ class SyncTests(ApplyCliTestCase):
         option_puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "enumOptions" in (r[3] or {})]
         self.assertEqual(option_puts, [(
             "/api/metadata/objects/contribuyente/fields/tipo_documento",
-            {"enumOptions": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION", "PASAPORTE"]},
+            {"enumOptions": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION", "PASAPORTE", "PTP-CPP", "CI",
+                             "OTROS"]},
         )])
         self.assertIn("done: 16 created, 1 updated, 27 skipped", out)
 

@@ -88,7 +88,8 @@ Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
 Solo añade, relaja o reetiqueta: no renombra, no cambia tipos y no borra, así los registros importados siguen siendo válidos. Por ejemplo,
 sobre la base del padrón:
 - añade los campos nuevos de `contribuyente`, `predio` y `declaracion_predial`;
-- amplía `tipo_documento` (`PASAPORTE`) y `condicion_propiedad` (`SOCIEDAD CONYUGAL`, `POSEEDOR`);
+- amplía `tipo_documento` (`PASAPORTE`, y `PTP-CPP`, `CI` y `OTROS` de los manuales del SRTM) y `condicion_propiedad`
+  (`SOCIEDAD CONYUGAL`, `POSEEDOR`);
 - crea los objetos y relaciones de las fases 1 y 2.
 
 Flags: `--core` (default `http://localhost:8090` o `$WASICHAI_CORE`), `--email`, `--password`, `--dry-run`,

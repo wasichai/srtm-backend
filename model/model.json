@@ -1,7 +1,7 @@
 {
   "enums": {
     "tipo_persona": ["NATURAL", "JURIDICA", "SUCESION"],
-    "tipo_documento": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION", "PASAPORTE"],
+    "tipo_documento": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION", "PASAPORTE", "PTP-CPP", "CI", "OTROS"],
     "condicion_predio": ["URBANO", "RUSTICO"],
     "ubicacion_area_verde": ["FRENTE A PARQUE", "MEDIANAMENTE CERCANO A AREAS VERDES", "FRENTE A BERMA", "OTRAS UBICACIONES"],
     "condicion_propiedad": ["PROPIETARIO UNICO", "CONDOMINO", "SOCIEDAD CONYUGAL", "POSEEDOR"],
