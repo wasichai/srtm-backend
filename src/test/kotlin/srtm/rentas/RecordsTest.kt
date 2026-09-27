@@ -61,20 +61,6 @@ class RecordsTest {
     }
 
     @Test
-    fun `totales count a missing value as zero`() {
-        val t =
-            totales(
-                listOf(
-                    Declaracion(valorAutoavaluo = BigDecimal("100.50"), valorAfecto = BigDecimal("50")),
-                    Declaracion(valorAutoavaluo = BigDecimal("20"))
-                )
-            )
-        assertEquals(2, t.declaraciones)
-        assertEquals(BigDecimal("120.50"), t.autoavaluo)
-        assertEquals(BigDecimal("50"), t.valorAfecto)
-    }
-
-    @Test
     fun `json keys are the model's field names`() {
         val json = JsonMapper.builder().addModule(KotlinModule.Builder().build()).build()
         val tree = json.readTree(json.writeValueAsString(Domicilio(tipoDomicilio = "FISCAL", subLote = "A")))

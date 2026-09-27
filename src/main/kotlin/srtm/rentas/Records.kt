@@ -52,10 +52,29 @@ object Records {
     fun attributes(dto: Any): Map<String, Any?> = (json.convertValue(dto, Map::class.java) as Map<String, Any?>) - "id"
 }
 
-// sums over the declarations of one year. a missing value counts as zero
-fun totales(declaraciones: List<Declaracion>) =
-    Totales(
-        declaraciones = declaraciones.size,
-        autoavaluo = declaraciones.sumOf { it.valorAutoavaluo ?: BigDecimal.ZERO },
-        valorAfecto = declaraciones.sumOf { it.valorAfecto ?: BigDecimal.ZERO }
+// sums over the declarations of one year; a missing value counts as zero. valor_autoavaluo is the whole predio's
+// (or secuencia de uso's) and valor_condominio a condómino's part of it, so summing valor_autoavaluo would count a
+// predio once per condómino. a contribuyente's autoavalúo adds up its parts: valor_condominio, or the whole
+// valor_autoavaluo when there is none (a sole owner). a predio's takes each secuencia's autoavalúo once, whoever
+// declares it. valor_afecto is already each titular's (valor_condominio - deduccion): it just adds up
+fun totalesDeContribuyente(declaraciones: List<Declaracion>) =
+    totales(declaraciones, declaraciones.sumOf { it.valorCondominio ?: it.valorAutoavaluo ?: BigDecimal.ZERO })
+
+// titulares that disagree on the autoavalúo count the highest
+fun totalesDePredio(declaraciones: List<Declaracion>) =
+    totales(
+        declaraciones,
+        declaraciones
+            .groupBy { Triple(it.predio, it.anio, it.secuenciaUso) }
+            .values
+            .sumOf { secuencia -> secuencia.mapNotNull { it.valorAutoavaluo }.maxOrNull() ?: BigDecimal.ZERO }
     )
+
+private fun totales(
+    declaraciones: List<Declaracion>,
+    autoavaluo: BigDecimal
+) = Totales(
+    declaraciones = declaraciones.size,
+    autoavaluo = autoavaluo,
+    valorAfecto = declaraciones.sumOf { it.valorAfecto ?: BigDecimal.ZERO }
+)
