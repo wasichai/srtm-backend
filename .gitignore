@@ -38,3 +38,6 @@ model/reports/
 
 # node tooling (commitlint, husky, prettier)
 node_modules/
+
+# srtm.emision.dir: the emisiones masivas' files carry every contribuyente's data
+/data/

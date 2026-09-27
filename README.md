@@ -75,7 +75,7 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 29 created, 0 updated, 0 skipped  (19 objetos + 10 relaciones)
+python3 apply.py                   # done: 30 created, 0 updated, 0 skipped  (20 objetos + 10 relaciones)
 python3 apply.py                   # idempotente: done: 0 created, 0 updated, 29 skipped
 python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
 ```
@@ -459,7 +459,7 @@ python3 apply.py                                  # 3. quita ANEXO, HABILITACION
 
 ## Modelo
 
-Diecinueve objetos (`model/model.json`):
+Veinte objetos (`model/model.json`):
 - **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
   *Formato Padrón Municipal Armonización 2026*.
 - **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
@@ -470,6 +470,8 @@ Diecinueve objetos (`model/model.json`):
 - **Catálogos:** `ubigeo`, `via`, `unidad_urbana`, `categoria_valor`, `obra_categoria` y `uso_predio`.
 - **Parámetros tributarios:** `parametro_tributario`, los valores normativos verificados del repo `normativa` (ver
   [Impuesto predial](#impuesto-predial)).
+- **Emisión masiva:** `emision_masiva`, el job de la emisión de un año en segundo plano (ver
+  [Emisión masiva](#emisión-masiva)).
 
 Geometrías (wasichai-gis, GeoJSON en EPSG:4326 por la API):
 - `predio.lote_geom` y `catastro_fiscal.lote_geom`: POLYGON, guardados en UTM 18S (EPSG:32718).
@@ -599,6 +601,10 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET | `/api/srtm/documentos/{tipo}/{numero}` | los apellidos y nombres que RENIEC da de un DNI; 404 si no hay datos o no hay convenio ([PIDE RENIEC](#pide-reniec)) |
 | GET | `/api/srtm/predios/{id}/pu?anio&contribuyente` | la PU del predio en PDF, inline; 404 sin DJ vigente en el año, 409 con `titulares` si hay varios y falta `contribuyente` ([Emisión de documentos](#emisión-de-documentos)) |
 | GET | `/api/srtm/contribuyentes/{id}/hr?anio` | la HR del contribuyente en PDF, inline, con el impuesto y las cuotas de `/liquidacion`; 422 con `faltan` sin parámetros del año, 404 sin DJ vigente en el año ([Emisión de documentos](#emisión-de-documentos)) |
+| POST | `/api/srtm/emisiones` `{anio, formato: PDF\|ZIP}` | lanza la emisión masiva del año en segundo plano: 202 con el job; 409 si ya hay una PENDIENTE o EN_PROCESO ([Emisión masiva](#emisión-masiva)) |
+| GET | `/api/srtm/emisiones?anio` | los jobs, el más reciente primero |
+| GET | `/api/srtm/emisiones/{id}` | un job: `{id, anio, formato, estado, total, procesados, errores:[{contribuyente, mensaje}], archivo, tamano, mensaje, iniciado, terminado}` |
+| GET | `/api/srtm/emisiones/{id}/archivo` | el PDF o ZIP, `attachment; filename="emision-<anio>-<id>.pdf\|zip"`, en streaming; 409 si aún no está TERMINADA |
 
 Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
 - **Inscripción:** el backend asigna `codigo` (6 dígitos, correlativo), `numero_declaracion` y `fecha_registro`.
@@ -786,6 +792,37 @@ wasichai/srtm-backend#37, aquí están la PU (Predio Urbano) y la HR (Hoja de Re
 - **Tiempo:** unos 80 ms por PU de dos usos solo en dibujar el PDF (`HojaPuTest`). `PuApiTest` mide 100 PU seguidas
   por la API, con las lecturas de Core, y lo imprime en la salida de `integrationTest`.
 
+## Emisión masiva
+
+Todas las HR y PU de un año (wasichai/srtm-backend#41), en segundo plano, como **un solo PDF** (por contribuyente, su
+HR seguida de sus PU) o como **un ZIP** (`<codigo>-<nombre>/HR-<anio>.pdf` y `<codigo>-<nombre>/PU-<codigo_predio>-<anio>.pdf`).
+
+- **Job:** el objeto Core `emision_masiva` (anio, formato, estado PENDIENTE → EN_PROCESO → TERMINADA o FALLIDA, total,
+  procesados, errores como JSON, archivo, tamano, mensaje, iniciado, terminado). Crear una emisión exige permiso de
+  creación sobre el objeto, y el job guarda su avance, así que quien la lanza necesita también el de edición.
+- **`EmisionMasivaService`:**
+  - Un `CoroutineScope(SupervisorJob() + Dispatchers.IO)` de la aplicación, cerrado en `@PreDestroy`, y un solo
+    worker (`Semaphore(1)`). Un segundo POST con una emisión PENDIENTE o EN_PROCESO da 409.
+  - Recorre los contribuyentes con DJ **vigentes** del año, por código, y por cada uno pide `hr` y la `pu` de cada
+    predio (por código de predio) a `DocumentosPrediales`. Un condominio da una PU por titular.
+  - **PDF:** cada documento va a un archivo temporal y al final `PdfMerger` los une en uno. **ZIP:** `ZipOutputStream`
+    en streaming. El archivo se escribe como `.part` y se renombra al terminar.
+  - Guarda `procesados` cada 25 contribuyentes y al final. Un contribuyente que falla queda en `errores`
+    (`{contribuyente: <codigo>, mensaje}`), sin sus documentos, y el resto sigue: el job termina TERMINADA. Un error
+    general lo deja FALLIDA con `mensaje`.
+  - **Usuario:** el job corre como quien lo lanzó. La autenticación de la petición pasa a la corrutina del job
+    (`ReactiveSecurityContextHolder.withAuthentication(...).asCoroutineContext()`, como hace wasichai-agent), así que
+    Core aplica sus permisos a cada lectura y escritura. El JWT no se vuelve a validar: su vencimiento no corta un job
+    ya empezado.
+  - **Al arrancar** (`ApplicationReadyEvent`), los jobs PENDIENTE o EN_PROCESO de cualquier organización pasan a
+    FALLIDA con el mensaje "interrumpida por reinicio". Al arrancar no hay usuario: esto va directo a la tabla del
+    objeto, con los nombres de columna que da la metadata de Core.
+- **Archivos** en `srtm.emision.dir` (`SRTM_EMISION_DIR`, por defecto `./data/emisiones`, fuera de git), con el
+  nombre `emision-<anio>-<id>.pdf|zip`. Llevan datos personales de todo el padrón: en producción, un volumen
+  persistente y privado. Nada los borra todavía.
+- **Descarga** `GET /api/srtm/emisiones/{id}/archivo`: `FileSystemResource`, en streaming, sin cargar el archivo en
+  memoria. El nombre se arma del job, nunca se lee del registro.
+
 ## Tests
 
 ```bash
@@ -798,7 +835,7 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`,
   `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…), `Records`,
   `Registros`, `srtm.pide` (`PideReniecTest`, contra un servidor local) y `srtm.emision` (`PdfRendererTest`,
-  `PdfMergerTest`, `HojaPuTest`, `HojaHrTest`, que leen el PDF de vuelta con PDFBox).
+  `PdfMergerTest`, `HojaPuTest`, `HojaHrTest`, `GeneradorEmisionTest`, que leen el PDF de vuelta con PDFBox).
 - **Integración** (`@Tag("integration")`): `SrtmSmokeTest` y las clases `*ApiTest`, que llaman a la API del portal
   sobre la app entera y PostGIS. Heredan de `SrtmApiTest`: el modelo aplicado como lo hace `apply.py`, el token del
   admin de desarrollo y las llamadas. Cada endpoint de `RentasController` y `DocumentosController` tiene un caso feliz
