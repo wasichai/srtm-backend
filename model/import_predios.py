@@ -54,6 +54,30 @@ ADDRESS_TAG = re.compile(r"(Nro\.Alt|Nro|Mz|Lt|Block|Dpto|Int|Km)\.:\s*(\S+)")
 DOMICILIO_SUFFIX = re.compile(r"^(?P<dir>.*?)\s*,?\s*Dist\.\s*(?P<dist>.*?)\s+Prov\.\s*(?P<prov>.*?)\s+Dpto\.\s*(?P<dpto>.*?)\s*$")
 SECTOR_MANZANA = re.compile(r"^\s*(\S+)\s*-\s*(\S+)\s*$")
 
+# prefix as written in the padrón -> the model's option. longest first, so "ASOCIACION DE VIVIENDA" wins over
+# "ASOCIACION". anything else keeps its whole text as the name, under OTROS. the abbreviations are also the ones the
+# portal writes an address with (Reglas.kt in srtm-backend, forms/direccion.ts in srtm-ui): each must be read back
+TIPOS_VIA = [
+    ("PROLONGACION", "PROLONGACION"), ("CARROZABLE", "CARROZABLE"), ("CARRETERA", "CARRETERA"), ("AVENIDA", "AVENIDA"),
+    ("MALECON", "MALECON"), ("ALAMEDA", "ALAMEDA"), ("PASAJE", "PASAJE"), ("TROCHA", "TROCHA"), ("CAMINO", "CAMINO"),
+    ("JIRON", "JIRON"), ("CALLE", "CALLE"), ("PSJE.", "PASAJE"), ("PROL.", "PROLONGACION"), ("CARR.", "CARRETERA"),
+    ("AV.", "AVENIDA"), ("JR.", "JIRON"), ("CA.", "CALLE"),
+    # the padrón's misspellings of CARROZABLE
+    ("CACARROZABLE", "CARROZABLE"), ("CORRAZABLE", "CARROZABLE"), ("CORROZABLE", "CARROZABLE"), ("CARROZBLE", "CARROZABLE"),
+]
+TIPOS_UNIDAD_URBANA = [
+    ("ASOCIACION DE VIVIENDA", "ASOCIACION DE VIVIENDA"), ("ASENTAMIENTO HUMANO", "ASENTAMIENTO HUMANO"),
+    ("COMUNIDAD CAMPESINA", "COMUNIDAD CAMPESINA"), ("HABILITACION URBANA", "HABILITACION URBANA"),
+    ("COMUNIDAD NATIVA", "COMUNIDAD NATIVA"), ("CENTRO POBLADO", "CENTRO POBLADO"), ("URBANIZACION", "URBANIZACION"),
+    ("PUEBLO JOVEN", "PUEBLO JOVEN"), ("HABILITACION", "HABILITACION URBANA"), ("COOPERATIVA", "COOPERATIVA"),
+    ("AGRUPACION", "AGRUPACION"), ("LOTIZACION", "LOTIZACION"), ("ASOCIACION", "ASOCIACION"), ("CERCADO", "CERCADO"),
+    ("CASERIO", "CASERIO"), ("SECTOR", "SECTOR"), ("ANEXO", "ANEXO"), ("AA.HH.", "ASENTAMIENTO HUMANO"),
+    ("AA.VV.", "ASOCIACION DE VIVIENDA"), ("URB.", "URBANIZACION"), ("C.P.", "CENTRO POBLADO"), ("ZONA", "ZONA"),
+]
+
+# the padrón numbers the usos of a predio with three digits: 001, 002...
+SECUENCIA_WIDTH = 3
+
 PROGRESS_EVERY = 500
 
 
@@ -158,7 +182,7 @@ def parse_address(value):
     text = clean_text(value) or ""
     tags = list(ADDRESS_TAG.finditer(text))
     if not tags:
-        return {"via": text or None, "numero": None, "manzana": None, "lote": None, "habilitacion_urbana": None}
+        return {"via": text or None, "numero": None, "manzana": None, "lote": None, "kilometro": None, "habilitacion_urbana": None}
     found = {}
     for m in tags:
         found.setdefault(m.group(1), _tag_value(m.group(2)))
@@ -167,8 +191,48 @@ def parse_address(value):
         "numero": found.get("Nro"),
         "manzana": found.get("Mz"),
         "lote": found.get("Lt"),
+        "kilometro": found.get("Km"),
         "habilitacion_urbana": text[tags[-1].end():].strip() or None,
     }
+
+
+def split_tipo(text, tipos, default="OTROS", anywhere=False):
+    """'AVENIDA LOS OLIVOS' -> ('AVENIDA', 'LOS OLIVOS'). The type must be a whole word followed by a name.
+    anywhere: the type may come after leftovers of the lot ('03-B CERCADO III MESETA'), which are dropped;
+    the earliest type wins, the longest on a tie. No type found: the whole text is the name, under default."""
+    best = None
+    for prefix, tipo in tipos:
+        pattern = re.compile(r"(?:^|(?<=[\s(-]))" + re.escape(prefix) + (r"(?=\s)" if not prefix.endswith(".") else r""))
+        match = pattern.search(text) if anywhere else pattern.match(text)
+        if not match:
+            continue
+        name = text[match.end():].strip(" -")
+        if not name:
+            continue
+        candidate = (match.start(), -len(prefix), tipo, name)
+        if best is None or candidate < best:
+            best = candidate
+    if best is None:
+        return default, text
+    return best[2], best[3]
+
+
+def split_ubicacion(address):
+    """parse_address's vía and habilitación urbana with their type split off, as the srtm's ubicación keeps them:
+    'JIRON LIMA' is tipo_via JIRON, via LIMA; '03-B CERCADO III MESETA' is tipo_zona CERCADO, habilitacion_urbana
+    III MESETA (the lot's leftovers dropped). What is missing stays missing."""
+    out = dict(address)
+    if address.get("via"):
+        out["tipo_via"], out["via"] = split_tipo(address["via"], TIPOS_VIA)
+    if address.get("habilitacion_urbana"):
+        out["tipo_zona"], out["habilitacion_urbana"] = split_tipo(address["habilitacion_urbana"], TIPOS_UNIDAD_URBANA, anywhere=True)
+    return out
+
+
+def secuencia_uso(value):
+    """The padrón's three digits: '1' is '001', none is the first. Anything but a number stays as written."""
+    text = clean_text(value) or "1"
+    return text.zfill(SECUENCIA_WIDTH) if text.isdigit() else text
 
 
 def parse_domicilio(value):
@@ -359,7 +423,7 @@ def _predio(row, codigo, mapper):
         "manzana_catastral": manzana,
         "condicion": mapper.enum(row, "tipo_pupr_desc", "condicion_predio", CONDICION_PREDIO),
         "direccion": clean_text(row.get("direccion_predio")),
-        **parse_address(row.get("direccion_predio")),
+        **split_ubicacion(parse_address(row.get("direccion_predio"))),
         "ubicacion_area_verde": mapper.enum(row, "ubicacion_parque", "ubicacion_area_verde"),
     }
 
@@ -404,7 +468,7 @@ def build_dataset(rows, anio, enums):
         try:
             codigo = clean_text(row.get("codigo_predio"))
             if codigo:
-                group = (codigo, clean_text(row.get("secuencia_uso")) or "001")
+                group = (codigo, secuencia_uso(row.get("secuencia_uso")))
             elif group is None:
                 data.problems.append(f"fila {fila}: co-owner row with no predio above it")
                 continue

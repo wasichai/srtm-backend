@@ -16,8 +16,8 @@ private val CIEN = BigDecimal(100)
 // besides propietario único, what a titular who holds the predio alone may declare itself
 private val TITULAR_UNICO = setOf(PROPIETARIO_UNICO, "SOCIEDAD CONYUGAL", "POSEEDOR")
 
-// the condominio a declaración belongs to
-fun grupoDe(d: Declaracion) = Triple(d.predio, d.anio, d.secuenciaUso)
+// the condominio a declaración belongs to. a secuencia stored before it had three digits ("1") is the same as "001"
+fun grupoDe(d: Declaracion) = Triple(d.predio, d.anio, d.secuenciaUso?.let(::secuenciaUso))
 
 // a sole titular holds 100 %; two or more are condóminos, each with the % it declares. valor_condominio is that % of
 // the autoavalúo (to the cent, half up) and valor_afecto what the deducción leaves of it

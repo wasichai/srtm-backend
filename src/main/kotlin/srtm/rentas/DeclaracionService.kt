@@ -57,7 +57,7 @@ class DeclaracionService(
         body: Declaracion
     ): Declaracion {
         val stored = registros.get(DECLARACION, Declaracion::class.java, id)
-        val next = body.copy(numeroDeclaracion = stored.numeroDeclaracion)
+        val next = body.copy(numeroDeclaracion = stored.numeroDeclaracion, secuenciaUso = secuenciaUso(body.secuenciaUso))
         val seUne = grupoDe(next) != grupoDe(stored)
         val otros = titulares(next).filter { it.id != id.toString() }
         val grupo = condominioCon(next, otros, seUne)
@@ -185,7 +185,7 @@ class DeclaracionService(
             contribuyente = contribuyente.toString(),
             predio = predio.toString(),
             anio = body.anio ?: presentacion.year,
-            secuenciaUso = body.secuenciaUso?.ifBlank { null } ?: "1",
+            secuenciaUso = secuenciaUso(body.secuenciaUso),
             motivo = body.motivo ?: "INSCRIPCION",
             medioDeterminacion = body.medioDeterminacion ?: "DECLARACION JURADA",
             medioPresentacion = body.medioPresentacion ?: "FISICO",
@@ -202,11 +202,14 @@ class DeclaracionService(
         return creada
     }
 
-    // the declaraciones of a condominio: same predio, year and secuencia de uso
+    // the declaraciones of a condominio: same predio, year and secuencia de uso. the secuencia is compared here, not in
+    // the query: one stored as "1" before model/normalizar_padron.py ran is the same as "001"
     private suspend fun titulares(d: Declaracion): List<Declaracion> {
         val (predio, anio, secuencia) = grupoDe(d)
         if (predio == null || anio == null || secuencia == null) return emptyList()
-        return registros.all(DECLARACION, Declaracion::class.java, filters = mapOf("predio" to predio, "anio" to anio.toString(), "secuencia_uso" to secuencia))
+        return registros
+            .all(DECLARACION, Declaracion::class.java, filters = mapOf("predio" to predio, "anio" to anio.toString()))
+            .filter { grupoDe(it) == grupoDe(d) }
     }
 
     // what is left of a condominio a declaración went away from

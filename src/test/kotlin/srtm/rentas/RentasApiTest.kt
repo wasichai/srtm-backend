@@ -140,7 +140,7 @@ class RentasApiTest : WasichaiIntegrationTest() {
                     "descripcion" to "lo que diga el cliente no cuenta"
                 )
             )
-        val descripcion = "AVENIDA MARGINAL, N° 234, JUNIN-CHANCHAMAYO-PERENE"
+        val descripcion = "AV. MARGINAL, N° 234, JUNIN-CHANCHAMAYO-PERENE"
         assertEquals(descripcion, domicilio["descripcion"].asString())
         assertEquals("ACTIVO", domicilio["estado"].asString())
         get("/api/srtm/contribuyentes/$id")
@@ -156,7 +156,7 @@ class RentasApiTest : WasichaiIntegrationTest() {
         get("/api/srtm/contribuyentes/$id")
             .expectBody()
             .jsonPath("$.contribuyente.domicilio_fiscal")
-            .isEqualTo("AVENIDA MARGINAL, N° 240, JUNIN-CHANCHAMAYO-PERENE")
+            .isEqualTo("AV. MARGINAL, N° 240, JUNIN-CHANCHAMAYO-PERENE")
 
         delete("/api/srtm/domicilios/$domicilioId")
         get("/api/srtm/contribuyentes/$id/domicilios")
@@ -260,9 +260,9 @@ class RentasApiTest : WasichaiIntegrationTest() {
             )
         val declaracion = dj["declaracion"]
         assertEquals("$sector-$manzana-0001", dj["predio"]["codigo"].asString())
-        assertEquals("AVENIDA MARGINAL, LT. 19, JUNIN-CHANCHAMAYO-PERENE", dj["predio"]["direccion"].asString())
+        assertEquals("AV. MARGINAL, LT. 19, JUNIN-CHANCHAMAYO-PERENE", dj["predio"]["direccion"].asString())
         assertEquals(2026, declaracion["anio"].asInt())
-        assertEquals("1", declaracion["secuencia_uso"].asString())
+        assertEquals("001", declaracion["secuencia_uso"].asString())
         assertEquals("PROPIETARIO UNICO", declaracion["condicion_propiedad"].asString())
         assertEquals(100, declaracion["porcentaje_condominio"].asInt())
         assertEquals(contribuyente, dj["contribuyente"]["id"].asString())

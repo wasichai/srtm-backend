@@ -66,7 +66,7 @@ fun totalesDePredio(declaraciones: List<Declaracion>) =
     totales(
         declaraciones,
         declaraciones
-            .groupBy { Triple(it.predio, it.anio, it.secuenciaUso) }
+            .groupBy(::grupoDe)
             .values
             .sumOf { secuencia -> secuencia.mapNotNull { it.valorAutoavaluo }.maxOrNull() ?: BigDecimal.ZERO }
     )

@@ -111,7 +111,7 @@ class ParseAddressTests(unittest.TestCase):
     def test_via_manzana_lote_habilitacion(self):
         self.assertEqual(
             ip.parse_address("PASAJE SAN PEDRO Mz.: G Lt.: 21 ASOCIACION DE VIVIENDA 06 DE AGOSTO"),
-            {"via": "PASAJE SAN PEDRO", "numero": None, "manzana": "G", "lote": "21",
+            {"via": "PASAJE SAN PEDRO", "numero": None, "manzana": "G", "lote": "21", "kilometro": None,
              "habilitacion_urbana": "ASOCIACION DE VIVIENDA 06 DE AGOSTO"},
         )
 
@@ -131,12 +131,59 @@ class ParseAddressTests(unittest.TestCase):
     def test_rural_without_lote(self):
         self.assertEqual(
             ip.parse_address(" CARROZABLE MIRICHARO Mz.: 99 ANEXO - CENTRO POBLADO MIRICHARO"),
-            {"via": "CARROZABLE MIRICHARO", "numero": None, "manzana": "99", "lote": None,
+            {"via": "CARROZABLE MIRICHARO", "numero": None, "manzana": "99", "lote": None, "kilometro": None,
              "habilitacion_urbana": "ANEXO - CENTRO POBLADO MIRICHARO"},
         )
 
     def test_no_tags_is_all_via(self):
         self.assertEqual(ip.parse_address("SECTOR IPANEMA")["via"], "SECTOR IPANEMA")
+
+    def test_kilometro(self):
+        parsed = ip.parse_address("AVENIDA CIRCUNVALACION - II- III MESETA Mz.: D Lt.: 20 Km.: 23.5 CERCADO III MESETA")
+        self.assertEqual(parsed["kilometro"], "23.5")
+        self.assertEqual(parsed["habilitacion_urbana"], "CERCADO III MESETA")
+        self.assertIsNone(ip.parse_address("SECTOR IPANEMA")["kilometro"])
+
+
+class SplitUbicacionTests(unittest.TestCase):
+    def test_types_split_off_the_names(self):
+        self.assertEqual(
+            ip.split_ubicacion({"via": "JIRON LIMA", "numero": "12", "habilitacion_urbana": "03-B CERCADO III MESETA"}),
+            {"tipo_via": "JIRON", "via": "LIMA", "numero": "12", "tipo_zona": "CERCADO", "habilitacion_urbana": "III MESETA"},
+        )
+        self.assertEqual(ip.split_ubicacion({"via": "JR. LIMA"}), {"tipo_via": "JIRON", "via": "LIMA"})
+
+    def test_no_type_is_otros_and_nothing_stays_nothing(self):
+        self.assertEqual(ip.split_ubicacion({"via": "SECTOR IPANEMA"}), {"tipo_via": "OTROS", "via": "SECTOR IPANEMA"})
+        self.assertEqual(ip.split_ubicacion({"via": None, "habilitacion_urbana": None}), {"via": None, "habilitacion_urbana": None})
+
+    def test_the_padron_misspells_carrozable(self):
+        for via in ["CORRAZABLE TUPAC AMARU", "CORROZABLE TUPAC AMARU", "CARROZBLE TUPAC AMARU", "CACARROZABLE TUPAC AMARU"]:
+            with self.subTest(via=via):
+                self.assertEqual(ip.split_tipo(via, ip.TIPOS_VIA), ("CARROZABLE", "TUPAC AMARU"))
+
+    def test_every_abbreviation_of_the_address_is_read_back(self):
+        # the tables Reglas.kt (srtm-backend) and forms/direccion.ts (srtm-ui) write addresses with
+        vias = {"AVENIDA": "AV.", "CALLE": "CA.", "JIRON": "JR.", "PASAJE": "PSJE.", "PROLONGACION": "PROL.", "CARRETERA": "CARR."}
+        unidades = {"ASENTAMIENTO HUMANO": "AA.HH.", "ASOCIACION DE VIVIENDA": "AA.VV.", "CENTRO POBLADO": "C.P.", "URBANIZACION": "URB."}
+        for tipo, sigla in vias.items():
+            with self.subTest(sigla=sigla):
+                self.assertEqual(ip.split_tipo(f"{sigla} LOS PINOS", ip.TIPOS_VIA), (tipo, "LOS PINOS"))
+        for tipo, sigla in unidades.items():
+            with self.subTest(sigla=sigla):
+                self.assertEqual(ip.split_tipo(f"{sigla} LOS PINOS", ip.TIPOS_UNIDAD_URBANA, anywhere=True), (tipo, "LOS PINOS"))
+
+
+class SecuenciaUsoTests(unittest.TestCase):
+    def test_three_digits_as_the_padron(self):
+        self.assertEqual(ip.secuencia_uso("1"), "001")
+        self.assertEqual(ip.secuencia_uso(" 12 "), "012")
+        self.assertEqual(ip.secuencia_uso("002"), "002")
+        self.assertEqual(ip.secuencia_uso("0001"), "0001")
+        self.assertEqual(ip.secuencia_uso(None), "001")
+        self.assertEqual(ip.secuencia_uso(""), "001")
+        # not a number: kept as written
+        self.assertEqual(ip.secuencia_uso("A"), "A")
 
 
 class ParseDomicilioTests(unittest.TestCase):
@@ -196,6 +243,10 @@ class BuildDatasetTests(unittest.TestCase):
         self.assertEqual((predio["sector_catastral"], predio["manzana_catastral"]), ("01", "01"))
         self.assertEqual(predio["condicion"], "URBANO")
         self.assertEqual(predio["manzana"], "G")
+        # the ubicación as the srtm's form edits it; direccion keeps the padrón's text
+        self.assertEqual((predio["tipo_via"], predio["via"]), ("PASAJE", "SAN PEDRO"))
+        self.assertEqual((predio["tipo_zona"], predio["habilitacion_urbana"]), ("ASOCIACION DE VIVIENDA", "06 DE AGOSTO"))
+        self.assertEqual(predio["direccion"], "PASAJE SAN PEDRO Mz.: G Lt.: 21 ASOCIACION DE VIVIENDA 06 DE AGOSTO")
 
         [decl] = data.declaraciones
         self.assertEqual(decl.attributes["condicion_propiedad"], "PROPIETARIO UNICO")
@@ -203,6 +254,11 @@ class BuildDatasetTests(unittest.TestCase):
         self.assertEqual(decl.attributes["valor_afecto"], "10080.45")
         self.assertEqual(decl.attributes["anio"], 2026)
         self.assertEqual((decl.codigo_predio, decl.numero_documento), ("01-01-0001", "20529936"))
+        self.assertEqual(decl.attributes["secuencia_uso"], "001")
+
+    def test_secuencia_has_three_digits(self):
+        [decl] = self.build([row(secuencia_uso="2")]).declaraciones
+        self.assertEqual(decl.attributes["secuencia_uso"], "002")
 
     def test_co_owners_inherit_the_predio(self):
         data = self.build([

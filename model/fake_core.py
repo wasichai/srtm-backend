@@ -10,6 +10,7 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 RECORDS = re.compile(r"^/api/objects/([a-z0-9_]+)/records$")
+RECORD = re.compile(r"^/api/objects/([a-z0-9_]+)/records/([0-9a-f-]+)$")
 FIELDS = re.compile(r"^/api/metadata/objects/([a-z0-9_]+)/fields$")
 
 
@@ -51,7 +52,8 @@ class FakeCore:
     """existing_objects/existing_relationships mark names that 409 on create; records live in memory."""
 
     def __init__(self, existing_objects=(), existing_relationships=(), fail_on_post_object=None,
-                 fail_put=False, fail_put_status=500, login_response=None, fail_on_record=None, existing_fields=None):
+                 fail_put=False, fail_put_status=500, login_response=None, fail_on_record=None, existing_fields=None,
+                 fail_on_update=None):
         self.existing_objects = set(existing_objects)
         self.existing_fields = existing_fields or {}  # object name -> list of {"name", "enumOptions"?}
         self.existing_relationships = set(existing_relationships)
@@ -60,6 +62,7 @@ class FakeCore:
         self.fail_put_status = fail_put_status
         self.login_response = login_response  # override the default {"token": "t"}
         self.fail_on_record = fail_on_record  # object name -> its record POSTs answer 400
+        self.fail_on_update = fail_on_update  # object name -> its record PUTs answer 400
         self.records = {}  # object name -> list of {"id", "attributes"}
         self.requests = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeCoreHandler)
@@ -103,6 +106,17 @@ class FakeCore:
             "totalPages": total_pages,
         }
 
+    def _update(self, path, body):
+        """A record's PUT: Core replaces every field with what is sent."""
+        name, record_id = RECORD.match(path).groups()
+        if self.fail_on_update == name:
+            return 400, {"detail": "Invalid option", "errors": [{"field": "tipo_via", "message": "boom-update"}]}
+        record = next((r for r in self.records.get(name, []) if r["id"] == record_id), None)
+        if record is None:
+            return 404, {"detail": "not found"}
+        record["attributes"] = dict(body["attributes"])
+        return 200, record
+
     def _script(self, method, full_path, body):
         path, _, query = full_path.partition("?")
         if path == "/api/auth/login" and method == "POST":
@@ -111,6 +125,8 @@ class FakeCore:
             return 200, {"token": "t"}
         if RECORDS.match(path) and method in ("GET", "POST"):
             return self._records(method, path, query, body)
+        if RECORD.match(path) and method == "PUT":
+            return self._update(path, body)
         if path == "/api/objects" and method == "GET":
             return 200, [{"name": n} for n in self.existing_objects]
         if path == "/api/objects" and method == "POST":

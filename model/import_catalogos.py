@@ -12,54 +12,15 @@ Exit: 0 ok, 1 Core refused something.
 import argparse
 import csv
 import os
-import re
 import sys
 
 from core_client import Client, CoreError
-from import_predios import LoadError, clean_text, parse_address, post_all, read_xlsx
+from import_predios import TIPOS_UNIDAD_URBANA, TIPOS_VIA, LoadError, clean_text, parse_address, post_all, read_xlsx, split_tipo
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Perené (JUNIN / CHANCHAMAYO): the district the padrón's vías and unidades urbanas belong to
 DEFAULT_UBIGEO = "120302"
-
-# prefix as written in the padrón -> the model's option. longest first, so "ASOCIACION DE VIVIENDA" wins over
-# "ASOCIACION". anything else keeps its whole text as the name, under OTROS
-TIPOS_VIA = [
-    ("PROLONGACION", "PROLONGACION"), ("CARROZABLE", "CARROZABLE"), ("CARRETERA", "CARRETERA"), ("AVENIDA", "AVENIDA"),
-    ("MALECON", "MALECON"), ("ALAMEDA", "ALAMEDA"), ("PASAJE", "PASAJE"), ("TROCHA", "TROCHA"), ("CAMINO", "CAMINO"),
-    ("JIRON", "JIRON"), ("CALLE", "CALLE"), ("PSJE.", "PASAJE"), ("AV.", "AVENIDA"), ("JR.", "JIRON"), ("CA.", "CALLE"),
-]
-TIPOS_UNIDAD_URBANA = [
-    ("ASOCIACION DE VIVIENDA", "ASOCIACION DE VIVIENDA"), ("ASENTAMIENTO HUMANO", "ASENTAMIENTO HUMANO"),
-    ("COMUNIDAD CAMPESINA", "COMUNIDAD CAMPESINA"), ("HABILITACION URBANA", "HABILITACION URBANA"),
-    ("COMUNIDAD NATIVA", "COMUNIDAD NATIVA"), ("CENTRO POBLADO", "CENTRO POBLADO"), ("URBANIZACION", "URBANIZACION"),
-    ("PUEBLO JOVEN", "PUEBLO JOVEN"), ("HABILITACION", "HABILITACION URBANA"), ("COOPERATIVA", "COOPERATIVA"),
-    ("AGRUPACION", "AGRUPACION"), ("LOTIZACION", "LOTIZACION"), ("ASOCIACION", "ASOCIACION"), ("CERCADO", "CERCADO"),
-    ("CASERIO", "CASERIO"), ("SECTOR", "SECTOR"), ("ANEXO", "ANEXO"), ("AA.HH.", "ASENTAMIENTO HUMANO"),
-    ("URB.", "URBANIZACION"), ("C.P.", "CENTRO POBLADO"), ("ZONA", "ZONA"),
-]
-
-
-def split_tipo(text, tipos, default="OTROS", anywhere=False):
-    """'AVENIDA LOS OLIVOS' -> ('AVENIDA', 'LOS OLIVOS'). The type must be a whole word followed by a name.
-    anywhere: the type may come after leftovers of the lot ('03-B CERCADO III MESETA'), which are dropped;
-    the earliest type wins, the longest on a tie. No type found: the whole text is the name, under default."""
-    best = None
-    for prefix, tipo in tipos:
-        pattern = re.compile(r"(?:^|(?<=[\s(-]))" + re.escape(prefix) + (r"(?=\s)" if not prefix.endswith(".") else r""))
-        match = pattern.search(text) if anywhere else pattern.match(text)
-        if not match:
-            continue
-        name = text[match.end():].strip(" -")
-        if not name:
-            continue
-        candidate = (match.start(), -len(prefix), tipo, name)
-        if best is None or candidate < best:
-            best = candidate
-    if best is None:
-        return default, text
-    return best[2], best[3]
 
 
 def read_ubigeo(path):
