@@ -6,6 +6,7 @@ Run: cd model && python3 -m unittest -v test_opciones_srtm
 import unittest
 
 from fake_core import FakeCore
+from import_predios import TIPOS_UNIDAD_URBANA, split_tipo
 from test_apply import ApplyCliTestCase, core_fields, load_model
 
 # before: what Core has for tipo_documento. the srtm's manuals (M01-1-012 contribuyente, M01-1-014 predial) list
@@ -41,6 +42,55 @@ class TipoDocumentoSrtmTests(ApplyCliTestCase):
         ])
         for name in PERSONAS:
             self.assertIn(f"update field {name}.tipo_documento (+PTP-CPP, CI, OTROS)", out)
+
+
+# the two tipos de unidad urbana the presentation cuts on page 5 ("ASOCIACION DE VIVIENDA D…", "…E I…"), named as the
+# catastro fiscal's TIPO_UU domain names them (codes 53 and 48): the list the srtm imports its zonas urbanas from
+UNIDADES_NUEVAS = ["ASOCIACION DE VIVIENDA DE INTERES SOCIAL", "ASOCIACION DE VIVIENDA E INTERES SOCIAL"]
+
+
+class TipoUnidadUrbanaSrtmTests(ApplyCliTestCase):
+    def setUp(self):
+        model = load_model()
+        self.antes = [o for o in model["enums"]["tipo_unidad_urbana"] if o not in UNIDADES_NUEVAS]
+        # every ENUM field on the list: the domicilio's, the catalog's, the predio's and the catastro's zona
+        self.campos = [(o["name"], f["name"]) for o in model["objects"] for f in o["fields"]
+                       if f.get("enum") == "tipo_unidad_urbana"]
+        fields = {o["name"]: core_fields(model, o["name"]) for o in model["objects"]}
+        for objeto, campo in self.campos:
+            fields[objeto] = core_fields(model, objeto, options={campo: self.antes})
+        self.core = FakeCore(
+            existing_objects=[o["name"] for o in model["objects"]],
+            existing_relationships=[r["name"] for r in model["relationships"]],
+            existing_fields=fields,
+        )
+        self.addCleanup(self.core.stop)
+
+    def test_model_lists_them_after_asociacion_de_vivienda(self):
+        # page 5 sorts the list: AGRUPACION … ASOCIACION DE VIVIENDA, then these two
+        tipos = load_model()["enums"]["tipo_unidad_urbana"]
+        i = tipos.index("ASOCIACION DE VIVIENDA")
+        self.assertEqual(tipos[i + 1:i + 3], UNIDADES_NUEVAS)
+
+    def test_adds_them_to_every_field_on_the_list(self):
+        self.assertEqual(len(self.campos), 4)
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0, msg=err)
+        option_puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "enumOptions" in (r[3] or {})]
+        # after the options Core has, as apply.py adds any option
+        self.assertEqual(option_puts, [
+            (f"/api/metadata/objects/{objeto}/fields/{campo}", {"enumOptions": self.antes + UNIDADES_NUEVAS})
+            for objeto, campo in self.campos
+        ])
+        for objeto, campo in self.campos:
+            self.assertIn(f"update field {objeto}.{campo} (+{', '.join(UNIDADES_NUEVAS)})", out)
+
+    def test_a_padron_address_keeps_the_whole_type(self):
+        for tipo in UNIDADES_NUEVAS:
+            with self.subTest(tipo=tipo):
+                self.assertEqual(split_tipo(f"{tipo} LOS PINOS", TIPOS_UNIDAD_URBANA, anywhere=True), (tipo, "LOS PINOS"))
+        self.assertEqual(split_tipo("ASOCIACION DE VIVIENDA LOS PINOS", TIPOS_UNIDAD_URBANA, anywhere=True),
+                         ("ASOCIACION DE VIVIENDA", "LOS PINOS"))
 
 
 if __name__ == "__main__":

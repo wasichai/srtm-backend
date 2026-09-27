@@ -94,6 +94,13 @@ registros importados siguen siendo válidos. Por ejemplo, sobre la base del padr
 - añade los campos nuevos de `contribuyente`, `predio` y `declaracion_predial`;
 - amplía `tipo_documento` (`PASAPORTE`, y `PTP-CPP`, `CI` y `OTROS` de los manuales del SRTM) y `condicion_propiedad`
   (`SOCIEDAD CONYUGAL`, `POSEEDOR`);
+- amplía `tipo_unidad_urbana` con las dos opciones que la presentación del SRTM corta en la pág. 5
+  ("ASOCIACION DE VIVIENDA D…", "…E I…"): `ASOCIACION DE VIVIENDA DE INTERES SOCIAL` y
+  `ASOCIACION DE VIVIENDA E INTERES SOCIAL`.
+  - Los nombres son los del dominio `TIPO_UU` del catastro fiscal del MEF (códigos 53 y 48), la lista de la que el SRTM
+    importa sus zonas urbanas. Se leyeron de la geodatabase de Perené (`120302_MD_Perene_ECF.gdb`) con
+    `ogrinfo -ro <gdb> -fielddomain TIPO_UU`. Ordenado alfabéticamente, ese dominio da las seis filas de la pág. 5.
+  - Sobre una base que ya tiene la lista, quedan después de `OTROS`, como toda opción que se añade.
 - cambia `tipo_obra` a los grupos del anexo III de obras complementarias (quita `CISTERNAS`, `PISCINAS`,
   `LOSAS DEPORTIVAS`, `PISOS DE CONCRETO` y `OTROS`) y añade `PZA` a `unidad_medida`;
 - quita de `clase_uso` y `sub_clase_uso` las opciones de antes del catálogo de usos del SRTM (`INDUSTRIAL`,
