@@ -203,6 +203,34 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
     // a response as a request body: every field it came with
     protected fun fields(node: JsonNode): Map<String, Any?> = json.convertValue(node, Map::class.java).entries.associate { it.key.toString() to it.value }
 
+    // a clerk (not ADMIN) with a role of their own: what it may do, and the one field it may read but not write
+    protected fun funcionario(
+        permisos: List<Map<String, Any?>>,
+        bloqueado: Pair<String, String>? = null
+    ): String {
+        val rol = uniqueName("ROL").uppercase()
+        send("POST", "/api/roles", mapOf("name" to rol, "label" to rol), HttpStatus.CREATED)
+        send("PUT", "/api/roles/$rol/permissions", mapOf("permissions" to permisos), HttpStatus.OK)
+        if (bloqueado != null) {
+            val (objeto, campo) = bloqueado
+            send(
+                "PUT",
+                "/api/roles/$rol/field-permissions",
+                mapOf("fields" to listOf(mapOf("objectName" to objeto, "fieldName" to campo, "read" to true, "write" to false))),
+                HttpStatus.OK
+            )
+        }
+        val email = "${rol.lowercase()}@srtm.test"
+        send("POST", "/api/users", mapOf("email" to email, "displayName" to rol, "password" to CLAVE, "roles" to listOf(rol)), HttpStatus.CREATED)
+        return bearer(email, CLAVE)
+    }
+
+    // objectName null: every object of the organization
+    protected fun permiso(
+        objeto: String?,
+        accion: String
+    ) = mapOf("objectName" to objeto, "action" to accion)
+
     // records
 
     // eight digits, unique enough for the shared test db: a document number, a code, a name
@@ -245,5 +273,8 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
 
     private companion object {
         val JSON: JsonMapper = JsonMapper.builder().build()
+
+        // Core wants at least 8 characters
+        const val CLAVE = "clave-del-funcionario"
     }
 }

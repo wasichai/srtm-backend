@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpHeaders
-import org.springframework.http.HttpStatus
 
 // the portal api for a clerk whose role is not ADMIN: core's object and field permissions narrow what the
 // catalogs answer and what a save sends, without failing the whole answer or the whole save. token is the admin's
@@ -50,43 +49,10 @@ class PermisosApiTest : SrtmApiTest() {
         assertTrue(nuevo["observacion"] == null || nuevo["observacion"].isNull)
     }
 
-    // a clerk with a role of their own: what it may do, and the one field it may read but not write
-    private fun funcionario(
-        permisos: List<Map<String, Any?>>,
-        bloqueado: Pair<String, String>? = null
-    ): String {
-        val rol = uniqueName("ROL").uppercase()
-        send("POST", "/api/roles", mapOf("name" to rol, "label" to rol), HttpStatus.CREATED)
-        send("PUT", "/api/roles/$rol/permissions", mapOf("permissions" to permisos), HttpStatus.OK)
-        if (bloqueado != null) {
-            val (objeto, campo) = bloqueado
-            send(
-                "PUT",
-                "/api/roles/$rol/field-permissions",
-                mapOf("fields" to listOf(mapOf("objectName" to objeto, "fieldName" to campo, "read" to true, "write" to false))),
-                HttpStatus.OK
-            )
-        }
-        val email = "${rol.lowercase()}@srtm.test"
-        send("POST", "/api/users", mapOf("email" to email, "displayName" to rol, "password" to CLAVE, "roles" to listOf(rol)), HttpStatus.CREATED)
-        return bearer(email, CLAVE)
-    }
-
-    // objectName null: every object of the organization
-    private fun permiso(
-        objeto: String?,
-        accion: String
-    ) = mapOf("objectName" to objeto, "action" to accion)
-
     private fun objetosDelModelo(): List<String> =
         modelo()["objects"]
             .iterator()
             .asSequence()
             .map { it["name"].asString() }
             .toList()
-
-    private companion object {
-        // Core wants at least 8 characters
-        const val CLAVE = "clave-del-funcionario"
-    }
 }
