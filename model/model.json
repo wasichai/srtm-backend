@@ -334,7 +334,9 @@
       "PISTA O PAVIMENTO DE CONCRETO", "TRAMPA DE CONCRETO PARA GRASA"],
     "unidad_medida": ["M2", "M3", "ML", "UND", "PZA"],
     "lado": ["PAR", "IMPAR"],
-    "estado_declaracion": ["VIGENTE", "ANULADA"]
+    "estado_declaracion": ["VIGENTE", "ANULADA"],
+    "formato_emision": ["PDF", "ZIP"],
+    "estado_emision": ["PENDIENTE", "EN_PROCESO", "TERMINADA", "FALLIDA"]
   },
   "objects": [
     {
@@ -778,6 +780,45 @@
         {"name": "clase", "label": "Clase de uso", "type": "ENUM", "enum": "clase_uso", "required": true},
         {"name": "sub_clase", "label": "Sub clase de uso", "type": "ENUM", "enum": "sub_clase_uso", "required": true},
         {"name": "uso", "label": "Uso del predio", "type": "ENUM", "enum": "uso", "required": true}
+      ]
+    },
+    {
+      "name": "parametro_tributario",
+      "label": "Parámetro tributario",
+      "pluralLabel": "Parámetros tributarios",
+      "description": "Valores normativos verificados (doble firma) del repositorio normativa: UIT, tramos y mínimo del impuesto predial, deducciones (model/data/parametros-predial.csv). Clave natural: tipo, clave y vigencia_desde.",
+      "fields": [
+        {"name": "tipo", "label": "Tipo", "type": "TEXT", "required": true, "description": "UIT, TRAMO_PREDIAL, TRAMO_PREDIAL_LIMITE, PREDIAL_MINIMO…"},
+        {"name": "clave", "label": "Clave", "type": "TEXT", "description": "El tramo (1, 2, 3); vacía en un tipo de un solo valor, como la UIT."},
+        {"name": "vigencia_desde", "label": "Vigencia desde", "type": "DATE", "required": true},
+        {"name": "vigencia_hasta", "label": "Vigencia hasta", "type": "DATE", "description": "Vacía: sigue vigente."},
+        {"name": "valor_numerico", "label": "Valor numérico", "type": "DECIMAL",
+          "description": "La cifra tal como la imprime la norma: una alícuota o un mínimo en %, un límite en UIT, la UIT en soles."},
+        {"name": "texto", "label": "Texto", "type": "LONG_TEXT", "description": "El valor como lo escribe la norma."},
+        {"name": "norma", "label": "Norma", "type": "LONG_TEXT", "description": "Documento fuente y artículo."},
+        {"name": "fuente", "label": "Fuente", "type": "TEXT", "description": "Archivo del corpus de normativa del que sale la fila."},
+        {"name": "transcribio", "label": "Transcribió", "type": "TEXT", "required": true},
+        {"name": "verifico", "label": "Verificó", "type": "TEXT", "required": true}
+      ]
+    },
+    {
+      "name": "emision_masiva",
+      "label": "Emisión masiva",
+      "pluralLabel": "Emisiones masivas",
+      "description": "Emisión en segundo plano de las HR y PU de un año, como un solo PDF o un ZIP (wasichai/srtm-backend#41). El archivo queda en srtm.emision.dir.",
+      "fields": [
+        {"name": "anio", "label": "Año", "type": "INTEGER", "required": true},
+        {"name": "formato", "label": "Formato", "type": "ENUM", "enum": "formato_emision", "required": true},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_emision", "required": true},
+        {"name": "total", "label": "Contribuyentes", "type": "INTEGER", "description": "Contribuyentes con DJ vigente en el año."},
+        {"name": "procesados", "label": "Procesados", "type": "INTEGER"},
+        {"name": "errores", "label": "Errores", "type": "LONG_TEXT",
+          "description": "JSON: [{contribuyente, mensaje}], el código del contribuyente que no se pudo emitir y por qué."},
+        {"name": "archivo", "label": "Archivo", "type": "TEXT", "description": "emision-<anio>-<id>.pdf|zip"},
+        {"name": "tamano", "label": "Tamaño (bytes)", "type": "INTEGER"},
+        {"name": "mensaje", "label": "Mensaje", "type": "LONG_TEXT", "description": "Por qué falló."},
+        {"name": "iniciado", "label": "Iniciado", "type": "DATETIME"},
+        {"name": "terminado", "label": "Terminado", "type": "DATETIME"}
       ]
     }
   ],

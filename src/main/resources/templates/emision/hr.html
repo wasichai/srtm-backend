@@ -1,0 +1,173 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <title th:text="|HR ${hr.contribuyente.codigo} ${hr.anio}|">HR</title>
+        <style th:utext="${css}"></style>
+    </head>
+    <body>
+        <div class="pie">
+            <span th:text="|Emitido el ${hr.emitido} · HR del contribuyente ${hr.contribuyente.codigo}|">Emitido el</span>
+        </div>
+
+        <table class="cabecera">
+            <tr>
+                <td>
+                    <div class="municipalidad" th:text="${hr.municipalidad}">MUNICIPALIDAD</div>
+                    <div class="documento">DECLARACIÓN JURADA DEL IMPUESTO PREDIAL — HR</div>
+                    <div class="etiqueta">Hoja de resumen</div>
+                </td>
+                <td class="numero">
+                    <span class="etiqueta">Año</span>
+                    <span class="valor" th:text="${hr.anio}">2026</span>
+                    <span class="etiqueta">Código de contribuyente</span>
+                    <span class="valor" th:text="${hr.contribuyente.codigo}">000001</span>
+                </td>
+            </tr>
+        </table>
+
+        <div class="bloque junto">
+            <div class="titulo">I. Contribuyente</div>
+            <table class="datos">
+                <tr>
+                    <td style="width: 16%">
+                        <div class="etiqueta">Código</div>
+                        <div class="valor" th:text="${hr.contribuyente.codigo}">000001</div>
+                    </td>
+                    <td style="width: 48%">
+                        <div class="etiqueta">Apellidos y nombres / razón social</div>
+                        <div class="valor" th:text="${hr.contribuyente.nombre}">nombre</div>
+                    </td>
+                    <td style="width: 36%">
+                        <div class="etiqueta">Documento de identidad</div>
+                        <div class="valor" th:text="${hr.contribuyente.documento}">DNI</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="2">
+                        <div class="etiqueta">Domicilio fiscal</div>
+                        <div class="valor" th:text="${hr.contribuyente.domicilioFiscal}">domicilio</div>
+                    </td>
+                    <td>
+                        <div class="etiqueta">Condición especial</div>
+                        <div class="valor" th:text="${hr.contribuyente.condicionEspecial.isEmpty() ? '—' : hr.contribuyente.condicionEspecial}">—</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="bloque">
+            <div class="titulo">II. Relación de predios</div>
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th style="width: 13%">Código</th>
+                        <th style="width: 31%">Dirección</th>
+                        <th style="width: 18%">Uso</th>
+                        <th style="width: 14%">Autoavalúo</th>
+                        <th style="width: 9%">% propiedad</th>
+                        <th style="width: 15%">Valor afecto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="p : ${hr.predios}">
+                        <td th:text="${p.codigo}">01-01-0001</td>
+                        <td th:text="${p.direccion}">dirección</td>
+                        <td th:text="${p.uso}">uso</td>
+                        <td class="num" th:text="${p.autoavaluo}">S/ 0.00</td>
+                        <td class="num" th:text="${p.porcentaje}">100.00 %</td>
+                        <td class="num" th:text="${p.valorAfecto}">S/ 0.00</td>
+                    </tr>
+                    <tr class="total">
+                        <td colspan="3" th:text="|Total (${#lists.size(hr.predios)} ${#lists.size(hr.predios) == 1 ? 'declaración' : 'declaraciones'})|">
+                            Total
+                        </td>
+                        <td class="num" th:text="${hr.totales.autoavaluo}">S/ 0.00</td>
+                        <td></td>
+                        <td class="num" th:text="${hr.totales.valorAfecto}">S/ 0.00</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="bloque junto">
+            <div class="titulo">III. Determinación del impuesto</div>
+            <table class="datos">
+                <tr>
+                    <td style="width: 25%">
+                        <div class="etiqueta">UIT del año</div>
+                        <div class="valor importe" th:text="${hr.impuesto.uit}">S/ 0.00</div>
+                    </td>
+                    <td style="width: 25%">
+                        <div class="etiqueta">Base imponible</div>
+                        <div class="valor importe" th:text="${hr.impuesto.base}">S/ 0.00</div>
+                    </td>
+                    <td style="width: 25%">
+                        <div class="etiqueta">Impuesto calculado</div>
+                        <div class="valor importe" th:text="${hr.impuesto.calculado}">S/ 0.00</div>
+                    </td>
+                    <td style="width: 25%">
+                        <div class="etiqueta">Impuesto mínimo</div>
+                        <div class="valor importe" th:text="${hr.impuesto.minimo}">S/ 0.00</div>
+                    </td>
+                </tr>
+            </table>
+
+            <div class="subtitulo">Tramos de la base imponible (TUO LTM art. 13)</div>
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th style="width: 8%">Tramo</th>
+                        <th style="width: 20%">Desde</th>
+                        <th style="width: 20%">Hasta</th>
+                        <th style="width: 12%">Alícuota</th>
+                        <th style="width: 20%">Monto gravado</th>
+                        <th style="width: 20%">Impuesto</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="t : ${hr.impuesto.tramos}">
+                        <td class="centro" th:text="${t.tramo}">1</td>
+                        <td class="num" th:text="${t.desde}">S/ 0.00</td>
+                        <td class="num" th:text="${t.hasta}">S/ 0.00</td>
+                        <td class="centro" th:text="${t.alicuota}">0.2 %</td>
+                        <td class="num" th:text="${t.monto}">S/ 0.00</td>
+                        <td class="num" th:text="${t.impuesto}">S/ 0.00</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <table class="anual">
+                <tr>
+                    <td>
+                        <span class="etiqueta">Impuesto predial anual</span>
+                        <span class="marca" th:if="${hr.impuesto.minimoAplicado}">Se aplica el mínimo</span>
+                    </td>
+                    <td class="importe" th:text="${hr.impuesto.anual}">S/ 0.00</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="bloque junto">
+            <div class="titulo">IV. Cuotas (TUO LTM art. 15)</div>
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th style="width: 20%">Cuota</th>
+                        <th style="width: 40%">Monto</th>
+                        <th style="width: 40%">Vencimiento</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="c : ${hr.cuotas}">
+                        <td class="centro" th:text="${c.numero}">1</td>
+                        <td class="num" th:text="${c.monto}">S/ 0.00</td>
+                        <td class="centro" th:text="${c.vencimiento}">27/02/2026</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="contado" th:text="${hr.contado}">Al contado</div>
+            <div class="nota">Las cuotas 2 a 4 se reajustan por IPM (TUO LTM art. 15).</div>
+        </div>
+    </body>
+</html>

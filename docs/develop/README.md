@@ -12,7 +12,7 @@ API están en el [README principal](../../README.md).
 | Python | 3.11+ | `model/` (solo stdlib, sin `pip install`) |
 | Node | >= 26 | solo si también corres el front, `../srtm-ui` |
 
-Las librerías de wasichai (`wasichai:wasichai-bom:0.1.0` y sus starters) se resuelven así, en este orden:
+Las librerías de wasichai (`wasichai:wasichai-bom:0.2.0` y sus starters) se resuelven así, en este orden:
 
 1. **GitHub Packages**. Pide un token aunque sea para leer. En `~/.gradle/gradle.properties`:
    ```properties
@@ -92,7 +92,8 @@ Con el servidor corriendo y `develop/.env` cargado:
 
 ```bash
 cd model
-python3 apply.py                                   # 18 objetos + 10 relaciones; idempotente
+python3 apply.py                                   # 19 objetos + 10 relaciones; idempotente
+python3 import_parametros.py                       # UIT, tramos y mínimo del predial; idempotente
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --limit 200
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"

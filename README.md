@@ -17,7 +17,7 @@ prediales, catastro fiscal) que se carga por REST, e importadores del padrón de
 
 - JDK 25 y Docker (para PostGIS y para los tests de integración con Testcontainers).
 - Python 3.11+ para `model/`.
-- Las librerías de wasichai (`wasichai:wasichai-bom:0.1.0` y los starters). Se resuelven desde:
+- Las librerías de wasichai (`wasichai:wasichai-bom:0.2.0` y los starters). Se resuelven desde:
   1. **GitHub Packages** (`https://maven.pkg.github.com/wasichai/wasichai`). Pide un token aunque sea para leer
      (`read:packages` basta). En `~/.gradle/gradle.properties`:
      ```properties
@@ -75,8 +75,8 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 28 created, 0 updated, 0 skipped  (18 objetos + 10 relaciones)
-python3 apply.py                   # idempotente: done: 0 created, 0 updated, 28 skipped
+python3 apply.py                   # done: 30 created, 0 updated, 0 skipped  (20 objetos + 10 relaciones)
+python3 apply.py                   # idempotente: done: 0 created, 0 updated, 29 skipped
 python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
 ```
 
@@ -219,6 +219,76 @@ python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"      
 - **Idempotente**, como los otros scripts.
 - Los catálogos se pueden editar después desde el admin. Un uso del predio editado así vuelve a lo que dice el CSV en
   la siguiente importación.
+
+## Impuesto predial
+
+`GET /api/srtm/contribuyentes/{id}/liquidacion?anio=` liquida el impuesto predial de un contribuyente en un año (sin
+`anio`, el año en curso). Lo calcula `srtm.impuesto.ImpuestoPredial`, una función pura, con los parámetros de
+`parametro_tributario`.
+
+**Parámetros.** Son los valores normativos **verificados** (doble firma) del repo `normativa`:
+`docs/10-negocio/valores-normativos/{uit,predial-tramos-y-alicuotas,predial-minimo,predial-deducciones}.md`.
+
+- `model/data/parametros-predial.csv` es una copia de las filas `UIT`, `TRAMO_PREDIAL`, `TRAMO_PREDIAL_LIMITE`,
+  `PREDIAL_MINIMO`, `DEDUCCION_PENSIONISTA` y `DEDUCCION_ADULTO_MAYOR` de su derivado publicable,
+  `publicacion/parametros-2026.csv`.
+  - Ninguna cifra se tecleó: las filas son las del original, sin su última columna (`valor_maquina`, vacía en todas).
+  - La cabecera `#` cita la fuente.
+  - Las columnas llevan los nombres de `parametro_tributario`: `tipo`, `clave`, `vigencia_desde`, `vigencia_hasta`,
+    `valor_numerico`, `texto`, `norma`, `fuente`, `transcribio` y `verifico`.
+- `valor_numerico` va como lo imprime la norma: las alícuotas y el mínimo en %, los límites de los tramos y las
+  deducciones en UIT, y la UIT en soles.
+- **Cada año**, con la UIT nueva de `normativa`, se copia su fila al CSV y se vuelve a cargar. Con
+  `NORMATIVA=/ruta/a/normativa`, o con `normativa` junto a este repo, `python3 -m unittest` compara cada fila con el
+  original.
+
+```bash
+cd model
+python3 import_parametros.py --dry-run   # lee Core y dice qué crearía o actualizaría, sin escribir
+python3 import_parametros.py             # parametro_tributario: 13 created, 0 updated, 0 skipped
+```
+
+`import_parametros.py` es idempotente y usa la clave natural (`tipo`, `clave`, `vigencia_desde`):
+- crea las filas que faltan;
+- actualiza en su lugar las que cambiaron;
+- no borra las que el CSV no tiene;
+- escribe una línea por fila que cambia y un resumen al final;
+- sale con `0` si todo va bien y con `1` si Core rechaza algo.
+
+**Cálculo** (art. 13 y 15 del TUO de la Ley de Tributación Municipal):
+- **Base:** la suma del `valor_afecto` de las DJ **vigentes** del contribuyente en el año. Es la misma suma que los
+  totales de la ficha (`totalesDeContribuyente`): cada condómino cuenta su parte, así que un predio compartido no se
+  cuenta dos veces. Una DJ anulada no suma.
+- **Tramos progresivos en UIT:**
+  - hasta 15 UIT, al 0.2 %;
+  - lo que excede de 15 UIT hasta 60 UIT, al 0.6 %;
+  - lo que excede de 60 UIT, al 1.0 %.
+
+  Cada tramo trae `desde`, `hasta`, `alicuota`, `monto` (la parte de la base que cae en él) e `impuesto`. El
+  impuesto de cada tramo se redondea al céntimo, y `impuestoCalculado` es la suma de los tramos.
+- **Mínimo:** 0.6 % de la UIT. Si la base es mayor que 0, `impuestoAnual` es el mayor entre `impuestoCalculado` y el
+  mínimo, y `minimoAplicado` dice si se usó el mínimo. Con base 0, el impuesto es 0 y no hay mínimo.
+- **Cuotas:** 4, de un cuarto cada una, redondeadas al céntimo (HALF_UP). La 4.ª lleva el residuo, así que las cuatro
+  suman exactamente el anual.
+- **Vencimientos:** el último día hábil de febrero, mayo, agosto y noviembre. Hábil significa de lunes a viernes y
+  que no sea feriado nacional de fecha fija. Los feriados están en una sola lista, `Vencimientos.FERIADOS_NACIONALES`:
+  1-ene, 1-may, 7-jun, 29-jun, 23-jul, 28 y 29-jul, 6-ago, 30-ago, 8-oct, 1-nov, 8-dic, 9-dic y 25-dic. En 2026 los
+  vencimientos son el 27-feb, el 29-may, el 31-ago y el 30-nov.
+- **Parámetros del año:** se usan la UIT, los tramos, los límites y el mínimo vigentes al 1 de enero. Si falta alguno,
+  no se calcula:
+  - `faltan` los nombra (`["UIT 2027"]`);
+  - `uit`, los importes y `minimoAplicado` van en `null`, y `tramos` y `cuotas` van vacíos;
+  - `base` sí se informa.
+
+```json
+{"anio": 2026, "uit": 5500.00, "base": 90000.00,
+ "tramos": [{"tramo": 1, "desde": 0.00, "hasta": 82500.00, "alicuota": 0.2, "monto": 82500.00, "impuesto": 165.00}, …],
+ "impuestoCalculado": 210.00, "minimo": 33.00, "minimoAplicado": false, "impuestoAnual": 210.00,
+ "cuotas": [{"numero": 1, "monto": 52.50, "vencimiento": "2026-02-27"}, …], "faltan": []}
+```
+
+Fuera de alcance: el reajuste de las cuotas 2 a 4 por el IPM, la prórroga de los vencimientos por ordenanza, el derecho
+de emisión y las deducciones (los parámetros ya se cargan, pero la DJ guarda su `deduccion`).
 
 ## Importar el catastro fiscal
 
@@ -393,7 +463,7 @@ python3 apply.py                                  # 3. quita ANEXO, HABILITACION
 
 ## Modelo
 
-Dieciocho objetos (`model/model.json`):
+Veinte objetos (`model/model.json`):
 - **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
   *Formato Padrón Municipal Armonización 2026*.
 - **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
@@ -402,6 +472,10 @@ Dieciocho objetos (`model/model.json`):
   `otro_frente`, cada uno con una relación obligatoria a `declaracion_predial`.
 - **Catastro fiscal (fase 3):** `catastro_fiscal`, un lote por código CPU, con su polígono.
 - **Catálogos:** `ubigeo`, `via`, `unidad_urbana`, `categoria_valor`, `obra_categoria` y `uso_predio`.
+- **Parámetros tributarios:** `parametro_tributario`, los valores normativos verificados del repo `normativa` (ver
+  [Impuesto predial](#impuesto-predial)).
+- **Emisión masiva:** `emision_masiva`, el job de la emisión de un año en segundo plano (ver
+  [Emisión masiva](#emisión-masiva)).
 
 Geometrías (wasichai-gis, GeoJSON en EPSG:4326 por la API):
 - `predio.lote_geom` y `catastro_fiscal.lote_geom`: POLYGON, guardados en UTM 18S (EPSG:32718).
@@ -489,7 +563,11 @@ Se descarta `orden2`, que es solo el número de fila.
     obras complementarias.
   - `CatalogoService`: las opciones ENUM y los catálogos (ubigeo, categorías de valores, usos, vías, unidades urbanas).
   - Aparte, `srtm.pide.DocumentosController` (`DocumentoService`) consulta un DNI a RENIEC ([PIDE RENIEC](#pide-reniec)).
+  - Y `srtm.impuesto.LiquidacionController` (`LiquidacionService`) liquida el impuesto predial
+    ([Impuesto predial](#impuesto-predial)).
 - **Claves JSON:** son los nombres de campo del modelo, en snake_case. `Records` convierte atributos ⇄ DTO con Jackson.
+  La liquidación sigue el contrato de la épica de emisión (wasichai/srtm-backend#37), en camelCase
+  (`impuestoCalculado`, `minimoAplicado`…).
 - **Protección:** como la API vive bajo `/api`, el filtro JWT de core ya la protege. `RecordService` aplica los permisos
   del usuario por objeto y por campo, y valida cada escritura. `Registros` envía solo los campos que el usuario puede
   escribir (un campo bloqueado conserva su valor) y `/catalogos` omite los objetos que su rol no puede leer.
@@ -504,6 +582,7 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET, POST | `/api/srtm/contribuyentes?q&page&size` | búsqueda (texto en todos los campos) e inscripción |
 | GET, PUT, DELETE | `/api/srtm/contribuyentes/{id}?anio` | la ficha: datos, nº de predios y totales del año; la edición; y la baja (409 si tiene declaraciones) |
 | GET | `/api/srtm/contribuyentes/{id}/declaraciones?anio` | sus declaraciones, cada una con su predio |
+| GET | `/api/srtm/contribuyentes/{id}/liquidacion?anio` | el impuesto predial del año: base, tramos, mínimo, anual y cuotas con su vencimiento; `faltan` si falta un parámetro ([Impuesto predial](#impuesto-predial)) |
 | GET, POST | `/api/srtm/contribuyentes/{id}/{lista}` | las listas del contribuyente: `domicilios`, `relacionados`, `medios-contacto`, `sustentos` |
 | PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
 | GET, POST | `/api/srtm/predios?q&page&size` | búsqueda y alta |
@@ -524,6 +603,12 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET, PUT | `/api/srtm/catastro/{id}` | un lote del catastro, y su edición (polígono incluido) |
 | GET | `/api/gis/objects/{catastro_fiscal\|predio}/features?bbox&geometry=lote_geom` | de wasichai-gis: los lotes del área visible, para el mapa |
 | GET | `/api/srtm/documentos/{tipo}/{numero}` | los apellidos y nombres que RENIEC da de un DNI; 404 si no hay datos o no hay convenio ([PIDE RENIEC](#pide-reniec)) |
+| GET | `/api/srtm/predios/{id}/pu?anio&contribuyente` | la PU del predio en PDF, inline; 404 sin DJ vigente en el año, 409 con `titulares` si hay varios y falta `contribuyente` ([Emisión de documentos](#emisión-de-documentos)) |
+| GET | `/api/srtm/contribuyentes/{id}/hr?anio` | la HR del contribuyente en PDF, inline, con el impuesto y las cuotas de `/liquidacion`; 422 con `faltan` sin parámetros del año, 404 sin DJ vigente en el año ([Emisión de documentos](#emisión-de-documentos)) |
+| POST | `/api/srtm/emisiones` `{anio, formato: PDF\|ZIP}` | lanza la emisión masiva del año en segundo plano: 202 con el job; 409 si ya hay una PENDIENTE o EN_PROCESO ([Emisión masiva](#emisión-masiva)) |
+| GET | `/api/srtm/emisiones?anio` | los jobs, el más reciente primero |
+| GET | `/api/srtm/emisiones/{id}` | un job: `{id, anio, formato, estado, total, procesados, errores:[{contribuyente, mensaje}], archivo, tamano, mensaje, iniciado, terminado}` |
+| GET | `/api/srtm/emisiones/{id}/archivo` | el PDF o ZIP, `attachment; filename="emision-<anio>-<id>.pdf\|zip"`, en streaming; 409 si aún no está TERMINADA |
 
 Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
 - **Inscripción:** el backend asigna `codigo` (6 dígitos, correlativo), `numero_declaracion` y `fecha_registro`.
@@ -660,6 +745,88 @@ PIDE RENIEC; sin ella (404), se escriben a mano con fuente MANUAL.
 - **Tests:** usan un doble de `ConsultaDocumento` (`ConsultaReniecApiTest`) o un servidor local
   (`PideReniecTest`). Nunca llaman a la PIDE real.
 
+## Emisión de documentos
+
+wasichai no genera PDF en el servidor: el paquete `srtm.emision` trae su propia infraestructura. De la épica
+wasichai/srtm-backend#37, aquí están la PU (Predio Urbano) y la HR (Hoja de Resumen); la emisión masiva
+(wasichai/srtm-backend#41) se construye encima.
+
+- **`PdfRenderer.render(template, model)`:** una plantilla de `templates/emision/` a PDF.
+  - Thymeleaf standalone (`TemplateEngine` + `ClassLoaderTemplateResolver`, sin MVC: la app es WebFlux) arma el
+    HTML, y openhtmltopdf (el fork mantenido `io.github.openhtmltopdf`, sobre PDFBox 3) lo pasa a PDF.
+  - Hoja A4, con `templates/emision/base.css` en línea en cada plantilla (variable `css`): márgenes, recuadros con
+    título sombreado, grillas de etiqueta y valor, tablas y el pie "Página X de Y".
+  - Fuente DejaVu Sans embebida (`resources/fonts`, con su licencia): tildes y ñ salen iguales en cualquier visor.
+  - El log de openhtmltopdf va por slf4j, en WARN (`logging.level.com.openhtmltopdf`).
+- **`PdfMerger.merge(partes, destino)`:** une PDF en orden con PDFBox, de bytes a un stream o de archivos a un
+  archivo. Usa archivos temporales (`MemoryUsageSetting.setupTempFileOnly()`), para que la masiva no llene la memoria.
+- **`DocumentosPrediales`:** la única fachada para los endpoints y la masiva.
+  - `pu(predioId, contribuyenteId?, anio)` devuelve un `Documento(nombre, bytes)`.
+  - `hr(contribuyenteId, anio)` devuelve la HR del contribuyente, también como `Documento`.
+  - Lee Core como el usuario, a través de `Registros`, y dibuja el PDF fuera del hilo de la petición.
+- **La PU** (`templates/emision/pu.html`, con `HojaPu.kt` que deja cada valor ya formateado):
+  - Una por predio y titular, con sus DJ **vigentes** del año. Cada `secuencia_uso` es una sección "Uso N.°".
+  - Cabecera: la municipalidad (`srtm.municipalidad.nombre`, `SRTM_MUNICIPALIDAD_NOMBRE`), el título, el año y los
+    N.° de declaración.
+  - Contribuyente, ubicación del predio, datos del predio, niveles (con las 7 categorías), obras complementarias y
+    los valores declarados (autoavalúo, valor condominio, deducción, valor afecto).
+  - Muestra los valores declarados, sin revalorizar. Los niveles y obras INACTIVO no salen.
+  - Pie: fecha de emisión y "Página X de Y".
+- **Endpoint** `GET /api/srtm/predios/{id}/pu?anio=&contribuyente=` (sin `anio`, el año en curso):
+  - Responde `application/pdf` con `Content-Disposition: inline; filename="PU-<codigo_predio>-<anio>.pdf"`.
+  - 404 si el predio no tiene DJ vigente ese año (una ANULADA no se emite) o si `contribuyente` no lo declara.
+  - 409 si hay más de un titular y falta `contribuyente`. El problem+json agrega
+    `titulares: [{id, nombre, documento}]` para elegir.
+- **La HR** (`templates/emision/hr.html`, con `HojaHr.kt`), una por contribuyente y año, con la misma cabecera y el
+  mismo CSS que la PU:
+  - Contribuyente: código, nombre o razón social, documento, domicilio fiscal completo (descripción y distrito /
+    provincia / departamento) y la condición especial (pensionista…) que declaren sus DJ, si la hay.
+  - Relación de predios: una fila por DJ **vigente** del año (un predio con dos usos tiene dos), con código,
+    dirección, uso, autoavalúo, % de propiedad y valor afecto, y una fila de totales.
+  - Determinación del impuesto: UIT, base imponible, cada tramo (desde, hasta, alícuota, monto gravado, impuesto), el
+    impuesto calculado, el mínimo y el impuesto anual, con la marca "Se aplica el mínimo" cuando corresponde.
+  - Cuotas 1 a 4 con monto y vencimiento, la línea "Al contado: <anual> hasta el <vencimiento 1>" y la nota "Las
+    cuotas 2 a 4 se reajustan por IPM (TUO LTM art. 15)".
+  - Las cifras salen de `LiquidacionService.determinar`, la misma liquidación que responde `/liquidacion`: la HR y el
+    endpoint no pueden diferir.
+- **Endpoint** `GET /api/srtm/contribuyentes/{id}/hr?anio=` (sin `anio`, el año en curso):
+  - Responde `application/pdf` con `Content-Disposition: inline; filename="HR-<codigo>-<anio>.pdf"`.
+  - 422 si falta un parámetro tributario del año. El problem+json agrega `faltan` (como en `/liquidacion`).
+  - 404 si el contribuyente no existe o no tiene DJ vigente ese año.
+- **Tiempo:** unos 80 ms por PU de dos usos solo en dibujar el PDF (`HojaPuTest`). `PuApiTest` mide 100 PU seguidas
+  por la API, con las lecturas de Core, y lo imprime en la salida de `integrationTest`.
+
+## Emisión masiva
+
+Todas las HR y PU de un año (wasichai/srtm-backend#41), en segundo plano, como **un solo PDF** (por contribuyente, su
+HR seguida de sus PU) o como **un ZIP** (`<codigo>-<nombre>/HR-<anio>.pdf` y `<codigo>-<nombre>/PU-<codigo_predio>-<anio>.pdf`).
+
+- **Job:** el objeto Core `emision_masiva` (anio, formato, estado PENDIENTE → EN_PROCESO → TERMINADA o FALLIDA, total,
+  procesados, errores como JSON, archivo, tamano, mensaje, iniciado, terminado). Crear una emisión exige permiso de
+  creación sobre el objeto, y el job guarda su avance, así que quien la lanza necesita también el de edición.
+- **`EmisionMasivaService`:**
+  - Un `CoroutineScope(SupervisorJob() + Dispatchers.IO)` de la aplicación, cerrado en `@PreDestroy`, y un solo
+    worker (`Semaphore(1)`). Un segundo POST con una emisión PENDIENTE o EN_PROCESO da 409.
+  - Recorre los contribuyentes con DJ **vigentes** del año, por código, y por cada uno pide `hr` y la `pu` de cada
+    predio (por código de predio) a `DocumentosPrediales`. Un condominio da una PU por titular.
+  - **PDF:** cada documento va a un archivo temporal y al final `PdfMerger` los une en uno. **ZIP:** `ZipOutputStream`
+    en streaming. El archivo se escribe como `.part` y se renombra al terminar.
+  - Guarda `procesados` cada 25 contribuyentes y al final. Un contribuyente que falla queda en `errores`
+    (`{contribuyente: <codigo>, mensaje}`), sin sus documentos, y el resto sigue: el job termina TERMINADA. Un error
+    general lo deja FALLIDA con `mensaje`.
+  - **Usuario:** el job corre como quien lo lanzó. La autenticación de la petición pasa a la corrutina del job
+    (`ReactiveSecurityContextHolder.withAuthentication(...).asCoroutineContext()`, como hace wasichai-agent), así que
+    Core aplica sus permisos a cada lectura y escritura. El JWT no se vuelve a validar: su vencimiento no corta un job
+    ya empezado.
+  - **Al arrancar** (`ApplicationReadyEvent`), los jobs PENDIENTE o EN_PROCESO de cualquier organización pasan a
+    FALLIDA con el mensaje "interrumpida por reinicio". Al arrancar no hay usuario: esto va directo a la tabla del
+    objeto, con los nombres de columna que da la metadata de Core.
+- **Archivos** en `srtm.emision.dir` (`SRTM_EMISION_DIR`, por defecto `./data/emisiones`, fuera de git), con el
+  nombre `emision-<anio>-<id>.pdf|zip`. Llevan datos personales de todo el padrón: en producción, un volumen
+  persistente y privado. Nada los borra todavía.
+- **Descarga** `GET /api/srtm/emisiones/{id}/archivo`: `FileSystemResource`, en streaming, sin cargar el archivo en
+  memoria. El nombre se arma del job, nunca se lee del registro.
+
 ## Tests
 
 ```bash
@@ -669,8 +836,10 @@ cd model && python3 apply.py --validate-only && python3 -m unittest -v
 yarn format:check           # prettier: yaml y json, model.json incluido
 ```
 
-- **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`…), `Records`,
-  `Registros` y `srtm.pide` (`PideReniecTest`, contra un servidor local).
+- **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`,
+  `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…), `Records`,
+  `Registros`, `srtm.pide` (`PideReniecTest`, contra un servidor local) y `srtm.emision` (`PdfRendererTest`,
+  `PdfMergerTest`, `HojaPuTest`, `HojaHrTest`, `GeneradorEmisionTest`, que leen el PDF de vuelta con PDFBox).
 - **Integración** (`@Tag("integration")`): `SrtmSmokeTest` y las clases `*ApiTest`, que llaman a la API del portal
   sobre la app entera y PostGIS. Heredan de `SrtmApiTest`: el modelo aplicado como lo hace `apply.py`, el token del
   admin de desarrollo y las llamadas. Cada endpoint de `RentasController` y `DocumentosController` tiene un caso feliz
@@ -688,7 +857,8 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - **Integraciones:** probar PIDE RENIEC con las credenciales del convenio; PIDE SUNAT (RUC) y MIGRACIONES (carné de
   extranjería) con la misma interfaz `ConsultaDocumento`. El fondo del mapa es OpenStreetMap; una capa WMS/WMTS
   municipal se puede publicar con GeoServer.
-- **Cálculo y cobranza:** impuesto predial (tramos UIT), arbitrios, deuda y cuotas, pagos y recibos.
+- **Cálculo y cobranza:** el reajuste IPM de las cuotas, las prórrogas por ordenanza y el derecho de emisión del
+  predial; arbitrios, deuda, pagos y recibos.
 - **Fiscalización:** el flujo (rol y pantallas) que determina de oficio una declaración: medio de determinación
   FISCALIZACIÓN o DE OFICIO y su modificación de oficio.
 - **En el modelo:** workflows y plantillas de documentos.
