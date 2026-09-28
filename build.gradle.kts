@@ -10,7 +10,7 @@ plugins {
 group = "srtm"
 description = "srtm-backend: rentas municipales on wasichai (core, workflow, documents, views, forms, pages, gis)"
 
-val wasichaiVersion = "0.1.0"
+val wasichaiVersion = "0.2.0"
 
 dependencies {
     implementation(platform("wasichai:wasichai-bom:$wasichaiVersion"))
