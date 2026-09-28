@@ -52,3 +52,7 @@ srtm:
   emision:
     # the emisiones masivas' files (emision-<anio>-<id>.pdf|zip). a real deployment points it at a persistent volume
     dir: ${SRTM_EMISION_DIR:./data/emisiones}
+    # the retention, after every masiva and at startup: the last n files of each year are kept (per organization), and
+    # none older than the days. 0 turns a rule off. a purged job keeps its record, without its file
+    conservar: ${SRTM_EMISION_CONSERVAR:5}
+    dias: ${SRTM_EMISION_DIAS:0}

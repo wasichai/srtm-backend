@@ -4,6 +4,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -19,6 +21,8 @@ import srtm.impuesto.ConParametrosApiTest
 import srtm.impuesto.Parametros
 import tools.jackson.databind.JsonNode
 import java.io.ByteArrayInputStream
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipInputStream
@@ -32,6 +36,9 @@ import java.util.zip.ZipInputStream
 class EmisionMasivaApiTest : ConParametrosApiTest() {
     @Autowired
     lateinit var servicio: EmisionMasivaService
+
+    @Autowired
+    lateinit var cerrojo: CerrojoEmision
 
     @TestConfiguration
     class Dobles {
@@ -139,6 +146,8 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
         assertEquals(HttpStatus.CONFLICT, segunda, problema)
         assertTrue(tree(problema)["detail"].asString().isNotBlank(), problema)
         assertEquals(HttpStatus.CONFLICT, descargar(id).status)
+        val (borrar, porque) = exchange("DELETE", "/api/srtm/emisiones/$id", null)
+        assertEquals(HttpStatus.CONFLICT, borrar, porque)
 
         puerta!!.complete(Unit)
         assertEquals("TERMINADA", esperar(id)["estado"].asString())
@@ -178,12 +187,8 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
     }
 
     @Test
-    fun `a job left running by a restart is failed at startup`() {
-        val atrapada =
-            post(
-                "/api/objects/emision_masiva/records",
-                mapOf("attributes" to mapOf("anio" to anio(), "formato" to "PDF", "estado" to "EN_PROCESO", "total" to 10, "procesados" to 2))
-            )["id"].asString()
+    fun `a job left running by a restart is failed at startup, and the audit log says so`() {
+        val atrapada = atrapada(anio())
 
         runBlocking { servicio.recuperar() }
 
@@ -191,7 +196,147 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
         assertEquals("FALLIDA", job["estado"].asString(), job.toString())
         assertEquals("interrumpida por reinicio", job["mensaje"].asString())
         assertTrue(job["terminado"].isString, job.toString())
+        // the system's write, without a user, in core's audit log
+        val historia = tree(send("GET", "/api/objects/emision_masiva/records/$atrapada/history", null, HttpStatus.OK))
+        val sistema = historia.iterator().asSequence().first { it["operation"].asString() == "UPDATE" }
+        assertTrue(sistema["userEmail"] == null || sistema["userEmail"].isNull, sistema.toString())
+        val estado = sistema["changes"].iterator().asSequence().first { it["field"].asString() == "estado" }
+        assertEquals("EN_PROCESO", estado["before"].asString(), sistema.toString())
+        assertEquals("FALLIDA", estado["after"].asString(), sistema.toString())
     }
+
+    @Test
+    fun `a caller who may create a masiva but not update it is refused before any job exists`() {
+        val anio = anio()
+        val funcionario = funcionario(listOf(permiso(null, "READ"), permiso(EMISION_MASIVA, "CREATE")))
+
+        val result =
+            client
+                .post()
+                .uri("/api/srtm/emisiones")
+                .header(HttpHeaders.AUTHORIZATION, funcionario)
+                .bodyValue(mapOf("anio" to anio, "formato" to "PDF"))
+                .exchange()
+                .expectBody(String::class.java)
+                .returnResult()
+        assertEquals(HttpStatus.FORBIDDEN.value(), result.status.value(), result.responseBody)
+        assertTrue(MediaType.APPLICATION_PROBLEM_JSON.isCompatibleWith(result.responseHeaders.contentType), "${result.responseHeaders.contentType}")
+        assertTrue(tree(result.responseBody!!)["detail"].asString().contains("edición"), result.responseBody)
+
+        assertEquals(0, tree(send("GET", "/api/srtm/emisiones?anio=$anio", null, HttpStatus.OK)).size())
+        // and nothing is left to block the next one
+        assertEquals("TERMINADA", esperar(emitir(anio, "PDF"))["estado"].asString())
+    }
+
+    @Test
+    fun `a job whose worker is gone does not block the next masiva, which fails it`() {
+        val anio = anio()
+        val huerfana = atrapada(anio)
+
+        val nueva = esperar(emitir(anio, "ZIP"))
+
+        assertEquals("TERMINADA", nueva["estado"].asString(), nueva.toString())
+        val job = tree(send("GET", "/api/srtm/emisiones/$huerfana", null, HttpStatus.OK))
+        assertEquals("FALLIDA", job["estado"].asString(), job.toString())
+        assertTrue(job["mensaje"].asString().startsWith("interrumpida"), job.toString())
+    }
+
+    @Test
+    fun `while another instance runs a masiva, a post is a 409 and startup leaves its job alone`() {
+        val anio = anio()
+        val atrapada = atrapada(anio)
+        // another instance's worker: the same postgres lock, on a connection of its own
+        val ajeno = runBlocking { cerrojo.tomar() }!!
+        try {
+            val (status, problema) = exchange("POST", "/api/srtm/emisiones", mapOf("anio" to anio, "formato" to "PDF"))
+            assertEquals(HttpStatus.CONFLICT, status, problema)
+            assertEquals(1, tree(send("GET", "/api/srtm/emisiones?anio=$anio", null, HttpStatus.OK)).size())
+
+            assertNull(runBlocking { servicio.recuperar() })
+            assertEquals("EN_PROCESO", tree(send("GET", "/api/srtm/emisiones/$atrapada", null, HttpStatus.OK))["estado"].asString())
+            val (borrar, porque) = exchange("DELETE", "/api/srtm/emisiones/$atrapada", null)
+            assertEquals(HttpStatus.CONFLICT, borrar, porque)
+        } finally {
+            runBlocking { ajeno.soltar() }
+        }
+
+        runBlocking { servicio.recuperar() }
+        assertEquals("FALLIDA", tree(send("GET", "/api/srtm/emisiones/$atrapada", null, HttpStatus.OK))["estado"].asString())
+    }
+
+    @Test
+    fun `after a masiva ends, the files beyond the last five of the year are purged`() {
+        val anio = anio()
+        // five older ones of the year, oldest first, with their files on disk
+        val viejas = (1..5).map { terminadaConArchivo(anio, "2020-01-0${it}T00:00:00Z") }
+
+        val nueva = esperar(emitir(anio, "PDF"))
+        assertEquals("TERMINADA", nueva["estado"].asString(), nueva.toString())
+
+        val depurada = esperar(viejas[0]) { it["archivo"] == null || it["archivo"].isNull }
+        assertEquals("archivo depurado", depurada["mensaje"].asString(), depurada.toString())
+        assertFalse(Files.exists(archivoDe(anio, viejas[0])))
+        val descarga = descargar(viejas[0])
+        assertEquals(HttpStatus.GONE, descarga.status)
+        assertTrue(tree(String(descarga.cuerpo))["detail"].asString().isNotBlank())
+        viejas.drop(1).forEach {
+            assertTrue(Files.exists(archivoDe(anio, it)), it)
+            assertEquals(HttpStatus.OK, descargar(it).status)
+        }
+        assertEquals(HttpStatus.OK, descargar(nueva["id"].asString()).status)
+    }
+
+    @Test
+    fun `deleting a finished masiva removes its job and its file`() {
+        val anio = anio()
+        val id = emitir(anio, "PDF")
+        esperar(id)
+        assertTrue(Files.exists(archivoDe(anio, id)))
+
+        send("DELETE", "/api/srtm/emisiones/$id", null, HttpStatus.NO_CONTENT)
+
+        assertFalse(Files.exists(archivoDe(anio, id)))
+        send("GET", "/api/srtm/emisiones/$id", null, HttpStatus.NOT_FOUND)
+    }
+
+    // a job EN_PROCESO that no worker runs, the way a crash leaves it: its id
+    private fun atrapada(anio: Int): String =
+        post(
+            "/api/objects/emision_masiva/records",
+            mapOf("attributes" to mapOf("anio" to anio, "formato" to "PDF", "estado" to "EN_PROCESO", "total" to 10, "procesados" to 2))
+        )["id"].asString()
+
+    // a TERMINADA job of `terminado`, with a file where the service looks for it: its id
+    private fun terminadaConArchivo(
+        anio: Int,
+        terminado: String
+    ): String {
+        val id =
+            post(
+                "/api/objects/emision_masiva/records",
+                mapOf(
+                    "attributes" to
+                        mapOf(
+                            "anio" to anio,
+                            "formato" to "PDF",
+                            "estado" to "TERMINADA",
+                            "total" to 0,
+                            "procesados" to 0,
+                            "archivo" to "emision-$anio.pdf",
+                            "tamano" to 3,
+                            "terminado" to terminado
+                        )
+                )
+            )["id"].asString()
+        Files.createDirectories(DIR)
+        Files.writeString(archivoDe(anio, id), "pdf")
+        return id
+    }
+
+    private fun archivoDe(
+        anio: Int,
+        id: String
+    ): Path = DIR.resolve("emision-$anio-$id.pdf")
 
     // 3 contribuyentes and 4 predios: A declares P1 and P2, B declares P3, and B and C share P4 (condominio)
     private class Escenario(
@@ -321,6 +466,8 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
     }
 
     private companion object {
+        val DIR: Path = Path.of("build/emisiones-test")
+
         @Volatile
         var fallan: Set<String> = emptySet()
 

@@ -605,10 +605,11 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET | `/api/srtm/documentos/{tipo}/{numero}` | los apellidos y nombres que RENIEC da de un DNI; 404 si no hay datos o no hay convenio ([PIDE RENIEC](#pide-reniec)) |
 | GET | `/api/srtm/predios/{id}/pu?anio&contribuyente` | la PU del predio en PDF, inline; 404 sin DJ vigente en el año, 409 con `titulares` si hay varios y falta `contribuyente` ([Emisión de documentos](#emisión-de-documentos)) |
 | GET | `/api/srtm/contribuyentes/{id}/hr?anio` | la HR del contribuyente en PDF, inline, con el impuesto y las cuotas de `/liquidacion`; 422 con `faltan` sin parámetros del año, 404 sin DJ vigente en el año ([Emisión de documentos](#emisión-de-documentos)) |
-| POST | `/api/srtm/emisiones` `{anio, formato: PDF\|ZIP}` | lanza la emisión masiva del año en segundo plano: 202 con el job; 409 si ya hay una PENDIENTE o EN_PROCESO ([Emisión masiva](#emisión-masiva)) |
+| POST | `/api/srtm/emisiones` `{anio, formato: PDF\|ZIP}` | lanza la emisión masiva del año en segundo plano: 202 con el job; 403 sin permiso de creación y de edición sobre `emision_masiva`; 409 si ya corre una, en esta u otra instancia ([Emisión masiva](#emisión-masiva)) |
 | GET | `/api/srtm/emisiones?anio` | los jobs, el más reciente primero |
 | GET | `/api/srtm/emisiones/{id}` | un job: `{id, anio, formato, estado, total, procesados, errores:[{contribuyente, mensaje}], archivo, tamano, mensaje, iniciado, terminado}` |
-| GET | `/api/srtm/emisiones/{id}/archivo` | el PDF o ZIP, `attachment; filename="emision-<anio>-<id>.pdf\|zip"`, en streaming; 409 si aún no está TERMINADA |
+| GET | `/api/srtm/emisiones/{id}/archivo` | el PDF o ZIP, `attachment; filename="emision-<anio>-<id>.pdf\|zip"`, en streaming; 409 si aún no está TERMINADA; 410 si la retención depuró el archivo |
+| DELETE | `/api/srtm/emisiones/{id}` | borra el job y su archivo: 204; 409 si aún corre; 403 sin permiso de borrado sobre `emision_masiva` |
 
 Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
 - **Inscripción:** el backend asigna `codigo` (6 dígitos, correlativo), `numero_declaracion` y `fecha_registro`.
@@ -802,11 +803,21 @@ Todas las HR y PU de un año (wasichai/srtm-backend#41), en segundo plano, como 
 HR seguida de sus PU) o como **un ZIP** (`<codigo>-<nombre>/HR-<anio>.pdf` y `<codigo>-<nombre>/PU-<codigo_predio>-<anio>.pdf`).
 
 - **Job:** el objeto Core `emision_masiva` (anio, formato, estado PENDIENTE → EN_PROCESO → TERMINADA o FALLIDA, total,
-  procesados, errores como JSON, archivo, tamano, mensaje, iniciado, terminado). Crear una emisión exige permiso de
-  creación sobre el objeto, y el job guarda su avance, así que quien la lanza necesita también el de edición.
+  procesados, errores como JSON, archivo, tamano, mensaje, iniciado, terminado). El job guarda su avance como quien
+  lo lanzó, así que el POST exige permiso de **creación y de edición** sobre el objeto antes de crear nada: sin el de
+  edición da 403 (problem+json). Antes, un job que no podía guardarse quedaba PENDIENTE y trababa toda emisión
+  posterior (wasichai/srtm-backend#47).
 - **`EmisionMasivaService`:**
-  - Un `CoroutineScope(SupervisorJob() + Dispatchers.IO)` de la aplicación, cerrado en `@PreDestroy`, y un solo
-    worker (`Semaphore(1)`). Un segundo POST con una emisión PENDIENTE o EN_PROCESO da 409.
+  - Un `CoroutineScope(SupervisorJob() + Dispatchers.IO)` de la aplicación, cerrado en `@PreDestroy`.
+  - **Un solo worker en todo el despliegue**, aunque corran varias instancias contra la misma base: el POST toma un
+    advisory lock de Postgres (`pg_try_advisory_lock`, `CerrojoEmision`) en una conexión propia, y el worker lo
+    retiene hasta terminar. Si otro lo tiene (en esta u otra instancia), el POST da 409 sin crear el job. Si la
+    instancia muere, Postgres cierra su sesión y suelta el lock. Es uno para todas las organizaciones: mientras una
+    emite, la otra recibe 409. Si la conexión del lock se cae a mitad de un job, otra instancia podría empezar otra
+    emisión: la conexión no se vigila.
+  - Un job PENDIENTE o EN_PROCESO sin nadie que tenga el lock no tiene worker (la instancia murió, o el job no pudo
+    guardar su final): el siguiente worker, al empezar, lo pasa a FALLIDA ("interrumpida: el proceso que la corría ya
+    no está"). Nunca traba las emisiones siguientes.
   - Recorre los contribuyentes con DJ **vigentes** del año, por código, y por cada uno pide `hr` y la `pu` de cada
     predio (por código de predio) a `DocumentosPrediales`. Un condominio da una PU por titular.
   - **PDF:** cada documento va a un archivo temporal y al final `PdfMerger` los une en uno. **ZIP:** `ZipOutputStream`
@@ -818,12 +829,23 @@ HR seguida de sus PU) o como **un ZIP** (`<codigo>-<nombre>/HR-<anio>.pdf` y `<c
     (`ReactiveSecurityContextHolder.withAuthentication(...).asCoroutineContext()`, como hace wasichai-agent), así que
     Core aplica sus permisos a cada lectura y escritura. El JWT no se vuelve a validar: su vencimiento no corta un job
     ya empezado.
-  - **Al arrancar** (`ApplicationReadyEvent`), los jobs PENDIENTE o EN_PROCESO de cualquier organización pasan a
-    FALLIDA con el mensaje "interrumpida por reinicio". Al arrancar no hay usuario: esto va directo a la tabla del
-    objeto, con los nombres de columna que da la metadata de Core.
+  - **Al arrancar** (`ApplicationReadyEvent`), si nadie tiene el lock, los jobs PENDIENTE o EN_PROCESO de cualquier
+    organización pasan a FALLIDA con el mensaje "interrumpida por reinicio", se borran los `.part` y los `.partes-`
+    que dejó un job a medias, y corre la retención. Si otra instancia tiene el lock, no toca nada: su job está vivo, y
+    su worker recuperará los demás.
+  - **Auditoría:** al arrancar no hay usuario, y wasichai 0.2.0 no ofrece un contexto de sistema para escribir por
+    `RecordService` (exige el JWT de un usuario). Por eso la recuperación y la retención van directo a la tabla del
+    objeto, con los nombres de columna que da la metadata de Core, y dejan su entrada en el log de auditoría de Core
+    con su `AuditService`: operación UPDATE, sin usuario, con los campos que cambiaron. No avisan a los listeners de
+    `RecordChange`.
 - **Archivos** en `srtm.emision.dir` (`SRTM_EMISION_DIR`, por defecto `./data/emisiones`, fuera de git), con el
   nombre `emision-<anio>-<id>.pdf|zip`. Llevan datos personales de todo el padrón: en producción, un volumen
-  persistente y privado. Nada los borra todavía.
+  persistente y privado.
+- **Retención**, después de cada emisión y al arrancar: de cada organización y año se conservan los últimos
+  `srtm.emision.conservar` archivos (`SRTM_EMISION_CONSERVAR`, por defecto 5), y ninguno más viejo que
+  `srtm.emision.dias` días (`SRTM_EMISION_DIAS`, por defecto 0: sin límite). 0 apaga una regla. El job depurado se
+  queda, sin `archivo` y con el mensaje "archivo depurado"; su descarga da 410. `DELETE /api/srtm/emisiones/{id}`
+  borra el job y su archivo (409 si aún corre; uno PENDIENTE o EN_PROCESO sin worker sí se borra).
 - **Descarga** `GET /api/srtm/emisiones/{id}/archivo`: `FileSystemResource`, en streaming, sin cargar el archivo en
   memoria. El nombre se arma del job, nunca se lee del registro.
 
