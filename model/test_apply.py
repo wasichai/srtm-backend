@@ -160,8 +160,7 @@ class SyncTests(ApplyCliTestCase):
         option_puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "enumOptions" in (r[3] or {})]
         self.assertEqual(option_puts, [(
             "/api/metadata/objects/contribuyente/fields/tipo_documento",
-            {"enumOptions": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION", "PASAPORTE", "PTP-CPP", "CI",
-                             "OTROS"]},
+            {"enumOptions": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "PASAPORTE", "PTP-CPP", "CI", "OTROS"]},
         )])
         self.assertIn("done: 16 created, 1 updated, 29 skipped", out)
 
@@ -291,12 +290,12 @@ class RelacionadoTransferenteSyncTests(ApplyCliTestCase):
 
 
 class RelabelTests(ApplyCliTestCase):
-    """A field model.json labels differently gets model.json's label: predio.condicion was "Condición del predio"."""
+    """A field model.json labels differently gets model.json's label: predio.tipo_predio as "Condición del predio"."""
 
     def setUp(self):
         model = load_model()
         fields = {o["name"]: core_fields(model, o["name"]) for o in model["objects"]}
-        next(f for f in fields["predio"] if f["name"] == "condicion")["label"] = "Condición del predio"
+        next(f for f in fields["predio"] if f["name"] == "tipo_predio")["label"] = "Condición del predio"
         self.core = FakeCore(
             existing_objects=[o["name"] for o in model["objects"]],
             existing_relationships=[r["name"] for r in model["relationships"]],
@@ -308,8 +307,8 @@ class RelabelTests(ApplyCliTestCase):
         code, out, err = self.run_cli([])
         self.assertEqual(code, 0, msg=err)
         puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "label" in (r[3] or {})]
-        self.assertEqual(puts, [("/api/metadata/objects/predio/fields/condicion", {"label": "Tipo de predio"})])
-        self.assertIn("update field predio.condicion (label)", out)
+        self.assertEqual(puts, [("/api/metadata/objects/predio/fields/tipo_predio", {"label": "Tipo de predio"})])
+        self.assertIn("update field predio.tipo_predio (label)", out)
         self.assertIn("done: 0 created, 1 updated, 29 skipped", out)
 
 
