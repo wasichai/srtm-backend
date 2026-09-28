@@ -814,9 +814,9 @@
         {"name": "procesados", "label": "Procesados", "type": "INTEGER"},
         {"name": "errores", "label": "Errores", "type": "LONG_TEXT",
           "description": "JSON: [{contribuyente, mensaje}], el código del contribuyente que no se pudo emitir y por qué."},
-        {"name": "archivo", "label": "Archivo", "type": "TEXT", "description": "emision-<anio>-<id>.pdf|zip"},
+        {"name": "archivo", "label": "Archivo", "type": "TEXT", "description": "emision-<anio>-<id>.pdf|zip; vacío si la retención lo depuró."},
         {"name": "tamano", "label": "Tamaño (bytes)", "type": "INTEGER"},
-        {"name": "mensaje", "label": "Mensaje", "type": "LONG_TEXT", "description": "Por qué falló."},
+        {"name": "mensaje", "label": "Mensaje", "type": "LONG_TEXT", "description": "Por qué falló, o que el archivo fue depurado."},
         {"name": "iniciado", "label": "Iniciado", "type": "DATETIME"},
         {"name": "terminado", "label": "Terminado", "type": "DATETIME"}
       ]

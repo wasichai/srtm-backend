@@ -6,6 +6,7 @@ import org.springframework.http.ContentDisposition
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
+import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -47,6 +48,13 @@ class EmisionMasivaController(
     suspend fun get(
         @PathVariable id: UUID
     ): Emision = emisiones.get(id)
+
+    // the job and its file (wasichai/srtm-backend#47): 409 while it runs
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    suspend fun eliminar(
+        @PathVariable id: UUID
+    ) = emisiones.eliminar(id)
 
     // the file, streamed from disk (never whole in memory), to download
     @GetMapping("/{id}/archivo")
