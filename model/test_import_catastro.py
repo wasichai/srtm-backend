@@ -48,6 +48,28 @@ class LotesFromTests(unittest.TestCase):
         _, problems = ic.lotes_from(collection, ic.parse_map([]), enums())
         self.assertEqual(len(problems), 4, problems)
 
+    def test_tipo_zona_takes_the_tipo_uu_code_or_abreviatura(self):
+        # the gdb's lotes carry TIPO_UU as the domain's code: 01 and 26 in Perené
+        collection = {"features": [
+            feature({"codigo_cpu": "A", "TIPO_UU": "01"}),
+            feature({"codigo_cpu": "B", "TIPO_UU": "26"}),
+            feature({"codigo_cpu": "C", "TIPO_UU": 1}),
+            feature({"codigo_cpu": "D", "TIPO_UU": "AA.HH."}),
+            feature({"codigo_cpu": "E", "TIPO_UU": "URBANIZACION"}),
+        ]}
+        lotes, problems = ic.lotes_from(collection, ic.parse_map(["tipo_zona=TIPO_UU"]), enums())
+        self.assertEqual(problems, [])
+        self.assertEqual(
+            [lote[1]["tipo_zona"] for lote in lotes],
+            ["ASENTAMIENTO HUMANO", "CENTRO POBLADO", "ASENTAMIENTO HUMANO", "ASENTAMIENTO HUMANO", "URBANIZACION"],
+        )
+
+    def test_an_unknown_tipo_uu_is_a_problem(self):
+        collection = {"features": [feature({"codigo_cpu": "A", "TIPO_UU": "99"})]}
+        _, problems = ic.lotes_from(collection, ic.parse_map(["tipo_zona=TIPO_UU"]), enums())
+        self.assertEqual(len(problems), 1)
+        self.assertIn("tipo_zona '99'", problems[0])
+
     def test_a_bad_map_is_refused(self):
         with self.assertRaises(ValueError):
             ic.parse_map(["color=COLOR"])

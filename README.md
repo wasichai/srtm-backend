@@ -306,6 +306,10 @@ python3 import_catastro.py --geojson lotes.geojson --map codigo_cpu=CPU --map co
   (se puede repetir). Campos: `codigo_cpu` (obligatorio), `codigo_predio_municipal`, `partida_registral`,
   `tipo_predio`, `ubigeo`, `tipo_via`, `via`, `numero`, `tipo_zona`, `zona`, `manzana`, `lote`, `kilometro`,
   `direccion`.
+- **`tipo_zona`** acepta el nombre, el código `TIPO_UU` o la abreviatura `ABREV_UU` del tipo de unidad urbana
+  ([`data/tipos_unidad_urbana.csv`](#tipos-de-unidad-urbana)) y guarda el nombre. La GDB trae el código (`01`, `26`),
+  así que basta con `--map tipo_zona=TIPO_UU`. `tipo_via` todavía espera el nombre: los códigos `TIP_VIA` de la GDB
+  no se traducen.
 - **Geometría:** un MultiPolygon de una sola parte se toma como Polygon. wasichai-gis lo guarda en UTM 18S (EPSG:32718)
   y lo devuelve en EPSG:4326.
 - **Idempotente** por `codigo_cpu`.
