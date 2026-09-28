@@ -87,8 +87,8 @@ Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
   con las que se conservan por estar en uso al final.
 - **Obligatoriedad:** deja opcional el campo que `model.json` ya no exige (`contribuyente.numero_documento`, vacío con
   SIN DOCUMENTO); nunca vuelve obligatorio uno existente.
-- **Etiquetas:** pone la etiqueta de `model.json` al campo que Core etiqueta distinto (`predio.condicion`: "Tipo de
-  predio"). Es solo lo que muestra el admin.
+- **Etiquetas:** pone la etiqueta de `model.json` al campo que Core etiqueta distinto (`predio.tipo_predio`:
+  "Tipo de predio"). Es solo lo que muestra el admin.
 
 Solo añade, relaja, reetiqueta o quita opciones sin uso: no renombra, no cambia tipos y no borra campos, así los
 registros importados siguen siendo válidos. Por ejemplo, sobre la base del padrón:
@@ -419,6 +419,47 @@ cada uno con su abreviatura del dominio `ABREV_UU` (mismo código).
   - Un tipo escrito entero gana a una abreviatura: en "LOT 2A CENTRO POBLADO SAN FERNANDO DE KIVINAKI", LOT es el lote.
   - `OTROS` no es un tipo: una habilitación sin tipo reconocido se guarda sin tipo.
 
+## Migrar al modelo de los manuales del SRTM
+
+Tres datos del padrón no son como los tiene el SRTM. Se resuelven con los manuales *M01-1-012 Registro Tributario -
+Contribuyente*, *M01-1-014 Registro Tributario - Predial* y *M21-1-003 Parámetros*:
+
+- **Sucesión indivisa.** En el SRTM es un *tipo de contribuyente*, no un tipo de documento. Se registra con el
+  documento del causante: DNI, pasaporte, CE, PTP / CPP, CI o S/D, y el causante tiene que figurar como fallecido.
+  - `tipo_documento` ya no tiene SUCESION.
+  - Las sucesiones del padrón (código 08) pasan a SIN DOCUMENTO con `tipo_contribuyente` SUCESION INDIVISA. Sus números
+    del 08 son códigos propios del padrón, no documentos; se conservan como clave del importador.
+  - El backend rechaza una sucesión indivisa con RUC (`errorTipoDocumento` en `Reglas.kt`).
+- **Tipo de predio y condición del predio.** Son dos datos distintos.
+  - El *tipo de predio* es Predio Urbano o Predio Rústico, y decide los campos de la ubicación. Ahora es
+    `predio.tipo_predio`, con el mismo enum que `domicilio` y `catastro_fiscal`. Antes era `predio.condicion`
+    (URBANO / RUSTICO).
+  - La *condición del predio* (inafecto, exonerado, monumentos, concesiones forestales, con su documento de sustento)
+    es `condicion_especial` de la declaración.
+- **Clasificación y estado de construcción.** No son datos de la DJ del SRTM.
+  - El SRTM deriva el *grupo de depreciación* del uso del predio, con el parámetro anual *Uso Predio - Depreciación*.
+  - Sus niveles de construcción llevan *estado de conservación*, no estado de construcción.
+  - Los dos campos se quedan en el modelo como datos heredados del padrón: el portal ya no los muestra ni los edita, y
+    el PU los puede seguir leyendo.
+
+En una base con registros de antes de este cambio, en este orden:
+
+```bash
+cd model
+python3 apply.py                                                 # 1. crea predio.tipo_predio; SUCESION se conserva mientras esté en uso
+python3 migrar_modelo_srtm.py --dry-run --borrar-condicion       # 2. lee Core y escribe el reporte, sin cambiar nada: revisarlo
+python3 migrar_modelo_srtm.py                                    #    y migrar
+python3 apply.py                                                 # 3. quita SUCESION de tipo_documento, que ya no usa nadie
+python3 migrar_modelo_srtm.py --dry-run --borrar-condicion       # 4. confirma 0 por migrar
+python3 migrar_modelo_srtm.py --borrar-condicion                 #    y borra predio.condicion (su columna con él)
+```
+
+- **El reporte** (`reports/migrar_modelo_srtm.csv`) tiene una fila por registro que cambia o que no se puede cambiar,
+  con el motivo.
+- **`--borrar-condicion`** no borra nada si queda algún predio con `condicion` que no pasó a `tipo_predio`: los
+  lista y sale con `1`.
+- **Es idempotente:** una segunda corrida no cambia nada.
+
 ## Migrar los tipos de unidad urbana
 
 En una base con registros de antes de `TIPO_UU` (con `ANEXO`, `HABILITACION URBANA` u `OTROS`), en este orden:
@@ -504,7 +545,8 @@ guardar.
 | Campo | Origen en el Excel |
 |---|---|
 | `tipo_persona` (NATURAL, JURIDICA, SUCESION) | derivado: RUC ⇒ JURIDICA; código 08 o `SUCESION…`/`SUC.` ⇒ SUCESION; nombre institucional (ASOCIACION, IGLESIA, INSTITUCION, CENTRO…) ⇒ JURIDICA; si no, NATURAL |
-| `tipo_documento` | `tipo_doc`: 00 SIN DOCUMENTO, 01 DNI, 04 CARNET DE EXTRANJERIA, 06 RUC, 08 SUCESION |
+| `tipo_documento` | `tipo_doc`: 00 SIN DOCUMENTO, 01 DNI, 04 CARNET DE EXTRANJERIA, 06 RUC, 08 SIN DOCUMENTO (ver abajo) |
+| `tipo_contribuyente` | SUCESION INDIVISA para las sucesiones; en los demás importados queda vacío |
 | `numero_documento` | `num_doc` |
 | `nombre_completo` | `nombre_contribuyente`, con los espacios normalizados |
 | `apellido_paterno`, `apellido_materno`, `nombres` | `nombre_contribuyente` separado (solo NATURAL) |
@@ -517,7 +559,7 @@ guardar.
 |---|---|
 | `codigo` | `codigo_predio` (`01-01-0001`) |
 | `sector_catastral`, `manzana_catastral` | `sector_manzana` (`01 - 01`) |
-| `condicion` (URBANO, RUSTICO) | `tipo_pupr_desc` (PU, PR) |
+| `tipo_predio` (PREDIO URBANO, PREDIO RUSTICO) | `tipo_pupr_desc` (PU, PR) |
 | `direccion` | `direccion_predio` completa |
 | `via`, `numero`, `manzana`, `lote`, `habilitacion_urbana` | `direccion_predio` parseada (`<vía> Nro.: Mz.: Lt.: … <habilitación>`) |
 | `ubicacion_area_verde` | `ubicacion_parque` |
@@ -531,8 +573,8 @@ guardar.
 | `condicion_propiedad` (PROPIETARIO UNICO, CONDOMINO) | derivado: CONDOMINO si el predio tiene más de un titular |
 | `porcentaje_condominio` | derivado: `valor_condominio / valor_autoavaluo × 100` |
 | `clase_uso`, `sub_clase_uso`, `uso` | `grupo_uso_desc`: `RESIDENCIAL - CASA HABITACION` es RESIDENCIAL / UNIFAMILIAR / CASA HABITACIÓN; `ESTACIONAMIENTO`, la clase GARAGE; otro grupo, la clase de su nombre, sin sub clase ni uso |
-| `clasificacion` | `clasificacion_predio_desc`, acortado a 64 caracteres sin comas (límite de las opciones ENUM de Core) |
-| `estado_construccion` | `estado_construccion_desc` |
+| `clasificacion` | `clasificacion_predio_desc`, acortado a 64 caracteres sin comas (límite de las opciones ENUM de Core). Heredado del padrón (ver abajo) |
+| `estado_construccion` | `estado_construccion_desc`. Heredado del padrón (ver abajo) |
 | `area_terreno`, `area_construida`, `longitud_frente` | columnas con el mismo nombre |
 | `numero_habitantes` | `cantidad_habitantes` |
 | `valor_autoavaluo`, `valor_condominio`, `deduccion`, `valor_afecto` | `autoavaluo_total`, `condominio`, `deduccion`, `autoavaluo_afecto` |

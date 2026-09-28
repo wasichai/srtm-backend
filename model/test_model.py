@@ -122,8 +122,8 @@ class PayloadTests(unittest.TestCase):
         obj = next(o for o in self.model["objects"] if o["name"] == "contribuyente")
         payload = object_payload(self.model, obj)
         tipo = next(f for f in payload["fields"] if f["name"] == "tipo_documento")
-        self.assertEqual(tipo["enumOptions"], ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION", "PASAPORTE",
-                                              "PTP-CPP", "CI", "OTROS"])
+        self.assertEqual(tipo["enumOptions"], ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "PASAPORTE", "PTP-CPP",
+                                              "CI", "OTROS"])
         self.assertTrue(tipo["required"])
         self.assertNotIn("enum", tipo)
         self.assertNotIn("source", tipo)

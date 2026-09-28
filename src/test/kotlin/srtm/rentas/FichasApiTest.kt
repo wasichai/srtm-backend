@@ -26,7 +26,7 @@ class FichasApiTest : SrtmApiTest() {
     @Test
     fun `a declaracion jurada is read with its predio, its contribuyente and when it was saved`() {
         val codigo = "T-${uniqueDocumento()}"
-        val predio = post("/api/srtm/predios", mapOf("codigo" to codigo, "direccion" to "JR. LIMA 123", "condicion" to "URBANO"))["id"].asString()
+        val predio = post("/api/srtm/predios", mapOf("codigo" to codigo, "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO"))["id"].asString()
         val contribuyente = inscribir()
         val creada =
             post(
@@ -48,8 +48,8 @@ class FichasApiTest : SrtmApiTest() {
     @Test
     fun `predios are searched by any of their texts, a page at a time, in the order of their codes`() {
         val marca = uniqueDocumento()
-        post("/api/srtm/predios", mapOf("codigo" to "T-$marca-2", "direccion" to "JR. LIMA 123", "condicion" to "URBANO"))
-        post("/api/srtm/predios", mapOf("codigo" to "T-$marca-1", "direccion" to "JR. LIMA 123", "condicion" to "URBANO"))
+        post("/api/srtm/predios", mapOf("codigo" to "T-$marca-2", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO"))
+        post("/api/srtm/predios", mapOf("codigo" to "T-$marca-1", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO"))
 
         get("/api/srtm/predios?q=$marca&size=1")
             .expectBody()

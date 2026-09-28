@@ -16,7 +16,7 @@ class RentasApiTest : SrtmApiTest() {
         val documento = uniqueDocumento()
         val contribuyente = inscribir(documento)
         val codigo = "T-$documento"
-        val predio = post("/api/srtm/predios", mapOf("codigo" to codigo, "direccion" to "JR. LIMA 123", "condicion" to "URBANO"))
+        val predio = post("/api/srtm/predios", mapOf("codigo" to codigo, "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO"))
         val contribuyenteId = contribuyente["id"].asString()
         val predioId = predio["id"].asString()
         post(
@@ -188,8 +188,8 @@ class RentasApiTest : SrtmApiTest() {
             .expectBody()
             .jsonPath("$.contribuyente.tipo_documento[1]")
             .isEqualTo("DNI")
-            .jsonPath("$.predio.condicion[0]")
-            .isEqualTo("URBANO")
+            .jsonPath("$.predio.tipo_predio[0]")
+            .isEqualTo("PREDIO URBANO")
             .jsonPath("$.domicilio.tipo_domicilio[0]")
             .isEqualTo("FISCAL")
 
@@ -227,7 +227,7 @@ class RentasApiTest : SrtmApiTest() {
                         mapOf(
                             "sector_catastral" to sector,
                             "manzana_catastral" to manzana,
-                            "condicion" to "URBANO",
+                            "tipo_predio" to "PREDIO URBANO",
                             "tipo_via" to "AVENIDA",
                             "via" to "MARGINAL",
                             "lote" to "19",

@@ -15,7 +15,7 @@ class BusquedaPrediosTest {
         val filtros = FiltrosPredio.of(mapOf("tipo_predio" to "PREDIO URBANO", "via" to "CACERES", "zona" to "ALAMEDA", "codigo" to "01-", "lote" to " "))
         assertEquals(
             listOf(
-                Condicion("condicion", "URBANO", exact = true),
+                Condicion("tipo_predio", "PREDIO URBANO", exact = true),
                 Condicion("codigo", "01-", exact = false),
                 Condicion("via", "CACERES", exact = false),
                 Condicion("habilitacion_urbana", "ALAMEDA", exact = false)

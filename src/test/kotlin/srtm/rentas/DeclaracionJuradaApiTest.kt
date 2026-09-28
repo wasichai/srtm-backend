@@ -15,7 +15,7 @@ class DeclaracionJuradaApiTest : SrtmApiTest() {
         val contribuyente = inscribir()
         val sector = uniqueDocumento().take(4)
         val manzana = uniqueDocumento().take(2)
-        val predio = mapOf("sector_catastral" to sector, "manzana_catastral" to manzana, "condicion" to "URBANO", "direccion" to "S/N")
+        val predio = mapOf("sector_catastral" to sector, "manzana_catastral" to manzana, "tipo_predio" to "PREDIO URBANO", "direccion" to "S/N")
         val antes = resumen()
 
         // core refuses the declaración (an option its enum lacks) once the predio is in

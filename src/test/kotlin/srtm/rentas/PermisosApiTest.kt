@@ -22,7 +22,7 @@ class PermisosApiTest : SrtmApiTest() {
             .expectBody()
             .jsonPath("$.contribuyente.tipo_documento")
             .isNotEmpty
-            .jsonPath("$.predio.condicion")
+            .jsonPath("$.predio.tipo_predio")
             .isNotEmpty
             .jsonPath("$.via")
             .doesNotExist()

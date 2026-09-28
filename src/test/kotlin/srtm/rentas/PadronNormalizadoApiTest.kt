@@ -53,7 +53,7 @@ class PadronNormalizadoApiTest : SrtmApiTest() {
                         mapOf(
                             "sector_catastral" to uniqueDocumento().take(2),
                             "manzana_catastral" to uniqueDocumento().take(2),
-                            "condicion" to "URBANO",
+                            "tipo_predio" to "PREDIO URBANO",
                             "tipo_via" to "AVENIDA",
                             "via" to "MARGINAL"
                         ) + PERENE
@@ -70,7 +70,7 @@ class PadronNormalizadoApiTest : SrtmApiTest() {
     private fun padron(via: String): Map<String, Any?> =
         mapOf(
             "codigo" to "P-${uniqueDocumento()}",
-            "condicion" to "URBANO",
+            "tipo_predio" to "PREDIO URBANO",
             "direccion" to "JIRON $via Nro.: 12 Mz.: A Lt.: 5 Km.: 23.5 CERCADO II MESETA",
             "tipo_via" to "JIRON",
             "via" to via,

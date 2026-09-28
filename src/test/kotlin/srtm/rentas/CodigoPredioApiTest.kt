@@ -17,7 +17,7 @@ class CodigoPredioApiTest : SrtmApiTest() {
         val contribuyente = inscribir()
         val predio =
             mapOf(
-                "condicion" to "URBANO",
+                "tipo_predio" to "PREDIO URBANO",
                 "tipo_via" to "AVENIDA",
                 "via" to "MARGINAL",
                 "departamento" to "JUNIN",

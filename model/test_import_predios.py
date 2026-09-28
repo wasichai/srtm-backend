@@ -239,7 +239,7 @@ class BuildDatasetTests(unittest.TestCase):
 
         predio = data.predios["01-01-0001"]
         self.assertEqual((predio["sector_catastral"], predio["manzana_catastral"]), ("01", "01"))
-        self.assertEqual(predio["condicion"], "URBANO")
+        self.assertEqual(predio["tipo_predio"], "PREDIO URBANO")
         self.assertEqual(predio["manzana"], "G")
         # the ubicación as the srtm's form edits it; direccion keeps the padrón's text
         self.assertEqual((predio["tipo_via"], predio["via"]), ("PASAJE", "SAN PEDRO"))
@@ -278,6 +278,17 @@ class BuildDatasetTests(unittest.TestCase):
         contrib = data.contribuyentes["20603080590"]
         self.assertEqual(contrib["razon_social"], "OROCOM SAC")
         self.assertIsNone(contrib["apellido_paterno"])
+
+    def test_a_sucesion_is_a_tipo_de_contribuyente_not_a_document(self):
+        # M01-1-012: a sucesión indivisa is identified by its causante's document; the padrón's 08 codes are none
+        data = self.build([row(tipo_doc="08", num_doc="151", nombre_contribuyente="SUCESION INDIVISA CONDORI PAYTAN PABLO")])
+        contrib = data.contribuyentes["151"]
+        self.assertEqual(contrib["tipo_documento"], "SIN DOCUMENTO")
+        self.assertEqual(contrib["tipo_contribuyente"], "SUCESION INDIVISA")
+        self.assertEqual(contrib["tipo_persona"], "SUCESION")
+        self.assertEqual(contrib["razon_social"], "SUCESION INDIVISA CONDORI PAYTAN PABLO")
+        # everyone else keeps no tipo_contribuyente, as before: the portal derives it from tipo_persona
+        self.assertIsNone(self.build([row()]).contribuyentes["20529936"]["tipo_contribuyente"])
 
     def test_clasificacion_is_shortened_and_empty_is_none(self):
         data = self.build([

@@ -164,6 +164,8 @@ class FakeCore:
             if self.fail_put:
                 return self.fail_put_status, {"message": "boom-put"}
             return 200, {"required": True}
+        if path.startswith("/api/metadata/objects/") and "/fields/" in path and method == "DELETE":
+            return 204, None
         if path.startswith("/api/relationships/") and method == "DELETE":
             return 204, None
         if path.startswith("/api/objects/") and method == "DELETE":

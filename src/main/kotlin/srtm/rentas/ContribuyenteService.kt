@@ -200,6 +200,7 @@ class ContribuyenteService(
         body: Contribuyente,
         except: UUID?
     ) {
+        errorTipoDocumento(body.tipoContribuyente, body.tipoDocumento)?.let { throw ValidationException("Documento inválido", "tipo_documento", it) }
         errorDocumento(body.tipoDocumento, body.numeroDocumento)?.let { throw ValidationException("Documento inválido", "numero_documento", it) }
         val numero = numeroDocumento(body.tipoDocumento, body.numeroDocumento) ?: return
         val otro =

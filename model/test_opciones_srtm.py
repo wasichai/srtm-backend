@@ -13,6 +13,9 @@ from test_apply import ApplyCliTestCase, core_fields, load_model
 # "DNI, RUC, pasaporte, CE, PTP / CPP, CI, S/D y Otros": PTP / CPP, CI and Otros were missing
 ANTES = ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION", "PASAPORTE"]
 NUEVAS = ["PTP-CPP", "CI", "OTROS"]
+# SUCESION is no document in the srtm: a sucesión indivisa is a tipo de contribuyente with its causante's document
+# (M01-1-012). model.json dropped it; apply.py drops it from Core once no record uses it (migrar_modelo_srtm.py)
+MODELO = [o for o in ANTES if o != "SUCESION"] + NUEVAS
 PERSONAS = ["contribuyente", "relacionado", "transferente"]
 
 
@@ -31,17 +34,17 @@ class TipoDocumentoSrtmTests(ApplyCliTestCase):
 
     def test_model_has_them_after_the_old_ones(self):
         # the stored values stay: the portal labels PTP-CPP as "PTP / CPP" (Core's options take no slash)
-        self.assertEqual(load_model()["enums"]["tipo_documento"], ANTES + NUEVAS)
+        self.assertEqual(load_model()["enums"]["tipo_documento"], MODELO)
 
     def test_adds_them_to_the_three_personas_only(self):
         code, out, err = self.run_cli([])
         self.assertEqual(code, 0, msg=err)
         option_puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "enumOptions" in (r[3] or {})]
         self.assertEqual(option_puts, [
-            (f"/api/metadata/objects/{name}/fields/tipo_documento", {"enumOptions": ANTES + NUEVAS}) for name in PERSONAS
+            (f"/api/metadata/objects/{name}/fields/tipo_documento", {"enumOptions": MODELO}) for name in PERSONAS
         ])
         for name in PERSONAS:
-            self.assertIn(f"update field {name}.tipo_documento (+PTP-CPP, CI, OTROS)", out)
+            self.assertIn(f"update field {name}.tipo_documento (+PTP-CPP, CI, OTROS; -SUCESION)", out)
 
 
 # the two tipos de unidad urbana the presentation cuts on page 5 ("ASOCIACION DE VIVIENDA D…", "…E I…"), named as the

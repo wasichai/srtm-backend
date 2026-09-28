@@ -18,6 +18,16 @@ class ReglasTest {
     }
 
     @Test
+    fun `a sucesion indivisa takes its causante's document, never a RUC`() {
+        listOf("DNI", "PASAPORTE", "CARNET DE EXTRANJERIA", "PTP-CPP", "CI", "SIN DOCUMENTO").forEach {
+            assertEquals(null, errorTipoDocumento("SUCESION INDIVISA", it), it)
+        }
+        assertTrue(errorTipoDocumento("SUCESION INDIVISA", "RUC")!!.contains("causante"))
+        assertEquals(null, errorTipoDocumento("PERSONA JURIDICA", "RUC"))
+        assertEquals(null, errorTipoDocumento(null, "RUC"))
+    }
+
+    @Test
     fun `nombre_completo is surnames then names for a person, the razon social otherwise`() {
         val persona = Contribuyente(tipoContribuyente = "PERSONA NATURAL", apellidoPaterno = "FLORES", apellidoMaterno = "OTINIANO", nombres = "JUNIOR PAOLO")
         assertEquals("FLORES OTINIANO JUNIOR PAOLO", nombreCompleto(persona))

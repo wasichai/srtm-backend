@@ -28,8 +28,10 @@ XLSX_REL = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships
 XLSX_PKG_REL = "{http://schemas.openxmlformats.org/package/2006/relationships}"
 
 # Excel code -> model enum option
-TIPO_DOCUMENTO = {"00": "SIN DOCUMENTO", "01": "DNI", "04": "CARNET DE EXTRANJERIA", "06": "RUC", "08": "SUCESION"}
-CONDICION_PREDIO = {"PU": "URBANO", "PR": "RUSTICO"}
+# 08 is the padrón's sucesión: in the srtm a sucesión indivisa is a tipo de contribuyente, identified by its causante's
+# document (M01-1-012). the padrón's 08 numbers are its own codes, not a document: SIN DOCUMENTO keeps them as the key
+TIPO_DOCUMENTO = {"00": "SIN DOCUMENTO", "01": "DNI", "04": "CARNET DE EXTRANJERIA", "06": "RUC", "08": "SIN DOCUMENTO"}
+TIPO_PREDIO = {"PU": "PREDIO URBANO", "PR": "PREDIO RUSTICO"}
 # Core's enum options allow no commas and at most 64 characters
 CLASIFICACION = {
     "TIENDAS,DEPOSITOS,CENTROS DE RECREACION O ESPARCIMIENTO ,CLUB SOCIALES O INSTITUCIONES":
@@ -472,6 +474,7 @@ def _contribuyente(row, mapper, data):
         razon_social = nombre
     return {
         "tipo_persona": tipo_persona,
+        "tipo_contribuyente": "SUCESION INDIVISA" if tipo_persona == "SUCESION" else None,
         "tipo_documento": mapper.enum(row, "tipo_doc", "tipo_documento", TIPO_DOCUMENTO),
         "numero_documento": clean_text(row.get("num_doc")),
         "nombre_completo": nombre,
@@ -489,7 +492,7 @@ def _predio(row, codigo, mapper):
         "codigo": codigo,
         "sector_catastral": sector,
         "manzana_catastral": manzana,
-        "condicion": mapper.enum(row, "tipo_pupr_desc", "condicion_predio", CONDICION_PREDIO),
+        "tipo_predio": mapper.enum(row, "tipo_pupr_desc", "tipo_predio", TIPO_PREDIO),
         "direccion": clean_text(row.get("direccion_predio")),
         **split_ubicacion(parse_address(row.get("direccion_predio"))),
         "ubicacion_area_verde": mapper.enum(row, "ubicacion_parque", "ubicacion_area_verde"),

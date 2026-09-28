@@ -64,6 +64,19 @@ fun errorDocumento(
     }
 }
 
+// a sucesión indivisa is known by its causante's document (M01-1-012): the ones a person has, never a RUC
+val DOCUMENTOS_DE_SUCESION = listOf("DNI", "PASAPORTE", "CARNET DE EXTRANJERIA", "PTP-CPP", "CI", SIN_DOCUMENTO)
+
+fun errorTipoDocumento(
+    tipoContribuyente: String?,
+    tipoDocumento: String?
+): String? =
+    if (tipoContribuyente == "SUCESION INDIVISA" && tipoDocumento != null && tipoDocumento !in DOCUMENTOS_DE_SUCESION) {
+        "Una sucesión indivisa se registra con el documento del causante: DNI, pasaporte, CE, PTP / CPP, CI o S/D"
+    } else {
+        null
+    }
+
 // the srtm writes the common types of vía and every type of unidad urbana abbreviated (AV. ANDRES AVELINO CACERES,
 // A.P.V. LOS PINOS): the records keep the model's word, the address its abbreviation; a type not here goes whole. the
 // same two tables are in srtm-ui (forms/direccion.ts), and model/import_predios.py (split_tipo) reads each abbreviation

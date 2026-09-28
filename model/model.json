@@ -1,8 +1,7 @@
 {
   "enums": {
     "tipo_persona": ["NATURAL", "JURIDICA", "SUCESION"],
-    "tipo_documento": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "SUCESION", "PASAPORTE", "PTP-CPP", "CI", "OTROS"],
-    "condicion_predio": ["URBANO", "RUSTICO"],
+    "tipo_documento": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "PASAPORTE", "PTP-CPP", "CI", "OTROS"],
     "ubicacion_area_verde": ["FRENTE A PARQUE", "MEDIANAMENTE CERCANO A AREAS VERDES", "FRENTE A BERMA", "OTRAS UBICACIONES"],
     "condicion_propiedad": ["PROPIETARIO UNICO", "CONDOMINO", "SOCIEDAD CONYUGAL", "POSEEDOR"],
     "uso": [
@@ -391,7 +390,8 @@
         {"name": "codigo", "label": "Código de predio", "type": "TEXT", "required": true, "unique": true, "source": "codigo_predio"},
         {"name": "sector_catastral", "label": "Sector catastral", "type": "TEXT", "source": "sector_manzana"},
         {"name": "manzana_catastral", "label": "Manzana catastral", "type": "TEXT", "source": "sector_manzana"},
-        {"name": "condicion", "label": "Tipo de predio", "type": "ENUM", "enum": "condicion_predio", "source": "tipo_pupr_desc"},
+        {"name": "tipo_predio", "label": "Tipo de predio", "type": "ENUM", "enum": "tipo_predio", "source": "tipo_pupr_desc",
+          "description": "Predio urbano o rústico (M01-1-014). La condición del predio es otro dato: condicion_especial de la declaración."},
         {"name": "direccion", "label": "Dirección", "type": "TEXT", "required": true, "source": "direccion_predio"},
         {"name": "via", "label": "Vía", "type": "TEXT", "source": "direccion_predio"},
         {"name": "numero", "label": "Número", "type": "TEXT", "source": "direccion_predio"},
@@ -446,9 +446,11 @@
         {"name": "porcentaje_condominio", "label": "% de condominio", "type": "DECIMAL",
           "description": "El que declara cada condómino; 100 con un solo titular. En los importados, valor_condominio / valor_autoavaluo × 100."},
         {"name": "uso", "label": "Uso", "type": "ENUM", "enum": "uso"},
-        {"name": "clasificacion", "label": "Clasificación", "type": "ENUM", "enum": "clasificacion", "source": "clasificacion_predio_desc"},
+        {"name": "clasificacion", "label": "Clasificación", "type": "ENUM", "enum": "clasificacion", "source": "clasificacion_predio_desc",
+          "description": "Heredado del padrón. No es un dato de la DJ del SRTM: su grupo de depreciación sale del uso (parámetro Uso Predio - Depreciación, M21-1-003)."},
         {"name": "estado_construccion", "label": "Estado de construcción", "type": "ENUM", "enum": "estado_construccion",
-          "source": "estado_construccion_desc"},
+          "source": "estado_construccion_desc",
+          "description": "Heredado del padrón. No es un dato de la DJ del SRTM: sus niveles llevan estado de conservación (M01-1-014)."},
         {"name": "area_terreno", "label": "Área de terreno (m²)", "type": "DECIMAL", "source": "area_terreno"},
         {"name": "area_construida", "label": "Área construida (m²)", "type": "DECIMAL", "source": "area_construida"},
         {"name": "longitud_frente", "label": "Longitud de frente (m)", "type": "DECIMAL", "source": "longitud_frente"},

@@ -45,12 +45,9 @@ data class Condicion(
     val exact: Boolean
 )
 
-// the padrón writes the tipo de predio as URBANO / RUSTICO, the catastro (and the srtm) as PREDIO URBANO / PREDIO RUSTICO
-fun condicionDelPadron(tipoPredio: String): String = tipoPredio.removePrefix("PREDIO ").trim()
-
 fun condicionesPredio(f: FiltrosPredio): List<Condicion> =
     listOfNotNull(
-        f.tipoPredio?.let { Condicion("condicion", condicionDelPadron(it), exact = true) },
+        f.tipoPredio?.let { Condicion("tipo_predio", it, exact = true) },
         f.codigo?.let { Condicion("codigo", it, exact = false) },
         f.codigoCpu?.let { Condicion("codigo_cpu", it, exact = false) },
         f.partidaRegistral?.let { Condicion("partida_registral", it, exact = false) },

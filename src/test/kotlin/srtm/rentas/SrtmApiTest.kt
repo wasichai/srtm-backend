@@ -260,7 +260,7 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
 
     // a new predio of the padrón's kind: its id
     protected fun predio(): String =
-        post("/api/srtm/predios", mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "condicion" to "URBANO"))["id"].asString()
+        post("/api/srtm/predios", mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO"))["id"].asString()
 
     // a declaration of a new contribuyente on a new predio: its id
     protected fun nuevaDeclaracion(): String =

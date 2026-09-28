@@ -119,7 +119,7 @@ class ConsultaReniecApiTest : SrtmApiTest() {
 
     // a declaration of the contribuyente on a new predio: its id
     private fun declaracion(contribuyente: String): String {
-        val predio = post("/api/srtm/predios", mapOf("codigo" to "R-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "condicion" to "URBANO"))
+        val predio = post("/api/srtm/predios", mapOf("codigo" to "R-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO"))
         return post(
             "/api/srtm/declaraciones",
             mapOf("contribuyente" to contribuyente, "predio" to predio["id"].asString(), "anio" to 2026, "secuencia_uso" to "1")

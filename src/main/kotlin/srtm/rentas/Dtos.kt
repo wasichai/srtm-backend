@@ -51,7 +51,8 @@ data class Predio(
     val codigo: String? = null,
     val sectorCatastral: String? = null,
     val manzanaCatastral: String? = null,
-    val condicion: String? = null,
+    // PREDIO URBANO / PREDIO RUSTICO. the srtm's condición del predio is another datum: the declaration's condicion_especial
+    val tipoPredio: String? = null,
     val direccion: String? = null,
     val via: String? = null,
     val numero: String? = null,
