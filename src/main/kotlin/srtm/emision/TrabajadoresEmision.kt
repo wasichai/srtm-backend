@@ -182,7 +182,17 @@ class GrupoTrabajadores(
             fallar(lote, "lote fallido tras ${lote.intentos - 1} intentos")
             return
         }
-        val autenticacion = lote.creadoPor?.let { identidad.de(it) }
+        val autenticacion =
+            try {
+                lote.creadoPor?.let { identidad.de(it) }
+            } catch (e: CancellationException) {
+                withContext(NonCancellable) { runCatching { lotes.liberar(lote, instancia) } }
+                throw e
+            } catch (e: Throwable) {
+                log.error("no se pudo leer quién creó el lote {} de la emisión masiva {}", lote.numero, lote.emision, e)
+                lotes.liberar(lote, instancia)
+                return
+            }
         if (autenticacion == null) {
             fallar(lote, SIN_USUARIO)
             return

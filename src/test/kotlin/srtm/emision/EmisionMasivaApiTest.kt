@@ -341,6 +341,18 @@ class EmisionMasivaApiTest : ConEscenarioApiTest() {
     }
 
     @Test
+    fun `the file of a finished masiva that the almacen no longer has is a 404`() {
+        val anio = anio()
+        val id = terminadaConArchivo(anio, "2020-01-01T00:00:00Z")
+        runBlocking { almacen.borrar(claveResultado(UUID.fromString(id), anio, FormatoEmision.PDF)) }
+
+        val descarga = descargar(id)
+
+        assertEquals(HttpStatus.NOT_FOUND, descarga.status, String(descarga.cuerpo))
+        assertEquals("El archivo de la emisión ya no está en el servidor", tree(String(descarga.cuerpo))["detail"].asString())
+    }
+
+    @Test
     fun `deleting a finished masiva removes its job, its file and its lotes`() {
         val anio = anio()
         escenario(anio)

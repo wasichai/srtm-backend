@@ -47,7 +47,7 @@ class EmisionMasivaController(
         @PathVariable id: UUID
     ): Emision = emisiones.get(id)
 
-    // the job and its file (wasichai/srtm-backend#47): 409 while it runs
+    // the job, its lotes and its files (wasichai/srtm-backend#47, #53): one still running is cancelled
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     suspend fun eliminar(
