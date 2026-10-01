@@ -80,7 +80,9 @@ internal suspend fun cancelarLotes(
         .toInt()
 }
 
-// the emission's procesados is the sum of its lotes': each worker counts its own, none overwrites another's
+// the emission's procesados is the sum of its lotes': each worker counts its own, none overwrites another's. two
+// workers saving at once may each sum before the other's commit and leave a lower sum for a moment: the next write
+// corrects it, and the emission's terminar sets the final count
 internal suspend fun sumarProcesadosLotes(
     db: DatabaseClient,
     t: TablasLote,
@@ -102,9 +104,9 @@ internal suspend fun sumarProcesadosLotes(
 internal fun segundos(lease: Duration): Double = lease.toMillis() / 1000.0
 
 // the lotes of the masivas (wasichai/srtm-backend#53, #54), straight on their tables: the system's writes, without
-// audit. a lote is taken with FOR UPDATE SKIP LOCKED, so two workers of any instance never take the same one; the one
-// who took it is the only one who writes it while it is EN_PROCESO (tomado_por), and a write that finds it no longer
-// so (cancelled, deleted, or taken again after its lease expired) is false: its worker stops
+// audit. a lote is taken with FOR UPDATE SKIP LOCKED, so two workers of any instance never take the same one; the take
+// that got it is the only one that writes it while it is EN_PROCESO (tomado_por and intentos), and a write that finds
+// it no longer so (cancelled, deleted, or taken again after its lease expired) is false: its worker stops
 @Component
 class LotesEmision(
     private val db: DatabaseClient,
@@ -304,7 +306,9 @@ class LotesEmision(
         tablas.lotes(lote.organizacion).forEach { sumarProcesadosLotes(db, it, lote.emision) }
     }
 
-    // a write of the lote by the one who took it: only while it is EN_PROCESO and theirs
+    // a write of the lote by the take that got it: only while it is EN_PROCESO and that take's. tomado_por alone
+    // names the instance, and another worker of the same one may have taken it again after its lease expired: every
+    // take counts one more intento, so the take is the instance and its intentos
     private suspend fun escribir(
         lote: LoteTomado,
         instancia: String,
@@ -316,10 +320,12 @@ class LotesEmision(
             db
                 .sql(
                     "UPDATE ${l.tabla} SET ${asignaciones(l)}, updated_at = now() " +
-                        "WHERE id = :id AND ${l.columna("estado")} = :en_proceso AND ${l.columna("tomado_por")} = :yo"
+                        "WHERE id = :id AND ${l.columna("estado")} = :en_proceso AND ${l.columna("tomado_por")} = :yo " +
+                        "AND ${l.columna("intentos")} = :intentos"
                 ).bind("id", lote.id)
                 .bind("en_proceso", EN_PROCESO)
                 .bind("yo", instancia)
+                .bind("intentos", lote.intentos)
         valores.forEach { (nombre, valor) -> spec = spec.bind(nombre, valor) }
         return spec.fetch().awaitRowsUpdated() > 0
     }

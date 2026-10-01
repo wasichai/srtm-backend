@@ -143,6 +143,30 @@ class LotesEmisionApiTest : SrtmApiTest() {
     }
 
     @Test
+    fun `a lote retaken by the same instance is no longer the old take's`() {
+        val emision = emision(anio(), "EN_PROCESO", latido = Instant.now())
+        lote(emision, 1)
+        val viejo = runBlocking { lotes.tomar("A", lease) }!!
+        // the old take's worker stalls past the lease, and another worker of the same instance takes the lote again
+        vencido(viejo.id)
+        val nuevo = runBlocking { lotes.tomar("A", lease) }!!
+        assertEquals(viejo.id, nuevo.id)
+        assertEquals(viejo.intentos + 1, nuevo.intentos)
+
+        assertFalse(runBlocking { lotes.latir(viejo, "A") })
+        assertFalse(runBlocking { lotes.avanzar(viejo, "A", 1, emptyList()) })
+        assertFalse(runBlocking { lotes.terminar(viejo, "A", 1, 2, emptyList(), "emision-$emision/parte-00001.pdf") })
+        assertFalse(runBlocking { lotes.fallar(viejo, "A", emptyList()) })
+        assertFalse(runBlocking { lotes.liberar(viejo, "A") })
+        assertEquals(0, job(emision)["procesados"].asInt())
+
+        assertTrue(runBlocking { lotes.latir(nuevo, "A") })
+        assertTrue(runBlocking { lotes.avanzar(nuevo, "A", 1, emptyList()) })
+        assertTrue(runBlocking { lotes.terminar(nuevo, "A", 1, 2, emptyList(), "emision-$emision/parte-00001.pdf") })
+        assertEquals("TERMINADO", runBlocking { lotes.estado(nuevo) })
+    }
+
+    @Test
     fun `a released lote is taken again with one more attempt`() {
         val emision = emision(anio(), "EN_PROCESO", latido = Instant.now())
         lote(emision, 1)
@@ -234,6 +258,37 @@ class LotesEmisionApiTest : SrtmApiTest() {
         val estado = cambio(emision, "estado")
         assertEquals("EN_PROCESO", estado["before"].asString())
         assertEquals("ENSAMBLANDO", estado["after"].asString())
+    }
+
+    @Test
+    fun `an emission another claimer holds is not claimed`() {
+        val emision = emision(anio(), "EN_PROCESO", latido = Instant.now())
+        val id = UUID.fromString(emision)
+        lote(emision, 1, "estado" to "TERMINADO")
+        val organizacion = organizacion(emision)
+        val t = runBlocking { tablas.de(EMISION_MASIVA, listOf("estado")) }.first { it.organizacion == organizacion }
+        // another claimer's transaction, mid-way: the emission's row locked on a connection of its own
+        val ajena = runBlocking { conexiones.create().awaitSingle() }
+        try {
+            runBlocking {
+                ajena.beginTransaction().awaitFirstOrNull()
+                ajena
+                    .createStatement("SELECT id FROM ${t.tabla} WHERE id = $1 FOR UPDATE")
+                    .bind("$1", id)
+                    .execute()
+                    .awaitSingle()
+                    .rowsUpdated
+                    .awaitFirstOrNull()
+            }
+
+            assertNull(runBlocking { withTimeout(10_000) { estados.reclamarEnsamblado(lease, organizacion, id) } })
+        } finally {
+            runBlocking {
+                ajena.rollbackTransaction().awaitFirstOrNull()
+                ajena.close().awaitFirstOrNull()
+            }
+        }
+        assertNotNull(runBlocking { estados.reclamarEnsamblado(lease, organizacion, id) })
     }
 
     @Test
@@ -417,6 +472,19 @@ class LotesEmisionApiTest : SrtmApiTest() {
                 .one()
                 .awaitSingle()
         }
+
+    // the lote's latido an hour ago, straight on its table: its worker stopped beating
+    private fun vencido(lote: UUID) {
+        runBlocking {
+            for (t in tablas.de("emision_lote", listOf("latido"))) {
+                db
+                    .sql("UPDATE ${t.tabla} SET ${t.columna("latido")} = now() - interval '1 hour' WHERE id = :id")
+                    .bind("id", lote)
+                    .fetch()
+                    .awaitRowsUpdated()
+            }
+        }
+    }
 
     // a lote TERMINADO, straight on its table: core's PUT replaces the whole record
     private fun terminado(lote: String) {
