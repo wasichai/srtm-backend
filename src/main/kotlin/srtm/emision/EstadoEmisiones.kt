@@ -61,6 +61,21 @@ class EstadoEmisiones(
             .toList()
     }
 
+    // whether its row is still there: it may be deleted while an instance works on it
+    suspend fun existe(
+        organizacion: UUID,
+        id: UUID
+    ): Boolean {
+        val e = tablas.lotes(organizacion).firstOrNull()?.emisiones ?: return false
+        return db
+            .sql("SELECT count(*) AS n FROM ${e.tabla} WHERE id = :id")
+            .bind("id", id)
+            .map { row, _ -> row.get("n", Long::class.javaObjectType)!! }
+            .one()
+            .awaitFirstOrNull()
+            ?.let { it > 0 } ?: false
+    }
+
     // the preparer's lease, while it reads the padron and cuts it: only while PENDIENTE
     suspend fun latirPreparacion(
         organizacion: UUID,

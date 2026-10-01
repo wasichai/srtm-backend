@@ -11,7 +11,7 @@ import kotlin.io.path.isDirectory
 import kotlin.io.path.name
 
 // the retention of the masivas' files (wasichai/srtm-backend#47), apart from core: which files go, and the leftovers
-// of a job that died mid-way. EmisionMasivaService reads the jobs and marks the ones whose file went
+// of a worker that died mid-way. RetencionEmision reads the jobs and marks the ones whose file went
 
 // a TERMINADA job whose file is still on disk
 data class ArchivoDeEmision(
@@ -48,12 +48,16 @@ fun aDepurar(
         }
 }
 
-// a job that died mid-way leaves its `.part` and the `.partes-` directory of a pdf's documents in srtm.emision.temporales
-// (the finished files are in the almacén): removed when no job runs. how many
+// a worker that died mid-way leaves in its work dir (srtm.emision.temporales) the `.part` of a lote, the `.partes-`
+// directory of a pdf's documents or the `ensamblado-` one of an assembly (the finished files are in the almacén):
+// removed when its group of workers starts, before any of them runs. how many
 @OptIn(ExperimentalPathApi::class)
 fun limpiarTemporales(temporales: Path): Int {
     if (!temporales.isDirectory()) return 0
-    val restos = Files.list(temporales).use { s -> s.toList().filter { it.name.endsWith(".part") || it.name.startsWith(".partes-") } }
+    val restos =
+        Files.list(temporales).use { s ->
+            s.toList().filter { it.name.endsWith(".part") || it.name.startsWith(".partes-") || it.name.startsWith("ensamblado-") }
+        }
     restos.forEach { it.deleteRecursively() }
     return restos.size
 }

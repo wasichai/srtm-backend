@@ -2,25 +2,20 @@ package srtm.emision
 
 import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.reactive.asFlow
 import kotlinx.coroutines.reactive.awaitFirstOrNull
 import kotlinx.coroutines.reactor.asCoroutineContext
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.io.Resource
 import org.springframework.http.HttpStatus
-import org.springframework.r2dbc.core.DatabaseClient
-import org.springframework.r2dbc.core.awaitRowsUpdated
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.stereotype.Service
 import srtm.rentas.CONTRIBUYENTE
@@ -31,21 +26,16 @@ import srtm.rentas.PREDIO
 import srtm.rentas.Predio
 import srtm.rentas.Registros
 import srtm.rentas.vigente
-import wasichai.core.audit.AuditOperation
-import wasichai.core.audit.AuditService
 import wasichai.core.common.Actions
 import wasichai.core.common.ConflictException
 import wasichai.core.common.ForbiddenException
 import wasichai.core.common.NotFoundException
 import wasichai.core.common.UnauthorizedException
 import wasichai.core.common.WasichaiException
+import wasichai.core.identity.AuthenticatedUser
 import wasichai.core.identity.CurrentUser
 import wasichai.core.metadata.MetadataService
-import java.nio.file.Files
-import java.nio.file.Path
 import java.time.Instant
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -54,14 +44,12 @@ const val EMISION_MASIVA = "emision_masiva"
 
 private const val PENDIENTE = "PENDIENTE"
 private const val EN_PROCESO = "EN_PROCESO"
+private const val ENSAMBLANDO = "ENSAMBLANDO"
 private const val TERMINADA = "TERMINADA"
-private const val FALLIDA = "FALLIDA"
 
-private val ACTIVOS = setOf(PENDIENTE, EN_PROCESO)
+private val ACTIVOS = setOf(PENDIENTE, EN_PROCESO, ENSAMBLANDO)
 
-private const val INTERRUMPIDA = "interrumpida por reinicio"
 internal const val HUERFANA = "interrumpida: el proceso que la corría ya no está"
-private const val DEPURADO = "archivo depurado"
 
 // a TERMINADA job whose file the retention removed
 class ArchivoDepuradoException(
@@ -123,46 +111,37 @@ class DescargaEmision(
     val tamano: Long
 )
 
-// the masiva of a year in the background (wasichai/srtm-backend#41). a POST leaves a PENDIENTE job and returns; its
-// worker reads the contribuyentes with vigente declaraciones of the year, writes the file under srtm.emision.temporales
-// (GeneradorEmision), hands it to the AlmacenEmision and keeps the job's progress in core.
+// the lote of the masiva a POST writes (its id: the rest is the workers')
+private data class RegistroLote(
+    val id: String? = null
+)
+
+// the masiva of a year (wasichai/srtm-backend#41, #53, #54). a POST leaves a PENDIENTE job and returns; in the
+// background, as the caller, it reads the contribuyentes with vigente declaraciones of the year and cuts them in lotes
+// of srtm.emision.lote (emision_lote), and the job goes EN_PROCESO. the workers of every instance (TrabajadoresEmision)
+// take the lotes, each one's parte goes to the almacén, and the one that ends the last lote assembles the file: the job
+// goes ENSAMBLANDO and then TERMINADA (or FALLIDA). a job's progress is the sum of its lotes'.
 //
-// the job runs as whoever asked for it: their authentication is taken from the request and carried into the job's
-// coroutine (ReactorContext), so every read and write goes through Registros and core checks that user's permissions,
-// as a request of theirs would. the jwt is not checked again after the request: its expiry does not stop a job
-// already started. the job saves its progress, so the POST asks for update besides create (wasichai/srtm-backend#47)
-// before any job exists: one it could not save would stay PENDIENTE.
-//
-// one worker in the whole deployment: a postgres advisory lock (CerrojoEmision) taken by the POST and held by the
-// worker until it ends, in whichever instance. a job PENDIENTE or EN_PROCESO while nobody holds the lock has no worker:
-// the next worker, or the next start, fails it. what needs no user is that maintenance, which is the system's: it
-// updates the table straight and writes core's audit log itself (wasichai 0.2.0 has no system context for
-// RecordService), as it does when the retention (srtm.emision.conservar, srtm.emision.dias) purges an old file
+// the preparation runs as whoever asked for it: their authentication is taken from the request and carried into its
+// coroutine (ReactorContext), so core checks that user's permissions on every read and on the lotes it creates, as a
+// request of theirs would; the lotes are generated as that same user (IdentidadEmision). the jwt is not checked again
+// after the request. one active masiva per organization and year: two organizations emit at once. what needs no user
+// is the system's (EstadoEmisiones, LotesEmision, RetencionEmision): it writes the tables straight and core's audit
+// log itself (wasichai 0.2.0 has no system context for RecordService)
 @Service
 class EmisionMasivaService(
     private val registros: Registros,
-    documentos: DocumentosDeEmision,
-    merger: PdfMerger,
-    private val db: DatabaseClient,
-    private val tablasCore: TablasCore,
     private val metadata: MetadataService,
     private val currentUser: CurrentUser,
-    private val auditoria: AuditService,
-    private val cerrojo: CerrojoEmision,
     private val almacen: AlmacenEmision,
-    @Value("\${srtm.emision.temporales}") temporales: String,
-    @param:Value("\${srtm.emision.conservar:5}") conservar: Int,
-    @param:Value("\${srtm.emision.dias:0}") dias: Int
+    private val lotes: LotesEmision,
+    private val estado: EstadoEmisiones,
+    private val retencion: RetencionEmision,
+    private val trabajadores: TrabajadoresEmision,
+    private val config: EmisionProperties
 ) {
-    // the work files: the `.part` a job writes and the `.partes-` directory of a pdf's documents. the almacén is where
-    // the result ends, and the only one that knows where that is
-    private val temporales: Path = Path.of(temporales)
-    private val retencion = Retencion(conservar, dias)
-    private val generador = GeneradorEmision(documentos, merger)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // CoroutineStart.ATOMIC is delicate: the worker's body starts even if the scope was cancelled, to let the lock go
-    @OptIn(DelicateCoroutinesApi::class)
     suspend fun emitir(
         anio: Int,
         formato: FormatoEmision
@@ -170,52 +149,120 @@ class EmisionMasivaService(
         val llamante =
             ReactiveSecurityContextHolder.getContext().awaitFirstOrNull()?.authentication
                 ?: throw UnauthorizedException("Authentication required")
-        exigirPermisos()
-        val tomado = cerrojo.tomar() ?: throw ConflictException("Ya hay una emisión masiva en curso: espere a que termine")
+        val usuario = exigirPermisos()
+        val organizacion = usuario.organizationId
+        if (estado.activas(organizacion, anio).isNotEmpty()) throw ConflictException(enCurso(anio))
         val job =
-            try {
-                registros.create(
-                    EMISION_MASIVA,
-                    RegistroEmision::class.java,
-                    mapOf(
-                        "anio" to anio,
-                        "formato" to formato.name,
-                        "estado" to PENDIENTE,
-                        "total" to 0,
-                        "procesados" to 0,
-                        "errores" to erroresJson(emptyList()),
-                        "iniciado" to Instant.now().toString()
-                    )
+            registros.create(
+                EMISION_MASIVA,
+                RegistroEmision::class.java,
+                mapOf(
+                    "anio" to anio,
+                    "formato" to formato.name,
+                    "estado" to PENDIENTE,
+                    "total" to 0,
+                    "procesados" to 0,
+                    "errores" to erroresJson(emptyList()),
+                    "iniciado" to Instant.now().toString(),
+                    // the preparer's lease, from the start: a job whose preparer dies is failed by the workers
+                    "latido" to Instant.now().toString()
                 )
-            } catch (e: Throwable) {
-                tomado.soltar()
-                throw e
-            }
+            )
         val id = UUID.fromString(job.id)
-        scope.launch(ReactiveSecurityContextHolder.withAuthentication(llamante).asCoroutineContext(), CoroutineStart.ATOMIC) {
-            try {
-                mantener("fallar las emisiones sin worker") { interrumpir(excepto = id, mensaje = HUERFANA) }
-                correr(id, anio, formato)
-                mantener("depurar los archivos de emisiones") { depurar() }
-            } finally {
-                mantener("soltar el cerrojo de la emisión masiva") { tomado.soltar() }
-            }
+        // two POSTs at once both saw none: the oldest goes on, the other one goes
+        val primera = estado.activas(organizacion, anio).minWithOrNull(compareBy({ it.second }, { it.first }))?.first
+        if (primera != null && primera != id) {
+            descartar(organizacion, id, usuario.userId)
+            throw ConflictException(enCurso(anio))
+        }
+        scope.launch(ReactiveSecurityContextHolder.withAuthentication(llamante).asCoroutineContext()) {
+            preparar(organizacion, id, anio, usuario.userId)
         }
         return emisionDe(job)
     }
 
-    // the job saves its progress and its end: a caller who may create it but not update it would leave it PENDIENTE
-    private suspend fun exigirPermisos() {
+    private fun enCurso(anio: Int) = "Ya hay una emisión masiva de $anio en curso: espere a que termine"
+
+    // the job of a POST that lost the race: deleted, or failed if the caller may not delete it
+    private suspend fun descartar(
+        organizacion: UUID,
+        id: UUID,
+        usuario: UUID
+    ) {
+        try {
+            registros.delete(EMISION_MASIVA, id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            estado.fallar(organizacion, id, "otra emisión masiva del año empezó a la vez", usuario)
+        }
+    }
+
+    // the preparation creates the lotes; the job is saved as it goes (the system's writes, but the caller's job): a
+    // caller who may create it but not update it, or not create its lotes, is refused before anything exists
+    private suspend fun exigirPermisos(): AuthenticatedUser {
         val usuario = currentUser.require()
         val objeto = metadata.definitionOf(EMISION_MASIVA).obj.id
+        val lote = metadata.definitionOf(EMISION_LOTE).obj.id
         try {
             currentUser.requirePermission(usuario, Actions.CREATE, objeto)
             currentUser.requirePermission(usuario, Actions.UPDATE, objeto)
+            currentUser.requirePermission(usuario, Actions.CREATE, lote)
         } catch (_: ForbiddenException) {
             throw ForbiddenException(
-                "Lanzar una emisión masiva exige permiso de creación y de edición sobre $EMISION_MASIVA: el job guarda su avance"
+                "Lanzar una emisión masiva exige permiso de creación y de edición sobre $EMISION_MASIVA, y de creación sobre $EMISION_LOTE: " +
+                    "el job guarda su avance en sus lotes"
             )
         }
+        return usuario
+    }
+
+    // in the background, as the caller, while the lease is renewed: the padron cut in lotes, written in order, and
+    // the job EN_PROCESO with its total. a failure leaves it FALLIDA; a job no longer PENDIENTE (deleted, or failed
+    // because its beats did not arrive) stops it. the lotes of a job that does not start are cancelled
+    private suspend fun preparar(
+        organizacion: UUID,
+        id: UUID,
+        anio: Int,
+        usuario: UUID
+    ) {
+        var iniciada = false
+        try {
+            val total =
+                conLatido(config.lease.dividedBy(4), { estado.latirPreparacion(organizacion, id) }) {
+                    val contribuyentes = padron(anio)
+                    cortarEnLotes(contribuyentes, config.lote).forEachIndexed { i, lote ->
+                        registros.create(
+                            EMISION_LOTE,
+                            RegistroLote::class.java,
+                            mapOf(
+                                "emision" to id.toString(),
+                                "numero" to i + 1,
+                                "contribuyentes" to contribuyentesJson(lote),
+                                "estado" to PENDIENTE,
+                                "intentos" to 0,
+                                "procesados" to 0
+                            )
+                        )
+                    }
+                    contribuyentes.size
+                }
+            if (total == null) {
+                log.warn("la emisión masiva {} dejó de estar PENDIENTE mientras se preparaba", id)
+                return
+            }
+            // its outcome must be known: a job EN_PROCESO whose lotes were cancelled would end empty
+            iniciada = withContext(NonCancellable) { estado.iniciar(organizacion, id, total, usuario) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            log.error("no se pudo preparar la emisión masiva {}", id, e)
+            mantener("marcar FALLIDA la emisión masiva $id") { estado.fallar(organizacion, id, e.message ?: e.javaClass.simpleName, usuario) }
+        } finally {
+            if (!iniciada) withContext(NonCancellable) { mantener("cancelar los lotes de la emisión masiva $id") { lotes.cancelar(organizacion, id) } }
+        }
+        // with no contribuyentes there are no lotes: a worker's claim assembles the empty file
+        if (iniciada) trabajadores.despertar()
     }
 
     suspend fun lista(anio: Int?): List<Emision> =
@@ -230,66 +277,32 @@ class EmisionMasivaService(
 
     suspend fun get(id: UUID): Emision = emisionDe(registros.get(EMISION_MASIVA, RegistroEmision::class.java, id))
 
-    // the file of a TERMINADA job: its key is rebuilt from the job, never read from it
+    // the file of a TERMINADA job: its key is rebuilt from the job, never read from it. a file purged between the
+    // calls to the almacén is a 404 too
     suspend fun archivo(id: UUID): DescargaEmision {
         val job = get(id)
         if (job.estado != TERMINADA) throw ConflictException("La emisión está ${job.estado}: su archivo estará al terminar")
         if (job.archivo == null) throw ArchivoDepuradoException("El archivo de la emisión fue depurado: vuelva a emitir el año")
         val clave = claveResultado(id, job.anio!!, FormatoEmision.valueOf(job.formato!!))
-        if (!almacen.existe(clave)) throw NotFoundException("El archivo de la emisión ya no está en el servidor")
-        return DescargaEmision(job, almacen.abrir(clave), almacen.tamano(clave))
+        return try {
+            DescargaEmision(job, almacen.abrir(clave), almacen.tamano(clave))
+        } catch (_: ClaveInexistenteException) {
+            throw NotFoundException("El archivo de la emisión ya no está en el servidor")
+        }
     }
 
-    // the job (core checks the caller may delete it) and its files. one PENDIENTE or EN_PROCESO whose worker runs is a
-    // 409; with nobody holding the lock it has no worker, and goes
+    // the job (the caller may delete it: checked before anything is touched), its lotes and its files. one still
+    // running is cancelled: its lotes go FALLIDO, and the workers that had them stop at their next write and leave
+    // nothing behind
     suspend fun eliminar(id: UUID) {
         val job = get(id)
-        if (job.estado in ACTIVOS) {
-            val tomado = cerrojo.tomar() ?: throw ConflictException("La emisión está ${job.estado}: espere a que termine para eliminarla")
-            tomado.soltar()
-        }
+        val usuario = currentUser.require()
+        currentUser.requirePermission(usuario, Actions.DELETE, metadata.definitionOf(EMISION_MASIVA).obj.id)
+        val organizacion = usuario.organizationId
+        if (job.estado in ACTIVOS) lotes.cancelar(organizacion, id)
+        lotes.borrar(organizacion, id)
         registros.delete(EMISION_MASIVA, id)
         almacen.listar(prefijoEmision(id)).forEach { almacen.borrar(it) }
-    }
-
-    private suspend fun correr(
-        id: UUID,
-        anio: Int,
-        formato: FormatoEmision
-    ) {
-        val nombre = nombreArchivo(anio, id.toString(), formato)
-        val clave = claveResultado(id, anio, formato)
-        val parcial = temporales.resolve("$nombre.part")
-        try {
-            Files.createDirectories(temporales)
-            val contribuyentes = padron(anio)
-            guardar(id, "estado" to EN_PROCESO, "total" to contribuyentes.size, "procesados" to 0)
-            val errores =
-                generador.generar(anio, formato, contribuyentes, parcial) { procesados, errores ->
-                    guardar(id, "procesados" to procesados, "errores" to erroresJson(errores))
-                }
-            almacen.guardar(clave, parcial)
-            guardar(
-                id,
-                "estado" to TERMINADA,
-                "procesados" to contribuyentes.size,
-                "errores" to erroresJson(errores),
-                "archivo" to nombre,
-                "tamano" to almacen.tamano(clave),
-                "terminado" to Instant.now().toString()
-            )
-        } catch (e: CancellationException) {
-            // shutting down: the job stays EN_PROCESO and the next start (or worker) fails it
-            Files.deleteIfExists(parcial)
-            throw e
-        } catch (e: Throwable) {
-            log.error("la emisión masiva {} falló", id, e)
-            Files.deleteIfExists(parcial)
-            // if not even this can be saved, the job stays PENDIENTE or EN_PROCESO without a worker: the lock is let
-            // go all the same, and the next worker or start fails it
-            runCatching { guardar(id, "estado" to FALLIDA, "mensaje" to (e.message ?: e.javaClass.simpleName), "terminado" to Instant.now().toString()) }
-                .onFailure { log.error("no se pudo marcar FALLIDA la emisión masiva {}", id, it) }
-        }
     }
 
     // the contribuyentes with vigente declaraciones of the year, by code; each one's predios by code
@@ -318,13 +331,6 @@ class EmisionMasivaService(
             }.sortedBy { it.codigo }
     }
 
-    private suspend fun guardar(
-        id: UUID,
-        vararg campos: Pair<String, Any?>
-    ) {
-        registros.replace(EMISION_MASIVA, RegistroEmision::class.java, id, mapOf(*campos))
-    }
-
     // maintenance that must not fail its caller: logged
     private suspend fun mantener(
         que: String,
@@ -343,148 +349,20 @@ class EmisionMasivaService(
     fun alArrancar() {
         runBlocking {
             runCatching { recuperar() }
-                .onSuccess {
-                    when {
-                        it == null -> log.info("otra instancia corre una emisión masiva: su worker recuperará las interrumpidas")
-                        it > 0 -> log.warn("{} emisiones masivas interrumpidas por el reinicio pasan a FALLIDA", it)
-                    }
-                }.onFailure { log.error("no se pudieron recuperar las emisiones masivas interrumpidas", it) }
+                .onSuccess { if (it > 0) log.warn("{} emisiones masivas sin quien las corriera pasan a FALLIDA", it) }
+                .onFailure { log.error("no se pudieron recuperar las emisiones masivas interrumpidas", it) }
         }
     }
 
-    // at startup, when no worker runs anywhere (nobody holds the lock): a job PENDIENTE or EN_PROCESO lost its worker
-    // and is FALLIDA, in every organization; the files it left half-written go, and the retention runs. how many jobs
-    // it failed; null if another instance's worker holds the lock, and then nothing is touched
-    suspend fun recuperar(): Long? {
-        val tomado = cerrojo.tomar() ?: return null
-        try {
-            val fallidas = interrumpir(excepto = null, mensaje = INTERRUMPIDA)
-            mantener("limpiar los temporales de emisiones") { limpiarTemporales(temporales) }
-            mantener("depurar los archivos de emisiones") { depurar() }
-            return fallidas
-        } finally {
-            tomado.soltar()
-        }
-    }
-
-    // with the lock held: every job PENDIENTE or EN_PROCESO but `excepto` has no worker. FALLIDA with `mensaje`,
-    // straight on the table, audited by hand. how many
-    private suspend fun interrumpir(
-        excepto: UUID?,
-        mensaje: String
-    ): Long {
-        var fallidas = 0L
-        for (t in tablas()) {
-            val e = t.columna("estado")
-            val activos =
-                db
-                    .sql("SELECT id, organization_id, $e AS estado FROM ${t.tabla} WHERE $e IN (:activos)")
-                    .bind("activos", ACTIVOS.toList())
-                    .map { row, _ ->
-                        Triple(row.get("id", UUID::class.java)!!, row.get("organization_id", UUID::class.java)!!, row.get("estado", String::class.java))
-                    }.all()
-                    .asFlow()
-                    .toList()
-                    .filter { it.first != excepto }
-            for ((id, organizacion, estado) in activos) {
-                val terminado = OffsetDateTime.now(ZoneOffset.UTC)
-                val cambiadas =
-                    db
-                        .sql(
-                            "UPDATE ${t.tabla} SET $e = :fallida, ${t.columna("mensaje")} = :mensaje, ${t.columna("terminado")} = :terminado, " +
-                                "updated_at = now() WHERE id = :id AND $e IN (:activos)"
-                        ).bind("fallida", FALLIDA)
-                        .bind("mensaje", mensaje)
-                        .bind("terminado", terminado)
-                        .bind("id", id)
-                        .bind("activos", ACTIVOS.toList())
-                        .fetch()
-                        .awaitRowsUpdated()
-                if (cambiadas == 0L) continue
-                auditar(organizacion, id, mapOf("estado" to estado), mapOf("estado" to FALLIDA, "mensaje" to mensaje, "terminado" to terminado.toString()))
-                fallidas++
-            }
-        }
+    // at startup: the jobs nobody works on any more (a preparer that died, or a job of the version before the lotes,
+    // left EN_PROCESO without latido) are FALLIDA, in every organization, and the retention runs. the lotes of a job
+    // that lives are not touched: they are retaken when their lease expires. each group of workers cleans its own work
+    // dir when it starts. how many jobs it failed
+    suspend fun recuperar(): Int {
+        val fallidas = estado.fallarAbandonadas(config.lease).size
+        mantener("depurar los archivos de emisiones") { retencion.depurar() }
         return fallidas
     }
-
-    // the retention: the files of the TERMINADA jobs beyond it are deleted, and their jobs keep everything but the
-    // file (archivo empty, mensaje "archivo depurado"): the download is then a 410. how many
-    suspend fun depurar(): Int {
-        var depuradas = 0
-        for (t in tablas()) {
-            val archivo = t.columna("archivo")
-            val terminadas =
-                db
-                    .sql(
-                        "SELECT id, organization_id, ${t.columna("anio")} AS anio, ${t.columna("formato")} AS formato, " +
-                            "${t.columna("terminado")} AS terminado, $archivo AS archivo, ${t.columna("mensaje")} AS mensaje " +
-                            "FROM ${t.tabla} WHERE ${t.columna("estado")} = :terminada AND $archivo IS NOT NULL"
-                    ).bind("terminada", TERMINADA)
-                    .map { row, _ ->
-                        FilaTerminada(
-                            row.get("id", UUID::class.java)!!,
-                            row.get("organization_id", UUID::class.java)!!,
-                            row.get("anio", Long::class.javaObjectType),
-                            row.get("formato", String::class.java),
-                            row.get("terminado", OffsetDateTime::class.java)?.toInstant(),
-                            row.get("archivo", String::class.java),
-                            row.get("mensaje", String::class.java)
-                        )
-                    }.all()
-                    .asFlow()
-                    .toList()
-                    .mapNotNull { f ->
-                        val formato = FormatoEmision.entries.firstOrNull { it.name == f.formato }
-                        if (formato == null || f.anio == null) {
-                            null
-                        } else {
-                            ArchivoDeEmision(f.id, f.organizacion, f.anio.toInt(), formato, f.terminado) to (f.archivo to f.mensaje)
-                        }
-                    }
-            val antes = terminadas.toMap()
-            for (a in aDepurar(terminadas.map { it.first }, retencion, Instant.now())) {
-                almacen.borrar(claveResultado(a.id, a.anio, a.formato))
-                val cambiadas =
-                    db
-                        .sql(
-                            "UPDATE ${t.tabla} SET $archivo = NULL, ${t.columna("mensaje")} = :mensaje, updated_at = now() " +
-                                "WHERE id = :id AND $archivo IS NOT NULL"
-                        ).bind("mensaje", DEPURADO)
-                        .bind("id", a.id)
-                        .fetch()
-                        .awaitRowsUpdated()
-                if (cambiadas == 0L) continue
-                val (nombre, mensaje) = antes.getValue(a)
-                auditar(a.organizacion, a.id, mapOf("archivo" to nombre, "mensaje" to mensaje), mapOf("archivo" to null, "mensaje" to DEPURADO))
-                depuradas++
-            }
-        }
-        if (depuradas > 0) log.info("{} archivos de emisiones masivas depurados", depuradas)
-        return depuradas
-    }
-
-    // a write of the system in core's audit log: no user, the fields it changed
-    private suspend fun auditar(
-        organizacion: UUID,
-        id: UUID,
-        antes: Map<String, Any?>,
-        despues: Map<String, Any?>
-    ) = auditoria.record(organizacion, null, EMISION_MASIVA, id, AuditOperation.UPDATE, before = antes, after = despues)
-
-    // the job's table in each organization, with the columns the maintenance writes
-    private suspend fun tablas(): List<TablaCore> = tablasCore.de(EMISION_MASIVA, listOf("anio", "formato", "estado", "archivo", "mensaje", "terminado"))
-
-    // a TERMINADA job with a file, as its row has it
-    private class FilaTerminada(
-        val id: UUID,
-        val organizacion: UUID,
-        val anio: Long?,
-        val formato: String?,
-        val terminado: Instant?,
-        val archivo: String?,
-        val mensaje: String?
-    )
 
     @PreDestroy
     fun cerrar() = scope.cancel()

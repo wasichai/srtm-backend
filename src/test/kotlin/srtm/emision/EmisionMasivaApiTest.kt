@@ -5,7 +5,6 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -16,29 +15,37 @@ import org.springframework.context.annotation.Primary
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
+import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.TestPropertySource
-import srtm.impuesto.ConParametrosApiTest
-import srtm.impuesto.Parametros
-import tools.jackson.databind.JsonNode
 import java.io.ByteArrayInputStream
 import java.nio.file.Files
-import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipInputStream
 
-// /api/srtm/emisiones (wasichai/srtm-backend#41): the masiva of a year in the background, as the epic's contract says.
-// the HR and the PUs are the real ones, behind a thin double of the HR: it fails for the contribuyentes in `fallan`
-// and waits on `puerta` when one is set. every test emits its own year, with its UIT: the test db is shared, and the
-// masiva takes every contribuyente with a vigente declaración that year
+// /api/srtm/emisiones (wasichai/srtm-backend#41, #53, #54): the masiva of a year, cut in lotes of 2 that this
+// context's 2 workers generate and one of them assembles. the HR and the PUs are the real ones, behind a thin double
+// of the HR: it fails for the contribuyentes in `fallan` and waits on `puerta` when one is set (only for the ones in
+// `retenidos`, if any). every test emits its own year, with its UIT: the test db is shared, and the masiva takes
+// every contribuyente with a vigente declaración that year.
+//
+// the only class whose context runs the bean's workers: @DirtiesContext closes it after the class, so they never take
+// the lotes the other classes create to look at
 @Import(EmisionMasivaApiTest.Dobles::class)
-@TestPropertySource(properties = ["srtm.emision.dir=build/emisiones-test", "srtm.emision.temporales=build/emisiones-test-tmp"])
-class EmisionMasivaApiTest : ConParametrosApiTest() {
+@TestPropertySource(
+    properties = [
+        "srtm.emision.dir=build/emisiones-test",
+        "srtm.emision.temporales=build/emisiones-test-tmp",
+        "srtm.emision.lote=2",
+        "srtm.emision.trabajadores=2",
+        "srtm.emision.lease=4s",
+        "srtm.emision.espera=200ms"
+    ]
+)
+@DirtiesContext
+class EmisionMasivaApiTest : ConEscenarioApiTest() {
     @Autowired
     lateinit var servicio: EmisionMasivaService
-
-    @Autowired
-    lateinit var cerrojo: CerrojoEmision
 
     @Autowired
     lateinit var almacen: AlmacenEmision
@@ -57,7 +64,7 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
             contribuyenteId: UUID,
             anio: Int
         ): Documento {
-            puerta?.await()
+            if (retenidos.isEmpty() || contribuyenteId.toString() in retenidos) puerta?.await()
             if (contribuyenteId.toString() in fallan) throw IllegalStateException("Faltan parámetros del año $anio")
             return documentos.hr(contribuyenteId, anio)
         }
@@ -72,12 +79,13 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
     @AfterEach
     fun sinDobles() {
         fallan = emptySet()
+        retenidos = emptySet()
         puerta?.complete(Unit)
         puerta = null
     }
 
     @Test
-    fun `a pdf masiva has every hr and pu of the year in one file`() {
+    fun `a pdf masiva has every hr and pu of the year in one file, in the padron's order`() {
         val anio = anio()
         val e = escenario(anio)
 
@@ -86,30 +94,29 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
         val job = tree(cuerpo)
         assertEquals(anio, job["anio"].asInt())
         assertEquals("PDF", job["formato"].asString())
+        val id = job["id"].asString()
 
-        val terminada = esperar(job["id"].asString())
+        val terminada = esperar(id)
         assertEquals("TERMINADA", terminada["estado"].asString(), terminada.toString())
         assertEquals(3, terminada["total"].asInt())
         assertEquals(3, terminada["procesados"].asInt())
         assertEquals(0, terminada["errores"].size(), terminada.toString())
-        assertEquals("emision-$anio-${job["id"].asString()}.pdf", terminada["archivo"].asString())
+        assertEquals("emision-$anio-$id.pdf", terminada["archivo"].asString())
         assertTrue(terminada["tamano"].asLong() > 0)
         assertTrue(terminada["terminado"].isString, terminada.toString())
+        // two lotes of 2 and 1
+        assertEquals(listOf(1, 2), lotesDe(id).map { it.numero })
+        assertTrue(lotesDe(id).all { it.estado == "TERMINADO" }, "${lotesDe(id)}")
 
-        val archivo = descargar(job["id"].asString())
+        val archivo = descargar(id)
         assertEquals(HttpStatus.OK, archivo.status)
         assertTrue(MediaType.APPLICATION_PDF.isCompatibleWith(archivo.tipo), "${archivo.tipo}")
-        assertEquals("attachment; filename=\"emision-$anio-${job["id"].asString()}.pdf\"", archivo.disposicion)
+        assertEquals("attachment; filename=\"emision-$anio-$id.pdf\"", archivo.disposicion)
         assertEquals(terminada["tamano"].asLong(), archivo.cuerpo.size.toLong())
         // the length comes from the almacén, not from reading the file
         assertEquals(terminada["tamano"].asLong(), archivo.longitud)
-        // the file is in the almacén, and the job's work file is gone from temporales
-        assertTrue(existe(anio, job["id"].asString()))
-        assertFalse(Files.exists(TEMPORALES.resolve("emision-$anio-${job["id"].asString()}.pdf.part")))
-        // the 3 HR and the 5 PU, as the endpoints emit them one by one
-        val hrs = e.contribuyentes.sumOf { paginas(documento("/api/srtm/contribuyentes/$it/hr?anio=$anio")) }
-        val pus = e.pus.sumOf { (predio, titular) -> paginas(documento("/api/srtm/predios/$predio/pu?anio=$anio&contribuyente=$titular")) }
-        assertEquals(hrs + pus, paginas(archivo.cuerpo))
+        // the 3 HR and the 5 PU, as the endpoints emit them one by one: each contribuyente's HR, then its PUs
+        esLaConcatenacion(archivo.cuerpo, documentos(e, anio))
     }
 
     @Test
@@ -142,7 +149,39 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
     }
 
     @Test
-    fun `a second masiva while one is running is a 409, and so is its file`() {
+    fun `after it ends no parte is left in the almacen`() {
+        val anio = anio()
+        escenario(anio)
+
+        val id = emitir(anio, "PDF")
+        assertEquals("TERMINADA", esperar(id)["estado"].asString())
+
+        val uuid = UUID.fromString(id)
+        assertEquals(listOf(claveResultado(uuid, anio, FormatoEmision.PDF)), runBlocking { almacen.listar(prefijoEmision(uuid)) })
+    }
+
+    @Test
+    fun `the progress is the sum of the lotes and moves during the run`() {
+        val anio = anio()
+        val e = escenario(anio)
+        // the last contribuyente's lote waits; the first lote ends
+        retenidos = setOf(e.contribuyentes[2])
+        puerta = CompletableDeferred()
+
+        val id = emitir(anio, "PDF")
+        val aMedias = esperar(id) { it["procesados"].asInt() > 0 }
+
+        assertEquals("EN_PROCESO", aMedias["estado"].asString(), aMedias.toString())
+        assertEquals(3, aMedias["total"].asInt())
+        assertEquals(2, aMedias["procesados"].asInt(), aMedias.toString())
+        puerta!!.complete(Unit)
+        val terminada = esperar(id)
+        assertEquals("TERMINADA", terminada["estado"].asString(), terminada.toString())
+        assertEquals(3, terminada["procesados"].asInt())
+    }
+
+    @Test
+    fun `a second masiva of the same year while one runs is a 409, its file too, and deleting it cancels it`() {
         val anio = anio()
         escenario(anio)
         puerta = CompletableDeferred()
@@ -152,14 +191,45 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
 
         val (segunda, problema) = exchange("POST", "/api/srtm/emisiones", mapOf("anio" to anio, "formato" to "ZIP"))
         assertEquals(HttpStatus.CONFLICT, segunda, problema)
-        assertTrue(tree(problema)["detail"].asString().isNotBlank(), problema)
+        assertEquals("Ya hay una emisión masiva de $anio en curso: espere a que termine", tree(problema)["detail"].asString(), problema)
+        assertEquals(1, tree(send("GET", "/api/srtm/emisiones?anio=$anio", null, HttpStatus.OK)).size())
         assertEquals(HttpStatus.CONFLICT, descargar(id).status)
-        val (borrar, porque) = exchange("DELETE", "/api/srtm/emisiones/$id", null)
-        assertEquals(HttpStatus.CONFLICT, borrar, porque)
+
+        send("DELETE", "/api/srtm/emisiones/$id", null, HttpStatus.NO_CONTENT)
+
+        send("GET", "/api/srtm/emisiones/$id", null, HttpStatus.NOT_FOUND)
+        assertEquals(emptyList<FilaLote>(), lotesDe(id))
+        // its workers lose their lotes, and whatever they write after goes
+        puerta!!.complete(Unit)
+        val prefijo = prefijoEmision(UUID.fromString(id))
+        val nueva = emitir(anio, "PDF")
+        assertEquals("TERMINADA", esperar(nueva)["estado"].asString())
+        hastaQue("quedan claves de la emisión borrada") { runBlocking { almacen.listar(prefijo) }.isEmpty() }
+    }
+
+    @Test
+    fun `two organizations emit at the same time`() {
+        val anio = anio()
+        val e = escenario(anio)
+        val otra = otraOrganizacion()
+        // the first organization's masiva waits in its first contribuyente
+        retenidos = setOf(e.contribuyentes[0])
+        puerta = CompletableDeferred()
+
+        val primera = emitir(anio, "PDF")
+        esperar(primera) { it["estado"].asString() == "EN_PROCESO" }
+        // the other one has no padrón that year: an empty file, while the first one still runs
+        val segunda = emitir(anio, "PDF", otra)
+        val vacia = esperar(segunda, otra)
+        assertEquals("TERMINADA", vacia["estado"].asString(), vacia.toString())
+        assertEquals(0, vacia["total"].asInt())
+        assertEquals("EN_PROCESO", tree(send("GET", "/api/srtm/emisiones/$primera", null, HttpStatus.OK))["estado"].asString())
+        assertEquals(0, paginas(descargar(segunda, otra).cuerpo))
+        // and neither sees the other's
+        send("GET", "/api/srtm/emisiones/$segunda", null, HttpStatus.NOT_FOUND)
 
         puerta!!.complete(Unit)
-        assertEquals("TERMINADA", esperar(id)["estado"].asString())
-        assertEquals(HttpStatus.OK, descargar(id).status)
+        assertEquals("TERMINADA", esperar(primera)["estado"].asString())
     }
 
     @Test
@@ -195,14 +265,14 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
     }
 
     @Test
-    fun `a job left running by a restart is failed at startup, and the audit log says so`() {
+    fun `a job of the previous version is failed at startup, and the audit log says so`() {
         val atrapada = atrapada(anio())
 
         runBlocking { servicio.recuperar() }
 
         val job = tree(send("GET", "/api/srtm/emisiones/$atrapada", null, HttpStatus.OK))
         assertEquals("FALLIDA", job["estado"].asString(), job.toString())
-        assertEquals("interrumpida por reinicio", job["mensaje"].asString())
+        assertEquals("interrumpida: el proceso que la corría ya no está", job["mensaje"].asString())
         assertTrue(job["terminado"].isString, job.toString())
         // the system's write, without a user, in core's audit log
         val historia = tree(send("GET", "/api/objects/emision_masiva/records/$atrapada/history", null, HttpStatus.OK))
@@ -216,7 +286,7 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
     @Test
     fun `a caller who may create a masiva but not update it is refused before any job exists`() {
         val anio = anio()
-        val funcionario = funcionario(listOf(permiso(null, "READ"), permiso(EMISION_MASIVA, "CREATE")))
+        val funcionario = funcionario(listOf(permiso(null, "READ"), permiso(EMISION_MASIVA, "CREATE"), permiso(EMISION_LOTE, "CREATE")))
 
         val result =
             client
@@ -237,39 +307,15 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
     }
 
     @Test
-    fun `a job whose worker is gone does not block the next masiva, which fails it`() {
+    fun `a caller who may not create its lotes is refused before any job exists`() {
         val anio = anio()
-        val huerfana = atrapada(anio)
+        val funcionario = funcionario(listOf(permiso(null, "READ"), permiso(EMISION_MASIVA, "CREATE"), permiso(EMISION_MASIVA, "UPDATE")))
 
-        val nueva = esperar(emitir(anio, "ZIP"))
+        val (status, problema) = exchange("POST", "/api/srtm/emisiones", mapOf("anio" to anio, "formato" to "PDF"), funcionario)
 
-        assertEquals("TERMINADA", nueva["estado"].asString(), nueva.toString())
-        val job = tree(send("GET", "/api/srtm/emisiones/$huerfana", null, HttpStatus.OK))
-        assertEquals("FALLIDA", job["estado"].asString(), job.toString())
-        assertTrue(job["mensaje"].asString().startsWith("interrumpida"), job.toString())
-    }
-
-    @Test
-    fun `while another instance runs a masiva, a post is a 409 and startup leaves its job alone`() {
-        val anio = anio()
-        val atrapada = atrapada(anio)
-        // another instance's worker: the same postgres lock, on a connection of its own
-        val ajeno = runBlocking { cerrojo.tomar() }!!
-        try {
-            val (status, problema) = exchange("POST", "/api/srtm/emisiones", mapOf("anio" to anio, "formato" to "PDF"))
-            assertEquals(HttpStatus.CONFLICT, status, problema)
-            assertEquals(1, tree(send("GET", "/api/srtm/emisiones?anio=$anio", null, HttpStatus.OK)).size())
-
-            assertNull(runBlocking { servicio.recuperar() })
-            assertEquals("EN_PROCESO", tree(send("GET", "/api/srtm/emisiones/$atrapada", null, HttpStatus.OK))["estado"].asString())
-            val (borrar, porque) = exchange("DELETE", "/api/srtm/emisiones/$atrapada", null)
-            assertEquals(HttpStatus.CONFLICT, borrar, porque)
-        } finally {
-            runBlocking { ajeno.soltar() }
-        }
-
-        runBlocking { servicio.recuperar() }
-        assertEquals("FALLIDA", tree(send("GET", "/api/srtm/emisiones/$atrapada", null, HttpStatus.OK))["estado"].asString())
+        assertEquals(HttpStatus.FORBIDDEN, status, problema)
+        assertTrue(tree(problema)["detail"].asString().contains(EMISION_LOTE), problema)
+        assertEquals(0, tree(send("GET", "/api/srtm/emisiones?anio=$anio", null, HttpStatus.OK)).size())
     }
 
     @Test
@@ -295,19 +341,23 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
     }
 
     @Test
-    fun `deleting a finished masiva removes its job and its file`() {
+    fun `deleting a finished masiva removes its job, its file and its lotes`() {
         val anio = anio()
+        escenario(anio)
         val id = emitir(anio, "PDF")
         esperar(id)
         assertTrue(existe(anio, id))
+        assertEquals(2, lotesDe(id).size)
 
         send("DELETE", "/api/srtm/emisiones/$id", null, HttpStatus.NO_CONTENT)
 
         assertFalse(existe(anio, id))
+        assertEquals(emptyList<String>(), runBlocking { almacen.listar(prefijoEmision(UUID.fromString(id))) })
+        assertEquals(emptyList<FilaLote>(), lotesDe(id))
         send("GET", "/api/srtm/emisiones/$id", null, HttpStatus.NOT_FOUND)
     }
 
-    // a job EN_PROCESO that no worker runs, the way a crash leaves it: its id
+    // a job EN_PROCESO of the version before the lotes, the way a restart left it: no latido, no lotes. its id
     private fun atrapada(anio: Int): String =
         post(
             "/api/objects/emision_masiva/records",
@@ -347,140 +397,24 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
         id: String
     ): Boolean = runBlocking { almacen.existe(claveResultado(UUID.fromString(id), anio, FormatoEmision.PDF)) }
 
-    // 3 contribuyentes and 4 predios: A declares P1 and P2, B declares P3, and B and C share P4 (condominio)
-    private class Escenario(
-        val contribuyentes: List<String>,
-        // each contribuyente's codigo, by id
-        val codigos: Map<String, String>,
-        // (predio, titular): one PU each
-        val pus: List<Pair<String, String>>
-    )
-
-    private fun escenario(anio: Int): Escenario {
-        uit(anio)
-        val inscritos = List(3) { post("/api/srtm/contribuyentes", personaNatural(uniqueDocumento())) }
-        val (a, b, c) = inscritos.map { it["id"].asString() }
-        val (p1, p2, p3, p4) = List(4) { predio() }
-        declarar(a, p1, anio)
-        declarar(a, p2, anio)
-        declarar(b, p3, anio)
-        declarar(b, p4, anio)
-        declarar(c, p4, anio, "porcentaje_condominio" to 40)
-        return Escenario(
-            listOf(a, b, c),
-            inscritos.associate { it["id"].asString() to it["codigo"].asString() },
-            listOf(
-                p1 to a,
-                p2 to a,
-                p3 to b,
-                p4 to b,
-                p4 to c
-            )
-        )
-    }
-
-    private fun declarar(
-        contribuyente: String,
-        predio: String,
-        anio: Int,
-        vararg extra: Pair<String, Any?>
-    ) {
-        post(
-            "/api/srtm/declaraciones",
-            mapOf(
-                "contribuyente" to contribuyente,
-                "predio" to predio,
-                "anio" to anio,
-                "secuencia_uso" to "1",
-                "valor_autoavaluo" to 10000.50,
-                "deduccion" to 0
-            ) + extra
-        )
-    }
-
-    // a 202: the job's id
-    private fun emitir(
-        anio: Int,
-        formato: String
-    ): String {
-        val (status, cuerpo) = exchange("POST", "/api/srtm/emisiones", mapOf("anio" to anio, "formato" to formato))
-        assertEquals(HttpStatus.ACCEPTED, status, cuerpo)
-        return tree(cuerpo)["id"].asString()
-    }
-
-    // polls the job until `listo` (by default, until it ends)
-    private fun esperar(
-        id: String,
-        listo: (JsonNode) -> Boolean = { it["estado"].asString() in setOf("TERMINADA", "FALLIDA") }
-    ): JsonNode {
-        val limite = System.nanoTime() + 60_000_000_000L
-        while (true) {
-            val job = tree(send("GET", "/api/srtm/emisiones/$id", null, HttpStatus.OK))
-            if (listo(job)) return job
-            assertTrue(System.nanoTime() < limite, "la emisión no avanza: $job")
-            Thread.sleep(200)
-        }
-    }
-
-    private class Respuesta(
-        val status: HttpStatus,
-        val tipo: MediaType?,
-        val disposicion: String?,
-        val longitud: Long,
-        val cuerpo: ByteArray
-    )
-
-    private fun descargar(id: String): Respuesta = bajar("/api/srtm/emisiones/$id/archivo")
-
-    // the csv's UIT of 2026 for the test's year: the HR liquidates with the UIT in force on 1 january. the tramos and
-    // the mínimo have no end date, and ConParametrosApiTest loads them
-    private fun uit(anio: Int) {
-        post(
-            "/api/objects/parametro_tributario/records",
-            mapOf(
-                "attributes" to
-                    mapOf(
-                        "tipo" to "UIT",
-                        "vigencia_desde" to "$anio-01-01",
-                        "vigencia_hasta" to "$anio-12-31",
-                        "valor_numerico" to Parametros.uit(2026),
-                        "transcribio" to "TEST",
-                        "verifico" to "TEST"
-                    )
-            )
-        )
-    }
-
-    // a pdf the endpoints emit one by one
-    private fun documento(path: String): ByteArray {
-        val r = bajar(path)
-        assertEquals(HttpStatus.OK, r.status, String(r.cuerpo))
-        return r.cuerpo
-    }
-
-    private fun bajar(path: String): Respuesta {
-        val result =
-            client
-                .get()
-                .uri(path)
-                .header(HttpHeaders.AUTHORIZATION, token)
-                .exchange()
-                .expectBody(ByteArray::class.java)
-                .returnResult()
-        return Respuesta(
-            HttpStatus.valueOf(result.status.value()),
-            result.responseHeaders.contentType,
-            result.responseHeaders.getFirst(HttpHeaders.CONTENT_DISPOSITION),
-            result.responseHeaders.contentLength,
-            result.responseBody ?: ByteArray(0)
-        )
+    // a new organization with the model applied, as core provisions one: its admin's token
+    private fun otraOrganizacion(): String {
+        val slug = uniqueName("org").lowercase()
+        val email = "admin@$slug.test"
+        post("/api/organizations", mapOf("name" to slug, "slug" to slug, "adminEmail" to email, "adminPassword" to CLAVE))
+        val suyo = bearer(email, CLAVE)
+        aplicarModelo(suyo)
+        return suyo
     }
 
     private companion object {
-        val TEMPORALES: Path = Path.of("build/emisiones-test-tmp")
+        const val CLAVE = "clave-de-la-otra-organizacion"
 
         @Volatile
         var fallan: Set<String> = emptySet()
+
+        @Volatile
+        var retenidos: Set<String> = emptySet()
 
         @Volatile
         var puerta: CompletableDeferred<Unit>? = null

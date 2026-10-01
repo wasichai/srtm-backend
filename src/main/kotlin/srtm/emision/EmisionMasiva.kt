@@ -13,8 +13,8 @@ import java.util.zip.ZipOutputStream
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.deleteRecursively
 
-// the masiva's file (wasichai/srtm-backend#41), apart from core and the job: the contribuyentes come already read, the
-// documents from DocumentosDeEmision. EmisionMasivaService runs it in the background
+// the masiva's files (wasichai/srtm-backend#41), apart from core and the job: the contribuyentes come already read, the
+// documents from DocumentosDeEmision. a worker (TrabajadoresEmision) runs it for each lote
 
 enum class FormatoEmision(
     val extension: String,
@@ -98,21 +98,29 @@ private const val MAX_NOMBRE = 60
 // how often the job's progress is saved
 const val AVANCE_CADA = 25
 
+// what a generation left out, and how many documents (HR and PU) it wrote
+data class ResultadoGeneracion(
+    val errores: List<ErrorEmision>,
+    val documentos: Int
+)
+
 class GeneradorEmision(
     private val documentos: DocumentosDeEmision,
     private val merger: PdfMerger
 ) {
     // every contribuyente's HR and then its PUs, into `destino`: one pdf (the documents go to temp files next to it
     // and are merged at the end) or a zip written as it goes. a contribuyente whose documents fail is left out and
-    // returned among the errors; the rest go on. `avance` is told how many were processed every AVANCE_CADA and at the end
+    // returned among the errors; the rest go on. `avance` is told how many were processed every AVANCE_CADA and at the
+    // end. the documents counted are the ones written
     suspend fun generar(
         anio: Int,
         formato: FormatoEmision,
         contribuyentes: List<ContribuyenteAEmitir>,
         destino: Path,
         avance: suspend (procesados: Int, errores: List<ErrorEmision>) -> Unit
-    ): List<ErrorEmision> {
+    ): ResultadoGeneracion {
         val errores = mutableListOf<ErrorEmision>()
+        var escritos = 0
         val salida = if (formato == FormatoEmision.PDF) SalidaPdf(destino, merger) else SalidaZip(destino)
         salida.use {
             contribuyentes.forEachIndexed { i, c ->
@@ -126,13 +134,16 @@ class GeneradorEmision(
                         errores += ErrorEmision(c.codigo, e.message ?: e.javaClass.simpleName)
                         null
                     }
-                docs?.let { salida.agregar(carpeta(c.codigo, c.nombre), it.map { (nombre, d) -> nombre to d.bytes }) }
+                docs?.let {
+                    salida.agregar(carpeta(c.codigo, c.nombre), it.map { (nombre, d) -> nombre to d.bytes })
+                    escritos += it.size
+                }
                 val procesados = i + 1
                 if (procesados % AVANCE_CADA == 0 || procesados == contribuyentes.size) avance(procesados, errores.toList())
             }
             salida.terminar()
         }
-        return errores
+        return ResultadoGeneracion(errores, escritos)
     }
 
     private interface Salida : AutoCloseable {
