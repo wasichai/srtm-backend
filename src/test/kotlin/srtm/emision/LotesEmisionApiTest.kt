@@ -49,7 +49,8 @@ class LotesEmisionApiTest : SrtmApiTest() {
     private val lease = Duration.ofMinutes(2)
 
     // a lote left takeable by another test would be taken by this one's: none is. no worker takes them meanwhile: this
-    // context runs none (SrtmApiTest), and the one that does is closed after its class (EmisionMasivaApiTest)
+    // context runs none (src/test/resources/application.properties), and the one that does is closed after its class
+    // (EmisionMasivaApiTest)
     @BeforeEach
     fun sinLotesPendientes() {
         runBlocking {

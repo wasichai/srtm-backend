@@ -984,10 +984,11 @@ yarn format:check           # prettier: yaml y json, model.json incluido
   y uno de error donde aplica, repartidos por tema: `RentasApiTest` (el recorrido completo), `ListasApiTest` (las
   filas de las ocho listas), `DeclaracionJuradaApiTest` (una DJ rechazada no deja nada a medias), `FichasApiTest`,
   `CatalogosApiTest`, `CatastroApiTest`, `CondominioApiTest`, `AnulacionApiTest`, `MotivoApiTest`…
-- **Trabajadores de la emisión masiva en los tests:** `SrtmApiTest` fija `srtm.emision.trabajadores=0`, así que ningún
-  contexto corre trabajadores salvo el de `EmisionMasivaApiTest` (2), que se cierra al terminar su clase
-  (`@DirtiesContext`): un contexto queda en caché mientras corren las demás clases, y sus trabajadores tomarían los
-  lotes que esas clases crean para mirarlos. `TrabajadoresEmisionApiTest` juega dos instancias con dos
+- **Trabajadores de la emisión masiva en los tests:** `src/test/resources/application.properties` fija
+  `srtm.emision.trabajadores=0` para toda la corrida (gana sobre `application.yml`; un `@TestPropertySource` gana sobre
+  ambos), así que ningún contexto corre trabajadores salvo el de `EmisionMasivaApiTest` (2), que se cierra al terminar
+  su clase (`@DirtiesContext`): un contexto queda en caché mientras corren las demás clases, y sus trabajadores
+  tomarían los lotes que esas clases crean para mirarlos. `TrabajadoresEmisionApiTest` juega dos instancias con dos
   `GrupoTrabajadores` propios, cada uno con su `instancia` y sus temporales.
 - Los de integración corren en el CI de cada PR. Con un Docker remoto no corren en local tal cual (Testcontainers no
   llega a sus puertos): se usa una base de test externa tunelizada, con PostGIS y un nombre que termine en `_test`.

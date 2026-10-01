@@ -315,7 +315,7 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
         cantidad: Int = 1
     ): GrupoTrabajadores =
         trabajadores
-            .grupo(instancia, cantidad, Path.of("build/emisiones-test-tmp", instancia), documentos)
+            .grupo(instancia, cantidad, Path.of("build/emisiones-test-grupos", instancia), documentos)
             .also {
                 grupos += it
                 it.iniciar()

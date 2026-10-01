@@ -4,7 +4,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
-import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.reactive.server.WebTestClient
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
@@ -14,12 +13,7 @@ import java.util.UUID
 
 // the base of the portal api's integration tests: the real model (model/model.json, applied the way model/apply.py
 // does it) before every test, the seeded admin's token, and the calls the tests make. the test db is shared by every
-// class of the suite: records carry unique documents and codes.
-//
-// srtm.emision.trabajadores=0: no context of the suite runs the masiva's workers unless its class asks for them
-// (EmisionMasivaApiTest). a context stays cached, workers and all, while the other classes run: its workers would
-// take the lotes those classes create to look at
-@TestPropertySource(properties = ["srtm.emision.trabajadores=0"])
+// class of the suite: records carry unique documents and codes
 abstract class SrtmApiTest : WasichaiIntegrationTest() {
     // the seeded admin's; a call takes another one where a test needs it
     protected lateinit var token: String

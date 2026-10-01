@@ -19,6 +19,7 @@ import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.TestPropertySource
 import java.io.ByteArrayInputStream
 import java.nio.file.Files
+import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipInputStream
@@ -117,6 +118,8 @@ class EmisionMasivaApiTest : ConEscenarioApiTest() {
         assertEquals(terminada["tamano"].asLong(), archivo.longitud)
         // the 3 HR and the 5 PU, as the endpoints emit them one by one: each contribuyente's HR, then its PUs
         esLaConcatenacion(archivo.cuerpo, documentos(e, anio))
+        // and no work file is left on disk: polled, since another class's leftover lotes may still be passing through
+        hastaQue("quedan temporales en $TEMPORALES") { restos().isEmpty() }
     }
 
     @Test
@@ -403,6 +406,10 @@ class EmisionMasivaApiTest : ConEscenarioApiTest() {
         return id
     }
 
+    // what is in the workers' work dir
+    private fun restos(): List<String> =
+        if (Files.isDirectory(TEMPORALES)) Files.list(TEMPORALES).use { l -> l.map { it.fileName.toString() }.toList() } else emptyList()
+
     // the pdf of the job in the almacén
     private fun existe(
         anio: Int,
@@ -420,6 +427,8 @@ class EmisionMasivaApiTest : ConEscenarioApiTest() {
     }
 
     private companion object {
+        val TEMPORALES: Path = Path.of("build/emisiones-test-tmp")
+
         const val CLAVE = "clave-de-la-otra-organizacion"
 
         @Volatile
