@@ -48,12 +48,12 @@ fun aDepurar(
         }
 }
 
-// a job that died mid-way leaves its `.part` and the `.partes-` directory of a pdf's documents: removed when no job
-// runs. how many
+// a job that died mid-way leaves its `.part` and the `.partes-` directory of a pdf's documents in srtm.emision.temporales
+// (the finished files are in the almacén): removed when no job runs. how many
 @OptIn(ExperimentalPathApi::class)
-fun limpiarTemporales(dir: Path): Int {
-    if (!dir.isDirectory()) return 0
-    val restos = Files.list(dir).use { s -> s.toList().filter { it.name.endsWith(".part") || it.name.startsWith(".partes-") } }
+fun limpiarTemporales(temporales: Path): Int {
+    if (!temporales.isDirectory()) return 0
+    val restos = Files.list(temporales).use { s -> s.toList().filter { it.name.endsWith(".part") || it.name.startsWith(".partes-") } }
     restos.forEach { it.deleteRecursively() }
     return restos.size
 }

@@ -32,13 +32,16 @@ import java.util.zip.ZipInputStream
 // and waits on `puerta` when one is set. every test emits its own year, with its UIT: the test db is shared, and the
 // masiva takes every contribuyente with a vigente declaración that year
 @Import(EmisionMasivaApiTest.Dobles::class)
-@TestPropertySource(properties = ["srtm.emision.dir=build/emisiones-test"])
+@TestPropertySource(properties = ["srtm.emision.dir=build/emisiones-test", "srtm.emision.temporales=build/emisiones-test-tmp"])
 class EmisionMasivaApiTest : ConParametrosApiTest() {
     @Autowired
     lateinit var servicio: EmisionMasivaService
 
     @Autowired
     lateinit var cerrojo: CerrojoEmision
+
+    @Autowired
+    lateinit var almacen: AlmacenEmision
 
     @TestConfiguration
     class Dobles {
@@ -98,6 +101,11 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
         assertTrue(MediaType.APPLICATION_PDF.isCompatibleWith(archivo.tipo), "${archivo.tipo}")
         assertEquals("attachment; filename=\"emision-$anio-${job["id"].asString()}.pdf\"", archivo.disposicion)
         assertEquals(terminada["tamano"].asLong(), archivo.cuerpo.size.toLong())
+        // the length comes from the almacén, not from reading the file
+        assertEquals(terminada["tamano"].asLong(), archivo.longitud)
+        // the file is in the almacén, and the job's work file is gone from temporales
+        assertTrue(existe(anio, job["id"].asString()))
+        assertFalse(Files.exists(TEMPORALES.resolve("emision-$anio-${job["id"].asString()}.pdf.part")))
         // the 3 HR and the 5 PU, as the endpoints emit them one by one
         val hrs = e.contribuyentes.sumOf { paginas(documento("/api/srtm/contribuyentes/$it/hr?anio=$anio")) }
         val pus = e.pus.sumOf { (predio, titular) -> paginas(documento("/api/srtm/predios/$predio/pu?anio=$anio&contribuyente=$titular")) }
@@ -275,12 +283,12 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
 
         val depurada = esperar(viejas[0]) { it["archivo"] == null || it["archivo"].isNull }
         assertEquals("archivo depurado", depurada["mensaje"].asString(), depurada.toString())
-        assertFalse(Files.exists(archivoDe(anio, viejas[0])))
+        assertFalse(existe(anio, viejas[0]))
         val descarga = descargar(viejas[0])
         assertEquals(HttpStatus.GONE, descarga.status)
         assertTrue(tree(String(descarga.cuerpo))["detail"].asString().isNotBlank())
         viejas.drop(1).forEach {
-            assertTrue(Files.exists(archivoDe(anio, it)), it)
+            assertTrue(existe(anio, it), it)
             assertEquals(HttpStatus.OK, descargar(it).status)
         }
         assertEquals(HttpStatus.OK, descargar(nueva["id"].asString()).status)
@@ -291,11 +299,11 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
         val anio = anio()
         val id = emitir(anio, "PDF")
         esperar(id)
-        assertTrue(Files.exists(archivoDe(anio, id)))
+        assertTrue(existe(anio, id))
 
         send("DELETE", "/api/srtm/emisiones/$id", null, HttpStatus.NO_CONTENT)
 
-        assertFalse(Files.exists(archivoDe(anio, id)))
+        assertFalse(existe(anio, id))
         send("GET", "/api/srtm/emisiones/$id", null, HttpStatus.NOT_FOUND)
     }
 
@@ -306,7 +314,7 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
             mapOf("attributes" to mapOf("anio" to anio, "formato" to "PDF", "estado" to "EN_PROCESO", "total" to 10, "procesados" to 2))
         )["id"].asString()
 
-    // a TERMINADA job of `terminado`, with a file where the service looks for it: its id
+    // a TERMINADA job of `terminado`, with its file in the almacén: its id
     private fun terminadaConArchivo(
         anio: Int,
         terminado: String
@@ -328,15 +336,16 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
                         )
                 )
             )["id"].asString()
-        Files.createDirectories(DIR)
-        Files.writeString(archivoDe(anio, id), "pdf")
+        val archivo = Files.writeString(Files.createTempFile("emision-test", ".pdf"), "pdf")
+        runBlocking { almacen.guardar(claveResultado(UUID.fromString(id), anio, FormatoEmision.PDF), archivo) }
         return id
     }
 
-    private fun archivoDe(
+    // the pdf of the job in the almacén
+    private fun existe(
         anio: Int,
         id: String
-    ): Path = DIR.resolve("emision-$anio-$id.pdf")
+    ): Boolean = runBlocking { almacen.existe(claveResultado(UUID.fromString(id), anio, FormatoEmision.PDF)) }
 
     // 3 contribuyentes and 4 predios: A declares P1 and P2, B declares P3, and B and C share P4 (condominio)
     private class Escenario(
@@ -417,6 +426,7 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
         val status: HttpStatus,
         val tipo: MediaType?,
         val disposicion: String?,
+        val longitud: Long,
         val cuerpo: ByteArray
     )
 
@@ -461,12 +471,13 @@ class EmisionMasivaApiTest : ConParametrosApiTest() {
             HttpStatus.valueOf(result.status.value()),
             result.responseHeaders.contentType,
             result.responseHeaders.getFirst(HttpHeaders.CONTENT_DISPOSITION),
+            result.responseHeaders.contentLength,
             result.responseBody ?: ByteArray(0)
         )
     }
 
     private companion object {
-        val DIR: Path = Path.of("build/emisiones-test")
+        val TEMPORALES: Path = Path.of("build/emisiones-test-tmp")
 
         @Volatile
         var fallan: Set<String> = emptySet()

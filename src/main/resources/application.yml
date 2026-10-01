@@ -50,8 +50,14 @@ srtm:
       # how long a consulta backs a save with fuente PIDE RENIEC
       vigencia: 30m
   emision:
-    # the emisiones masivas' files (emision-<anio>-<id>.pdf|zip). a real deployment points it at a persistent volume
+    # where the emisiones' files are kept (AlmacenEmision): local, on this server's disk under dir
+    almacen: ${SRTM_EMISION_ALMACEN:local}
+    # the local almacén's root: <dir>/emision-<id>/emision-<anio>-<id>.pdf|zip. a real deployment points it at a
+    # persistent volume
     dir: ${SRTM_EMISION_DIR:./data/emisiones}
+    # the work files of a masiva (the .part it writes, the .partes- of a pdf) before the almacén takes the file. local
+    # and disposable: a masiva that dies leaves them here, and the next start removes them
+    temporales: ${SRTM_EMISION_TEMPORALES:${java.io.tmpdir}/srtm-emision}
     # the retention, after every masiva and at startup: the last n files of each year are kept (per organization), and
     # none older than the days. 0 turns a rule off. a purged job keeps its record, without its file
     conservar: ${SRTM_EMISION_CONSERVAR:5}

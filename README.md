@@ -863,7 +863,8 @@ HR seguida de sus PU) o como **un ZIP** (`<codigo>-<nombre>/HR-<anio>.pdf` y `<c
   - Recorre los contribuyentes con DJ **vigentes** del año, por código, y por cada uno pide `hr` y la `pu` de cada
     predio (por código de predio) a `DocumentosPrediales`. Un condominio da una PU por titular.
   - **PDF:** cada documento va a un archivo temporal y al final `PdfMerger` los une en uno. **ZIP:** `ZipOutputStream`
-    en streaming. El archivo se escribe como `.part` y se renombra al terminar.
+    en streaming. El archivo se escribe como `.part` en `srtm.emision.temporales` y, al terminar, se entrega al almacén
+    (más abajo).
   - Guarda `procesados` cada 25 contribuyentes y al final. Un contribuyente que falla queda en `errores`
     (`{contribuyente: <codigo>, mensaje}`), sin sus documentos, y el resto sigue: el job termina TERMINADA. Un error
     general lo deja FALLIDA con `mensaje`.
@@ -873,23 +874,50 @@ HR seguida de sus PU) o como **un ZIP** (`<codigo>-<nombre>/HR-<anio>.pdf` y `<c
     ya empezado.
   - **Al arrancar** (`ApplicationReadyEvent`), si nadie tiene el lock, los jobs PENDIENTE o EN_PROCESO de cualquier
     organización pasan a FALLIDA con el mensaje "interrumpida por reinicio", se borran los `.part` y los `.partes-`
-    que dejó un job a medias, y corre la retención. Si otra instancia tiene el lock, no toca nada: su job está vivo, y
+    que dejó un job a medias en `srtm.emision.temporales`, y corre la retención. Si otra instancia tiene el lock, no toca nada: su job está vivo, y
     su worker recuperará los demás.
   - **Auditoría:** al arrancar no hay usuario, y wasichai 0.2.0 no ofrece un contexto de sistema para escribir por
     `RecordService` (exige el JWT de un usuario). Por eso la recuperación y la retención van directo a la tabla del
     objeto, con los nombres de columna que da la metadata de Core, y dejan su entrada en el log de auditoría de Core
     con su `AuditService`: operación UPDATE, sin usuario, con los campos que cambiaron. No avisan a los listeners de
     `RecordChange`.
-- **Archivos** en `srtm.emision.dir` (`SRTM_EMISION_DIR`, por defecto `./data/emisiones`, fuera de git), con el
-  nombre `emision-<anio>-<id>.pdf|zip`. Llevan datos personales de todo el padrón: en producción, un volumen
-  persistente y privado.
+- **Almacén** (`AlmacenEmision`, wasichai/srtm-backend#52): dónde viven los archivos ya generados. El servicio y el
+  controlador solo hablan con esta interfaz (`guardar`, `abrir`, `traer`, `borrar`, `existe`, `tamano`, `listar`), así
+  que los archivos pueden estar en el disco del servidor o en un almacén de objetos compartido por todas las
+  instancias. Se elige con `srtm.emision.almacen` (`SRTM_EMISION_ALMACEN`, por defecto `local`, la única
+  implementación por ahora).
+  - **Claves:** relativas, separadas por `/`, de segmentos `[A-Za-z0-9._-]`; nunca vacías, ni `.` ni `..`, ni con `/`
+    al inicio (cualquier otra es `IllegalArgumentException`: ninguna clave sale del almacén). El resultado de una
+    emisión es `emision-<id>/emision-<anio>-<id>.pdf|zip`; las partes de sus lotes, `emision-<id>/parte-00001.pdf|zip`.
+    Todo lo de una emisión cuelga de `emision-<id>/`, así que borrarla es borrar ese prefijo (`listar` + `borrar`).
+    `guardar` consume el archivo local (al volver ya no existe), `abrir` devuelve un `Resource` en streaming cuyo
+    `contentLength()` no lee el contenido, y `abrir`, `traer` y `tamano` de una clave que no está dan
+    `ClaveInexistenteException`.
+  - **`AlmacenLocal`:** `<srtm.emision.dir>/<clave>` (`SRTM_EMISION_DIR`, por defecto `./data/emisiones`, fuera de git).
+    `guardar` mueve el archivo a un nombre temporal junto a su destino y lo renombra de forma atómica (sirve entre
+    sistemas de archivos). Llevan datos personales de todo el padrón: en producción, un volumen persistente y privado.
+  - **Archivos del formato anterior:** antes los archivos eran planos, `<dir>/emision-<anio>-<id>.pdf|zip`. Al crearse,
+    `AlmacenLocal` mueve cada uno a `<dir>/emision-<id>/emision-<anio>-<id>.<ext>` y deja en el log cuántos movió. Es
+    idempotente, y un archivo que no se puede mover se registra y queda donde estaba: nunca impide arrancar. Los
+    `.part` y `.partes-` que haya dejado la versión anterior en `<dir>` ya no se limpian (la limpieza corre en
+    `temporales`): se borran a mano.
+  - **Temporales** `srtm.emision.temporales` (`SRTM_EMISION_TEMPORALES`, por defecto `${java.io.tmpdir}/srtm-emision`):
+    el `.part` que escribe el job y el `.partes-` de un PDF. Es local de cada instancia y descartable; no necesita
+    persistir.
+  - **Otra implementación:** implementar `AlmacenEmision` (con su IO bloqueante dentro de `Dispatchers.IO`), extender
+    `AlmacenEmisionContractTest` dando su almacén vacío en `nuevo()`, y activarla con su propio valor de
+    `srtm.emision.almacen` (`@ConditionalOnProperty(prefix = "srtm.emision", name = ["almacen"], havingValue = "...")`).
+    Las claves y su validación (`exigirClave`) son las de arriba para todas.
 - **Retención**, después de cada emisión y al arrancar: de cada organización y año se conservan los últimos
   `srtm.emision.conservar` archivos (`SRTM_EMISION_CONSERVAR`, por defecto 5), y ninguno más viejo que
   `srtm.emision.dias` días (`SRTM_EMISION_DIAS`, por defecto 0: sin límite). 0 apaga una regla. El job depurado se
   queda, sin `archivo` y con el mensaje "archivo depurado"; su descarga da 410. `DELETE /api/srtm/emisiones/{id}`
-  borra el job y su archivo (409 si aún corre; uno PENDIENTE o EN_PROCESO sin worker sí se borra).
-- **Descarga** `GET /api/srtm/emisiones/{id}/archivo`: `FileSystemResource`, en streaming, sin cargar el archivo en
-  memoria. El nombre se arma del job, nunca se lee del registro.
+  borra el job y todo lo que el almacén guarde bajo `emision-<id>/` (409 si aún corre; uno PENDIENTE o EN_PROCESO sin
+  worker sí se borra).
+- **Descarga** `GET /api/srtm/emisiones/{id}/archivo`: el `Resource` del almacén, en streaming, sin cargar el archivo en
+  memoria; el `Content-Length` sale de `tamano` del almacén, sin leer el archivo. 409 si no está TERMINADA, 410 si se
+  depuró, 404 si el almacén ya no tiene la clave. La clave y el nombre (`Content-Disposition`) se arman del job, nunca
+  se leen del registro.
 
 ## Tests
 
@@ -903,7 +931,8 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`,
   `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…), `Records`,
   `Registros`, `srtm.pide` (`PideReniecTest`, contra un servidor local) y `srtm.emision` (`PdfRendererTest`,
-  `PdfMergerTest`, `HojaPuTest`, `HojaHrTest`, `GeneradorEmisionTest`, que leen el PDF de vuelta con PDFBox).
+  `PdfMergerTest`, `HojaPuTest`, `HojaHrTest`, `GeneradorEmisionTest`, que leen el PDF de vuelta con PDFBox; `AlmacenLocalTest`, que corre el contrato
+  de `AlmacenEmision` sobre un directorio temporal).
 - **Integración** (`@Tag("integration")`): `SrtmSmokeTest` y las clases `*ApiTest`, que llaman a la API del portal
   sobre la app entera y PostGIS. Heredan de `SrtmApiTest`: el modelo aplicado como lo hace `apply.py`, el token del
   admin de desarrollo y las llamadas. Cada endpoint de `RentasController` y `DocumentosController` tiene un caso feliz

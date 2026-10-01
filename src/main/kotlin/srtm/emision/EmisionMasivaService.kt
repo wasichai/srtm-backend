@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
+import org.springframework.core.io.Resource
 import org.springframework.http.HttpStatus
 import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.r2dbc.core.awaitRowsUpdated
@@ -48,7 +49,6 @@ import wasichai.core.platform.SqlIdentifier
 import wasichai.core.platform.WasichaiSchemas
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -132,9 +132,16 @@ fun emisionDe(r: RegistroEmision) =
         terminado = r.terminado
     )
 
+// the file of a TERMINADA job, to download: streamed from the almacén, with its size from there too
+class DescargaEmision(
+    val job: Emision,
+    val recurso: Resource,
+    val tamano: Long
+)
+
 // the masiva of a year in the background (wasichai/srtm-backend#41). a POST leaves a PENDIENTE job and returns; its
-// worker reads the contribuyentes with vigente declaraciones of the year, writes the file under srtm.emision.dir
-// (GeneradorEmision) and keeps the job's progress in core.
+// worker reads the contribuyentes with vigente declaraciones of the year, writes the file under srtm.emision.temporales
+// (GeneradorEmision), hands it to the AlmacenEmision and keeps the job's progress in core.
 //
 // the job runs as whoever asked for it: their authentication is taken from the request and carried into the job's
 // coroutine (ReactorContext), so every read and write goes through Registros and core checks that user's permissions,
@@ -158,11 +165,14 @@ class EmisionMasivaService(
     private val currentUser: CurrentUser,
     private val auditoria: AuditService,
     private val cerrojo: CerrojoEmision,
-    @param:Value("\${srtm.emision.dir}") dir: String,
+    private val almacen: AlmacenEmision,
+    @Value("\${srtm.emision.temporales}") temporales: String,
     @param:Value("\${srtm.emision.conservar:5}") conservar: Int,
     @param:Value("\${srtm.emision.dias:0}") dias: Int
 ) {
-    private val dir: Path = Path.of(dir)
+    // the work files: the `.part` a job writes and the `.partes-` directory of a pdf's documents. the almacén is where
+    // the result ends, and the only one that knows where that is
+    private val temporales: Path = Path.of(temporales)
     private val retencion = Retencion(conservar, dias)
     private val generador = GeneradorEmision(documentos, merger)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -236,17 +246,17 @@ class EmisionMasivaService(
 
     suspend fun get(id: UUID): Emision = emisionDe(registros.get(EMISION_MASIVA, RegistroEmision::class.java, id))
 
-    // the file of a TERMINADA job: its name is rebuilt from the job, never read from it
-    suspend fun archivo(id: UUID): Pair<Emision, Path> {
+    // the file of a TERMINADA job: its key is rebuilt from the job, never read from it
+    suspend fun archivo(id: UUID): DescargaEmision {
         val job = get(id)
         if (job.estado != TERMINADA) throw ConflictException("La emisión está ${job.estado}: su archivo estará al terminar")
         if (job.archivo == null) throw ArchivoDepuradoException("El archivo de la emisión fue depurado: vuelva a emitir el año")
-        val archivo = archivoDe(job)
-        if (!Files.isRegularFile(archivo)) throw NotFoundException("El archivo de la emisión ya no está en el servidor")
-        return job to archivo
+        val clave = claveResultado(id, job.anio!!, FormatoEmision.valueOf(job.formato!!))
+        if (!almacen.existe(clave)) throw NotFoundException("El archivo de la emisión ya no está en el servidor")
+        return DescargaEmision(job, almacen.abrir(clave), almacen.tamano(clave))
     }
 
-    // the job (core checks the caller may delete it) and its file. one PENDIENTE or EN_PROCESO whose worker runs is a
+    // the job (core checks the caller may delete it) and its files. one PENDIENTE or EN_PROCESO whose worker runs is a
     // 409; with nobody holding the lock it has no worker, and goes
     suspend fun eliminar(id: UUID) {
         val job = get(id)
@@ -255,10 +265,8 @@ class EmisionMasivaService(
             tomado.soltar()
         }
         registros.delete(EMISION_MASIVA, id)
-        if (job.anio != null && job.formato != null) Files.deleteIfExists(archivoDe(job))
+        almacen.listar(prefijoEmision(id)).forEach { almacen.borrar(it) }
     }
-
-    private fun archivoDe(job: Emision): Path = dir.resolve(nombreArchivo(job.anio!!, job.id, FormatoEmision.valueOf(job.formato!!)))
 
     private suspend fun correr(
         id: UUID,
@@ -266,24 +274,24 @@ class EmisionMasivaService(
         formato: FormatoEmision
     ) {
         val nombre = nombreArchivo(anio, id.toString(), formato)
-        val destino = dir.resolve(nombre)
-        val parcial = dir.resolve("$nombre.part")
+        val clave = claveResultado(id, anio, formato)
+        val parcial = temporales.resolve("$nombre.part")
         try {
-            Files.createDirectories(dir)
+            Files.createDirectories(temporales)
             val contribuyentes = padron(anio)
             guardar(id, "estado" to EN_PROCESO, "total" to contribuyentes.size, "procesados" to 0)
             val errores =
                 generador.generar(anio, formato, contribuyentes, parcial) { procesados, errores ->
                     guardar(id, "procesados" to procesados, "errores" to erroresJson(errores))
                 }
-            Files.move(parcial, destino, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            almacen.guardar(clave, parcial)
             guardar(
                 id,
                 "estado" to TERMINADA,
                 "procesados" to contribuyentes.size,
                 "errores" to erroresJson(errores),
                 "archivo" to nombre,
-                "tamano" to Files.size(destino),
+                "tamano" to almacen.tamano(clave),
                 "terminado" to Instant.now().toString()
             )
         } catch (e: CancellationException) {
@@ -367,7 +375,7 @@ class EmisionMasivaService(
         val tomado = cerrojo.tomar() ?: return null
         try {
             val fallidas = interrumpir(excepto = null, mensaje = INTERRUMPIDA)
-            mantener("limpiar los temporales de emisiones") { limpiarTemporales(dir) }
+            mantener("limpiar los temporales de emisiones") { limpiarTemporales(temporales) }
             mantener("depurar los archivos de emisiones") { depurar() }
             return fallidas
         } finally {
@@ -452,7 +460,7 @@ class EmisionMasivaService(
                     }
             val antes = terminadas.toMap()
             for (a in aDepurar(terminadas.map { it.first }, retencion, Instant.now())) {
-                Files.deleteIfExists(dir.resolve(nombreArchivo(a.anio, a.id.toString(), a.formato)))
+                almacen.borrar(claveResultado(a.id, a.anio, a.formato))
                 val cambiadas =
                     db
                         .sql(

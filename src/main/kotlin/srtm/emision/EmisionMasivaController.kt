@@ -1,6 +1,5 @@
 package srtm.emision
 
-import org.springframework.core.io.FileSystemResource
 import org.springframework.core.io.Resource
 import org.springframework.http.ContentDisposition
 import org.springframework.http.HttpHeaders
@@ -15,7 +14,6 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
-import java.nio.file.Files
 import java.time.LocalDate
 import java.util.UUID
 
@@ -56,24 +54,26 @@ class EmisionMasivaController(
         @PathVariable id: UUID
     ) = emisiones.eliminar(id)
 
-    // the file, streamed from disk (never whole in memory), to download
+    // the file, streamed from the almacén (never whole in memory), to download. its length comes from the store, so
+    // the response has a Content-Length without reading the file. the name is rebuilt from the job
     @GetMapping("/{id}/archivo")
     suspend fun archivo(
         @PathVariable id: UUID
     ): ResponseEntity<Resource> {
-        val (job, archivo) = emisiones.archivo(id)
+        val descarga = emisiones.archivo(id)
+        val job = descarga.job
         val formato = FormatoEmision.valueOf(job.formato!!)
         return ResponseEntity
             .ok()
             .contentType(formato.mediaType)
-            .contentLength(Files.size(archivo))
+            .contentLength(descarga.tamano)
             .header(
                 HttpHeaders.CONTENT_DISPOSITION,
                 ContentDisposition
                     .attachment()
-                    .filename(archivo.fileName.toString())
+                    .filename(nombreArchivo(job.anio!!, job.id, formato))
                     .build()
                     .toString()
-            ).body(FileSystemResource(archivo))
+            ).body(descarga.recurso)
     }
 }
