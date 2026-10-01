@@ -27,8 +27,16 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 20)
+        self.assertEqual(len(names), 21)
         self.assertEqual(len(self.model["relationships"]), 10)
+
+    def test_the_municipalidad_holds_the_documents_header(self):
+        # the PU and HR's header, one record per organization edited in the admin (the escudo is a file, not a field)
+        municipalidad = next(o for o in self.model["objects"] if o["name"] == "municipalidad")
+        campos = {f["name"]: f for f in municipalidad["fields"]}
+        self.assertEqual(list(campos), ["nombre", "oficina", "ruc", "gerencia", "direccion"])
+        self.assertEqual([n for n, f in campos.items() if f.get("required")], ["nombre"])
+        self.assertTrue(all(f["type"] == "TEXT" for f in campos.values()))
 
     def test_new_contribuyente_fields_are_optional(self):
         # 11 840 contribuyentes came from the padron without them: a required field would be refused by Core

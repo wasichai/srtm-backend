@@ -2,7 +2,6 @@ package srtm.emision
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import srtm.impuesto.LiquidacionService
@@ -20,7 +19,8 @@ import srtm.rentas.Registros
 import srtm.rentas.vigente
 import wasichai.core.common.NotFoundException
 import wasichai.core.common.WasichaiException
-import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
 import java.util.UUID
 
 // a pdf and the name it is served or stored under
@@ -55,7 +55,7 @@ class DocumentosPrediales(
     private val registros: Registros,
     private val renderer: PdfRenderer,
     private val liquidaciones: LiquidacionService,
-    @param:Value("\${srtm.municipalidad.nombre}") private val municipalidad: String
+    private val cabeceras: CabeceraDocumento
 ) {
     // the PU of a predio for one titular: its vigente declaraciones of `anio`, a section per secuencia de uso.
     // NotFoundException without one (or when `contribuyenteId` declares none); VariosTitulares when the predio has
@@ -90,7 +90,7 @@ class DocumentosPrediales(
                     obras = registros.all(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, filters = id, sort = "created_at")
                 )
             }
-        val hoja = hojaPu(municipalidad, anio, predio, contribuyente, usos, LocalDate.now())
+        val hoja = hojaPu(cabeceras.actual(), anio, predio, contribuyente, usos, LocalDateTime.now(LIMA))
         val pdf = withContext(Dispatchers.Default) { renderer.render("pu", mapOf("pu" to hoja)) }
         return Documento("PU-${predio.codigo ?: predioId}-$anio.pdf", pdf)
     }
@@ -110,7 +110,7 @@ class DocumentosPrediales(
             throw NotFoundException("El contribuyente ${contribuyente.codigo.orEmpty()} no tiene declaración jurada vigente en $anio")
         }
         val predios = registros.byIds(PREDIO, Predio::class.java, determinacion.declaraciones.mapNotNull { it.predio })
-        val hoja = hojaHr(municipalidad, anio, contribuyente, predios, determinacion.declaraciones, liquidacion, LocalDate.now())
+        val hoja = hojaHr(cabeceras.actual(), anio, contribuyente, predios, determinacion.declaraciones, liquidacion, LocalDateTime.now(LIMA))
         val pdf = withContext(Dispatchers.Default) { renderer.render("hr", mapOf("hr" to hoja)) }
         return Documento("HR-${contribuyente.codigo ?: contribuyenteId}-$anio.pdf", pdf)
     }
@@ -123,3 +123,6 @@ class DocumentosPrediales(
         }
     }
 }
+
+// the documents carry the hour they were emitted at, as the municipality reads its clock
+private val LIMA: ZoneId = ZoneId.of("America/Lima")

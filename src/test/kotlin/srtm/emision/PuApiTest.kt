@@ -15,7 +15,7 @@ class PuApiTest : SrtmApiTest() {
     @Test
     fun `the pu is an inline pdf with the predio, its titular, a nivel and the autoavaluo`() {
         val titular = contribuyente("JUNIOR")
-        val predio = post("/api/srtm/predios", mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "condicion" to "URBANO"))
+        val predio = post("/api/srtm/predios", mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO"))
         val d = declarar(titular["id"].asString(), predio["id"].asString())
         post("/api/srtm/declaraciones/$d/niveles", NIVEL)
 
@@ -30,6 +30,38 @@ class PuApiTest : SrtmApiTest() {
         assertTrue(titular["nombre_completo"].asString() in texto, texto)
         assertTrue("ADOBE" in texto, texto)
         assertTrue("S/ 10,000.50" in texto, texto)
+    }
+
+    // the header is the organization's municipalidad record, edited in the admin: the shared test db may already
+    // have one, so the test writes its own values over it
+    @Test
+    fun `the pu opens with the organization's municipalidad record`() {
+        val marca = uniqueDocumento()
+        val datos =
+            mapOf(
+                "nombre" to "MUNICIPALIDAD DISTRITAL DE PRUEBA",
+                "oficina" to "OFICINA DE TESORERIA",
+                "ruc" to "20195238961",
+                "gerencia" to "GERENCIA DE ADMINISTRACION TRIBUTARIA",
+                "direccion" to "JR. PRUEBA $marca"
+            )
+        val existente = tree(send("GET", "/api/objects/municipalidad/records?sort=created_at", null, HttpStatus.OK))["content"].firstOrNull()
+        if (existente == null) {
+            post("/api/objects/municipalidad/records", mapOf("attributes" to datos))
+        } else {
+            put("/api/objects/municipalidad/records/${existente["id"].asString()}", mapOf("attributes" to datos))
+        }
+        val predio = post("/api/srtm/predios", mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO"))
+        declarar(contribuyente("CABECERA")["id"].asString(), predio["id"].asString())
+
+        val texto = texto(pu(predio["id"].asString(), "anio=2026").cuerpo)
+
+        assertTrue("MUNICIPALIDAD DISTRITAL DE PRUEBA" in texto, texto)
+        assertTrue("OFICINA DE TESORERIA" in texto, texto)
+        assertTrue("RUC: 20195238961" in texto, texto)
+        assertTrue("GERENCIA DE ADMINISTRACION TRIBUTARIA" in texto, texto)
+        assertTrue("JR. PRUEBA $marca" in texto, texto)
+        assertTrue(Regex("Fecha: \\d{2}/\\d{2}/\\d{4} \\d{2}:\\d{2}").containsMatchIn(texto), texto)
     }
 
     @Test
