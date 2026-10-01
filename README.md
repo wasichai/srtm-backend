@@ -923,12 +923,12 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
   ```
 
   y `docker compose up --scale backend=3`. Los lotes se reparten entre las réplicas; cualquiera atiende el POST, la
-  consulta y la descarga.
+  consulta y la descarga. Sin volumen compartido (K8s), con `srtm.emision.almacen=s3`: ver **Almacén S3 (K8s)**.
 - **Almacén** (`AlmacenEmision`, wasichai/srtm-backend#52): dónde viven los archivos ya generados. El servicio y el
   controlador solo hablan con esta interfaz (`guardar`, `abrir`, `traer`, `borrar`, `existe`, `tamano`, `listar`), así
   que los archivos pueden estar en el disco del servidor o en un almacén de objetos compartido por todas las
-  instancias. Se elige con `srtm.emision.almacen` (`SRTM_EMISION_ALMACEN`, por defecto `local`, la única
-  implementación por ahora).
+  instancias. Se elige con `srtm.emision.almacen` (`SRTM_EMISION_ALMACEN`): `local` (por defecto, `AlmacenLocal`) o
+  `s3` (`AlmacenS3`, abajo).
   - **Claves:** relativas, separadas por `/`, de segmentos `[A-Za-z0-9._-]`; nunca vacías, ni `.` ni `..`, ni con `/`
     al inicio (cualquier otra es `IllegalArgumentException`: ninguna clave sale del almacén). El resultado de una
     emisión es `emision-<id>/emision-<anio>-<id>.pdf|zip`; las partes de sus lotes, `emision-<id>/parte-00001.pdf|zip`.
@@ -952,6 +952,48 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
     `AlmacenEmisionContractTest` dando su almacén vacío en `nuevo()`, y activarla con su propio valor de
     `srtm.emision.almacen` (`@ConditionalOnProperty(prefix = "srtm.emision", name = ["almacen"], havingValue = "...")`).
     Las claves y su validación (`exigirClave`) son las de arriba para todas.
+- **Almacén S3 (K8s)** (`AlmacenS3`, wasichai/srtm-backend#56): con `srtm.emision.almacen=s3` los archivos van a un
+  bucket de S3 (o de un servicio con su API, como MinIO) y **no hace falta volumen**: ni `srtm.emision.dir` ni un disco
+  compartido. Cada pod solo necesita sus `temporales` locales (un `emptyDir` basta).
+  - **Variables:** `srtm.emision.s3.bucket` (`SRTM_EMISION_S3_BUCKET`), obligatoria: sin ella la aplicación no arranca
+    ("srtm.emision.s3.bucket es obligatorio con srtm.emision.almacen=s3"). `srtm.emision.s3.region`
+    (`SRTM_EMISION_S3_REGION`): vacía, la de la cadena del SDK (`AWS_REGION`, que IRSA ya pone en el pod); contra otro
+    endpoint, `us-east-1`. `srtm.emision.s3.endpoint` (`SRTM_EMISION_S3_ENDPOINT`): solo para otro servicio que AWS
+    (MinIO), al que se llega por *path-style*; vacía en AWS. `srtm.emision.s3.prefijo` (`SRTM_EMISION_S3_PREFIJO`): las
+    claves van debajo (`srtm/emisiones` da `srtm/emisiones/emision-<id>/...`; las `/` de los extremos sobran); vacío, en
+    la raíz del bucket.
+  - **Credenciales:** las de la cadena por defecto del AWS SDK v2, nunca en la configuración de la app. En EKS, **IRSA**:
+    el pod corre con una ServiceAccount anotada con `eks.amazonaws.com/role-arn` y el SDK toma el rol solo
+    (`AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`). Si no, un **secreto** de Kubernetes con `AWS_ACCESS_KEY_ID` y
+    `AWS_SECRET_ACCESS_KEY` como variables de entorno. El rol necesita `s3:PutObject`, `s3:GetObject`,
+    `s3:DeleteObject`, `s3:AbortMultipartUpload` y `s3:ListBucket` sobre el bucket (o su prefijo). Por ejemplo:
+
+    ```yaml
+    serviceAccountName: srtm-backend # con IRSA; sin IRSA, el envFrom del secreto
+    containers:
+      - name: backend
+        image: srtm-backend
+        env:
+          - { name: SRTM_EMISION_ALMACEN, value: s3 }
+          - { name: SRTM_EMISION_S3_BUCKET, value: municipalidad-srtm-emisiones }
+          - { name: SRTM_EMISION_S3_PREFIJO, value: srtm/emisiones }
+          - { name: SRTM_EMISION_TEMPORALES, value: /tmp/srtm-emision } # un emptyDir del pod
+        # envFrom: [{ secretRef: { name: srtm-s3 } }] # AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY
+    ```
+
+  - **Cómo guarda:** un archivo de menos de 16 MiB va en un `PutObject`; uno mayor, por *multipart upload* en partes de
+    16 MiB leídas del archivo una a una (los PDF pueden pesar GB), que se aborta si algo falla. Una clave solo aparece
+    completa (`PutObject` y `CompleteMultipartUpload` son atómicos): el ensamblado que encuentra el archivo final ya
+    guardado puede usarlo tal cual. `traer` descarga a los temporales para el ensamblado, `listar` pagina por prefijo
+    y `borrar` de una clave que no está no hace nada.
+  - **Descarga:** pasa por el backend, que mantiene el control de permisos, en streaming desde S3: el `Content-Length`
+    sale de un `HeadObject` y el objeto se abre recién al leerlo, sin cargarlo en memoria. Si el cliente corta, se
+    aborta la conexión con S3 en vez de leer el resto. (Una URL prefirmada queda como opción a futuro.)
+  - **Probar en local:** `docker compose --profile s3 up -d` levanta MinIO (`127.0.0.1:9000`, consola en
+    `127.0.0.1:9001`, usuario `srtm`, clave `srtm-minio`) y crea el bucket `srtm-emisiones`. Luego se arranca con
+    `SRTM_EMISION_ALMACEN=s3`, `SRTM_EMISION_S3_BUCKET=srtm-emisiones`, `SRTM_EMISION_S3_ENDPOINT=http://localhost:9000`,
+    `AWS_ACCESS_KEY_ID=srtm` y `AWS_SECRET_ACCESS_KEY=srtm-minio` (comentadas en `develop/example.env`). La imagen es el
+    fork comunitario `pgsty/minio`: MinIO ya no publica `minio/minio` en Docker Hub.
 - **Retención**, después de cada ensamblado y al arrancar (`RetencionEmision`): de cada organización y año se conservan
   los últimos `srtm.emision.conservar` archivos (`SRTM_EMISION_CONSERVAR`, por defecto 5), y ninguno más viejo que
   `srtm.emision.dias` días (`SRTM_EMISION_DIAS`, por defecto 0: sin límite). 0 apaga una regla. El job depurado se
@@ -1017,6 +1059,10 @@ yarn format:check           # prettier: yaml y json, model.json incluido
   su clase (`@DirtiesContext`): un contexto queda en caché mientras corren las demás clases, y sus trabajadores
   tomarían los lotes que esas clases crean para mirarlos. `TrabajadoresEmisionApiTest` juega dos instancias con dos
   `GrupoTrabajadores` propios, cada uno con su `instancia` y sus temporales.
+- **Almacén S3 en los tests:** `AlmacenS3Test` corre el contrato de `AlmacenEmision` (más las partes, el aborto y el
+  streaming) contra un MinIO de Testcontainers (`pgsty/minio`, uno para toda la corrida), y `EmisionS3ApiTest` corre
+  la app con `srtm.emision.almacen=s3` contra él: dos instancias sin disco compartido completan una emisión PDF y una
+  ZIP, y una descarga de 101 MiB se lee en streaming. `AlmacenS3ConfigTest` (unitario) revisa qué almacén se arma.
 - Los de integración corren en el CI de cada PR. Con un Docker remoto no corren en local tal cual (Testcontainers no
   llega a sus puertos): se usa una base de test externa tunelizada, con PostGIS y un nombre que termine en `_test`.
   Cómo, en [docs/develop/README.md](docs/develop/README.md#6-tests).

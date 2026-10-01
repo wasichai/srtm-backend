@@ -36,11 +36,12 @@ data class EmisionProperties(
         require(!espera.isNegative && !espera.isZero) { "srtm.emision.espera debe ser positiva: $espera" }
     }
 
-    // the object store of srtm.emision.almacen=s3, shared by every instance
+    // the object store of srtm.emision.almacen=s3 (AlmacenS3), shared by every instance: required then
     data class S3(
         val bucket: String = "",
+        // none: the sdk's chain (AWS_REGION), or us-east-1 against another endpoint
         val region: String = "",
-        // another endpoint than aws' (minio, say); none: aws'
+        // another endpoint than aws' (minio, say), reached path-style; none: aws'
         val endpoint: String? = null,
         // the keys go under it, if any
         val prefijo: String = ""

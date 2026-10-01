@@ -204,6 +204,26 @@ abstract class ConEscenarioApiTest : ConParametrosApiTest() {
         )
     }
 
+    // every lote and emission still to run, of any class, is failed: a test's own groups of workers then take or
+    // assemble only that test's emission
+    protected fun soloLasDelTest() {
+        runBlocking {
+            for (t in tablas.de(EMISION_LOTE, listOf("estado"))) {
+                db
+                    .sql("UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDO' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO')")
+                    .fetch()
+                    .awaitRowsUpdated()
+            }
+            for (t in tablas.de(EMISION_MASIVA, listOf("estado"))) {
+                db
+                    .sql(
+                        "UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDA' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO', 'ENSAMBLANDO')"
+                    ).fetch()
+                    .awaitRowsUpdated()
+            }
+        }
+    }
+
     // a lote as its row has it
     protected data class FilaLote(
         val id: UUID,

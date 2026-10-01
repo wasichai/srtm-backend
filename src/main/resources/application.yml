@@ -50,7 +50,8 @@ srtm:
       # how long a consulta backs a save with fuente PIDE RENIEC
       vigencia: 30m
   emision:
-    # where the emisiones' files are kept (AlmacenEmision): local, on this server's disk under dir
+    # where the emisiones' files are kept (AlmacenEmision): local, on this server's disk under dir, or s3, in the
+    # bucket of s3.* (no shared volume: what k8s wants)
     almacen: ${SRTM_EMISION_ALMACEN:local}
     # the local almacén's root: <dir>/emision-<id>/emision-<anio>-<id>.pdf|zip. a real deployment points it at a
     # persistent volume
@@ -74,3 +75,13 @@ srtm:
     # none older than the days. 0 turns a rule off. a purged job keeps its record, without its file
     conservar: ${SRTM_EMISION_CONSERVAR:5}
     dias: ${SRTM_EMISION_DIAS:0}
+    # the bucket of almacen=s3, required then. the credentials come from the aws sdk's default chain: the environment
+    # (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY), the pod's web identity (irsa), a profile, the instance's role
+    s3:
+      bucket: ${SRTM_EMISION_S3_BUCKET:}
+      # none: the sdk's chain (AWS_REGION); us-east-1 against another endpoint
+      region: ${SRTM_EMISION_S3_REGION:}
+      # another endpoint than aws' (minio), reached path-style; none: aws'
+      endpoint: ${SRTM_EMISION_S3_ENDPOINT:}
+      # the keys go under it: srtm/emisiones gives srtm/emisiones/emision-<id>/...; none: the bucket's root
+      prefijo: ${SRTM_EMISION_S3_PREFIJO:}

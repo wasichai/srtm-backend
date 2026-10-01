@@ -92,23 +92,7 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
 
     // nothing of another class is left for the groups to take or assemble: only this test's emission runs
     @BeforeEach
-    fun soloLaDelTest() {
-        runBlocking {
-            for (t in tablas.de(EMISION_LOTE, listOf("estado"))) {
-                db
-                    .sql("UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDO' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO')")
-                    .fetch()
-                    .awaitRowsUpdated()
-            }
-            for (t in tablas.de(EMISION_MASIVA, listOf("estado"))) {
-                db
-                    .sql(
-                        "UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDA' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO', 'ENSAMBLANDO')"
-                    ).fetch()
-                    .awaitRowsUpdated()
-            }
-        }
-    }
+    fun soloLaDelTest() = soloLasDelTest()
 
     @AfterEach
     fun detener() {

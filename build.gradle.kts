@@ -30,8 +30,16 @@ dependencies {
     implementation(libs.openhtmltopdf.slf4j)
     implementation(libs.pdfbox)
 
+    // srtm.emision.almacen=s3 (AlmacenS3): the sync client over its default http client (apache5). the async netty
+    // client the sdk brings is never used, and would mix its netty with webflux's
+    implementation(platform(libs.awssdk.bom))
+    implementation(libs.awssdk.s3) {
+        exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+    }
+
     // WasichaiIntegrationTest; brings spring-boot-starter-test, webflux-test and testcontainers
     testImplementation("wasichai:wasichai-test")
+    testImplementation(libs.testcontainers.minio)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
