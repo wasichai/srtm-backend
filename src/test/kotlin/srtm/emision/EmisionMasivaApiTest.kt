@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.TestPropertySource
+import srtm.impuesto.ParametroTributario
 import java.io.ByteArrayInputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -63,11 +64,12 @@ class EmisionMasivaApiTest : ConEscenarioApiTest() {
     ) : DocumentosDeEmision {
         override suspend fun hr(
             contribuyenteId: UUID,
-            anio: Int
+            anio: Int,
+            parametros: List<ParametroTributario>?
         ): Documento {
             if (retenidos.isEmpty() || contribuyenteId.toString() in retenidos) puerta?.await()
             if (contribuyenteId.toString() in fallan) throw IllegalStateException("Faltan parámetros del año $anio")
-            return documentos.hr(contribuyenteId, anio)
+            return documentos.hr(contribuyenteId, anio, parametros)
         }
 
         override suspend fun pu(

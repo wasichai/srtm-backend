@@ -18,6 +18,7 @@ import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.security.oauth2.jwt.Jwt
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken
 import org.springframework.test.context.TestPropertySource
+import srtm.impuesto.ParametroTributario
 import wasichai.core.platform.WasichaiSchemas
 import java.nio.file.Files
 import java.nio.file.Path
@@ -75,10 +76,11 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
         object : DocumentosDeEmision {
             override suspend fun hr(
                 contribuyenteId: UUID,
-                anio: Int
+                anio: Int,
+                parametros: List<ParametroTributario>?
             ): Documento {
                 if (primera.compareAndSet(false, true)) puerta?.await()
-                return documentosPrediales.hr(contribuyenteId, anio)
+                return documentosPrediales.hr(contribuyenteId, anio, parametros)
             }
 
             override suspend fun pu(
@@ -200,7 +202,7 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
                         val lote = lotes.tomar("muerta", Duration.ofMinutes(2))!!
                         val archivo = Files.createTempFile("parte", ".pdf")
                         Files.delete(archivo)
-                        val hecho = GeneradorEmision(documentos, merger).generar(anio, FormatoEmision.PDF, lote.contribuyentes, archivo) { _, _ -> }
+                        val hecho = GeneradorEmision(documentos, merger).generar(anio, FormatoEmision.PDF, lote.contribuyentes, null, archivo) { _, _ -> }
                         val clave = claveParte(uuid, lote.numero, FormatoEmision.PDF)
                         almacen.guardar(clave, archivo)
                         assertTrue(lotes.terminar(lote, "muerta", lote.contribuyentes.size, hecho.documentos, hecho.errores, clave))

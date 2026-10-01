@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import srtm.impuesto.ParametroTributario
+import java.math.BigDecimal
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -20,12 +22,15 @@ class GeneradorEmisionTest {
         val fallan: Set<UUID> = emptySet()
     ) : DocumentosDeEmision {
         val pedidos = mutableListOf<String>()
+        val parametrosPedidos = mutableListOf<List<ParametroTributario>?>()
 
         override suspend fun hr(
             contribuyenteId: UUID,
-            anio: Int
+            anio: Int,
+            parametros: List<ParametroTributario>?
         ): Documento {
             pedidos += "HR $contribuyenteId"
+            parametrosPedidos += parametros
             if (contribuyenteId in fallan) throw IllegalStateException("Faltan parámetros del año $anio")
             return Documento("HR-x-$anio.pdf", enBlanco(2))
         }
@@ -44,10 +49,11 @@ class GeneradorEmisionTest {
         formato: FormatoEmision,
         lotes: List<ContribuyenteAEmitir>,
         documentos: DocumentosDeEmision = Documentos(),
+        parametros: List<ParametroTributario>? = null,
         avance: suspend (Int, List<ErrorEmision>) -> Unit = { _, _ -> }
     ): Pair<Path, ResultadoGeneracion> {
         val destino = dir.resolve("emision.${formato.extension}")
-        val resultado = runBlocking { GeneradorEmision(documentos, PdfMerger()).generar(2026, formato, lotes, destino, avance) }
+        val resultado = runBlocking { GeneradorEmision(documentos, PdfMerger()).generar(2026, formato, lotes, parametros, destino, avance) }
         return destino to resultado
     }
 
@@ -65,6 +71,16 @@ class GeneradorEmisionTest {
             listOf("HR ${ANA.id}", "PU $P1 ${ANA.id}", "PU $P2 ${ANA.id}", "HR ${BETO.id}", "PU $P2 ${BETO.id}"),
             documentos.pedidos
         )
+    }
+
+    @Test
+    fun `every hr gets the parametros the caller read`() {
+        val documentos = Documentos()
+        val parametros = listOf(ParametroTributario(tipo = "UIT", valorNumerico = BigDecimal("5500")))
+
+        generar(FormatoEmision.PDF, listOf(ANA, BETO), documentos, parametros)
+
+        assertEquals(listOf(parametros, parametros), documentos.parametrosPedidos)
     }
 
     @Test

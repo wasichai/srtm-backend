@@ -3,6 +3,7 @@ package srtm.emision
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
+import srtm.impuesto.ParametroTributario
 import java.io.BufferedOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -42,9 +43,11 @@ data class ContribuyenteAEmitir(
 // what the masiva emits: DocumentosPrediales' HR and PU. a seam so the job's tests do not depend on the HR
 // (wasichai/srtm-backend#40)
 interface DocumentosDeEmision {
+    // `parametros`: the year's parámetros tributarios, read once by the lote; null reads them
     suspend fun hr(
         contribuyenteId: UUID,
-        anio: Int
+        anio: Int,
+        parametros: List<ParametroTributario>?
     ): Documento
 
     suspend fun pu(
@@ -60,8 +63,9 @@ class DocumentosPredialesDeEmision(
 ) : DocumentosDeEmision {
     override suspend fun hr(
         contribuyenteId: UUID,
-        anio: Int
-    ) = documentos.hr(contribuyenteId, anio)
+        anio: Int,
+        parametros: List<ParametroTributario>?
+    ) = documentos.hr(contribuyenteId, anio, parametros)
 
     override suspend fun pu(
         predioId: UUID,
@@ -111,11 +115,12 @@ class GeneradorEmision(
     // every contribuyente's HR and then its PUs, into `destino`: one pdf (the documents go to temp files next to it
     // and are merged at the end) or a zip written as it goes. a contribuyente whose documents fail is left out and
     // returned among the errors; the rest go on. `avance` is told how many were processed every AVANCE_CADA and at the
-    // end. the documents counted are the ones written
+    // end. the documents counted are the ones written. `parametros` go to every HR: the caller reads them once
     suspend fun generar(
         anio: Int,
         formato: FormatoEmision,
         contribuyentes: List<ContribuyenteAEmitir>,
+        parametros: List<ParametroTributario>?,
         destino: Path,
         avance: suspend (procesados: Int, errores: List<ErrorEmision>) -> Unit
     ): ResultadoGeneracion {
@@ -126,7 +131,7 @@ class GeneradorEmision(
             contribuyentes.forEachIndexed { i, c ->
                 val docs =
                     try {
-                        listOf("HR-$anio.pdf" to documentos.hr(c.id, anio)) +
+                        listOf("HR-$anio.pdf" to documentos.hr(c.id, anio, parametros)) +
                             c.predios.map { p -> documentos.pu(p, c.id, anio).let { it.nombre to it } }
                     } catch (e: CancellationException) {
                         throw e

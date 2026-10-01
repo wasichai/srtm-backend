@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import srtm.impuesto.LiquidacionService
+import srtm.impuesto.ParametroTributario
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
 import srtm.rentas.DECLARACION
@@ -97,12 +98,14 @@ class DocumentosPrediales(
 
     // the HR of a contribuyente for `anio`: its vigente declaraciones and the impuesto predial with its cuotas, from the
     // same liquidación GET /liquidacion answers (LiquidacionService.determinar). FaltanParametros when a parameter of
-    // the year is missing; NotFoundException when the contribuyente does not exist or has no vigente declaración
+    // the year is missing; NotFoundException when the contribuyente does not exist or has no vigente declaración.
+    // `parametros` are the year's already read (a lote of the masiva reads them once); null reads them
     suspend fun hr(
         contribuyenteId: UUID,
-        anio: Int
+        anio: Int,
+        parametros: List<ParametroTributario>? = null
     ): Documento {
-        val determinacion = liquidaciones.determinar(contribuyenteId, anio)
+        val determinacion = liquidaciones.determinar(contribuyenteId, anio, parametros)
         val contribuyente = determinacion.contribuyente
         val liquidacion = determinacion.liquidacion
         if (liquidacion.faltan.isNotEmpty()) throw FaltanParametros(anio, liquidacion.faltan)

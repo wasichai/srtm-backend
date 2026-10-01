@@ -30,7 +30,9 @@ data class EmisionAEnsamblar(
     val organizacion: UUID,
     val anio: Int,
     val formato: FormatoEmision,
-    val latido: OffsetDateTime
+    val latido: OffsetDateTime,
+    // when the emission was started, for the log's total time
+    val iniciado: OffsetDateTime? = null
 )
 
 // the transitions of emision_masiva (wasichai/srtm-backend#54), straight on its tables and audited by hand: the
@@ -151,7 +153,7 @@ class EstadoEmisiones(
                         UPDATE ${e.tabla} AS e SET $estado = :ensamblando, $latido = now(), updated_at = now()
                         FROM antes WHERE e.id = antes.id
                         RETURNING e.id AS id, e.${e.columna("anio")} AS anio, e.${e.columna("formato")} AS formato, e.$latido AS latido,
-                            antes.estado AS antes
+                            e.${e.columna("iniciado")} AS iniciado, antes.estado AS antes
                         """.trimIndent()
                     ).bind("en_proceso", EN_PROCESO)
                     .bind("ensamblando", ENSAMBLANDO)
@@ -166,7 +168,8 @@ class EstadoEmisiones(
                             organizacion = e.organizacion,
                             anio = row.get("anio", Long::class.javaObjectType)!!.toInt(),
                             formato = FormatoEmision.valueOf(row.get("formato", String::class.java)!!),
-                            latido = row.get("latido", OffsetDateTime::class.java)!!
+                            latido = row.get("latido", OffsetDateTime::class.java)!!,
+                            iniciado = row.get("iniciado", OffsetDateTime::class.java)
                         ) to row.get("antes", String::class.java)
                     }.one()
                     .awaitFirstOrNull()

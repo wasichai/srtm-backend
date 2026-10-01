@@ -29,10 +29,13 @@ import org.springframework.context.event.EventListener
 import org.springframework.core.env.Environment
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.stereotype.Component
+import srtm.impuesto.ParametrosTributarios
 import java.net.InetAddress
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
+import java.time.Instant
+import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
@@ -44,6 +47,15 @@ internal const val SIN_USUARIO = "el usuario que lanzó la emisión ya no existe
 
 // how long a stop waits for the workers to let their lotes go
 private val DETENER: Duration = Duration.ofSeconds(30)
+
+private const val MILIS = 1000.0
+
+// documents per second with one decimal, always with a point: what the log lines say. a time under a millisecond
+// counts as one, so it never divides by zero
+internal fun documentosPorSegundo(
+    documentos: Int,
+    duracion: Duration
+): String = String.format(Locale.ROOT, "%.1f", documentos * MILIS / duracion.toMillis().coerceAtLeast(1))
 
 // a worker lost its lote, its assembly or its preparation while working on it: another take has it now, or it was
 // cancelled or deleted. a cancellation of the work only, never of the worker
@@ -117,7 +129,8 @@ class GrupoTrabajadores(
     documentos: DocumentosDeEmision,
     merger: PdfMerger,
     private val identidad: IdentidadEmision,
-    private val retencion: RetencionEmision
+    private val retencion: RetencionEmision,
+    private val parametros: ParametrosTributarios
 ) {
     private val generador = GeneradorEmision(documentos, merger)
     private val ensamblador = EnsambladorEmision(almacen, merger)
@@ -201,19 +214,23 @@ class GrupoTrabajadores(
         // the take in the name: a take of the same lote by another worker of this group never shares it
         val parcial = temporales.resolve("lote-${lote.id}-${lote.intentos}.part")
         val inicio = System.nanoTime()
+        var documentos = 0
         try {
             val resultado =
                 withContext(ReactiveSecurityContextHolder.withAuthentication(autenticacion).asCoroutineContext()) {
                     conLatido(cadaLatido, { lotes.latir(lote, instancia) }) {
                         withContext(Dispatchers.IO) { Files.createDirectories(temporales) }
+                        // once per lote, as the lote's user: every HR of the lote uses them
+                        val parametrosDelAnio = parametros.todos()
                         val hecho =
-                            generador.generar(lote.anio, lote.formato, lote.contribuyentes, parcial) { procesados, errores ->
+                            generador.generar(lote.anio, lote.formato, lote.contribuyentes, parametrosDelAnio, parcial) { procesados, errores ->
                                 if (!lotes.avanzar(lote, instancia, procesados, errores)) throw Perdido()
                             }
                         almacen.guardar(clave, parcial)
                         hecho
                     }
                 }
+            documentos = resultado?.documentos ?: 0
             if (resultado == null || !lotes.terminar(lote, instancia, lote.contribuyentes.size, resultado.documentos, resultado.errores, clave)) {
                 soltarParte(lote, clave)
                 return
@@ -230,12 +247,15 @@ class GrupoTrabajadores(
         } finally {
             withContext(NonCancellable + Dispatchers.IO) { Files.deleteIfExists(parcial) }
         }
+        val duracion = Duration.ofNanos(System.nanoTime() - inicio)
         log.info(
-            "lote {} de la emisión masiva {}: {} contribuyentes en {} ms",
+            "lote {} de la emisión {}: {} contribuyentes, {} documentos en {} ms ({} documentos/s)",
             lote.numero,
             lote.emision,
             lote.contribuyentes.size,
-            Duration.ofNanos(System.nanoTime() - inicio).toMillis()
+            documentos,
+            duracion.toMillis(),
+            documentosPorSegundo(documentos, duracion)
         )
         reclamar(lote)
     }
@@ -299,6 +319,18 @@ class GrupoTrabajadores(
                 if (!estado.existe(e.organizacion, e.id)) borrarTodo(e)
                 return
             }
+            // from its start (the POST) to its end: the preparation, the lotes' wait and the assembly are all in it
+            val documentos = partes.sumOf { it.documentos }
+            val duracion = e.iniciado?.let { Duration.between(it.toInstant(), Instant.now()) } ?: Duration.ofNanos(System.nanoTime() - inicio)
+            log.info(
+                "emisión {} de {}: {} contribuyentes, {} documentos en {} s ({} documentos/s)",
+                e.id,
+                e.anio,
+                procesados,
+                documentos,
+                String.format(Locale.ROOT, "%.1f", duracion.toMillis() / MILIS),
+                documentosPorSegundo(documentos, duracion)
+            )
         } catch (ex: CancellationException) {
             // the group stops: the emission stays ENSAMBLANDO and another instance takes it over when its lease expires
             throw ex
@@ -345,6 +377,7 @@ class TrabajadoresEmision(
     private val merger: PdfMerger,
     private val identidad: IdentidadEmision,
     private val retencion: RetencionEmision,
+    private val parametros: ParametrosTributarios,
     private val entorno: Environment
 ) {
     @Volatile
@@ -356,7 +389,7 @@ class TrabajadoresEmision(
         cantidad: Int,
         temporales: Path,
         documentos: DocumentosDeEmision = this.documentos
-    ) = GrupoTrabajadores(instancia, cantidad, temporales, config, lotes, estado, almacen, documentos, merger, identidad, retencion)
+    ) = GrupoTrabajadores(instancia, cantidad, temporales, config, lotes, estado, almacen, documentos, merger, identidad, retencion, parametros)
 
     @EventListener(ApplicationReadyEvent::class)
     fun arrancar() {
