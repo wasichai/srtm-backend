@@ -335,7 +335,8 @@
     "lado": ["PAR", "IMPAR"],
     "estado_declaracion": ["VIGENTE", "ANULADA"],
     "formato_emision": ["PDF", "ZIP"],
-    "estado_emision": ["PENDIENTE", "EN_PROCESO", "TERMINADA", "FALLIDA"]
+    "estado_emision": ["PENDIENTE", "EN_PROCESO", "ENSAMBLANDO", "TERMINADA", "FALLIDA"],
+    "estado_lote": ["PENDIENTE", "EN_PROCESO", "TERMINADO", "FALLIDO"]
   },
   "objects": [
     {
@@ -807,7 +808,7 @@
       "name": "emision_masiva",
       "label": "Emisión masiva",
       "pluralLabel": "Emisiones masivas",
-      "description": "Emisión en segundo plano de las HR y PU de un año, como un solo PDF o un ZIP (wasichai/srtm-backend#41). El archivo queda en srtm.emision.dir.",
+      "description": "Emisión en segundo plano de las HR y PU de un año, como un solo PDF o un ZIP (wasichai/srtm-backend#41). El archivo queda en el almacén (srtm.emision.almacen), con la clave emision-<id>/emision-<anio>-<id>.pdf|zip.",
       "fields": [
         {"name": "anio", "label": "Año", "type": "INTEGER", "required": true},
         {"name": "formato", "label": "Formato", "type": "ENUM", "enum": "formato_emision", "required": true},
@@ -820,7 +821,30 @@
         {"name": "tamano", "label": "Tamaño (bytes)", "type": "INTEGER"},
         {"name": "mensaje", "label": "Mensaje", "type": "LONG_TEXT", "description": "Por qué falló, o que el archivo fue depurado."},
         {"name": "iniciado", "label": "Iniciado", "type": "DATETIME"},
-        {"name": "terminado", "label": "Terminado", "type": "DATETIME"}
+        {"name": "terminado", "label": "Terminado", "type": "DATETIME"},
+        {"name": "latido", "label": "Latido", "type": "DATETIME",
+          "description": "Lease de la instancia que la prepara o la ensambla: la renueva mientras trabaja; vencida, otra la toma."}
+      ]
+    },
+    {
+      "name": "emision_lote",
+      "label": "Lote de emisión",
+      "pluralLabel": "Lotes de emisión",
+      "description": "Un tramo del padrón de una emisión masiva, que toma un trabajador de cualquier instancia (wasichai/srtm-backend#53).",
+      "fields": [
+        {"name": "numero", "label": "Número", "type": "INTEGER", "required": true},
+        {"name": "contribuyentes", "label": "Contribuyentes", "type": "LONG_TEXT", "required": true,
+          "description": "JSON: [{id, codigo, nombre, predios}], los contribuyentes del lote en el orden en que se emiten."},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_lote", "required": true},
+        {"name": "tomado_por", "label": "Tomado por", "type": "TEXT", "description": "La instancia cuyo trabajador lo genera."},
+        {"name": "latido", "label": "Latido", "type": "DATETIME",
+          "description": "Lease del trabajador que lo genera: la renueva mientras trabaja; vencida, otro lo toma."},
+        {"name": "intentos", "label": "Intentos", "type": "INTEGER", "description": "Cuántas veces fue tomado."},
+        {"name": "procesados", "label": "Procesados", "type": "INTEGER"},
+        {"name": "documentos", "label": "Documentos", "type": "INTEGER", "description": "HR y PU generados."},
+        {"name": "errores", "label": "Errores", "type": "LONG_TEXT",
+          "description": "JSON: [{contribuyente, mensaje}], el código del contribuyente que no se pudo emitir y por qué."},
+        {"name": "parte", "label": "Parte", "type": "TEXT", "description": "La clave de su archivo en el almacén: emision-<id>/parte-00001.pdf|zip."}
       ]
     }
   ],
@@ -913,6 +937,15 @@
       "source": "otro_frente",
       "target": "declaracion_predial",
       "fieldName": "declaracion",
+      "required": true
+    },
+    {
+      "name": "emision_lote_emision",
+      "label": "Emisión",
+      "inverseLabel": "Lotes",
+      "source": "emision_lote",
+      "target": "emision_masiva",
+      "fieldName": "emision",
       "required": true
     }
   ]

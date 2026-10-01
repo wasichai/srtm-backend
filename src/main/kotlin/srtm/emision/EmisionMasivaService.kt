@@ -31,10 +31,6 @@ import srtm.rentas.PREDIO
 import srtm.rentas.Predio
 import srtm.rentas.Registros
 import srtm.rentas.vigente
-import tools.jackson.databind.DeserializationFeature
-import tools.jackson.databind.json.JsonMapper
-import tools.jackson.module.kotlin.KotlinModule
-import tools.jackson.module.kotlin.readValue
 import wasichai.core.audit.AuditOperation
 import wasichai.core.audit.AuditService
 import wasichai.core.common.Actions
@@ -45,14 +41,11 @@ import wasichai.core.common.UnauthorizedException
 import wasichai.core.common.WasichaiException
 import wasichai.core.identity.CurrentUser
 import wasichai.core.metadata.MetadataService
-import wasichai.core.platform.SqlIdentifier
-import wasichai.core.platform.WasichaiSchemas
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
-import java.util.Optional
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -67,7 +60,7 @@ private const val FALLIDA = "FALLIDA"
 private val ACTIVOS = setOf(PENDIENTE, EN_PROCESO)
 
 private const val INTERRUMPIDA = "interrumpida por reinicio"
-private const val HUERFANA = "interrumpida: el proceso que la corría ya no está"
+internal const val HUERFANA = "interrumpida: el proceso que la corría ya no está"
 private const val DEPURADO = "archivo depurado"
 
 // a TERMINADA job whose file the retention removed
@@ -107,15 +100,6 @@ data class Emision(
     val terminado: String?
 )
 
-private val JSON: JsonMapper =
-    JsonMapper
-        .builder()
-        .addModule(KotlinModule.Builder().build())
-        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-        .build()
-
-fun erroresJson(errores: List<ErrorEmision>): String = JSON.writeValueAsString(errores)
-
 fun emisionDe(r: RegistroEmision) =
     Emision(
         id = r.id!!,
@@ -124,7 +108,7 @@ fun emisionDe(r: RegistroEmision) =
         estado = r.estado,
         total = r.total ?: 0,
         procesados = r.procesados ?: 0,
-        errores = r.errores?.takeIf { it.isNotBlank() }?.let { JSON.readValue<List<ErrorEmision>>(it) } ?: emptyList(),
+        errores = erroresDe(r.errores),
         archivo = r.archivo,
         tamano = r.tamano,
         mensaje = r.mensaje,
@@ -160,7 +144,7 @@ class EmisionMasivaService(
     documentos: DocumentosDeEmision,
     merger: PdfMerger,
     private val db: DatabaseClient,
-    private val schemas: WasichaiSchemas,
+    private val tablasCore: TablasCore,
     private val metadata: MetadataService,
     private val currentUser: CurrentUser,
     private val auditoria: AuditService,
@@ -488,36 +472,8 @@ class EmisionMasivaService(
         despues: Map<String, Any?>
     ) = auditoria.record(organizacion, null, EMISION_MASIVA, id, AuditOperation.UPDATE, before = antes, after = despues)
 
-    // the object's table in each organization, with its columns as core's metadata names them
-    private class Tabla(
-        val tabla: String,
-        private val columnas: Map<String, String>
-    ) {
-        fun columna(campo: String) = SqlIdentifier.quote(columnas.getValue(campo))
-    }
-
-    private suspend fun tablas(): List<Tabla> {
-        val campos = listOf("anio", "formato", "estado", "archivo", "mensaje", "terminado")
-        val columnas = campos.joinToString(",\n") { "max(CASE WHEN f.name = '$it' THEN f.column_name END) AS $it" }
-        return db
-            .sql(
-                """
-                SELECT o.physical_table AS tabla,
-                $columnas
-                FROM ${schemas.metadata}.custom_objects o
-                JOIN ${schemas.metadata}.custom_fields f ON f.object_id = o.id
-                WHERE o.name = :nombre
-                GROUP BY o.physical_table
-                """.trimIndent()
-            ).bind("nombre", EMISION_MASIVA)
-            .map { row, _ ->
-                Optional.ofNullable(row.get("tabla", String::class.java)) to
-                    campos.mapNotNull { c -> row.get(c, String::class.java)?.let { c to it } }.toMap()
-            }.all()
-            .asFlow()
-            .toList()
-            .mapNotNull { (tabla, cols) -> if (tabla.isEmpty || cols.size < campos.size) null else Tabla(schemas.dataTable(tabla.get()), cols) }
-    }
+    // the job's table in each organization, with the columns the maintenance writes
+    private suspend fun tablas(): List<TablaCore> = tablasCore.de(EMISION_MASIVA, listOf("anio", "formato", "estado", "archivo", "mensaje", "terminado"))
 
     // a TERMINADA job with a file, as its row has it
     private class FilaTerminada(

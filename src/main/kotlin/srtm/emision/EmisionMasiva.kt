@@ -30,8 +30,9 @@ data class ErrorEmision(
     val mensaje: String
 )
 
-// a contribuyente with vigente declaraciones in the year: its predios, in the order their PUs go
-class ContribuyenteAEmitir(
+// a contribuyente with vigente declaraciones in the year: its predios, in the order their PUs go. a lote keeps them as
+// json (contribuyentesJson)
+data class ContribuyenteAEmitir(
     val id: UUID,
     val codigo: String,
     val nombre: String,
@@ -69,7 +70,7 @@ class DocumentosPredialesDeEmision(
     ) = documentos.pu(predioId, contribuyenteId, anio)
 }
 
-// the file's name under srtm.emision.dir, and the download's
+// the file's name, the last part of its key in the almacén (claveResultado), and the download's
 fun nombreArchivo(
     anio: Int,
     id: String,
