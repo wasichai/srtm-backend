@@ -13,12 +13,12 @@ import srtm.rentas.Declaracion
 import srtm.rentas.Predio
 import java.io.File
 import java.math.BigDecimal
-import java.time.LocalDate
+import java.time.LocalDateTime
 import javax.imageio.ImageIO
 
 // what the HR shows of a contribuyente, its predios and the liquidación, formatted; and the hr template rendering it
 class HojaHrTest {
-    private val hoy = LocalDate.of(2026, 3, 15)
+    private val ahora = LocalDateTime.of(2026, 3, 15, 9, 30)
 
     @Test
     fun `the contribuyente shows its full domicilio fiscal and its condicion especial`() {
@@ -85,6 +85,8 @@ class HojaHrTest {
         val pdf = PdfRenderer().render("hr", mapOf("hr" to hoja()))
         val texto = texto(pdf)
         assertTrue("HOJA DE RESUMEN" in texto, texto)
+        assertTrue("MUNICIPALIDAD DISTRITAL DE PERENÉ" in texto && "RUC: 20195238961" in texto, texto)
+        assertTrue("Fecha: 15/03/2026 09:30" in texto, texto)
         assertTrue("01-01-0001" in texto && "01-02-0003" in texto, texto)
         assertTrue("S/ 110,000.00" in texto, texto)
         assertTrue(soles(liquidar("110000.00").impuestoAnual!!) in texto, texto)
@@ -122,7 +124,7 @@ class HojaHrTest {
     private fun hoja(
         declaraciones: List<Declaracion> = listOf(CONDOMINIO, PROPIA),
         liquidacion: srtm.impuesto.Liquidacion = liquidar("110000.00")
-    ) = hojaHr("MUNICIPALIDAD DISTRITAL DE PERENÉ", 2026, CONTRIBUYENTE, PREDIOS, declaraciones, liquidacion, hoy)
+    ) = hojaHr(CABECERA, 2026, CONTRIBUYENTE, PREDIOS, declaraciones, liquidacion, ahora)
 
     private companion object {
         val CONTRIBUYENTE =

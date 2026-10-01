@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Loads the catalogs the portal's forms offer: ubigeo (INEI districts), the categories of the official unit-value
-table, the partidas of obras complementarias, the srtm's usos del predio, vías and unidades urbanas.
+table, the partidas of obras complementarias, the srtm's usos del predio, vías and unidades urbanas, and the municipalidad (the PU and HR's header).
 
 ubigeo comes from data/ubigeo.csv, the categories from data/categorias_valor.csv, the obras from
 data/obras_complementarias.csv, the usos from data/usos_predio.csv (all shipped). vías and unidades urbanas come from the padrón Excel: the
@@ -9,13 +9,15 @@ same `direccion_predio` import_predios.py parses, its `<vía>` and `<habilitaci�
 
 The usos del predio follow the CSV by código: a código Core lacks is created, one whose clase, sub clase or uso
 changed is updated and one the CSV no longer has is deleted. Nothing references their records (a declaración keeps
-the names in its own ENUMs). The other catalogs are only created.
+the names in its own ENUMs). The other catalogs are only created. The municipalidad (data/municipalidad.json, the
+provisional header) is created only when the organization has none: the real one is edited in the admin.
 
 Run: python3 import_catalogos.py [--excel "CODIGO DE PREDIOS AL 2026.xlsx"] [--dry-run]
 Exit: 0 ok, 1 Core refused something.
 """
 import argparse
 import csv
+import json
 import os
 import re
 import sys
@@ -86,6 +88,14 @@ def read_usos(path):
             raise ValueError(f"usos del predio: al uso {codigo} le falta su clase o su sub clase")
         usos.append({"codigo": codigo, "clase": clase, "sub_clase": sub_clase, "uso": descripcion})
     return usos
+
+
+def read_municipalidad(path):
+    """The municipalidad to create, as a one-item list: the file's fields without its notes (a key starting with _)
+    and without the empty ones."""
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    return [{k: v for k, v in data.items() if not k.startswith("_") and v not in (None, "")}]
 
 
 def catalogs_from_rows(rows, ubigeo):
@@ -169,7 +179,7 @@ def sync_usos(client, usos, workers, dry_run=False):
     return len(new), skipped
 
 
-def load(client, ubigeos, vias, unidades, workers, categorias=(), obras=(), usos=(), dry_run=False):
+def load(client, ubigeos, vias, unidades, workers, categorias=(), obras=(), usos=(), dry_run=False, municipalidades=()):
     """Creates what Core lacks and syncs the usos del predio (only when there are usos: none leaves them as they
     are). With dry_run, reads Core and says what it would do. Returns (created, skipped)."""
     created = skipped = 0
@@ -180,6 +190,8 @@ def load(client, ubigeos, vias, unidades, workers, categorias=(), obras=(), usos
         (USO_PREDIO, list(usos), None),
         ("via", vias, lambda a: (a["tipo_via"], a["nombre"], a.get("ubigeo"))),
         ("unidad_urbana", unidades, lambda a: (a["tipo_unidad_urbana"], a["nombre"], a.get("ubigeo"))),
+        # one per organization: any record there is the one, so the provisional is created only into an empty object
+        ("municipalidad", list(municipalidades), lambda a: "municipalidad"),
     ]
     for object_name, items, key in plan:
         if object_name == USO_PREDIO:
@@ -206,6 +218,7 @@ def _parse_args(argv):
     p.add_argument("--categorias-csv", default=os.path.join(HERE, "data", "categorias_valor.csv"))
     p.add_argument("--obras-csv", default=os.path.join(HERE, "data", "obras_complementarias.csv"))
     p.add_argument("--usos-csv", default=os.path.join(HERE, "data", "usos_predio.csv"))
+    p.add_argument("--municipalidad-json", default=os.path.join(HERE, "data", "municipalidad.json"))
     p.add_argument("--excel", default=None, help="padrón Excel; without it only ubigeo is loaded")
     p.add_argument("--sheet", default=None, help="sheet name (default: the first)")
     p.add_argument("--distrito", default=DEFAULT_UBIGEO, help=f"ubigeo of the padrón's vías (default {DEFAULT_UBIGEO}, Perené)")
@@ -225,6 +238,7 @@ def main(argv=None):
     categorias = read_categorias(args.categorias_csv)
     obras = read_obras(args.obras_csv)
     usos = read_usos(args.usos_csv)
+    municipalidades = read_municipalidad(args.municipalidad_json)
     vias, unidades = catalogs_from_rows(read_xlsx(args.excel, args.sheet), args.distrito) if args.excel else ([], [])
     print(f"ubigeo: {len(ubigeos)}")
     print(f"categorías de valores unitarios: {len(categorias)}")
@@ -236,7 +250,7 @@ def main(argv=None):
     client = Client(args.core)
     try:
         client.login(args.email, args.password)
-        created, skipped = load(client, ubigeos, vias, unidades, args.workers, categorias, obras, usos, args.dry_run)
+        created, skipped = load(client, ubigeos, vias, unidades, args.workers, categorias, obras, usos, args.dry_run, municipalidades)
     except LoadError as e:
         method = getattr(e, "method", "POST")
         print(f"error {method} /api/objects/{e.object_name}/records (#{e.fila}) -> {e.error.status}\n{e.error.body}", file=sys.stderr)

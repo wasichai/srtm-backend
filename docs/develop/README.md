@@ -92,13 +92,16 @@ Con el servidor corriendo y `develop/.env` cargado:
 
 ```bash
 cd model
-python3 apply.py                                   # 19 objetos + 10 relaciones; idempotente
+python3 apply.py                                   # 21 objetos + 10 relaciones; idempotente
 python3 import_parametros.py                       # UIT, tramos y mínimo del predial; idempotente
+python3 import_catalogos.py                        # catálogos y la municipalidad (cabecera del PU y la HR); idempotente
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --limit 200
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"
 ```
 
+- **Cabecera del PU y la HR:** los datos de `model/data/municipalidad.json` son provisionales. Los reales se editan
+  en `/admin` (objeto *Municipalidad*); el escudo se configura con `SRTM_MUNICIPALIDAD_ESCUDO`.
 - **Datos personales:** el Excel y `model/reports/` traen DNI, nombres y domicilios. No se copian al repo: `*.xlsx`
   y `model/reports/` están en `.gitignore`.
 - **Tiempo de carga:** la importación completa son unos 42 000 registros. Con la base local tarda unos minutos. Por

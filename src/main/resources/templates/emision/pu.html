@@ -10,16 +10,15 @@
             <span th:text="|Emitido el ${pu.emitido} · PU del predio ${pu.predio.codigo}|">Emitido el</span>
         </div>
 
-        <table class="cabecera">
+        <div th:replace="~{cabecera :: cabecera(${pu.cabecera}, ${pu.emitido}, 'DECLARACIÓN JURADA DEL IMPUESTO PREDIAL — PU', 'Predio urbano')}"></div>
+
+        <table class="identificacion">
             <tr>
                 <td>
-                    <div class="municipalidad" th:text="${pu.municipalidad}">MUNICIPALIDAD</div>
-                    <div class="documento">DECLARACIÓN JURADA DEL IMPUESTO PREDIAL — PU</div>
-                    <div class="etiqueta">Predio urbano</div>
-                </td>
-                <td class="numero">
                     <span class="etiqueta">Año</span>
                     <span class="valor" th:text="${pu.anio}">2026</span>
+                </td>
+                <td>
                     <span class="etiqueta">N.° de declaración</span>
                     <span class="valor" th:text="${pu.declaraciones}">1</span>
                 </td>

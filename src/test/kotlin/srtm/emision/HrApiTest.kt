@@ -23,8 +23,8 @@ class HrApiTest : ConParametrosApiTest() {
     @Test
     fun `the hr of two predios, one in condominio, has the amounts of the liquidacion`() {
         val a = contribuyente()
-        val propio = post("/api/srtm/predios", mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "AV. MARGINAL 10", "condicion" to "URBANO"))
-        val compartido = post("/api/srtm/predios", mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "condicion" to "URBANO"))
+        val propio = post("/api/srtm/predios", mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "AV. MARGINAL 10", "tipo_predio" to "PREDIO URBANO"))
+        val compartido = post("/api/srtm/predios", mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO"))
         declarar(a["id"].asString(), propio["id"].asString(), "60000.00")
         declarar(a["id"].asString(), compartido["id"].asString(), "100000.00")
         // a second condómino takes 50 % out of a's 100 %
