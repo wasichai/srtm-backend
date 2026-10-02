@@ -295,8 +295,9 @@ de emisión y las deducciones (los parámetros ya se cargan, pero la DJ guarda s
 
 ## Arbitrios
 
-Los arbitrios se portan del negocio de `rentas` (`DeterminarArbitrios`). Por ahora está el modelo y la carga de una
-ordenanza; la determinación, sus consultas y la Hoja de Liquidación de Arbitrios (HLA) llegan en los PR siguientes.
+Los arbitrios se portan del negocio de `rentas` (`DeterminarArbitrios`). Por ahora están el modelo, la carga de una
+ordenanza y el cálculo (`srtm.arbitrios.Arbitrios`, una función pura). Los endpoints de la determinación, sus
+consultas y la Hoja de Liquidación de Arbitrios (HLA) llegan en los PR siguientes.
 
 **Modelo:**
 
@@ -354,6 +355,29 @@ python3 import_arbitrios.py --archivo arbitrios-2026.json
 - es idempotente con claves naturales: la ordenanza por `anio`, el servicio por `codigo`, la inafectación por predio,
   servicio y `vigencia_desde`; actualiza en su lugar lo que cambió y no borra nada;
 - sale con `0` si todo va bien, `1` si Core rechaza algo y `2` si el archivo no encaja (sin escribir nada).
+
+**Cálculo** (`Arbitrios.determinar`, de un predio y un año):
+- **Del año:** hace falta la ordenanza del año ratificada (acuerdo y fecha) y al menos un servicio vigente. Si no,
+  `faltan` lo dice y no se determina ningún predio.
+- **Cada mes a su fecha.** El mes *m* se decide el día 1 de *m* (`Periodo.atribucion`), no el día en que se corre:
+  - **Titular:** de las DJ del año que cubren ese día, la del titular principal. Gana el mayor `porcentaje_condominio`;
+    en empate, la `fecha_adquisicion` más antigua, luego el `codigo` de contribuyente menor y luego la secuencia de uso
+    menor. Se le cobra íntegro, sin prorrateo.
+  - **Qué días cubre una DJ:** desde el 1 de enero, o desde el día siguiente a su `fecha_adquisicion` si cae en el año;
+    hasta el 31 de diciembre, o hasta su `fecha_anulacion` si se anuló (descargo). Una importada sin fechas cubre el
+    año. Una venta el 20 de mayo da: vendedor de enero a mayo, comprador de junio a diciembre.
+  - **Zona:** `ARBITRIO_ZONA` del `sector_catastral` del predio.
+  - **Uso de arbitrio:** `ARBITRIO_USO` del código de uso de la DJ principal. Ese código es tan preciso como la DJ:
+    `XXYYZZ` con clase, sub clase y uso; `XXYY` sin uso; `XX` con solo la clase. Gana el prefijo más largo.
+  - **Servicios:** cada servicio vigente ese día, salvo que el predio tenga una inafectación suya vigente ese día o
+    que la cuota ya exista. Su monto es la tasa `TASA_ARBITRIO servicio:zona:uso` vigente ese día, tal cual (sin
+    área, prorrateo ni redondeo). `parametro_aplicado` guarda la llave exacta que se leyó.
+- **Meses sin cobro:** un mes sin titular, o sin sector o uso, no se cobra. Un predio que aparece en julio no debe de
+  enero a junio.
+- **No se puede determinar** un predio sin titular en ningún mes, o sin sector o uso en todos los meses con titular.
+- **Todo o nada:** si falta un parámetro (una zona, un uso, una tasa), no se determina nada de ese predio. `faltan`
+  nombra cada uno una vez (`TASA_ARBITRIO LIMPIEZA:Z1:CASA 2026`).
+- **Reejecutar no duplica:** las cuotas que ya existen no se recalculan.
 
 **Ninguna cifra inventada.** Todavía no hay una transcripción verificada de la ordenanza de arbitrios de Perené y su
 ratificación (E-6 del plan de desbloqueo D-02 de `normativa`). Hasta que la haya, el repo no lleva ni el JSON ni el CSV
