@@ -929,6 +929,20 @@
       ]
     },
     {
+      "name": "anulacion_cuota_arbitrio",
+      "label": "Anulación de cuota de arbitrio",
+      "pluralLabel": "Anulaciones de cuotas de arbitrio",
+      "description": "La corrección de una cuota de arbitrio: se agrega, nunca se edita ni se borra. La cuota anulada deja de contar, y la redeterminación del predio escribe la versión siguiente de su clave.",
+      "fields": [
+        {"name": "anio", "label": "Año", "type": "INTEGER", "required": true, "description": "El de la cuota: con el predio, lo que se consulta."},
+        {"name": "motivo", "label": "Motivo", "type": "TEXT", "required": true},
+        {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true, "description": "Por qué, de 5 a 500 caracteres."},
+        {"name": "fecha", "label": "Fecha", "type": "DATE", "required": true},
+        {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true,
+          "description": "El id de la cuota: una sola anulación por cuota."}
+      ]
+    },
+    {
       "name": "determinacion_arbitrio_masiva",
       "label": "Determinación masiva de arbitrios",
       "pluralLabel": "Determinaciones masivas de arbitrios",
@@ -1141,6 +1155,24 @@
       "source": "determinacion_arbitrio_lote",
       "target": "determinacion_arbitrio_masiva",
       "fieldName": "determinacion",
+      "required": true
+    },
+    {
+      "name": "anulacion_cuota_arbitrio_cuota",
+      "label": "Cuota",
+      "inverseLabel": "Anulación",
+      "source": "anulacion_cuota_arbitrio",
+      "target": "cuota_arbitrio",
+      "fieldName": "cuota",
+      "required": true
+    },
+    {
+      "name": "anulacion_cuota_arbitrio_predio",
+      "label": "Predio",
+      "inverseLabel": "Anulaciones de cuotas de arbitrio",
+      "source": "anulacion_cuota_arbitrio",
+      "target": "predio",
+      "fieldName": "predio",
       "required": true
     }
   ]

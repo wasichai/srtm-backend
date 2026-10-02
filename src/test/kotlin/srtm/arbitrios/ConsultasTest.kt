@@ -99,6 +99,16 @@ class ConsultasTest {
     }
 
     @Test
+    fun `an annulled cuota counts for nothing, and is pending again`() {
+        val todas = guardadas(hoy, Arbitrios.determinar(contexto, datos(emptyList()), "Determinación de prueba", hoy).cuotas)
+        val anulada = todas.first()
+        val m = Consultas.matriz(contexto, datos(todas).copy(anuladas = setOf(anulada.id!!)), personas, hoy)
+        assertEquals(BigDecimal("144.50"), m.total) // 153.00 less one 8.50
+        assertNull(m.filas[0].meses[0])
+        assertEquals(1, m.pendientes)
+    }
+
+    @Test
     fun `each month's titular, by the rule - the sale of may`() {
         val m = Consultas.matriz(contexto, datos(emptyList()), personas, hoy)
         assertEquals(List(5) { "ANA" } + List(7) { "BETO" }, m.titulares.map { it.titular?.nombre })

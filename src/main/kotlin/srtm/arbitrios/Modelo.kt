@@ -10,6 +10,7 @@ const val ORDENANZA_ARBITRIO = "ordenanza_arbitrio"
 const val SERVICIO_ARBITRIO = "servicio_arbitrio"
 const val INAFECTACION_ARBITRIO = "inafectacion_arbitrio"
 const val CUOTA_ARBITRIO = "cuota_arbitrio"
+const val ANULACION_CUOTA_ARBITRIO = "anulacion_cuota_arbitrio"
 
 // the records of the arbitrios (model/model.json). a relation is its target's id
 
@@ -74,6 +75,23 @@ data class CuotaArbitrio(
     val observacion: String? = null,
     val clave: String? = null
 )
+
+// the correction of a cuota: added, never edited nor deleted. clave is the cuota's id, so a cuota is annulled once.
+// predio and anio are the cuota's: what a predio's year reads them by
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class AnulacionCuotaArbitrio(
+    val id: String? = null,
+    val cuota: String? = null,
+    val predio: String? = null,
+    val anio: Int? = null,
+    val motivo: String? = null,
+    val observacion: String? = null,
+    val fecha: LocalDate? = null,
+    val clave: String? = null
+)
+
+// the version a cuota's clave carries: 1 for the first one, one more for each redetermination after an annulment
+fun versionDe(clave: String?): Int? = clave?.substringAfterLast('|', "")?.toIntOrNull()
 
 // rentas' det_arbitrio_uq: one cuota per predio, servicio, year and month. core has no composite unique, so the
 // unique field holds them joined; the version goes up with each annulment

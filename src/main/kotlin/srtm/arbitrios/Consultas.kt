@@ -94,7 +94,7 @@ object Consultas {
         soloDe: String? = null
     ): MatrizArbitrios {
         val anio = contexto.anio
-        val cuotas = datos.existentes.filter { it.anio == anio && (soloDe == null || it.contribuyente == soloDe) }
+        val cuotas = datos.vigentes.filter { it.anio == anio && (soloDe == null || it.contribuyente == soloDe) }
         val conCuotas = cuotas.mapNotNull { it.servicio }.toSet()
         val servicios =
             contexto.servicios.filter { s ->
