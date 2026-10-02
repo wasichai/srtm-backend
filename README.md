@@ -297,7 +297,7 @@ de emisión y las deducciones (los parámetros ya se cargan, pero la DJ guarda s
 
 Los arbitrios se portan del negocio de `rentas` (`DeterminarArbitrios`). Ya están el modelo, la carga de una
 ordenanza, el cálculo (`srtm.arbitrios.Arbitrios`, una función pura) y la determinación por predio y por contribuyente
-con sus consultas. La determinación masiva y la Hoja de Liquidación de Arbitrios (HLA) llegan en los PR siguientes.
+con sus consultas, y la determinación masiva. La Hoja de Liquidación de Arbitrios (HLA) llega en el PR siguiente.
 
 **Modelo:**
 
@@ -403,6 +403,34 @@ en su primer uso (`IndicesArbitrios`). Medido en el CI sobre 505 000 filas: list
 | GET | `/contribuyentes/{id}/arbitrios?anio` | Lo mismo por cada predio de sus DJ del año (o del que tiene cuotas), solo con las cuotas a su nombre, y su total. |
 | POST | `/predios/{id}/arbitrios` `{anio, observacion}` | **201** con las cuotas escritas; **200** con `[]` si no había nada pendiente; **422** con `faltan`; **400** si la observación no tiene de 5 a 500 caracteres; **403** sin permiso de creación sobre `cuota_arbitrio`. |
 | POST | `/contribuyentes/{id}/arbitrios` `{anio, observacion}` | Determina cada predio de sus DJ del año (también una anulada: puede cubrir los meses previos a una venta). Calcula todos antes de escribir: si uno no se puede determinar, **422** que lo nombra (`Predio <código>: …`) y no escribe ninguno. |
+
+**Determinación masiva** (`/api/srtm/arbitrios/determinaciones`). Determina todos los predios de un año en segundo
+plano, sobre la misma maquinaria de lotes de la [emisión masiva](#emisión-masiva):
+- **POST `{anio, observacion}` → 202** con el job PENDIENTE. Antes de crear nada responde:
+  - **403** si quien la lanza no tiene creación y edición sobre `determinacion_arbitrio_masiva` y creación sobre
+    `determinacion_arbitrio_lote` y `cuota_arbitrio`;
+  - **400** si la observación no tiene de 5 a 500 caracteres;
+  - **422** con `faltan` si el año no tiene su ordenanza ratificada, sus servicios o filas de tasas, zonas y usos;
+  - **409** si ya hay una del año en curso en la organización.
+- **Preparación.** En segundo plano y como quien la lanzó, toma los predios con alguna DJ del año (también anulada: puede
+  cubrir los meses previos a una venta), los ordena por código y los corta en lotes de `srtm.emision.lote`
+  (`determinacion_arbitrio_lote`). El job pasa a EN_PROCESO.
+- **Trabajadores.** Los mismos de la emisión toman sus lotes (`TrabajoDeterminacion`), turnándose con los de la emisión:
+  ninguna espera a que la otra termine.
+  - Un lote se procesa como el usuario que lo creó, con la ordenanza, los servicios, los parámetros y los usos del año
+    leídos una vez por lote.
+  - Cada predio se determina y se escribe como en el POST de su ficha, en su propia transacción.
+  - Un predio que no se puede determinar va a `errores` (`[{predio, mensaje}]`, por su código) y el lote sigue.
+  - Una cuota que ya existía no se vuelve a escribir, así que un lote retomado tras vencer su lease vuelve a empezar
+    sin duplicar nada.
+  - Toda escritura del lote exige su toma (`tomado_por` + `intentos`).
+- **Cierre.** Cuando todos sus lotes terminaron, el job pasa a **TERMINADA** con `procesados` (predios), `generadas`
+  (cuotas) y `errores`. No genera archivo, así que no pasa por ENSAMBLANDO. Mientras corre, `generadas` suma las de
+  sus lotes terminados.
+- **Fallos.** Igual que en la emisión: un lote que agota `srtm.emision.intentos` queda FALLIDO con todos sus predios en
+  `errores`; si su creador ya no existe o está deshabilitado, también; un job sin quien lo prepare pasa a FALLIDA.
+- **GET** lista (`?anio`) y **GET** `/{id}` devuelven el job. **DELETE** `/{id}` cancela sus lotes y lo borra (204);
+  las cuotas que escribió quedan, porque una cuota no se borra.
 
 **Permisos.** Consultar pide lectura de `cuota_arbitrio`, `servicio_arbitrio`, `ordenanza_arbitrio`,
 `inafectacion_arbitrio` y `parametro_tributario`. Determinar pide, además, creación sobre `cuota_arbitrio`. Nadie
