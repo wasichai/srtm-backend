@@ -169,6 +169,9 @@ class EmisionMasivaService(
                 )
             )
         val id = UUID.fromString(job.id)
+        // the lease again, now by the db's clock, the one fallarAbandonadas compares with: a skew of this instance's
+        // clock never fails a fresh job
+        estado.latirPreparacion(organizacion, id)
         // two POSTs at once both saw none: the oldest goes on, the other one goes
         val primera = estado.activas(organizacion, anio).minWithOrNull(compareBy({ it.second }, { it.first }))?.first
         if (primera != null && primera != id) {
@@ -198,8 +201,9 @@ class EmisionMasivaService(
         }
     }
 
-    // the preparation creates the lotes; the job is saved as it goes (the system's writes, but the caller's job): a
-    // caller who may create it but not update it, or not create its lotes, is refused before anything exists
+    // the preparation creates the lotes as the caller, and its transitions of the job (PENDIENTE -> EN_PROCESO, or
+    // FALLIDA if it fails) are system writes that core's audit log records as the caller's UPDATEs: a caller who may
+    // create the job but not update it, or not create its lotes, is refused before anything exists
     private suspend fun exigirPermisos(): AuthenticatedUser {
         val usuario = currentUser.require()
         val objeto = metadata.definitionOf(EMISION_MASIVA).obj.id
