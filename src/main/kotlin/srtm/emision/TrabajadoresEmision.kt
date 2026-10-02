@@ -24,6 +24,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.boot.context.event.ApplicationReadyEvent
 import org.springframework.context.event.EventListener
 import org.springframework.core.env.Environment
@@ -37,6 +38,7 @@ import java.time.Duration
 import java.time.Instant
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -108,13 +110,28 @@ internal suspend fun <T> conLatido(
         }
     }
 
+// another kind of job by lotes that the same workers take, in turns with the emission's lotes (the determination of
+// arbitrios). an implementation is a bean: every group finds them all
+interface TrabajoPorLotes {
+    // its jobs nobody works on any more failed, and those whose lotes all ended closed. each cycle, before a take
+    suspend fun mantener(lease: Duration)
+
+    // one of its lotes taken and processed by a worker of `instancia`: false if there was none to take
+    suspend fun procesarUno(
+        instancia: String,
+        lease: Duration
+    ): Boolean
+}
+
 // the workers of one instance (wasichai/srtm-backend#53, #54): `cantidad` coroutines that take the lotes of any
 // emission of any organization, generate their partes and assemble the emissions whose lotes all ended, coordinated
 // with the other instances' only through postgres (LotesEmision, EstadoEmisiones) and the almacén. `instancia` is
 // what the lotes they take say in tomado_por; `temporales` is this group's own work dir, local and disposable.
 //
-// a cycle: the emissions nobody works on any more are failed; one to assemble is claimed and assembled; else a lote
-// is taken and generated; with nothing done the worker waits `espera`, or until despertar(). a lote is generated as
+// a cycle: the emissions nobody works on any more are failed (and the other kinds' jobs kept, TrabajoPorLotes); one to
+// assemble is claimed and assembled; else a lote is taken and processed, of the kind whose turn it is (the kinds take
+// turns: a cycle starts with the one after the kind of the last lote taken, so a long emission never makes another
+// kind's job wait, nor the other way round); with nothing done the worker waits `espera`, or until despertar(). a lote is generated as
 // the user who created it (IdentidadEmision); the system's writes need nobody. every write of a lote is guarded by
 // its take and every write of an assembly by its token: one that lost it (lease expired and retaken, or the emission
 // cancelled or deleted) stops and touches nothing of the new owner's
@@ -130,13 +147,17 @@ class GrupoTrabajadores(
     merger: PdfMerger,
     private val identidad: IdentidadEmision,
     private val retencion: RetencionEmision,
-    private val parametros: ParametrosTributarios
+    private val parametros: ParametrosTributarios,
+    private val otros: List<TrabajoPorLotes> = emptyList()
 ) {
     private val generador = GeneradorEmision(documentos, merger)
     private val ensamblador = EnsambladorEmision(almacen, merger)
     private val lease = config.lease
     private val cadaLatido = lease.dividedBy(4)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineName("emision-$instancia"))
+
+    // the kind whose lote a cycle tries first: 0 the emission's, k the k-th of `otros`
+    private val turno = AtomicInteger(0)
 
     // one per worker: despertar rings them all, and a worker busy when it rang looks again as soon as it is done
     private val timbres = List(cantidad) { Channel<Unit>(Channel.CONFLATED) }
@@ -179,13 +200,34 @@ class GrupoTrabajadores(
     // true if it did something: then it looks again right away
     private suspend fun ciclo(): Boolean {
         for ((_, id) in estado.fallarAbandonadas(lease)) log.warn("la emisión masiva {} no tenía quien la corriera: FALLIDA", id)
+        // one kind failing is that kind's problem: the emission's work goes on
+        for (otro in otros) {
+            try {
+                otro.mantener(lease)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                log.error("no se pudieron mantener los trabajos de {}", otro.javaClass.simpleName, e)
+            }
+        }
         estado.reclamarEnsamblado(lease)?.let {
             ensamblar(it)
             return true
         }
-        lotes.tomar(instancia, lease)?.let {
-            procesar(it)
-            return true
+        val tipos = 1 + otros.size
+        val desde = turno.get()
+        for (i in 0 until tipos) {
+            val k = (desde + i) % tipos
+            val hizo =
+                if (k == 0) {
+                    lotes.tomar(instancia, lease)?.also { procesar(it) } != null
+                } else {
+                    otros[k - 1].procesarUno(instancia, lease)
+                }
+            if (hizo) {
+                turno.set((k + 1) % tipos)
+                return true
+            }
         }
         return false
     }
@@ -381,7 +423,8 @@ class TrabajadoresEmision(
     private val identidad: IdentidadEmision,
     private val retencion: RetencionEmision,
     private val parametros: ParametrosTributarios,
-    private val entorno: Environment
+    private val entorno: Environment,
+    private val otros: ObjectProvider<TrabajoPorLotes>
 ) {
     @Volatile
     private var propio: GrupoTrabajadores? = null
@@ -392,7 +435,21 @@ class TrabajadoresEmision(
         cantidad: Int,
         temporales: Path,
         documentos: DocumentosDeEmision = this.documentos
-    ) = GrupoTrabajadores(instancia, cantidad, temporales, config, lotes, estado, almacen, documentos, merger, identidad, retencion, parametros)
+    ) = GrupoTrabajadores(
+        instancia,
+        cantidad,
+        temporales,
+        config,
+        lotes,
+        estado,
+        almacen,
+        documentos,
+        merger,
+        identidad,
+        retencion,
+        parametros,
+        otros.orderedStream().toList()
+    )
 
     @EventListener(ApplicationReadyEvent::class)
     fun arrancar() {
