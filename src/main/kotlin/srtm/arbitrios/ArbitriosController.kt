@@ -70,14 +70,8 @@ class ArbitriosController(
         @RequestBody pedido: PedidoDeterminacion
     ) = escritas(arbitrios.determinarContribuyente(id, pedido))
 
-    // the problem core's handler would write, plus what is missing
     @ExceptionHandler(FaltanArbitrios::class)
-    fun faltan(ex: FaltanArbitrios): ProblemDetail =
-        ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.message).apply {
-            type = URI.create("${web.problemBaseUri.trimEnd('/')}/${HttpStatus.UNPROCESSABLE_CONTENT.value()}")
-            title = HttpStatus.UNPROCESSABLE_CONTENT.reasonPhrase
-            setProperty("faltan", ex.faltan)
-        }
+    fun faltan(ex: FaltanArbitrios): ProblemDetail = problemaFaltan(ex, web)
 
     private fun escritas(cuotas: List<CuotaArbitrio>) = ResponseEntity.status(if (cuotas.isEmpty()) HttpStatus.OK else HttpStatus.CREATED).body(cuotas)
 
@@ -113,3 +107,14 @@ class ArbitriosController(
         val RELACIONES = listOf("predio", "contribuyente", "servicio")
     }
 }
+
+// the problem core's handler would write, plus what is missing
+internal fun problemaFaltan(
+    ex: FaltanArbitrios,
+    web: WasichaiWebProperties
+): ProblemDetail =
+    ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.message).apply {
+        type = URI.create("${web.problemBaseUri.trimEnd('/')}/${HttpStatus.UNPROCESSABLE_CONTENT.value()}")
+        title = HttpStatus.UNPROCESSABLE_CONTENT.reasonPhrase
+        setProperty("faltan", ex.faltan)
+    }

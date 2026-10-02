@@ -116,6 +116,15 @@ class ArbitriosService(
         return calculadas.flatMap { (p, d) -> escribir(contexto, p, observacion, hoy, d) }
     }
 
+    // one predio of a masiva's lote, with the lote's contexto and the job's observación: what it wrote. FaltanArbitrios
+    // when it cannot be determined. as the lote's user, like a POST of the portal
+    suspend fun determinarEnLote(
+        contexto: ContextoArbitrios,
+        predio: UUID,
+        observacion: String,
+        hoy: LocalDate
+    ): List<CuotaArbitrio> = escribir(contexto, registros.get(PREDIO, Predio::class.java, predio), observacion, hoy)
+
     // GET /predios/{id}/arbitrios
     suspend fun matrizDelPredio(
         id: UUID,
