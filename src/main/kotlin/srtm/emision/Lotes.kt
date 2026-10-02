@@ -30,6 +30,16 @@ fun contribuyentesDe(json: String): List<ContribuyenteAEmitir> = JSON.readValue(
 
 fun erroresJson(errores: List<ErrorEmision>): String = JSON.writeValueAsString(errores)
 
+// the documents an emission asks for, as its job keeps them (a json list of names); none: the HR and the PUs, as
+// before the HLA
+fun documentosJson(documentos: Set<DocumentoEmision>): String = JSON.writeValueAsString(DocumentoEmision.entries.filter { it in documentos })
+
+fun documentosDe(json: String?): Set<DocumentoEmision> =
+    json
+        ?.takeIf { it.isNotBlank() }
+        ?.let { JSON.readValue<List<String>>(it).map(DocumentoEmision::valueOf).toSet() }
+        ?.ifEmpty { null } ?: POR_DEFECTO
+
 fun erroresDe(json: String?): List<ErrorEmision> = json?.takeIf { it.isNotBlank() }?.let { JSON.readValue(it) } ?: emptyList()
 
 // what a worker needs besides the jvm's base, and that base (a document in memory, the pdfbox of its merge)

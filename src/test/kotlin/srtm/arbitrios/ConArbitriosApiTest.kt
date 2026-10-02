@@ -31,7 +31,9 @@ abstract class ConArbitriosApiTest : SrtmApiTest() {
     // a year with its ordinance (ratified unless said), two servicios that rule only in it, a sector with its zona, the
     // uso of a casa with its tasas, and a predio of that sector declared by one contribuyente the whole year
     protected inner class Escenario(
-        ratificada: Boolean = true
+        ratificada: Boolean = true,
+        // each month's due date (ARBITRIO_VENCIMIENTO), which only the HLA reads
+        vencimientos: Boolean = false
     ) {
         val anio = anioLibre()
         val sector = "S${uniqueDocumento()}"
@@ -63,6 +65,7 @@ abstract class ConArbitriosApiTest : SrtmApiTest() {
             parametro("ARBITRIO_USO", "0101", texto = "CASA")
             parametro("TASA_ARBITRIO", "${codigos[0]}:Z1:CASA", valor = "8.50")
             parametro("TASA_ARBITRIO", "${codigos[1]}:Z1:CASA", valor = "4.25")
+            if (vencimientos) (1..12).forEach { parametro("ARBITRIO_VENCIMIENTO", "$it", texto = "$anio-${"%02d".format(it)}-28") }
         }
 
         val contribuyente = inscribir()

@@ -69,7 +69,8 @@ data class RegistroEmision(
     val tamano: Long? = null,
     val mensaje: String? = null,
     val iniciado: String? = null,
-    val terminado: String? = null
+    val terminado: String? = null,
+    val documentos: String? = null
 )
 
 // the job of the epic's contract (wasichai/srtm-backend#37)
@@ -85,7 +86,9 @@ data class Emision(
     val tamano: Long?,
     val mensaje: String?,
     val iniciado: String?,
-    val terminado: String?
+    val terminado: String?,
+    // what each contribuyente gets (HR, PU, HLA)
+    val documentos: List<String> = POR_DEFECTO.map { it.name }
 )
 
 fun emisionDe(r: RegistroEmision) =
@@ -101,7 +104,8 @@ fun emisionDe(r: RegistroEmision) =
         tamano = r.tamano,
         mensaje = r.mensaje,
         iniciado = r.iniciado,
-        terminado = r.terminado
+        terminado = r.terminado,
+        documentos = DocumentoEmision.entries.filter { it in documentosDe(r.documentos) }.map { it.name }
     )
 
 // the file of a TERMINADA job, to download: streamed from the almacén, with its size from there too
@@ -138,18 +142,26 @@ class EmisionMasivaService(
     private val estado: EstadoEmisiones,
     private val retencion: RetencionEmision,
     private val trabajadores: TrabajadoresEmision,
-    private val config: EmisionProperties
+    private val config: EmisionProperties,
+    private val documentos: DocumentosDeEmision
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // `incluir`: the documents of each contribuyente. one that asks for the HLA is refused (422, with what is missing)
+    // when the year lacks what every HLA needs, before anything exists
     suspend fun emitir(
         anio: Int,
-        formato: FormatoEmision
+        formato: FormatoEmision,
+        incluir: Set<DocumentoEmision> = POR_DEFECTO
     ): Emision {
         val llamante =
             ReactiveSecurityContextHolder.getContext().awaitFirstOrNull()?.authentication
                 ?: throw UnauthorizedException("Authentication required")
         val usuario = exigirPermisos()
+        if (DocumentoEmision.HLA in incluir) {
+            val faltan = documentos.faltanHla(anio)
+            if (faltan.isNotEmpty()) throw FaltanParametros(anio, faltan)
+        }
         val organizacion = usuario.organizationId
         if (estado.activas(organizacion, anio).isNotEmpty()) throw ConflictException(enCurso(anio))
         val job =
@@ -159,6 +171,7 @@ class EmisionMasivaService(
                 mapOf(
                     "anio" to anio,
                     "formato" to formato.name,
+                    "documentos" to documentosJson(incluir),
                     "estado" to PENDIENTE,
                     "total" to 0,
                     "procesados" to 0,
