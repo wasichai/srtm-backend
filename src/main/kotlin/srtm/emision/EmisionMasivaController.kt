@@ -1,13 +1,15 @@
 package srtm.emision
 
+import kotlinx.coroutines.reactor.awaitSingleOrNull
+import org.springframework.core.ResolvableType
 import org.springframework.core.io.Resource
 import org.springframework.core.io.buffer.DataBuffer
 import org.springframework.core.io.buffer.DataBufferUtils
 import org.springframework.core.io.buffer.DefaultDataBufferFactory
 import org.springframework.http.ContentDisposition
-import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
-import org.springframework.http.ResponseEntity
+import org.springframework.http.MediaType
+import org.springframework.http.codec.ResourceHttpMessageWriter
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -17,7 +19,9 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.server.ServerWebExchange
 import reactor.core.publisher.Flux
+import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
 import java.time.LocalDate
 import java.util.UUID
@@ -60,37 +64,49 @@ class EmisionMasivaController(
     ) = emisiones.eliminar(id)
 
     // the file, streamed from the almacén (never whole in memory), to download. its length comes from the store, so
-    // the response has a Content-Length without reading the file. the name is rebuilt from the job
+    // the response has a Content-Length without reading the file. the name is rebuilt from the job. written straight
+    // to the response: a ResponseEntity has one body type, and the file and the stream need two (escribirDescarga)
     @GetMapping("/{id}/archivo")
     suspend fun archivo(
-        @PathVariable id: UUID
-    ): ResponseEntity<Flux<DataBuffer>> {
+        @PathVariable id: UUID,
+        exchange: ServerWebExchange
+    ) {
         val descarga = emisiones.archivo(id)
         val job = descarga.job
         val formato = FormatoEmision.valueOf(job.formato!!)
-        return ResponseEntity
-            .ok()
-            .contentType(formato.mediaType)
-            .contentLength(descarga.tamano)
-            .header(
-                HttpHeaders.CONTENT_DISPOSITION,
-                ContentDisposition
-                    .attachment()
-                    .filename(nombreArchivo(job.anio!!, job.id, formato))
-                    .build()
-                    .toString()
-            ).body(cuerpoDeDescarga(descarga.recurso))
+        val cabeceras = exchange.response.headers
+        cabeceras.contentType = formato.mediaType
+        cabeceras.contentLength = descarga.tamano
+        cabeceras.contentDisposition =
+            ContentDisposition
+                .attachment()
+                .filename(nombreArchivo(job.anio!!, job.id, formato))
+                .build()
+        escribirDescarga(descarga.recurso, formato.mediaType, exchange).awaitSingleOrNull()
     }
 }
 
 // the chunks the download is written in
 private const val TROZO = 64 * 1024
 
-// the file as it is read, never whole in memory. a file on disk is read with an async channel; anything else (an s3
-// object) is a blocking stream, read on boundedElastic: never on the event loop, which spring's own encoder would do
-fun cuerpoDeDescarga(recurso: Resource): Flux<DataBuffer> =
+private val RECURSOS = ResourceHttpMessageWriter(TROZO)
+
+// the file as it is read, never whole in memory, after the headers the caller set. a file on disk goes to spring's own
+// writer, as a ResponseEntity<Resource> would: an async channel, and a Range answered with a 206. anything else (an s3
+// object) is a blocking stream, read on boundedElastic (cuerpoDeDescarga), and answers no Range: always the whole file
+fun escribirDescarga(
+    recurso: Resource,
+    tipo: MediaType,
+    exchange: ServerWebExchange
+): Mono<Void> =
     if (recurso.isFile) {
-        DataBufferUtils.read(recurso, DefaultDataBufferFactory.sharedInstance, TROZO)
+        val recursoTipo = ResolvableType.forClass(Resource::class.java)
+        RECURSOS.write(Mono.just(recurso), recursoTipo, recursoTipo, tipo, exchange.request, exchange.response, emptyMap<String, Any>())
     } else {
-        DataBufferUtils.readInputStream(recurso::getInputStream, DefaultDataBufferFactory.sharedInstance, TROZO).subscribeOn(Schedulers.boundedElastic())
+        exchange.response.writeWith(cuerpoDeDescarga(recurso))
     }
+
+// a blocking stream in chunks, opened and read on boundedElastic: never on the event loop, which spring's own encoder
+// would do
+fun cuerpoDeDescarga(recurso: Resource): Flux<DataBuffer> =
+    DataBufferUtils.readInputStream(recurso::getInputStream, DefaultDataBufferFactory.sharedInstance, TROZO).subscribeOn(Schedulers.boundedElastic())

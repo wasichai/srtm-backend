@@ -6,8 +6,15 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.springframework.core.io.AbstractResource
 import org.springframework.core.io.FileSystemResource
+import org.springframework.core.io.Resource
 import org.springframework.core.io.buffer.DataBuffer
 import org.springframework.core.io.buffer.DataBufferUtils
+import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
+import org.springframework.mock.http.server.reactive.MockServerHttpRequest
+import org.springframework.mock.http.server.reactive.MockServerHttpResponse
+import org.springframework.mock.web.server.MockServerWebExchange
 import reactor.core.publisher.Flux
 import java.io.ByteArrayInputStream
 import java.io.InputStream
@@ -17,8 +24,8 @@ import java.time.Duration
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
-// the body of GET /emisiones/{id}/archivo: in chunks, and a blocking stream (an s3 object) never read on the caller's
-// thread, which in the server is netty's event loop
+// the body of GET /emisiones/{id}/archivo: a file on disk through spring's writer (its ranges answered), and a
+// blocking stream (an s3 object) in chunks, never read on the caller's thread, which in the server is netty's event loop
 class DescargaEmisionTest {
     @TempDir
     lateinit var dir: Path
@@ -54,15 +61,50 @@ class DescargaEmisionTest {
     }
 
     @Test
-    fun `a file on disk is read as it is`() {
+    fun `a file on disk answers a range with a 206 and its part, and without one the whole file`() {
         val bytes = Random(5).nextBytes(200_000)
-        val archivo = Files.write(dir.resolve("emision.pdf"), bytes)
+        val archivo = FileSystemResource(Files.write(dir.resolve("emision.pdf"), bytes))
 
-        val (leido, trozos) = leer(cuerpoDeDescarga(FileSystemResource(archivo)))
+        val parte = descargar(archivo, "bytes=100-199")
+        val entera = descargar(archivo, null)
 
-        assertEquals(bytes.toList(), leido.toList())
-        assertTrue(trozos.all { it <= 64 * 1024 }, "$trozos")
+        assertEquals(HttpStatus.PARTIAL_CONTENT, parte.statusCode)
+        assertEquals("bytes 100-199/200000", parte.headers.getFirst(HttpHeaders.CONTENT_RANGE))
+        assertEquals(100, parte.headers.contentLength)
+        assertEquals(bytes.copyOfRange(100, 200).toList(), cuerpo(parte).toList())
+        assertTrue(entera.statusCode in setOf(null, HttpStatus.OK), "${entera.statusCode}")
+        assertEquals(bytes.toList(), cuerpo(entera).toList())
     }
+
+    @Test
+    fun `a stream answers the whole file even to a range`() {
+        val bytes = Random(7).nextBytes(1000)
+        val recurso =
+            object : AbstractResource() {
+                override fun getDescription() = "un objeto de s3"
+
+                override fun getInputStream(): InputStream = ByteArrayInputStream(bytes)
+            }
+
+        val respuesta = descargar(recurso, "bytes=0-9")
+
+        assertTrue(respuesta.statusCode in setOf(null, HttpStatus.OK), "${respuesta.statusCode}")
+        assertEquals(bytes.toList(), cuerpo(respuesta).toList())
+    }
+
+    // the response escribirDescarga writes for a GET with that Range
+    private fun descargar(
+        recurso: Resource,
+        rango: String?
+    ): MockServerHttpResponse {
+        val pedido = MockServerHttpRequest.get("/api/srtm/emisiones/x/archivo")
+        if (rango != null) pedido.header(HttpHeaders.RANGE, rango)
+        val exchange = MockServerWebExchange.from(pedido)
+        escribirDescarga(recurso, MediaType.APPLICATION_PDF, exchange).block(Duration.ofSeconds(10))
+        return exchange.response
+    }
+
+    private fun cuerpo(respuesta: MockServerHttpResponse): ByteArray = leer(respuesta.body).first
 
     // the bytes, and the size of each chunk they came in
     private fun leer(cuerpo: Flux<DataBuffer>): Pair<ByteArray, List<Int>> {

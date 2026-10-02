@@ -996,7 +996,8 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
   - **Descarga:** pasa por el backend, que mantiene el control de permisos, en streaming desde S3: el `Content-Length`
     sale de un `HeadObject` y el objeto se abre recién al leerlo, sin cargarlo en memoria, en trozos de 64 KiB leídos
     en `boundedElastic` (la lectura de S3 bloquea: nunca en el event loop de Netty). Si el cliente corta, se aborta la
-    conexión con S3 en vez de leer el resto. (Una URL prefirmada queda como opción a futuro.)
+    conexión con S3 en vez de leer el resto. No responde `Range` (siempre el archivo entero). (Una URL prefirmada queda
+    como opción a futuro.)
   - **Probar en local:** `docker compose --profile s3 up -d` levanta MinIO (`127.0.0.1:9000`, consola en
     `127.0.0.1:9001`, usuario `srtm`, clave `srtm-minio`) y crea el bucket `srtm-emisiones`. Luego se arranca con
     `SRTM_EMISION_ALMACEN=s3`, `SRTM_EMISION_S3_BUCKET=srtm-emisiones`, `SRTM_EMISION_S3_ENDPOINT=http://localhost:9000`,
@@ -1010,8 +1011,10 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
   sus lotes por generar pasan a FALLIDO (sus trabajadores lo notan en su siguiente escritura y abortan); luego se borran
   sus lotes, el job y todo lo que el almacén guarde bajo `emision-<id>/`. Ya no da 409.
 - **Descarga** `GET /api/srtm/emisiones/{id}/archivo`: el `Resource` del almacén, en streaming, sin cargar el archivo en
-  memoria, en trozos de 64 KiB (un archivo en disco, con un canal asíncrono; otro recurso, como un objeto de S3, en
-  `boundedElastic`); el `Content-Length` sale de `tamano` del almacén, sin leer el archivo. 409 si no está TERMINADA, 410 si se
+  memoria; el `Content-Length` sale de `tamano` del almacén, sin leer el archivo. Un archivo en disco (`AlmacenLocal`)
+  lo escribe el `ResourceHttpMessageWriter` de Spring, con un canal asíncrono, y responde los `Range` con 206 (una
+  descarga cortada puede retomarse). Otro recurso, como un objeto de S3, va en trozos de 64 KiB leídos en
+  `boundedElastic` y **no responde `Range`**: siempre el archivo entero, con 200. 409 si no está TERMINADA, 410 si se
   depuró, 404 si el almacén ya no tiene la clave. La clave y el nombre (`Content-Disposition`) se arman del job, nunca
   se leen del registro.
 

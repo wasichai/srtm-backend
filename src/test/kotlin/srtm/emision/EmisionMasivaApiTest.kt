@@ -346,6 +346,27 @@ class EmisionMasivaApiTest : ConEscenarioApiTest() {
     }
 
     @Test
+    fun `a file of the local almacen answers a range with its part`() {
+        val anio = anio()
+        val id = terminadaConArchivo(anio, "2020-01-01T00:00:00Z")
+
+        val result =
+            client
+                .get()
+                .uri("/api/srtm/emisiones/$id/archivo")
+                .header(HttpHeaders.AUTHORIZATION, token)
+                .header(HttpHeaders.RANGE, "bytes=1-2")
+                .exchange()
+                .expectBody(String::class.java)
+                .returnResult()
+
+        assertEquals(HttpStatus.PARTIAL_CONTENT.value(), result.status.value(), result.responseBody)
+        assertEquals("df", result.responseBody)
+        assertEquals("bytes 1-2/3", result.responseHeaders.getFirst(HttpHeaders.CONTENT_RANGE))
+        assertEquals("attachment; filename=\"emision-$anio-$id.pdf\"", result.responseHeaders.getFirst(HttpHeaders.CONTENT_DISPOSITION))
+    }
+
+    @Test
     fun `the file of a finished masiva that the almacen no longer has is a 404`() {
         val anio = anio()
         val id = terminadaConArchivo(anio, "2020-01-01T00:00:00Z")
