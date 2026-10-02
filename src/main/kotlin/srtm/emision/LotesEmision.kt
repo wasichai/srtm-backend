@@ -1,42 +1,46 @@
 package srtm.emision
 
-import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.reactive.asFlow
-import kotlinx.coroutines.reactive.awaitFirstOrNull
 import org.springframework.r2dbc.core.DatabaseClient
-import org.springframework.r2dbc.core.awaitRowsUpdated
 import org.springframework.stereotype.Component
 import java.time.Duration
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicReference
 
 // model/model.json
 const val EMISION_LOTE = "emision_lote"
-
-private const val PENDIENTE = "PENDIENTE"
-private const val EN_PROCESO = "EN_PROCESO"
-private const val TERMINADO = "TERMINADO"
-private const val FALLIDO = "FALLIDO"
-
-private val ACTIVOS = listOf(PENDIENTE, EN_PROCESO)
 
 internal val CAMPOS_LOTE =
     listOf("emision", "numero", "contribuyentes", "estado", "tomado_por", "latido", "intentos", "procesados", "documentos", "errores", "parte")
 internal val CAMPOS_EMISION =
     listOf("anio", "formato", "estado", "total", "procesados", "errores", "archivo", "tamano", "mensaje", "iniciado", "terminado", "latido")
 
+// the emission as a kind of job by lotes: its lotes carry contribuyentes and count documentos, and a take returns the
+// emission's formato with its anio
+val TIPO_EMISION =
+    TipoLotes(
+        trabajo = EMISION_MASIVA,
+        lote = EMISION_LOTE,
+        relacion = "emision",
+        carga = "contribuyentes",
+        producidos = "documentos",
+        camposTrabajo = CAMPOS_EMISION,
+        camposLote = CAMPOS_LOTE,
+        delTrabajo = listOf("formato")
+    )
+
 // a lote a worker of this instance took: what it needs to generate its part
 data class LoteTomado(
-    val id: UUID,
-    val organizacion: UUID,
+    override val id: UUID,
+    override val organizacion: UUID,
     val emision: UUID,
     val numero: Int,
     val contribuyentes: List<ContribuyenteAEmitir>,
-    val intentos: Int,
+    override val intentos: Int,
     val creadoPor: UUID?,
     val anio: Int,
     val formato: FormatoEmision
-)
+) : TomaDeLote {
+    override val trabajo: UUID get() = emision
+}
 
 // a lote as the assembly reads it
 data class ParteLote(
@@ -50,141 +54,41 @@ data class ParteLote(
     val parte: String?
 )
 
-// the lotes' table of an organization and the one of its emissions, which the lotes point to
-internal class TablasLote(
-    val lotes: TablaCore,
-    val emisiones: TablaCore
-) {
-    val organizacion: UUID get() = lotes.organizacion
-}
+// the emission's lotes and the one of its jobs, which the lotes point to
+internal suspend fun TablasCore.lotes(organizacion: UUID? = null): List<TablasLote> = lotes(TIPO_EMISION, organizacion)
 
-internal suspend fun TablasCore.lotes(organizacion: UUID? = null): List<TablasLote> {
-    val emisiones = de(EMISION_MASIVA, CAMPOS_EMISION).associateBy { it.organizacion }
-    return de(EMISION_LOTE, CAMPOS_LOTE)
-        .filter { organizacion == null || it.organizacion == organizacion }
-        .mapNotNull { l -> emisiones[l.organizacion]?.let { TablasLote(l, it) } }
-}
-
-// the PENDIENTE and EN_PROCESO lotes of an emission go FALLIDO: their workers lose them at their next write. how many
-internal suspend fun cancelarLotes(
-    db: DatabaseClient,
-    lotes: TablaCore,
-    emision: UUID
-): Int {
-    val e = lotes.columna("estado")
-    return db
-        .sql("UPDATE ${lotes.tabla} SET $e = :fallido, updated_at = now() WHERE ${lotes.columna("emision")} = :emision AND $e IN (:activos)")
-        .bind("fallido", FALLIDO)
-        .bind("emision", emision)
-        .bind("activos", ACTIVOS)
-        .fetch()
-        .awaitRowsUpdated()
-        .toInt()
-}
-
-// the emission's procesados is the sum of its lotes': each worker counts its own, none overwrites another's. two
-// workers saving at once may each sum before the other's commit and leave a lower sum for a moment: the next write
-// corrects it, and the emission's terminar sets the final count
-internal suspend fun sumarProcesadosLotes(
-    db: DatabaseClient,
-    t: TablasLote,
-    emision: UUID
-) {
-    val l = t.lotes
-    val e = t.emisiones
-    db
-        .sql(
-            "UPDATE ${e.tabla} SET ${e.columna("procesados")} = " +
-                "(SELECT coalesce(sum(${l.columna("procesados")}), 0) FROM ${l.tabla} WHERE ${l.columna("emision")} = :emision), " +
-                "updated_at = now() WHERE id = :emision AND ${e.columna("estado")} IN ('EN_PROCESO', 'ENSAMBLANDO')"
-        ).bind("emision", emision)
-        .fetch()
-        .awaitRowsUpdated()
-}
-
-// the lease as postgres takes it
-internal fun segundos(lease: Duration): Double = lease.toMillis() / 1000.0
-
-// the lotes of the masivas (wasichai/srtm-backend#53, #54), straight on their tables: the system's writes, without
-// audit. a lote is taken with FOR UPDATE SKIP LOCKED, so two workers of any instance never take the same one; the take
-// that got it is the only one that writes it while it is EN_PROCESO (tomado_por and intentos), and a write that finds
-// it no longer so (cancelled, deleted, or taken again after its lease expired) is false: its worker stops
+// the lotes of the masivas (wasichai/srtm-backend#53, #54): MaquinaLotes on emision_lote, with the emission's types
 @Component
 class LotesEmision(
-    private val db: DatabaseClient,
-    private val tablas: TablasCore
+    db: DatabaseClient,
+    tablas: TablasCore
 ) {
-    // the organization of the last lote this instance took: the next take starts with the one after it
-    private val ultima = AtomicReference<UUID?>(null)
+    private val maquina = MaquinaLotes(db, tablas, TIPO_EMISION)
 
-    // the next lote of the oldest emission EN_PROCESO: a PENDIENTE one, or one EN_PROCESO whose worker stopped beating
-    // `lease` ago. it counts one more attempt and starts over. the organizations take turns: each take starts with the
-    // one after the organization of the last lote taken, so one organization's emission never waits for another's to
-    // end. null: none to take
+    // the next lote of the oldest emission EN_PROCESO (MaquinaLotes.tomar). null: none to take
     suspend fun tomar(
         instancia: String,
         lease: Duration
-    ): LoteTomado? {
-        // in TablasCore's order (by organization), rotated to start after the last one; it may be gone: from the first
-        val todas = tablas.lotes()
-        val antes = ultima.get()
-        val desde = (todas.indexOfFirst { it.organizacion == antes } + 1) % todas.size.coerceAtLeast(1)
-        for (t in todas.drop(desde) + todas.take(desde)) {
-            val l = t.lotes
-            val e = t.emisiones
-            val tomado =
-                db
-                    .sql(
-                        """
-                        UPDATE ${l.tabla} AS l SET ${l.columna("estado")} = :en_proceso, ${l.columna("tomado_por")} = :yo,
-                            ${l.columna("latido")} = now(), ${l.columna("intentos")} = coalesce(l.${l.columna("intentos")}, 0) + 1,
-                            ${l.columna("procesados")} = 0, ${l.columna("documentos")} = 0, ${l.columna("errores")} = NULL, updated_at = now()
-                        FROM ${e.tabla} AS e
-                        WHERE l.id = (
-                            SELECT l2.id FROM ${l.tabla} l2 JOIN ${e.tabla} e2 ON e2.id = l2.${l.columna("emision")}
-                            WHERE e2.${e.columna("estado")} = :en_proceso
-                              AND (l2.${l.columna("estado")} = :pendiente
-                                OR (l2.${l.columna("estado")} = :en_proceso AND l2.${l.columna("latido")} < now() - make_interval(secs => :lease)))
-                            ORDER BY e2.created_at, l2.${l.columna("numero")}
-                            LIMIT 1
-                            FOR UPDATE OF l2 SKIP LOCKED
-                        ) AND e.id = l.${l.columna("emision")}
-                        RETURNING l.id AS id, l.organization_id AS organizacion, l.${l.columna("emision")} AS emision,
-                            l.${l.columna("numero")} AS numero, l.${l.columna("contribuyentes")} AS contribuyentes,
-                            l.${l.columna("intentos")} AS intentos, l.created_by AS creado_por,
-                            e.${e.columna("anio")} AS anio, e.${e.columna("formato")} AS formato
-                        """.trimIndent()
-                    ).bind("en_proceso", EN_PROCESO)
-                    .bind("pendiente", PENDIENTE)
-                    .bind("yo", instancia)
-                    .bind("lease", segundos(lease))
-                    .map { row, _ ->
-                        LoteTomado(
-                            id = row.get("id", UUID::class.java)!!,
-                            organizacion = row.get("organizacion", UUID::class.java)!!,
-                            emision = row.get("emision", UUID::class.java)!!,
-                            numero = row.get("numero", Long::class.javaObjectType)!!.toInt(),
-                            contribuyentes = contribuyentesDe(row.get("contribuyentes", String::class.java)!!),
-                            intentos = row.get("intentos", Long::class.javaObjectType)!!.toInt(),
-                            creadoPor = row.get("creado_por", UUID::class.java),
-                            anio = row.get("anio", Long::class.javaObjectType)!!.toInt(),
-                            formato = FormatoEmision.valueOf(row.get("formato", String::class.java)!!)
-                        )
-                    }.one()
-                    .awaitFirstOrNull()
-            if (tomado != null) {
-                ultima.set(tomado.organizacion)
-                return tomado
-            }
+    ): LoteTomado? =
+        maquina.tomar(instancia, lease)?.let {
+            LoteTomado(
+                id = it.id,
+                organizacion = it.organizacion,
+                emision = it.trabajo,
+                numero = it.numero,
+                contribuyentes = contribuyentesDe(it.carga),
+                intentos = it.intentos,
+                creadoPor = it.creadoPor,
+                anio = it.anio,
+                formato = FormatoEmision.valueOf(it.delTrabajo.getValue("formato")!!)
+            )
         }
-        return null
-    }
 
     // the lease renewed: false if the lote is no longer this instance's
     suspend fun latir(
         lote: LoteTomado,
         instancia: String
-    ): Boolean = escribir(lote, instancia, { "${it.columna("latido")} = now()" })
+    ): Boolean = maquina.latir(lote, instancia)
 
     // the lote's progress, and its emission's with it. a progress saved is a beat too
     suspend fun avanzar(
@@ -192,18 +96,7 @@ class LotesEmision(
         instancia: String,
         procesados: Int,
         errores: List<ErrorEmision>
-    ): Boolean {
-        val propio =
-            escribir(
-                lote,
-                instancia,
-                { "${it.columna("procesados")} = :procesados, ${it.columna("errores")} = :errores, ${it.columna("latido")} = now()" },
-                "procesados" to procesados,
-                "errores" to erroresJson(errores)
-            )
-        if (propio) sumarProcesados(lote)
-        return propio
-    }
+    ): Boolean = maquina.avanzar(lote, instancia, procesados, erroresJson(errores))
 
     // the lote's part is in the almacén under `parte`: TERMINADO, with what it counted
     suspend fun terminar(
@@ -213,134 +106,42 @@ class LotesEmision(
         documentos: Int,
         errores: List<ErrorEmision>,
         parte: String
-    ): Boolean {
-        val propio =
-            escribir(
-                lote,
-                instancia,
-                {
-                    "${it.columna("estado")} = :terminado, ${it.columna("procesados")} = :procesados, " +
-                        "${it.columna("documentos")} = :documentos, ${it.columna("errores")} = :errores, ${it.columna("parte")} = :parte"
-                },
-                "terminado" to TERMINADO,
-                "procesados" to procesados,
-                "documentos" to documentos,
-                "errores" to erroresJson(errores),
-                "parte" to parte
-            )
-        if (propio) sumarProcesados(lote)
-        return propio
-    }
+    ): Boolean = maquina.terminar(lote, instancia, procesados, documentos, erroresJson(errores), parte)
 
     // the lote could not be generated (its attempts are over): FALLIDO, with why
     suspend fun fallar(
         lote: LoteTomado,
         instancia: String,
         errores: List<ErrorEmision>
-    ): Boolean =
-        escribir(
-            lote,
-            instancia,
-            { "${it.columna("estado")} = :fallido, ${it.columna("errores")} = :errores" },
-            "fallido" to FALLIDO,
-            "errores" to erroresJson(errores)
-        )
+    ): Boolean = maquina.fallar(lote, instancia, erroresJson(errores))
 
     // the lote is let go (the instance stops): PENDIENTE again, for the next taker, which counts one more attempt
     suspend fun liberar(
         lote: LoteTomado,
         instancia: String
-    ): Boolean =
-        escribir(
-            lote,
-            instancia,
-            { "${it.columna("estado")} = :pendiente, ${it.columna("tomado_por")} = NULL" },
-            "pendiente" to PENDIENTE
-        )
+    ): Boolean = maquina.liberar(lote, instancia)
 
     // null: the row is gone (its emission was deleted)
-    suspend fun estado(lote: LoteTomado): String? {
-        val l = tablas.lotes(lote.organizacion).firstOrNull()?.lotes ?: return null
-        return db
-            .sql("SELECT ${l.columna("estado")} AS estado FROM ${l.tabla} WHERE id = :id")
-            .bind("id", lote.id)
-            .map { row, _ -> row.get("estado", String::class.java)!! }
-            .one()
-            .awaitFirstOrNull()
-    }
+    suspend fun estado(lote: LoteTomado): String? = maquina.estado(lote)
 
     // the emission's lotes still to generate go FALLIDO. how many
     suspend fun cancelar(
         organizacion: UUID,
         emision: UUID
-    ): Int = tablas.lotes(organizacion).sumOf { cancelarLotes(db, it.lotes, emision) }
+    ): Int = maquina.cancelar(organizacion, emision)
 
     // the emission's lote rows, before the emission itself can go. how many
     suspend fun borrar(
         organizacion: UUID,
         emision: UUID
-    ): Int =
-        tablas.lotes(organizacion).sumOf { t ->
-            db
-                .sql("DELETE FROM ${t.lotes.tabla} WHERE ${t.lotes.columna("emision")} = :emision")
-                .bind("emision", emision)
-                .fetch()
-                .awaitRowsUpdated()
-                .toInt()
-        }
+    ): Int = maquina.borrar(organizacion, emision)
 
     // the emission's lotes by numero, the order of their parts
     suspend fun partes(
         organizacion: UUID,
         emision: UUID
-    ): List<ParteLote> {
-        val l = tablas.lotes(organizacion).firstOrNull()?.lotes ?: return emptyList()
-        return db
-            .sql(
-                "SELECT id, ${l.columna("numero")} AS numero, ${l.columna("estado")} AS estado, ${l.columna("procesados")} AS procesados, " +
-                    "${l.columna("documentos")} AS documentos, ${l.columna("errores")} AS errores, ${l.columna("parte")} AS parte " +
-                    "FROM ${l.tabla} WHERE ${l.columna("emision")} = :emision ORDER BY ${l.columna("numero")}"
-            ).bind("emision", emision)
-            .map { row, _ ->
-                ParteLote(
-                    id = row.get("id", UUID::class.java)!!,
-                    numero = row.get("numero", Long::class.javaObjectType)!!.toInt(),
-                    estado = row.get("estado", String::class.java)!!,
-                    procesados = row.get("procesados", Long::class.javaObjectType)?.toInt() ?: 0,
-                    documentos = row.get("documentos", Long::class.javaObjectType)?.toInt() ?: 0,
-                    errores = erroresDe(row.get("errores", String::class.java)),
-                    parte = row.get("parte", String::class.java)
-                )
-            }.all()
-            .asFlow()
-            .toList()
-    }
-
-    private suspend fun sumarProcesados(lote: LoteTomado) {
-        tablas.lotes(lote.organizacion).forEach { sumarProcesadosLotes(db, it, lote.emision) }
-    }
-
-    // a write of the lote by the take that got it: only while it is EN_PROCESO and that take's. tomado_por alone
-    // names the instance, and another worker of the same one may have taken it again after its lease expired: every
-    // take counts one more intento, so the take is the instance and its intentos
-    private suspend fun escribir(
-        lote: LoteTomado,
-        instancia: String,
-        asignaciones: (TablaCore) -> String,
-        vararg valores: Pair<String, Any>
-    ): Boolean {
-        val l = tablas.lotes(lote.organizacion).firstOrNull()?.lotes ?: return false
-        var spec =
-            db
-                .sql(
-                    "UPDATE ${l.tabla} SET ${asignaciones(l)}, updated_at = now() " +
-                        "WHERE id = :id AND ${l.columna("estado")} = :en_proceso AND ${l.columna("tomado_por")} = :yo " +
-                        "AND ${l.columna("intentos")} = :intentos"
-                ).bind("id", lote.id)
-                .bind("en_proceso", EN_PROCESO)
-                .bind("yo", instancia)
-                .bind("intentos", lote.intentos)
-        valores.forEach { (nombre, valor) -> spec = spec.bind(nombre, valor) }
-        return spec.fetch().awaitRowsUpdated() > 0
-    }
+    ): List<ParteLote> =
+        maquina.partes(organizacion, emision).map {
+            ParteLote(it.id, it.numero, it.estado, it.procesados, it.producidos, erroresDe(it.errores), it.parte)
+        }
 }
