@@ -16,15 +16,19 @@ data class ContextoArbitrios(
     val usos: List<UsoPredio>
 )
 
-// one predio's: its declarations of the year (every titular's), its contribuyentes' codes by id, its inafectaciones
-// and the cuotas of the year it already has
+// one predio's: its declarations of the year (every titular's), its contribuyentes' codes by id, its inafectaciones,
+// the cuotas of the year it already has and the ids of the ones annulled (which count for nothing)
 data class PredioArbitrios(
     val predio: Predio,
     val declaraciones: List<Declaracion>,
     val codigos: Map<String, String?>,
     val inafectaciones: List<InafectacionArbitrio>,
-    val existentes: List<CuotaArbitrio>
-)
+    val existentes: List<CuotaArbitrio>,
+    val anuladas: Set<String> = emptySet()
+) {
+    // the ones that count: not annulled
+    val vigentes: List<CuotaArbitrio> get() = existentes.filter { it.id == null || it.id !in anuladas }
+}
 
 // the cuotas to write, or what is missing to write any: never both. faltan names each missing thing once
 data class Determinacion(
@@ -40,7 +44,8 @@ data class Determinacion(
 // a month without a titular or without rasgos is not charged: a predio that appears in july owes nothing before. a
 // predio without a titular in any month, or without rasgos in any month with one, cannot be determined. a missing
 // parameter fails the whole predio: everything is computed before anything is written, so nothing stays half done.
-// the cuotas that exist are not recomputed, so running it again adds nothing
+// the cuotas that exist are not recomputed, so running it again adds nothing. one annulled is determined again, with the
+// next version of its clave
 object Arbitrios {
     // what the year lacks, before any predio: the ordinance, ratified (D-02b), and the servicios it charges
     fun faltanDelAnio(c: ContextoArbitrios): List<String> {
@@ -97,7 +102,19 @@ object Arbitrios {
             for (servicio in serviciosDelDia(c.servicios, dia)) {
                 val servicioId = requireNotNull(servicio.id) { "El servicio no tiene id" }
                 if (p.inafectaciones.any { it.servicio == servicioId && vigente(it.vigenciaDesde, it.vigenciaHasta, dia) }) continue
-                if (p.existentes.any { it.servicio == servicioId && it.anio == c.anio && it.periodo == periodo }) continue
+                if (p.vigentes.any { it.servicio == servicioId && it.anio == c.anio && it.periodo == periodo }) continue
+                val version =
+                    1 +
+                        (
+                            p.existentes
+                                .filter { it.servicio == servicioId && it.anio == c.anio && it.periodo == periodo }
+                                .mapNotNull {
+                                    versionDe(
+                                        it.clave
+                                    )
+                                }.maxOrNull()
+                                ?: 0
+                        )
                 val claveDeTasa = Llaves.tasa(servicio.codigo!!.trim(), zona, uso)
                 val tasa = enVigor(c.parametros, Llaves.TASA_ARBITRIO, dia) { it.clave?.trim() == claveDeTasa && it.valorNumerico != null }
                 if (tasa == null) {
@@ -118,7 +135,7 @@ object Arbitrios {
                         usoArbitrio = uso,
                         fechaCalculo = hoy,
                         observacion = observacion,
-                        clave = claveDeCuota(predioId, servicioId, c.anio, periodo)
+                        clave = claveDeCuota(predioId, servicioId, c.anio, periodo, version)
                     )
                 val malas = invariantes(cuota)
                 if (malas.isEmpty()) {

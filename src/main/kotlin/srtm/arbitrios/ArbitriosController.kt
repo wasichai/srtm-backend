@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
 import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
@@ -56,6 +57,14 @@ class ArbitriosController(
         @PathVariable id: UUID,
         @RequestParam params: Map<String, String>
     ) = arbitrios.delContribuyente(id, anio(soloConoce(params, "anio")))
+
+    // 201 with the anulación: the cuota stops counting, and the next determination of its predio writes it again
+    @PostMapping("/arbitrios/cuotas/{id}/anulacion")
+    @ResponseStatus(HttpStatus.CREATED)
+    suspend fun anular(
+        @PathVariable id: UUID,
+        @RequestBody pedido: PedidoAnulacion
+    ) = arbitrios.anular(id, pedido)
 
     // 201 with what it wrote; 200 with nothing when nothing was pending
     @PostMapping("/predios/{id}/arbitrios")

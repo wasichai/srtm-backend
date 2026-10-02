@@ -20,6 +20,7 @@ import srtm.rentas.UsoPredio
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import wasichai.core.common.Actions
+import wasichai.core.common.ConflictException
 import wasichai.core.common.FieldViolation
 import wasichai.core.common.ForbiddenException
 import wasichai.core.common.PageRequest
@@ -35,6 +36,12 @@ import java.util.UUID
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class PedidoDeterminacion(
     val anio: Int? = null,
+    val observacion: String? = null
+)
+
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class PedidoAnulacion(
+    val motivo: String? = null,
     val observacion: String? = null
 )
 
@@ -83,7 +90,12 @@ class ArbitriosService(
         val declaraciones = registros.all(DECLARACION, Declaracion::class.java, filters = mapOf("predio" to id, "anio" to "$anio"))
         val codigos = personas(declaraciones.mapNotNull { it.contribuyente }).mapValues { it.value.codigo }
         val inafectaciones = registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java, filters = mapOf("predio" to id))
-        return PredioArbitrios(predio, declaraciones, codigos, inafectaciones, cuotas(mapOf("predio" to id, "anio" to "$anio")))
+        val anuladas =
+            registros
+                .all(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, filters = mapOf("predio" to id, "anio" to "$anio"))
+                .mapNotNull { it.cuota }
+                .toSet()
+        return PredioArbitrios(predio, declaraciones, codigos, inafectaciones, cuotas(mapOf("predio" to id, "anio" to "$anio")), anuladas)
     }
 
     // POST /predios/{id}/arbitrios: the cuotas it wrote; none when nothing was pending
@@ -124,6 +136,42 @@ class ArbitriosService(
         observacion: String,
         hoy: LocalDate
     ): List<CuotaArbitrio> = escribir(contexto, registros.get(PREDIO, Predio::class.java, predio), observacion, hoy)
+
+    // POST /arbitrios/cuotas/{id}/anulacion: the cuota stops counting, and the next determination of its predio writes
+    // it again with the next version of its clave. a cuota is annulled once (409); motivo and observación say why (400)
+    suspend fun anular(
+        id: UUID,
+        pedido: PedidoAnulacion
+    ): AnulacionCuotaArbitrio {
+        val usuario = currentUser.require()
+        try {
+            currentUser.requirePermission(usuario, Actions.CREATE, metadata.definitionOf(ANULACION_CUOTA_ARBITRIO).obj.id)
+        } catch (_: ForbiddenException) {
+            throw ForbiddenException("Anular una cuota exige permiso de creación sobre $ANULACION_CUOTA_ARBITRIO")
+        }
+        val motivo = pedido.motivo?.trim()?.ifEmpty { null } ?: throw ValidationException("Falta el motivo", "motivo", "indica por qué se anula")
+        val observacion = Observacion.de(pedido.observacion)
+        val cuota = registros.get(CUOTA_ARBITRIO, CuotaArbitrio::class.java, id)
+        return try {
+            registros.create(
+                ANULACION_CUOTA_ARBITRIO,
+                AnulacionCuotaArbitrio::class.java,
+                Records.attributes(
+                    AnulacionCuotaArbitrio(
+                        cuota = cuota.id,
+                        predio = cuota.predio,
+                        anio = cuota.anio,
+                        motivo = motivo,
+                        observacion = observacion,
+                        fecha = LocalDate.now(),
+                        clave = cuota.id
+                    )
+                )
+            )
+        } catch (_: DuplicateKeyException) {
+            throw ConflictException("La cuota ya está anulada")
+        }
+    }
 
     // GET /predios/{id}/arbitrios
     suspend fun matrizDelPredio(

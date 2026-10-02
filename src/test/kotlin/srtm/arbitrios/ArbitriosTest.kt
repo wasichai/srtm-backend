@@ -76,6 +76,22 @@ class ArbitriosTest {
     }
 
     @Test
+    fun `an annulled cuota is determined again, with the next version of its clave`() {
+        val todas = determinar().cuotas.mapIndexed { i, c -> c.copy(id = "q$i") }
+        val anulada = todas.single { it.servicio == "srv-PARQUES" && it.periodo == 7 }
+        val otra = determinar(p = del(existentes = todas).copy(anuladas = setOf(anulada.id!!)))
+        val nueva = otra.cuotas.single()
+        assertEquals("predio-100|srv-PARQUES|2026|7|2", nueva.clave)
+        assertEquals(7, nueva.periodo)
+
+        // annulled again: the third version
+        val segunda = nueva.copy(id = "q-v2")
+        val tercera = determinar(p = del(existentes = todas + segunda).copy(anuladas = setOf(anulada.id!!, "q-v2"))).cuotas.single()
+        assertEquals("predio-100|srv-PARQUES|2026|7|3", tercera.clave)
+        assertTrue(invariantes(tercera).isEmpty())
+    }
+
+    @Test
     fun `only what is missing is determined`() {
         val todas = determinar().cuotas
         val falta = todas.single { it.servicio == "srv-PARQUES" && it.periodo == 7 }

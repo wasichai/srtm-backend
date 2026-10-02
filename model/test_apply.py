@@ -14,20 +14,21 @@ from fake_core import FakeCore
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.json")
 
-OBJECTS = 28
-RELATIONSHIPS = 19
+OBJECTS = 29
+RELATIONSHIPS = 21
 OBJECT_ORDER = ["contribuyente", "predio", "declaracion_predial", "domicilio", "relacionado", "medio_contacto", "sustento",
                 "ubigeo", "via", "unidad_urbana", "transferente", "nivel_construccion", "obra_complementaria", "otro_frente",
                 "categoria_valor", "catastro_fiscal", "obra_categoria", "uso_predio", "parametro_tributario",
                 "municipalidad", "emision_masiva", "emision_lote", "ordenanza_arbitrio", "servicio_arbitrio",
-                "inafectacion_arbitrio", "cuota_arbitrio", "determinacion_arbitrio_masiva", "determinacion_arbitrio_lote"]
+                "inafectacion_arbitrio", "cuota_arbitrio", "anulacion_cuota_arbitrio", "determinacion_arbitrio_masiva",
+                "determinacion_arbitrio_lote"]
 RELATIONSHIP_ORDER = ["declaracion_predial_contribuyente", "declaracion_predial_predio", "domicilio_contribuyente",
                       "relacionado_contribuyente", "medio_contacto_contribuyente", "sustento_contribuyente",
                       "transferente_declaracion", "nivel_construccion_declaracion", "obra_complementaria_declaracion",
                       "otro_frente_declaracion", "emision_lote_emision", "servicio_arbitrio_ordenanza",
                       "inafectacion_arbitrio_predio", "inafectacion_arbitrio_servicio", "cuota_arbitrio_predio",
                       "cuota_arbitrio_contribuyente", "cuota_arbitrio_servicio", "cuota_arbitrio_parametro",
-                      "determinacion_arbitrio_lote_masiva"]
+                      "determinacion_arbitrio_lote_masiva", "anulacion_cuota_arbitrio_cuota", "anulacion_cuota_arbitrio_predio"]
 
 
 def load_model():
@@ -110,6 +111,8 @@ class HappyPathTests(ApplyCliTestCase):
             ("/api/metadata/objects/cuota_arbitrio/fields/servicio", {"required": True}),
             ("/api/metadata/objects/cuota_arbitrio/fields/parametro", {"required": True}),
             ("/api/metadata/objects/determinacion_arbitrio_lote/fields/determinacion", {"required": True}),
+            ("/api/metadata/objects/anulacion_cuota_arbitrio/fields/cuota", {"required": True}),
+            ("/api/metadata/objects/anulacion_cuota_arbitrio/fields/predio", {"required": True}),
         ])
 
         for method, path, auth, body in self.core.requests:
@@ -118,7 +121,7 @@ class HappyPathTests(ApplyCliTestCase):
             else:
                 self.assertEqual(auth, "Bearer t")
 
-        self.assertIn("done: 47 created, 0 updated, 0 skipped", out)
+        self.assertIn("done: 50 created, 0 updated, 0 skipped", out)
 
 
 class IdempotencyTests(ApplyCliTestCase):
@@ -137,7 +140,7 @@ class IdempotencyTests(ApplyCliTestCase):
         object_posts = [r for r in self.core.requests if r[1] == "/api/objects" and r[0] == "POST"]
         self.assertEqual(object_posts, [])
         self.assertEqual([r for r in self.core.requests if r[0] == "POST" and "/fields" in r[1]], [])
-        self.assertIn("done: 0 created, 0 updated, 47 skipped", out)
+        self.assertIn("done: 0 created, 0 updated, 50 skipped", out)
 
 
 class SyncTests(ApplyCliTestCase):
@@ -175,7 +178,7 @@ class SyncTests(ApplyCliTestCase):
             "/api/metadata/objects/contribuyente/fields/tipo_documento",
             {"enumOptions": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "PASAPORTE", "PTP-CPP", "CI", "OTROS"]},
         )])
-        self.assertIn("done: 16 created, 1 updated, 46 skipped", out)
+        self.assertIn("done: 16 created, 1 updated, 49 skipped", out)
 
 
 class DropOptionsTests(ApplyCliTestCase):
@@ -213,7 +216,7 @@ class DropOptionsTests(ApplyCliTestCase):
         self.assertIn("; -CISTERNAS, PISCINAS, LOSAS DEPORTIVAS, PISOS DE CONCRETO, OTROS)", out)
         self.assertIn("; -CISTERNAS, PISCINAS, LOSAS DEPORTIVAS, PISOS DE CONCRETO)", out)
         self.assertIn("keep   option obra_complementaria.tipo_obra OTROS: 1 record uses it", out)
-        self.assertIn("done: 0 created, 2 updated, 45 skipped", out)
+        self.assertIn("done: 0 created, 2 updated, 48 skipped", out)
 
     def count_answers(self, status, payload):
         """The records GET, the count asked before dropping an option, answers this."""
@@ -261,7 +264,7 @@ class RelaxRequiredTests(ApplyCliTestCase):
         puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "/api/metadata/objects/contribuyente/" in r[1]]
         self.assertEqual(puts, [("/api/metadata/objects/contribuyente/fields/numero_documento", {"required": False})])
         self.assertIn("update field contribuyente.numero_documento (optional)", out)
-        self.assertIn("done: 0 created, 1 updated, 46 skipped", out)
+        self.assertIn("done: 0 created, 1 updated, 49 skipped", out)
 
 
 class RelacionadoTransferenteSyncTests(ApplyCliTestCase):
@@ -299,7 +302,7 @@ class RelacionadoTransferenteSyncTests(ApplyCliTestCase):
             ("/api/metadata/objects/transferente/fields/nombres", {"required": False}),
         ])
         self.assertIn("update field relacionado.nombres (optional)", out)
-        self.assertIn("done: 4 created, 2 updated, 45 skipped", out)
+        self.assertIn("done: 4 created, 2 updated, 48 skipped", out)
 
 
 class RelabelTests(ApplyCliTestCase):
@@ -322,7 +325,7 @@ class RelabelTests(ApplyCliTestCase):
         puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "label" in (r[3] or {})]
         self.assertEqual(puts, [("/api/metadata/objects/predio/fields/tipo_predio", {"label": "Tipo de predio"})])
         self.assertIn("update field predio.tipo_predio (label)", out)
-        self.assertIn("done: 0 created, 1 updated, 46 skipped", out)
+        self.assertIn("done: 0 created, 1 updated, 49 skipped", out)
 
 
 class FailureStopsTests(ApplyCliTestCase):
@@ -389,7 +392,7 @@ class DropTests(ApplyCliTestCase):
         deletes = [r[1] for r in self.core.requests if r[0] == "DELETE"]
         self.assertEqual(deletes, [f"/api/relationships/{n}" for n in reversed(RELATIONSHIP_ORDER)]
                          + [f"/api/objects/{n}" for n in reversed(OBJECT_ORDER)])
-        self.assertIn("done: 47 deleted, 0 skipped", out)
+        self.assertIn("done: 50 deleted, 0 skipped", out)
 
     def test_drop_dry_run_makes_no_requests(self):
         code, out, err = self.run_cli(["--drop", "--dry-run"])

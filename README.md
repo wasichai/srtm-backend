@@ -297,7 +297,8 @@ de emisión y las deducciones (los parámetros ya se cargan, pero la DJ guarda s
 
 Los arbitrios se portan del negocio de `rentas` (`DeterminarArbitrios`). Ya están el modelo, la carga de una
 ordenanza, el cálculo (`srtm.arbitrios.Arbitrios`, una función pura) y la determinación por predio y por contribuyente
-con sus consultas, la determinación masiva y la Hoja de Liquidación de Arbitrios (HLA), sola y en la emisión masiva.
+con sus consultas, la determinación masiva, la Hoja de Liquidación de Arbitrios (HLA), sola y en la emisión masiva, y
+la anulación de una cuota.
 
 **Modelo:**
 
@@ -307,13 +308,14 @@ con sus consultas, la determinación masiva y la Hoja de Liquidación de Arbitri
 | `servicio_arbitrio` | Un servicio que la ordenanza cobra (barrido, residuos, serenazgo…), con `codigo` único de hasta 20 caracteres y su vigencia. Ningún servicio está escrito en el código. |
 | `inafectacion_arbitrio` | Un predio que no paga un servicio en una vigencia (ambos extremos cuentan), con su motivo, documento y observación. |
 | `cuota_arbitrio` | Lo determinado de un predio, un servicio y un mes: `monto`, `parametro_aplicado` (la llave leída), `zona` y `uso_arbitrio` usados, `fecha_calculo` y `observacion`, más relaciones obligatorias a `predio`, `contribuyente` (el titular principal ese mes), `servicio` y `parametro` (la fila de `parametro_tributario`). |
+| `anulacion_cuota_arbitrio` | La corrección de una cuota: `motivo`, `observacion`, `fecha`, y su `cuota` y `predio`. `clave` única (el id de la cuota): una sola anulación por cuota. |
 | `determinacion_arbitrio_masiva`, `determinacion_arbitrio_lote` | El job de la determinación de un año en segundo plano y sus lotes de predios, gemelos de `emision_masiva` y `emision_lote`. No generan archivo. |
 
 Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
 - **Una cuota por predio, servicio, año y mes:** `cuota_arbitrio.clave` es única y vale `predio|servicio|anio|periodo|version`.
   Core no tiene unicidad compuesta; como cada organización tiene su tabla física, la unicidad es por organización.
-- **Inmutable:** una cuota no se edita ni se borra, ni siquiera un ADMIN; una corrección será una anulación que se
-  agrega y una versión nueva de la `clave`. Los permisos de Core no pueden decirlo (ADMIN se los salta, y `/admin` usa
+- **Inmutable:** una cuota no se edita ni se borra, ni siquiera un ADMIN; una corrección es una anulación que se
+  agrega y una versión nueva de la `clave` (ver **Anulación**). Los permisos de Core no pueden decirlo (ADMIN se los salta, y `/admin` usa
   la misma API), así que lo hace cumplir `CuotasInmutables`, que envuelve el `RecordStore` de Core: un PUT o DELETE de
   una cuota, por cualquier vía, responde **409**. Su límite: borrar el objeto entero desde los metadatos sigue siendo
   posible.
@@ -454,9 +456,22 @@ plano, sobre la misma maquinaria de lotes de la [emisión masiva](#emisión-masi
     `HLA: <por qué>`;
   - uno sin cuotas a su nombre no lleva HLA, y no es un error.
 
+**Anulación** (`POST /api/srtm/arbitrios/cuotas/{id}/anulacion` `{motivo, observacion}` → 201). Así se corrige
+una cuota, en lugar de editarla:
+- se agrega una `anulacion_cuota_arbitrio`, que tampoco se edita ni se borra (409 por cualquier vía);
+- la cuota anulada deja de contar en la matriz, en los totales y en la HLA, y vuelve a quedar pendiente;
+- la siguiente determinación del predio la escribe de nuevo con la versión siguiente de su `clave`
+  (`…|2`, `…|3`), con la tasa, la zona, el uso y el titular vigentes entonces;
+- una cuota se anula una sola vez (**409**);
+- `motivo` es obligatorio, y la observación va de 5 a 500 caracteres (**400**);
+- pide creación sobre `anulacion_cuota_arbitrio` (**403**).
+
+La consulta paginada (`GET /arbitrios`) lista las cuotas tal como se escribieron, también las anuladas: la matriz, los
+totales y la HLA son los que las excluyen.
+
 **Permisos.** Consultar pide lectura de `cuota_arbitrio`, `servicio_arbitrio`, `ordenanza_arbitrio`,
 `inafectacion_arbitrio` y `parametro_tributario`. Determinar pide, además, creación sobre `cuota_arbitrio`. Nadie
-actualiza ni borra cuotas.
+actualiza ni borra cuotas ni anulaciones; anular pide creación sobre `anulacion_cuota_arbitrio`.
 
 **Ninguna cifra inventada.** Todavía no hay una transcripción verificada de la ordenanza de arbitrios de Perené y su
 ratificación (E-6 del plan de desbloqueo D-02 de `normativa`). Hasta que la haya, el repo no lleva ni el JSON ni el CSV
@@ -676,7 +691,7 @@ python3 apply.py                                  # 3. quita ANEXO, HABILITACION
 
 ## Modelo
 
-Veintiocho objetos (`model/model.json`):
+Veintinueve objetos (`model/model.json`):
 - **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
   *Formato Padrón Municipal Armonización 2026*.
 - **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
@@ -689,8 +704,8 @@ Veintiocho objetos (`model/model.json`):
   [Impuesto predial](#impuesto-predial)).
 - **Emisión masiva:** `emision_masiva`, el job de la emisión de un año en segundo plano, y `emision_lote`, sus lotes (ver
   [Emisión masiva](#emisión-masiva)).
-- **Arbitrios:** `ordenanza_arbitrio`, `servicio_arbitrio`, `inafectacion_arbitrio` y `cuota_arbitrio`, y el job de la
-  determinación masiva con sus lotes, `determinacion_arbitrio_masiva` y `determinacion_arbitrio_lote` (ver
+- **Arbitrios:** `ordenanza_arbitrio`, `servicio_arbitrio`, `inafectacion_arbitrio`, `cuota_arbitrio` y
+  `anulacion_cuota_arbitrio`, y el job de la determinación masiva con sus lotes, `determinacion_arbitrio_masiva` y `determinacion_arbitrio_lote` (ver
   [Arbitrios](#arbitrios)).
 
 Geometrías (wasichai-gis, GeoJSON en EPSG:4326 por la API):
@@ -1333,7 +1348,8 @@ yarn format:check           # prettier: yaml y json, model.json incluido
   extranjería) con la misma interfaz `ConsultaDocumento`. El fondo del mapa es OpenStreetMap; una capa WMS/WMTS
   municipal se puede publicar con GeoServer.
 - **Cálculo y cobranza:** el reajuste IPM de las cuotas, las prórrogas por ordenanza y el derecho de emisión del
-  predial; arbitrios, deuda, pagos y recibos.
+  predial; las tasas reales de arbitrios (cuando `normativa` transcriba la ordenanza de Perené), deuda, pagos y
+  recibos.
 - **Fiscalización:** el flujo (rol y pantallas) que determina de oficio una declaración: medio de determinación
   FISCALIZACIÓN o DE OFICIO y su modificación de oficio.
 - **En el modelo:** workflows y plantillas de documentos.

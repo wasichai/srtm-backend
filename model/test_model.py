@@ -27,8 +27,8 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 28)
-        self.assertEqual(len(self.model["relationships"]), 19)
+        self.assertEqual(len(names), 29)
+        self.assertEqual(len(self.model["relationships"]), 21)
 
     def test_the_municipalidad_holds_the_documents_header(self):
         # the PU and HR's header, one record per organization edited in the admin (the escudo is a file, not a field)
@@ -133,6 +133,16 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(relaciones[("servicio_arbitrio", "ordenanza")]["target"], "ordenanza_arbitrio")
         self.assertEqual(relaciones[("inafectacion_arbitrio", "servicio")]["target"], "servicio_arbitrio")
         self.assertEqual(relaciones[("inafectacion_arbitrio", "predio")]["target"], "predio")
+
+    def test_an_anulacion_is_added_once_per_cuota(self):
+        # decision 5 of the plan: a cuota is corrected by an anulación added to it, never by an update; its clave (the
+        # cuota's id) is unique, so a cuota is annulled once
+        objetos = {o["name"]: o for o in self.model["objects"]}
+        fields = {f["name"]: f for f in objetos["anulacion_cuota_arbitrio"]["fields"]}
+        self.assertEqual({n for n, f in fields.items() if f.get("required")}, {"anio", "motivo", "observacion", "fecha", "clave"})
+        self.assertEqual({n for n, f in fields.items() if f.get("unique")}, {"clave"})
+        relaciones = {r["fieldName"]: r["target"] for r in self.model["relationships"] if r["source"] == "anulacion_cuota_arbitrio"}
+        self.assertEqual(relaciones, {"cuota": "cuota_arbitrio", "predio": "predio"})
 
     def test_the_masiva_de_arbitrios_is_a_twin_of_the_emision(self):
         # the same lotes, lease and attempts as emision_masiva / emision_lote; it writes cuotas, never a file

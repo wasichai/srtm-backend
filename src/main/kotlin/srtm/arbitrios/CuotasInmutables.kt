@@ -15,11 +15,11 @@ import wasichai.core.metadata.ObjectDefinition
 import wasichai.core.platform.WasichaiSchemas
 import java.util.UUID
 
-// rentas' GRANT INSERT, SELECT on determinacion_arbitrio: a cuota is never updated nor deleted, by anyone. core's
-// permissions cannot say it (an ADMIN bypasses them, and /admin goes through the same api), but every write of every
-// record goes through the RecordStore: this one wraps core's. an insert must hold the cuota's invariantes, whoever
-// sends it (the determination never builds one that breaks them). its limit: deleting the whole object from the
-// metadata still can
+// rentas' GRANT INSERT, SELECT on determinacion_arbitrio: a cuota (and the anulación that corrects one) is never
+// updated nor deleted, by anyone. core's permissions cannot say it (an ADMIN bypasses them, and /admin goes through
+// the same api), but every write of every record goes through the RecordStore: this one wraps core's. an insert of a
+// cuota must hold its invariantes, whoever sends it (the determination never builds one that breaks them). its
+// limit: deleting the whole object from the metadata still can
 class CuotasInmutables(
     private val almacen: RecordStore
 ) : RecordStore by almacen {
@@ -47,7 +47,7 @@ class CuotasInmutables(
         sections: Map<String, Map<String, Any?>>,
         withState: Boolean
     ): RecordRow {
-        if (esCuota(definition)) throw inmutable()
+        if (soloSeAgrega(definition)) throw inmutable()
         return almacen.update(definition, organizationId, userId, id, attributes, sections, withState)
     }
 
@@ -59,7 +59,7 @@ class CuotasInmutables(
         from: String?,
         to: String
     ): RecordRow? {
-        if (esCuota(definition)) throw inmutable()
+        if (soloSeAgrega(definition)) throw inmutable()
         return almacen.transitionState(definition, organizationId, userId, id, from, to)
     }
 
@@ -68,13 +68,16 @@ class CuotasInmutables(
         organizationId: UUID,
         id: UUID
     ): Boolean {
-        if (esCuota(definition)) throw inmutable()
+        if (soloSeAgrega(definition)) throw inmutable()
         return almacen.delete(definition, organizationId, id)
     }
 
     private fun esCuota(definition: ObjectDefinition) = definition.obj.name == CUOTA_ARBITRIO
 
-    private fun inmutable() = ConflictException("Una cuota de arbitrio no se edita ni se borra: una corrección se agrega como anulación")
+    // a cuota, and the anulación that corrects one
+    private fun soloSeAgrega(definition: ObjectDefinition) = esCuota(definition) || definition.obj.name == ANULACION_CUOTA_ARBITRIO
+
+    private fun inmutable() = ConflictException("Una cuota de arbitrio y su anulación no se editan ni se borran: una corrección se agrega como anulación")
 }
 
 // core's RecordStore bean is @ConditionalOnMissingBean: this one takes its place, wrapped
