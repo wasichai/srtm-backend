@@ -1,0 +1,118 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <title th:text="|HLA ${hla.contribuyente.codigo} ${hla.anio}|">HLA</title>
+        <style th:utext="${css}"></style>
+    </head>
+    <body>
+        <div class="pie">
+            <span th:text="|Emitido el ${hla.emitido} · HLA del contribuyente ${hla.contribuyente.codigo}|">Emitido el</span>
+        </div>
+
+        <div th:replace="~{cabecera :: cabecera(${hla.cabecera}, ${hla.emitido}, 'HOJA DE LIQUIDACIÓN DE ARBITRIOS — HLA', 'Arbitrios municipales')}"></div>
+
+        <table class="identificacion">
+            <tr>
+                <td>
+                    <span class="etiqueta">Año</span>
+                    <span class="valor" th:text="${hla.anio}">2026</span>
+                </td>
+                <td>
+                    <span class="etiqueta">Código de contribuyente</span>
+                    <span class="valor" th:text="${hla.contribuyente.codigo}">000001</span>
+                </td>
+            </tr>
+        </table>
+
+        <div class="bloque junto">
+            <div class="titulo">I. Contribuyente</div>
+            <table class="datos">
+                <tr>
+                    <td style="width: 16%">
+                        <div class="etiqueta">Código</div>
+                        <div class="valor" th:text="${hla.contribuyente.codigo}">000001</div>
+                    </td>
+                    <td style="width: 48%">
+                        <div class="etiqueta">Apellidos y nombres / razón social</div>
+                        <div class="valor" th:text="${hla.contribuyente.nombre}">nombre</div>
+                    </td>
+                    <td style="width: 36%">
+                        <div class="etiqueta">Documento de identidad</div>
+                        <div class="valor" th:text="${hla.contribuyente.documento}">DNI</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3">
+                        <div class="etiqueta">Domicilio fiscal</div>
+                        <div class="valor" th:text="${hla.contribuyente.domicilioFiscal}">domicilio</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="bloque" th:each="p, i : ${hla.predios}">
+            <div class="titulo" th:text="|${i.count == 1 ? 'II. ' : ''}Predio ${p.codigo} — ${p.direccion}|">II. Predio</div>
+            <table class="datos">
+                <tr>
+                    <td style="width: 50%">
+                        <div class="etiqueta">Zona</div>
+                        <div class="valor" th:text="${p.zona}">Z1</div>
+                    </td>
+                    <td style="width: 50%">
+                        <div class="etiqueta">Uso de arbitrio</div>
+                        <div class="valor" th:text="${p.uso}">CASA</div>
+                    </td>
+                </tr>
+            </table>
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th>Mes</th>
+                        <th th:each="s : ${hla.servicios}" th:text="${s}">Servicio</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="m : ${p.meses}">
+                        <td th:text="${m.mes}">Enero</td>
+                        <td class="num" th:each="monto : ${m.montos}" th:text="${monto}">S/ 0.00</td>
+                        <td class="num" th:text="${m.total}">S/ 0.00</td>
+                    </tr>
+                    <tr class="total">
+                        <td>Total del predio</td>
+                        <td class="num" th:each="t : ${p.totales}" th:text="${t}">S/ 0.00</td>
+                        <td class="num" th:text="${p.total}">S/ 0.00</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="bloque junto">
+            <div class="titulo">III. Cuotas mensuales</div>
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th style="width: 30%">Mes</th>
+                        <th style="width: 35%">Monto</th>
+                        <th style="width: 35%">Vencimiento</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="c : ${hla.cuotas}">
+                        <td th:text="${c.mes}">Enero</td>
+                        <td class="num" th:text="${c.monto}">S/ 0.00</td>
+                        <td class="centro" th:text="${c.vencimiento}">31/01/2026</td>
+                    </tr>
+                </tbody>
+            </table>
+            <table class="anual">
+                <tr>
+                    <td><span class="etiqueta">Arbitrios del año</span></td>
+                    <td class="importe" th:text="${hla.total}">S/ 0.00</td>
+                </tr>
+            </table>
+            <div class="nota" th:text="|Determinados al ${hla.fechaCalculo}. ${hla.ordenanza}.|">Determinados al</div>
+        </div>
+    </body>
+</html>

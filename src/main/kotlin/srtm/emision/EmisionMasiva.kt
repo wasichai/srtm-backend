@@ -3,6 +3,7 @@ package srtm.emision
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
+import srtm.arbitrios.DocumentosArbitrios
 import srtm.impuesto.ParametroTributario
 import java.io.BufferedOutputStream
 import java.nio.file.Files
@@ -40,8 +41,14 @@ data class ContribuyenteAEmitir(
     val predios: List<UUID>
 )
 
-// what the masiva emits: DocumentosPrediales' HR and PU. a seam so the job's tests do not depend on the HR
-// (wasichai/srtm-backend#40)
+// the documents a masiva emits for each contribuyente, in this order: its HR, the PU of each predio and its HLA (hoja
+// de liquidación de arbitrios). by default the HR and the PUs
+enum class DocumentoEmision { HR, PU, HLA }
+
+val POR_DEFECTO: Set<DocumentoEmision> = setOf(DocumentoEmision.HR, DocumentoEmision.PU)
+
+// what the masiva emits: DocumentosPrediales' HR and PU, and DocumentosArbitrios' HLA. a seam so the job's tests do
+// not depend on the HR (wasichai/srtm-backend#40)
 interface DocumentosDeEmision {
     // `parametros`: the year's parámetros tributarios, read once by the lote; null reads them
     suspend fun hr(
@@ -55,12 +62,24 @@ interface DocumentosDeEmision {
         contribuyenteId: UUID?,
         anio: Int
     ): Documento
+
+    // the HLA of each contribuyente of a lote, with the year's ordinance and parameters read once: null for a
+    // contribuyente charged no arbitrio of the year. a contribuyente whose HLA cannot be made throws. null: no HLA at all
+    suspend fun hlas(anio: Int): (suspend (UUID) -> Documento?)? = null
+
+    // what the year lacks for any HLA: a POST that asks for them is refused (422) before anything exists
+    suspend fun faltanHla(anio: Int): List<String> = emptyList()
 }
 
 @Component
 class DocumentosPredialesDeEmision(
-    private val documentos: DocumentosPrediales
+    private val documentos: DocumentosPrediales,
+    private val arbitrios: DocumentosArbitrios
 ) : DocumentosDeEmision {
+    override suspend fun hlas(anio: Int): suspend (UUID) -> Documento? = arbitrios.hlas(anio)
+
+    override suspend fun faltanHla(anio: Int) = arbitrios.faltanHla(anio)
+
     override suspend fun hr(
         contribuyenteId: UUID,
         anio: Int,
@@ -112,10 +131,7 @@ class GeneradorEmision(
     private val documentos: DocumentosDeEmision,
     private val merger: PdfMerger
 ) {
-    // every contribuyente's HR and then its PUs, into `destino`: one pdf (the documents go to temp files next to it
-    // and are merged at the end) or a zip written as it goes. a contribuyente whose documents fail is left out and
-    // returned among the errors; the rest go on. `avance` is told how many were processed every AVANCE_CADA and at the
-    // end. the documents counted are the ones written. `parametros` go to every HR: the caller reads them once
+    // each contribuyente's HR and PUs, as before the HLA (below)
     suspend fun generar(
         anio: Int,
         formato: FormatoEmision,
@@ -123,21 +139,51 @@ class GeneradorEmision(
         parametros: List<ParametroTributario>?,
         destino: Path,
         avance: suspend (procesados: Int, errores: List<ErrorEmision>) -> Unit
+    ): ResultadoGeneracion = generar(anio, formato, contribuyentes, parametros, destino, POR_DEFECTO, null, avance)
+
+    // every contribuyente's HR, then its PUs, then its HLA (the ones `incluir` asks for), into `destino`: one pdf (the
+    // documents go to temp files next to it and are merged at the end) or a zip written as it goes. a contribuyente
+    // whose HR or PUs fail is left out and returned among the errors; the rest go on. its HLA is apart: one that fails
+    // leaves its HR and PUs in and the contribuyente among the errors ("HLA: why"), and one charged nothing has none.
+    // `avance` is told how many were processed every AVANCE_CADA and at the end. the documents counted are the ones
+    // written. `parametros` go to every HR and `hla` makes every HLA: the caller reads the year's once
+    suspend fun generar(
+        anio: Int,
+        formato: FormatoEmision,
+        contribuyentes: List<ContribuyenteAEmitir>,
+        parametros: List<ParametroTributario>?,
+        destino: Path,
+        incluir: Set<DocumentoEmision>,
+        hla: (suspend (UUID) -> Documento?)?,
+        avance: suspend (procesados: Int, errores: List<ErrorEmision>) -> Unit
     ): ResultadoGeneracion {
         val errores = mutableListOf<ErrorEmision>()
         var escritos = 0
         val salida = if (formato == FormatoEmision.PDF) SalidaPdf(destino, merger) else SalidaZip(destino)
         salida.use {
             contribuyentes.forEachIndexed { i, c ->
-                val docs =
+                val prediales =
                     try {
-                        listOf("HR-$anio.pdf" to documentos.hr(c.id, anio, parametros)) +
-                            c.predios.map { p -> documentos.pu(p, c.id, anio).let { it.nombre to it } }
+                        (if (DocumentoEmision.HR in incluir) listOf("HR-$anio.pdf" to documentos.hr(c.id, anio, parametros)) else emptyList()) +
+                            (if (DocumentoEmision.PU in incluir) c.predios.map { p -> documentos.pu(p, c.id, anio).let { it.nombre to it } } else emptyList())
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Throwable) {
                         errores += ErrorEmision(c.codigo, e.message ?: e.javaClass.simpleName)
                         null
+                    }
+                val docs =
+                    if (prediales == null || DocumentoEmision.HLA !in incluir || hla == null) {
+                        prediales
+                    } else {
+                        try {
+                            prediales + listOfNotNull(hla(c.id)?.let { "HLA-$anio.pdf" to it })
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Throwable) {
+                            errores += ErrorEmision(c.codigo, "HLA: ${e.message ?: e.javaClass.simpleName}")
+                            prediales
+                        }
                     }
                 docs?.let {
                     salida.agregar(carpeta(c.codigo, c.nombre), it.map { (nombre, d) -> nombre to d.bytes })

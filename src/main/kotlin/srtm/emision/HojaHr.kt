@@ -105,19 +105,7 @@ fun hojaHr(
         cabecera = cabecera,
         anio = anio,
         emitido = ahora.format(FECHA_HORA),
-        contribuyente =
-            ContribuyenteHr(
-                codigo = contribuyente.codigo.orEmpty(),
-                nombre = nombreDe(contribuyente),
-                documento = documentoDe(contribuyente),
-                domicilioFiscal =
-                    unir(
-                        " — ",
-                        contribuyente.domicilioFiscal,
-                        unir(" / ", contribuyente.domicilioDistrito, contribuyente.domicilioProvincia, contribuyente.domicilioDepartamento)
-                    ),
-                condicionEspecial = declaraciones.mapNotNull { it.condicionEspecial?.trim()?.ifEmpty { null } }.distinct().joinToString(", ")
-            ),
+        contribuyente = contribuyenteHr(contribuyente, declaraciones),
         predios = filas,
         totales =
             TotalesHr(
@@ -149,3 +137,20 @@ fun hojaHr(
         contado = "Al contado: ${soles(liquidacion.impuestoAnual)} hasta el ${cuotas.firstOrNull()?.vencimiento.orEmpty()}"
     )
 }
+
+// who a document is for, as the HR and the HLA print it. `declaraciones`: the ones whose condiciones especiales it states
+internal fun contribuyenteHr(
+    contribuyente: Contribuyente,
+    declaraciones: List<Declaracion>
+) = ContribuyenteHr(
+    codigo = contribuyente.codigo.orEmpty(),
+    nombre = nombreDe(contribuyente),
+    documento = documentoDe(contribuyente),
+    domicilioFiscal =
+        unir(
+            " — ",
+            contribuyente.domicilioFiscal,
+            unir(" / ", contribuyente.domicilioDistrito, contribuyente.domicilioProvincia, contribuyente.domicilioDepartamento)
+        ),
+    condicionEspecial = declaraciones.mapNotNull { it.condicionEspecial?.trim()?.ifEmpty { null } }.distinct().joinToString(", ")
+)

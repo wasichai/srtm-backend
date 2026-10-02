@@ -143,7 +143,7 @@ class GrupoTrabajadores(
     private val lotes: LotesEmision,
     private val estado: EstadoEmisiones,
     private val almacen: AlmacenEmision,
-    documentos: DocumentosDeEmision,
+    private val documentos: DocumentosDeEmision,
     merger: PdfMerger,
     private val identidad: IdentidadEmision,
     private val retencion: RetencionEmision,
@@ -262,10 +262,19 @@ class GrupoTrabajadores(
                 withContext(ReactiveSecurityContextHolder.withAuthentication(autenticacion).asCoroutineContext()) {
                     conLatido(cadaLatido, { lotes.latir(lote, instancia) }) {
                         withContext(Dispatchers.IO) { Files.createDirectories(temporales) }
-                        // once per lote, as the lote's user: every HR of the lote uses them
+                        // once per lote, as the lote's user: every HR (and HLA) of the lote uses them
                         val parametrosDelAnio = parametros.todos()
+                        val hla = if (DocumentoEmision.HLA in lote.documentos) this@GrupoTrabajadores.documentos.hlas(lote.anio) else null
                         val hecho =
-                            generador.generar(lote.anio, lote.formato, lote.contribuyentes, parametrosDelAnio, parcial) { procesados, errores ->
+                            generador.generar(
+                                lote.anio,
+                                lote.formato,
+                                lote.contribuyentes,
+                                parametrosDelAnio,
+                                parcial,
+                                lote.documentos,
+                                hla
+                            ) { procesados, errores ->
                                 if (!lotes.avanzar(lote, instancia, procesados, errores)) throw Perdido()
                             }
                         almacen.guardar(clave, parcial)

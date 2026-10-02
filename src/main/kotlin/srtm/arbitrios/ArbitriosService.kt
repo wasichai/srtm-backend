@@ -140,10 +140,11 @@ class ArbitriosService(
     // GET /contribuyentes/{id}/arbitrios: the predios of its declarations of the year and those it has cuotas of
     suspend fun delContribuyente(
         id: UUID,
-        anio: Int
+        anio: Int,
+        delAnio: ContextoArbitrios? = null
     ): ArbitriosContribuyente {
         val contribuyente = registros.get(CONTRIBUYENTE, Contribuyente::class.java, id)
-        val contexto = contexto(anio)
+        val contexto = delAnio ?: contexto(anio)
         val hoy = LocalDate.now()
         val matrices =
             prediosDe(id, anio, conCuotas = true).map { predio ->
@@ -222,6 +223,12 @@ class ArbitriosService(
         if (d.cuotas.isEmpty()) return emptyList()
         return transaccion.executeAndAwait { d.cuotas.map { registros.create(CUOTA_ARBITRIO, CuotaArbitrio::class.java, Records.attributes(it)) } }
     }
+
+    // the cuotas of the year charged to a contribuyente
+    internal suspend fun cuotasDe(
+        contribuyente: UUID,
+        anio: Int
+    ) = cuotas(mapOf("contribuyente" to "$contribuyente", "anio" to "$anio"))
 
     private suspend fun cuotas(filtros: Map<String, String>): List<CuotaArbitrio> {
         indices.asegurar(currentUser.require().organizationId)

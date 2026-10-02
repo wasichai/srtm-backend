@@ -297,7 +297,7 @@ de emisión y las deducciones (los parámetros ya se cargan, pero la DJ guarda s
 
 Los arbitrios se portan del negocio de `rentas` (`DeterminarArbitrios`). Ya están el modelo, la carga de una
 ordenanza, el cálculo (`srtm.arbitrios.Arbitrios`, una función pura) y la determinación por predio y por contribuyente
-con sus consultas, y la determinación masiva. La Hoja de Liquidación de Arbitrios (HLA) llega en el PR siguiente.
+con sus consultas, la determinación masiva y la Hoja de Liquidación de Arbitrios (HLA), sola y en la emisión masiva.
 
 **Modelo:**
 
@@ -431,6 +431,28 @@ plano, sobre la misma maquinaria de lotes de la [emisión masiva](#emisión-masi
   `errores`; si su creador ya no existe o está deshabilitado, también; un job sin quien lo prepare pasa a FALLIDA.
 - **GET** lista (`?anio`) y **GET** `/{id}` devuelven el job. **DELETE** `/{id}` cancela sus lotes y lo borra (204);
   las cuotas que escribió quedan, porque una cuota no se borra.
+
+**HLA** (hoja de liquidación de arbitrios, `GET /api/srtm/contribuyentes/{id}/hla?anio`, PDF inline como la HR).
+- **Qué imprime:** las cuotas a nombre del contribuyente tal como se determinaron, con las mismas cifras que
+  `GET /contribuyentes/{id}/arbitrios`:
+  - por predio, la zona y el uso, los meses con cuota por servicio y sus totales;
+  - las cuotas mensuales con su vencimiento (`ARBITRIO_VENCIMIENTO` de cada mes, vigente al día 1);
+  - el total del año, la fecha de cálculo y la ordenanza con su ratificación.
+- **Usa** la cabecera de los documentos (`templates/emision/hla.html`).
+- **422 con `faltan`** si:
+  - el año no tiene su ordenanza ratificada;
+  - un predio del contribuyente tiene cuotas por determinar, o no se puede determinar;
+  - un mes con cuota no tiene vencimiento.
+- **404** si no hay ninguna cuota a su nombre en el año (un condómino que no es el titular principal).
+- **En la emisión masiva:** el `POST /api/srtm/emisiones` acepta `documentos` (de `HR`, `PU`, `HLA`; por defecto
+  `["HR","PU"]`, como antes). Con la HLA:
+  - **422 con `faltan`** antes de crear nada si al año le falta lo que toda HLA necesita (lo de
+    `/arbitrios/parametros` y los vencimientos de los 12 meses);
+  - la HLA va después de la HR y los PU de cada contribuyente (`<codigo>-<nombre>/HLA-<anio>.pdf` en el ZIP), con la
+    ordenanza y los parámetros leídos una vez por lote;
+  - un contribuyente cuya HLA no se puede hacer **sigue con su HR y sus PU** y queda en `errores` como
+    `HLA: <por qué>`;
+  - uno sin cuotas a su nombre no lleva HLA, y no es un error.
 
 **Permisos.** Consultar pide lectura de `cuota_arbitrio`, `servicio_arbitrio`, `ordenanza_arbitrio`,
 `inafectacion_arbitrio` y `parametro_tributario`. Determinar pide, además, creación sobre `cuota_arbitrio`. Nadie
@@ -1021,11 +1043,12 @@ emisión (hora de Lima); la gerencia; la dirección; una línea punteada, y el t
 
 Todas las HR y PU de un año (wasichai/srtm-backend#41), en segundo plano, como **un solo PDF** (por contribuyente, su
 HR seguida de sus PU) o como **un ZIP** (`<codigo>-<nombre>/HR-<anio>.pdf` y `<codigo>-<nombre>/PU-<codigo_predio>-<anio>.pdf`).
+Con `documentos`, cada contribuyente lleva los que se pidan de HR, PU y HLA (ver [Arbitrios](#arbitrios)).
 El padrón se reparte en **lotes** que generan en paralelo los **trabajadores** de todas las instancias, coordinados
 solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm-backend#53, #54).
 
 - **Job:** el objeto Core `emision_masiva` (anio, formato, estado, total, procesados, errores como JSON, archivo, tamano,
-  mensaje, iniciado, terminado, latido). Estados: **PENDIENTE** (se lee el padrón y se crean los lotes) →
+  mensaje, iniciado, terminado, latido, documentos como JSON). Estados: **PENDIENTE** (se lee el padrón y se crean los lotes) →
   **EN_PROCESO** (los trabajadores generan los lotes) → **ENSAMBLANDO** (una instancia une las partes) →
   **TERMINADA** o **FALLIDA** (con `mensaje`). `procesados` es la suma de los lotes y avanza durante la corrida.
 - **`POST /api/srtm/emisiones`** (202): exige permiso de **creación y de edición** sobre `emision_masiva` y de
@@ -1221,6 +1244,10 @@ La versión con lotes cambia el modelo, los estados y dónde viven los archivos.
    como `emision-<id>/emision-<anio>-<id>.<ext>`.
 4. **Bucket:** una regla de ciclo de vida que aborte las subidas en partes incompletas (por ejemplo, a los 7 días). Un
    pod que muere a mitad de una subida no puede abortarla, y sus partes se cobran hasta que alguien las borre.
+
+**La versión con la HLA** (arbitrios) agrega `emision_masiva.documentos`, que los trabajadores leen al tomar cada
+lote. Igual que arriba: `python3 apply.py` antes de arrancar el backend nuevo. Sin ese campo el backend no ve las
+tablas de la emisión de la organización y su POST falla. Los jobs anteriores, sin `documentos`, son de HR y PU.
 
 ### Medición
 

@@ -11,10 +11,10 @@ const val EMISION_LOTE = "emision_lote"
 internal val CAMPOS_LOTE =
     listOf("emision", "numero", "contribuyentes", "estado", "tomado_por", "latido", "intentos", "procesados", "documentos", "errores", "parte")
 internal val CAMPOS_EMISION =
-    listOf("anio", "formato", "estado", "total", "procesados", "errores", "archivo", "tamano", "mensaje", "iniciado", "terminado", "latido")
+    listOf("anio", "formato", "estado", "total", "procesados", "errores", "archivo", "tamano", "mensaje", "iniciado", "terminado", "latido", "documentos")
 
 // the emission as a kind of job by lotes: its lotes carry contribuyentes and count documentos, and a take returns the
-// emission's formato with its anio
+// emission's formato and the documents it asks for with its anio
 val TIPO_EMISION =
     TipoLotes(
         trabajo = EMISION_MASIVA,
@@ -24,7 +24,7 @@ val TIPO_EMISION =
         producidos = "documentos",
         camposTrabajo = CAMPOS_EMISION,
         camposLote = CAMPOS_LOTE,
-        delTrabajo = listOf("formato")
+        delTrabajo = listOf("formato", "documentos")
     )
 
 // a lote a worker of this instance took: what it needs to generate its part
@@ -37,7 +37,9 @@ data class LoteTomado(
     override val intentos: Int,
     val creadoPor: UUID?,
     val anio: Int,
-    val formato: FormatoEmision
+    val formato: FormatoEmision,
+    // what each contribuyente gets: the emission's documentos
+    val documentos: Set<DocumentoEmision> = POR_DEFECTO
 ) : TomaDeLote {
     override val trabajo: UUID get() = emision
 }
@@ -80,7 +82,8 @@ class LotesEmision(
                 intentos = it.intentos,
                 creadoPor = it.creadoPor,
                 anio = it.anio,
-                formato = FormatoEmision.valueOf(it.delTrabajo.getValue("formato")!!)
+                formato = FormatoEmision.valueOf(it.delTrabajo.getValue("formato")!!),
+                documentos = documentosDe(it.delTrabajo["documentos"])
             )
         }
 

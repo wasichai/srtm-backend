@@ -836,7 +836,9 @@
         {"name": "iniciado", "label": "Iniciado", "type": "DATETIME"},
         {"name": "terminado", "label": "Terminado", "type": "DATETIME"},
         {"name": "latido", "label": "Latido", "type": "DATETIME",
-          "description": "Lease de la instancia que la prepara o la ensambla: la renueva mientras trabaja; vencida, otra la toma."}
+          "description": "Lease de la instancia que la prepara o la ensambla: la renueva mientras trabaja; vencida, otra la toma."},
+        {"name": "documentos", "label": "Documentos", "type": "LONG_TEXT",
+          "description": "JSON: los documentos de cada contribuyente, de HR, PU y HLA (hoja de liquidación de arbitrios). Vacío: HR y PU."}
       ]
     },
     {
