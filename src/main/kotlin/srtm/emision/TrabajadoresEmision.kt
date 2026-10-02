@@ -295,7 +295,10 @@ class GrupoTrabajadores(
             val partes =
                 conLatido(cadaLatido, { estado.latirEnsamblado(token.get())?.also { token.set(it) } != null }) {
                     val partes = lotes.partes(e.organizacion, e.id)
-                    ensamblador.ensamblar(e.formato, partes.filter { it.estado == TERMINADO }.mapNotNull { it.parte }, clave, temporales)
+                    // each parte by its number, never by the row's `parte`: a lote can be created through core's records
+                    // api with any key there (another emission's file, even another organization's)
+                    val claves = partes.filter { it.estado == TERMINADO }.map { claveParte(e.id, it.numero, e.formato) }
+                    ensamblador.ensamblar(e.formato, claves, clave, temporales)
                     // the final file is stored: the partes and anything else of the emission go
                     almacen.listar(prefijoEmision(e.id)).filter { it != clave }.forEach { almacen.borrar(it) }
                     partes

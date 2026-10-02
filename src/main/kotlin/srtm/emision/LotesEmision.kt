@@ -45,6 +45,7 @@ data class ParteLote(
     val procesados: Int,
     val documentos: Int,
     val errores: List<ErrorEmision>,
+    // the key its worker wrote, for whoever reads the row: the assembly rebuilds it from the numero (claveParte)
     val parte: String?
 )
 

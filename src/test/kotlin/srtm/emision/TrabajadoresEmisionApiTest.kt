@@ -239,6 +239,32 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
     }
 
     @Test
+    fun `a lote planted TERMINADO with another emission's file as its parte never brings that file into the result`() {
+        val anio = anio()
+        val e = escenario(anio)
+        // the result of another emission (of this organization or another one): a key a launcher may know
+        val ajena = claveResultado(UUID.randomUUID(), anio, FormatoEmision.PDF)
+        val pdfAjeno = enBlanco(7)
+        runBlocking { almacen.guardar(ajena, Files.write(Files.createTempFile("ajena", ".pdf"), pdfAjeno)) }
+        val id = enProceso(anio, 3)
+        val uuid = UUID.fromString(id)
+        loteNuevo(id, 1, aEmitir(e))
+        // a lote nobody generated, created TERMINADO through core's records api with that key in its parte
+        loteNuevo(id, 2, emptyList(), token, "estado" to "TERMINADO", "intentos" to 1, "documentos" to 7, "parte" to ajena)
+
+        grupo("viva")
+
+        // its parte is the one of its number: there is none, and the assembly fails
+        val fallida = esperar(id)
+        assertEquals("FALLIDA", fallida["estado"].asString(), fallida.toString())
+        assertTrue(fallida["mensaje"].asString().contains(claveParte(uuid, 2, FormatoEmision.PDF)), fallida.toString())
+        // the other emission's file is untouched, and this one keeps nothing
+        assertEquals(pdfAjeno.size.toLong(), runBlocking { almacen.tamano(ajena) })
+        assertEquals(emptyList<String>(), runBlocking { almacen.listar(prefijoEmision(uuid)) })
+        runBlocking { almacen.borrar(ajena) }
+    }
+
+    @Test
     fun `the identity of a lote is its creator's as the jwt filter would build it, and none for an unknown user`() {
         val admin = admin()
 
@@ -257,35 +283,8 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
         val anio = anio()
         val e = escenario(anio)
         // a single lote with every contribuyente of the padrón, as lote >= total cuts it
-        val id =
-            post(
-                "/api/objects/emision_masiva/records",
-                mapOf(
-                    "attributes" to
-                        mapOf(
-                            "anio" to anio,
-                            "formato" to "PDF",
-                            "estado" to "EN_PROCESO",
-                            "total" to 3,
-                            "procesados" to 0,
-                            "latido" to Instant.now().toString()
-                        )
-                )
-            )["id"].asString()
-        post(
-            "/api/objects/emision_lote/records",
-            mapOf(
-                "attributes" to
-                    mapOf(
-                        "emision" to id,
-                        "numero" to 1,
-                        "contribuyentes" to contribuyentesJson(aEmitir(e)),
-                        "estado" to "PENDIENTE",
-                        "intentos" to 0,
-                        "procesados" to 0
-                    )
-            )
-        )
+        val id = enProceso(anio, 3)
+        loteNuevo(id, 1, aEmitir(e))
 
         grupo("sola", cantidad = 1)
 
@@ -293,6 +292,53 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
         assertEquals("TERMINADA", terminada["estado"].asString(), terminada.toString())
         assertEquals(3, terminada["procesados"].asInt())
         esLaConcatenacion(descargar(id).cuerpo, documentos(e, anio))
+    }
+
+    // an emission EN_PROCESO of `total` contribuyentes created through core's records api, as a launcher may: its id
+    private fun enProceso(
+        anio: Int,
+        total: Int,
+        token: String = this.token
+    ): String =
+        post(
+            "/api/objects/emision_masiva/records",
+            mapOf(
+                "attributes" to
+                    mapOf(
+                        "anio" to anio,
+                        "formato" to "PDF",
+                        "estado" to "EN_PROCESO",
+                        "total" to total,
+                        "procesados" to 0,
+                        "latido" to Instant.now().toString()
+                    )
+            ),
+            token
+        )["id"].asString()
+
+    // a lote of the emission through core's records api: PENDIENTE by default, with `extra` fields
+    private fun loteNuevo(
+        emision: String,
+        numero: Int,
+        contribuyentes: List<ContribuyenteAEmitir>,
+        token: String = this.token,
+        vararg extra: Pair<String, Any>
+    ) {
+        post(
+            "/api/objects/emision_lote/records",
+            mapOf(
+                "attributes" to
+                    mapOf(
+                        "emision" to emision,
+                        "numero" to numero,
+                        "contribuyentes" to contribuyentesJson(contribuyentes),
+                        "estado" to "PENDIENTE",
+                        "intentos" to 0,
+                        "procesados" to 0
+                    ) + extra
+            ),
+            token
+        )
     }
 
     // a started group of this context playing an instance, with its own work dir
