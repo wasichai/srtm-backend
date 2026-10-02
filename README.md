@@ -75,8 +75,8 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 32 created, 0 updated, 0 skipped  (21 objetos + 11 relaciones)
-python3 apply.py                   # idempotente: done: 0 created, 0 updated, 32 skipped
+python3 apply.py                   # done: 33 created, 0 updated, 0 skipped  (22 objetos + 11 relaciones)
+python3 apply.py                   # idempotente: done: 0 created, 0 updated, 33 skipped
 python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
 ```
 
@@ -117,11 +117,14 @@ obras complementarias desde objetos catálogo:
 
 ```bash
 cd model
-python3 import_catalogos.py                                                           # ubigeo, categorías, partidas de obras y usos
+python3 import_catalogos.py                                                           # ubigeo, categorías, partidas de obras, usos y municipalidad
 python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run  # lee Core y dice qué haría
 python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"            # ubigeo + vías + unidades urbanas
 ```
 
+- **`municipalidad`:** la cabecera del PU y la HR ([Cabecera de los documentos](#cabecera-de-los-documentos)). Se
+  crea desde `model/data/municipalidad.json` solo si la organización no tiene ninguna; nunca pisa la editada en el
+  admin. Los datos que trae son **provisionales**.
 - **`ubigeo`:** los 1 893 distritos del INEI, de `model/data/ubigeo.csv`. El archivo es un recorte de
   [ubigeo-peru-aumentado](https://github.com/jmcastagnetto/ubigeo-peru-aumentado): código INEI, departamento,
   provincia y distrito.
@@ -504,7 +507,7 @@ python3 apply.py                                  # 3. quita ANEXO, HABILITACION
 
 ## Modelo
 
-Veintiún objetos (`model/model.json`):
+Veintidós objetos (`model/model.json`):
 - **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
   *Formato Padrón Municipal Armonización 2026*.
 - **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
@@ -799,7 +802,9 @@ wasichai/srtm-backend#37, aquí están la PU (Predio Urbano) y la HR (Hoja de Re
     HTML, y openhtmltopdf (el fork mantenido `io.github.openhtmltopdf`, sobre PDFBox 3) lo pasa a PDF.
   - Hoja A4, con `templates/emision/base.css` en línea en cada plantilla (variable `css`): márgenes, recuadros con
     título sombreado, grillas de etiqueta y valor, tablas y el pie "Página X de Y".
-  - Fuente DejaVu Sans embebida (`resources/fonts`, con su licencia): tildes y ñ salen iguales en cualquier visor.
+  - Fuente Liberation Sans embebida (`resources/fonts`, con su licencia SIL OFL 1.1), con las métricas de Arial,
+    como los recibos de la municipalidad; Arial no se puede distribuir. DejaVu Sans queda detrás para cualquier glifo
+    que le falte. Tildes y ñ salen iguales en cualquier visor.
   - El log de openhtmltopdf va por slf4j, en WARN (`logging.level.com.openhtmltopdf`).
 - **`PdfMerger.merge(partes, destino)`:** une PDF en orden con PDFBox, de bytes a un stream o de archivos a un
   archivo. Usa archivos temporales (`MemoryUsageSetting.setupTempFileOnly()`), para que la masiva no llene la memoria.
@@ -809,8 +814,8 @@ wasichai/srtm-backend#37, aquí están la PU (Predio Urbano) y la HR (Hoja de Re
   - Lee Core como el usuario, a través de `Registros`, y dibuja el PDF fuera del hilo de la petición.
 - **La PU** (`templates/emision/pu.html`, con `HojaPu.kt` que deja cada valor ya formateado):
   - Una por predio y titular, con sus DJ **vigentes** del año. Cada `secuencia_uso` es una sección "Uso N.°".
-  - Cabecera: la municipalidad (`srtm.municipalidad.nombre`, `SRTM_MUNICIPALIDAD_NOMBRE`), el título, el año y los
-    N.° de declaración.
+  - Cabecera institucional ([Cabecera de los documentos](#cabecera-de-los-documentos)), el título y, debajo, el año
+    y los N.° de declaración.
   - Contribuyente, ubicación del predio, datos del predio, niveles (con las 7 categorías), obras complementarias y
     los valores declarados (autoavalúo, valor condominio, deducción, valor afecto).
   - Muestra los valores declarados, sin revalorizar. Los niveles y obras INACTIVO no salen.
@@ -836,8 +841,31 @@ wasichai/srtm-backend#37, aquí están la PU (Predio Urbano) y la HR (Hoja de Re
   - Responde `application/pdf` con `Content-Disposition: inline; filename="HR-<codigo>-<anio>.pdf"`.
   - 422 si falta un parámetro tributario del año. El problem+json agrega `faltan` (como en `/liquidacion`).
   - 404 si el contribuyente no existe o no tiene DJ vigente ese año.
-- **Tiempo:** unos 80 ms por PU de dos usos solo en dibujar el PDF (`HojaPuTest`). `PuApiTest` mide 100 PU seguidas
+- **Tiempo:** unos 50 ms por PU de dos usos solo en dibujar el PDF (`HojaPuTest`). `PuApiTest` mide 100 PU seguidas
   por la API, con las lecturas de Core, y lo imprime en la salida de `integrationTest`.
+
+### Cabecera de los documentos
+
+El PU y la HR abren con la misma cabecera (`templates/emision/cabecera.html`), ordenada como los recibos de la
+municipalidad: el escudo a la izquierda, con el nombre en negrita y la oficina centrados; el RUC y la fecha y hora de
+emisión (hora de Lima); la gerencia; la dirección; una línea punteada, y el título del documento.
+
+- **Los datos** salen del registro `municipalidad` de la organización (nombre, oficina, RUC, gerencia y dirección),
+  que se edita en el admin: `/admin`, objeto *Municipalidad*.
+  - Hay uno por organización. Si hay más, vale el más antiguo y el log lo avisa.
+  - Sin registro, la cabecera solo lleva `srtm.municipalidad.nombre` (`SRTM_MUNICIPALIDAD_NOMBRE`).
+  - Una línea vacía no se imprime.
+  - Se lee como el usuario que emite, así que su rol necesita permiso de lectura sobre `municipalidad`, como sobre
+    `parametro_tributario`.
+  - Se guarda `srtm.municipalidad.cache` (1 min) por organización: un cambio en el admin aparece en el PDF dentro de
+    ese tiempo.
+  - Los datos de `model/data/municipalidad.json` son **provisionales**: el RUC sale del padrón, y la oficina y la
+    gerencia son genéricas. Se corrigen en el admin.
+- **El escudo** es un archivo: core no tiene campos de imagen.
+  - `srtm.municipalidad.escudo` (`SRTM_MUNICIPALIDAD_ESCUDO`) admite `classpath:…` o `file:…`, solo PNG o JPG.
+  - Se lee una vez al arrancar y va dentro del PDF. Si no es PNG ni JPG, o si no existe, la app no arranca y el error
+    nombra el archivo.
+  - Vacío, la cabecera no lleva escudo.
 
 ## Emisión masiva
 

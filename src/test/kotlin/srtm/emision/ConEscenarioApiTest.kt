@@ -81,8 +81,12 @@ abstract class ConEscenarioApiTest : ConParametrosApiTest() {
         documentos: List<ByteArray>
     ) {
         assertEquals(documentos.sumOf { paginas(it) }, paginas(pdf))
-        assertEquals(documentos.joinToString("") { texto(it) }, texto(pdf))
+        assertEquals(sinHora(documentos.joinToString("") { texto(it) }), sinHora(texto(pdf)))
     }
+
+    // the header prints when each document was emitted, to the minute: the masiva and the documents asked for after it
+    // may fall on different minutes. the dates without a time (the cuotas' due dates) still count
+    private fun sinHora(texto: String) = texto.replace(Regex("""\d{2}/\d{2}/\d{4} \d{2}:\d{2}"""), "<emitido>")
 
     private fun predioDe(codigo: String): String =
         post("/api/srtm/predios", mapOf("codigo" to codigo, "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO"))["id"].asString()

@@ -34,8 +34,13 @@ logging:
 
 srtm:
   municipalidad:
-    # the header of the emitted documents (PU, HR)
+    # the header of the emitted documents (PU, HR) is the organization's municipalidad record, edited in the admin
+    # (nombre, oficina, ruc, gerencia, direccion). this name is only its fallback, while there is no record
     nombre: ${SRTM_MUNICIPALIDAD_NOMBRE:MUNICIPALIDAD DISTRITAL DE PERENÉ}
+    # the escudo, a png or jpg: classpath:… or file:… (core has no image field). empty prints none
+    escudo: ${SRTM_MUNICIPALIDAD_ESCUDO:}
+    # how long the header is kept per organization: an edit in the admin shows within it
+    cache: 1m
   pide:
     reniec:
       # the DNI's names from RENIEC through the PIDE (pages 3, 8 and 15). off until the municipality's convenio gives
