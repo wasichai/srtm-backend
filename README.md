@@ -75,8 +75,8 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 30 created, 0 updated, 0 skipped  (20 objetos + 10 relaciones)
-python3 apply.py                   # idempotente: done: 0 created, 0 updated, 29 skipped
+python3 apply.py                   # done: 32 created, 0 updated, 0 skipped  (21 objetos + 11 relaciones)
+python3 apply.py                   # idempotente: done: 0 created, 0 updated, 32 skipped
 python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
 ```
 
@@ -504,7 +504,7 @@ python3 apply.py                                  # 3. quita ANEXO, HABILITACION
 
 ## Modelo
 
-Veinte objetos (`model/model.json`):
+Veintiún objetos (`model/model.json`):
 - **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
   *Formato Padrón Municipal Armonización 2026*.
 - **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
@@ -851,8 +851,10 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
   **EN_PROCESO** (los trabajadores generan los lotes) → **ENSAMBLANDO** (una instancia une las partes) →
   **TERMINADA** o **FALLIDA** (con `mensaje`). `procesados` es la suma de los lotes y avanza durante la corrida.
 - **`POST /api/srtm/emisiones`** (202): exige permiso de **creación y de edición** sobre `emision_masiva` y de
-  **creación** sobre `emision_lote` antes de crear nada (403 problem+json si falta alguno; antes, un job que no podía
-  guardarse quedaba PENDIENTE, wasichai/srtm-backend#47). Da **409** si ya hay una emisión PENDIENTE, EN_PROCESO o
+  **creación** sobre `emision_lote` antes de crear nada (403 problem+json si falta alguno, wasichai/srtm-backend#47).
+  Los lotes se crean como quien llamó, y aunque las transiciones del job las escribe el sistema, las de su preparación
+  (PENDIENTE → EN_PROCESO, o FALLIDA si falla) quedan en la auditoría como edición (UPDATE) de quien la lanzó: por eso
+  la edición. Da **409** si ya hay una emisión PENDIENTE, EN_PROCESO o
   ENSAMBLANDO **de la misma organización y año** ("Ya hay una emisión masiva de <anio> en curso: espere a que
   termine"); dos organizaciones emiten a la vez. Si llegan dos POST a la vez, sigue el más antiguo y el otro da 409.
   En segundo plano, como quien llamó, lee los contribuyentes con DJ **vigentes** del año (por código, sus predios por
@@ -861,7 +863,8 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
   (PENDIENTE, EN_PROCESO, TERMINADO o FALLIDO), `tomado_por`, `latido`, `intentos`, `procesados`, `documentos`,
   `errores` y `parte` (su clave en el almacén). Tienen `srtm.emision.lote` contribuyentes (`SRTM_EMISION_LOTE`, por
   defecto 100). Un trabajador toma el siguiente con `UPDATE ... FOR UPDATE SKIP LOCKED` sobre la tabla física: dos
-  trabajadores, de esta u otra instancia, nunca toman el mismo. Genera la parte (`GeneradorEmision`: por cada
+  trabajadores, de esta u otra instancia, nunca toman el mismo. Las organizaciones se turnan: cada toma empieza por la
+  siguiente a la del último lote que tomó la instancia, así las emisiones de dos organizaciones avanzan a la vez. Genera la parte (`GeneradorEmision`: por cada
   contribuyente su HR y sus PU; PDF unido con `PdfMerger` o ZIP en streaming) en sus temporales y la deja en el almacén
   como `emision-<id>/parte-00001.pdf|zip`. Un contribuyente que falla queda en `errores`
   (`{contribuyente: <codigo>, mensaje}`), sin sus documentos, y el resto sigue.
@@ -1017,6 +1020,27 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
   `boundedElastic` y **no responde `Range`**: siempre el archivo entero, con 200. 409 si no está TERMINADA, 410 si se
   depuró, 404 si el almacén ya no tiene la clave. La clave y el nombre (`Content-Disposition`) se arman del job, nunca
   se leen del registro.
+
+### Actualizar desde la versión anterior
+
+La versión con lotes cambia el modelo, los estados y dónde viven los archivos. Para pasar a ella:
+
+1. **El modelo primero**, con el backend nuevo todavía apagado: `cd model && python3 apply.py --dry-run` (muestra lo
+   que mandaría, sin llamar a Core) y luego `python3 apply.py`, que sobre el modelo existente crea `emision_lote` y su
+   relación y añade `emision_masiva.latido` y el estado `ENSAMBLANDO`. Sin `emision_lote`, el backend nuevo no ve la
+   organización (le faltan las tablas de los lotes) y su POST falla.
+2. **Sin versiones mezcladas:** detener **todas** las instancias viejas (mejor sin ninguna masiva corriendo) antes de
+   arrancar las nuevas. Un POST de una instancia vieja pasa a FALLIDA los jobs activos de las nuevas (los cree sin
+   worker), y una instancia nueva falla el job que una vieja esté corriendo (no tiene `latido`). Al arrancar, la
+   versión nueva pasa a FALLIDA los jobs que dejó la anterior (PENDIENTE o EN_PROCESO sin `latido`): se vuelven a
+   emitir. Con el almacén local, `AlmacenLocal` mueve al arrancar los archivos planos de la versión anterior
+   (`<dir>/emision-<anio>-<id>.<ext>`) a su clave.
+3. **De local a S3:** los archivos existentes **no se migran solos**: si no se copian al bucket con las mismas claves,
+   sus descargas dan 404. Por ejemplo `aws s3 sync <srtm.emision.dir> s3://<bucket>/<prefijo>`. Viniendo directo de la
+   versión anterior, arrancar antes una vez con `local` (para que `AlmacenLocal` los pase a sus claves) o copiarlos ya
+   como `emision-<id>/emision-<anio>-<id>.<ext>`.
+4. **Bucket:** una regla de ciclo de vida que aborte las subidas en partes incompletas (por ejemplo, a los 7 días). Un
+   pod que muere a mitad de una subida no puede abortarla, y sus partes se cobran hasta que alguien las borre.
 
 ### Medición
 
