@@ -75,8 +75,8 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 30 created, 0 updated, 0 skipped  (20 objetos + 10 relaciones)
-python3 apply.py                   # idempotente: done: 0 created, 0 updated, 29 skipped
+python3 apply.py                   # done: 33 created, 0 updated, 0 skipped  (22 objetos + 11 relaciones)
+python3 apply.py                   # idempotente: done: 0 created, 0 updated, 33 skipped
 python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
 ```
 
@@ -507,7 +507,7 @@ python3 apply.py                                  # 3. quita ANEXO, HABILITACION
 
 ## Modelo
 
-Veinte objetos (`model/model.json`):
+Veintidós objetos (`model/model.json`):
 - **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
   *Formato Padrón Municipal Armonización 2026*.
 - **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
@@ -518,7 +518,7 @@ Veinte objetos (`model/model.json`):
 - **Catálogos:** `ubigeo`, `via`, `unidad_urbana`, `categoria_valor`, `obra_categoria` y `uso_predio`.
 - **Parámetros tributarios:** `parametro_tributario`, los valores normativos verificados del repo `normativa` (ver
   [Impuesto predial](#impuesto-predial)).
-- **Emisión masiva:** `emision_masiva`, el job de la emisión de un año en segundo plano (ver
+- **Emisión masiva:** `emision_masiva`, el job de la emisión de un año en segundo plano, y `emision_lote`, sus lotes (ver
   [Emisión masiva](#emisión-masiva)).
 
 Geometrías (wasichai-gis, GeoJSON en EPSG:4326 por la API):
@@ -650,11 +650,11 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET | `/api/srtm/documentos/{tipo}/{numero}` | los apellidos y nombres que RENIEC da de un DNI; 404 si no hay datos o no hay convenio ([PIDE RENIEC](#pide-reniec)) |
 | GET | `/api/srtm/predios/{id}/pu?anio&contribuyente` | la PU del predio en PDF, inline; 404 sin DJ vigente en el año, 409 con `titulares` si hay varios y falta `contribuyente` ([Emisión de documentos](#emisión-de-documentos)) |
 | GET | `/api/srtm/contribuyentes/{id}/hr?anio` | la HR del contribuyente en PDF, inline, con el impuesto y las cuotas de `/liquidacion`; 422 con `faltan` sin parámetros del año, 404 sin DJ vigente en el año ([Emisión de documentos](#emisión-de-documentos)) |
-| POST | `/api/srtm/emisiones` `{anio, formato: PDF\|ZIP}` | lanza la emisión masiva del año en segundo plano: 202 con el job; 403 sin permiso de creación y de edición sobre `emision_masiva`; 409 si ya corre una, en esta u otra instancia ([Emisión masiva](#emisión-masiva)) |
+| POST | `/api/srtm/emisiones` `{anio, formato: PDF\|ZIP}` | lanza la emisión masiva del año en segundo plano, por lotes: 202 con el job; 403 sin permiso de creación y de edición sobre `emision_masiva` y de creación sobre `emision_lote`; 409 si ya hay una activa de la misma organización y año ([Emisión masiva](#emisión-masiva)) |
 | GET | `/api/srtm/emisiones?anio` | los jobs, el más reciente primero |
 | GET | `/api/srtm/emisiones/{id}` | un job: `{id, anio, formato, estado, total, procesados, errores:[{contribuyente, mensaje}], archivo, tamano, mensaje, iniciado, terminado}` |
 | GET | `/api/srtm/emisiones/{id}/archivo` | el PDF o ZIP, `attachment; filename="emision-<anio>-<id>.pdf\|zip"`, en streaming; 409 si aún no está TERMINADA; 410 si la retención depuró el archivo |
-| DELETE | `/api/srtm/emisiones/{id}` | borra el job y su archivo: 204; 409 si aún corre; 403 sin permiso de borrado sobre `emision_masiva` |
+| DELETE | `/api/srtm/emisiones/{id}` | borra el job, sus lotes y sus archivos (si aún corre, la cancela): 204; 403 sin permiso de borrado sobre `emision_masiva` |
 
 Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
 - **Inscripción:** el backend asigna `codigo` (6 dígitos, correlativo), `numero_declaracion` y `fecha_registro`.
@@ -871,53 +871,246 @@ emisión (hora de Lima); la gerencia; la dirección; una línea punteada, y el t
 
 Todas las HR y PU de un año (wasichai/srtm-backend#41), en segundo plano, como **un solo PDF** (por contribuyente, su
 HR seguida de sus PU) o como **un ZIP** (`<codigo>-<nombre>/HR-<anio>.pdf` y `<codigo>-<nombre>/PU-<codigo_predio>-<anio>.pdf`).
+El padrón se reparte en **lotes** que generan en paralelo los **trabajadores** de todas las instancias, coordinados
+solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm-backend#53, #54).
 
-- **Job:** el objeto Core `emision_masiva` (anio, formato, estado PENDIENTE → EN_PROCESO → TERMINADA o FALLIDA, total,
-  procesados, errores como JSON, archivo, tamano, mensaje, iniciado, terminado). El job guarda su avance como quien
-  lo lanzó, así que el POST exige permiso de **creación y de edición** sobre el objeto antes de crear nada: sin el de
-  edición da 403 (problem+json). Antes, un job que no podía guardarse quedaba PENDIENTE y trababa toda emisión
-  posterior (wasichai/srtm-backend#47).
-- **`EmisionMasivaService`:**
-  - Un `CoroutineScope(SupervisorJob() + Dispatchers.IO)` de la aplicación, cerrado en `@PreDestroy`.
-  - **Un solo worker en todo el despliegue**, aunque corran varias instancias contra la misma base: el POST toma un
-    advisory lock de Postgres (`pg_try_advisory_lock`, `CerrojoEmision`) en una conexión propia, y el worker lo
-    retiene hasta terminar. Si otro lo tiene (en esta u otra instancia), el POST da 409 sin crear el job. Si la
-    instancia muere, Postgres cierra su sesión y suelta el lock. Es uno para todas las organizaciones: mientras una
-    emite, la otra recibe 409. Si la conexión del lock se cae a mitad de un job, otra instancia podría empezar otra
-    emisión: la conexión no se vigila.
-  - Un job PENDIENTE o EN_PROCESO sin nadie que tenga el lock no tiene worker (la instancia murió, o el job no pudo
-    guardar su final): el siguiente worker, al empezar, lo pasa a FALLIDA ("interrumpida: el proceso que la corría ya
-    no está"). Nunca traba las emisiones siguientes.
-  - Recorre los contribuyentes con DJ **vigentes** del año, por código, y por cada uno pide `hr` y la `pu` de cada
-    predio (por código de predio) a `DocumentosPrediales`. Un condominio da una PU por titular.
-  - **PDF:** cada documento va a un archivo temporal y al final `PdfMerger` los une en uno. **ZIP:** `ZipOutputStream`
-    en streaming. El archivo se escribe como `.part` y se renombra al terminar.
-  - Guarda `procesados` cada 25 contribuyentes y al final. Un contribuyente que falla queda en `errores`
-    (`{contribuyente: <codigo>, mensaje}`), sin sus documentos, y el resto sigue: el job termina TERMINADA. Un error
-    general lo deja FALLIDA con `mensaje`.
-  - **Usuario:** el job corre como quien lo lanzó. La autenticación de la petición pasa a la corrutina del job
-    (`ReactiveSecurityContextHolder.withAuthentication(...).asCoroutineContext()`, como hace wasichai-agent), así que
-    Core aplica sus permisos a cada lectura y escritura. El JWT no se vuelve a validar: su vencimiento no corta un job
-    ya empezado.
-  - **Al arrancar** (`ApplicationReadyEvent`), si nadie tiene el lock, los jobs PENDIENTE o EN_PROCESO de cualquier
-    organización pasan a FALLIDA con el mensaje "interrumpida por reinicio", se borran los `.part` y los `.partes-`
-    que dejó un job a medias, y corre la retención. Si otra instancia tiene el lock, no toca nada: su job está vivo, y
-    su worker recuperará los demás.
-  - **Auditoría:** al arrancar no hay usuario, y wasichai 0.2.0 no ofrece un contexto de sistema para escribir por
-    `RecordService` (exige el JWT de un usuario). Por eso la recuperación y la retención van directo a la tabla del
-    objeto, con los nombres de columna que da la metadata de Core, y dejan su entrada en el log de auditoría de Core
-    con su `AuditService`: operación UPDATE, sin usuario, con los campos que cambiaron. No avisan a los listeners de
-    `RecordChange`.
-- **Archivos** en `srtm.emision.dir` (`SRTM_EMISION_DIR`, por defecto `./data/emisiones`, fuera de git), con el
-  nombre `emision-<anio>-<id>.pdf|zip`. Llevan datos personales de todo el padrón: en producción, un volumen
-  persistente y privado.
-- **Retención**, después de cada emisión y al arrancar: de cada organización y año se conservan los últimos
-  `srtm.emision.conservar` archivos (`SRTM_EMISION_CONSERVAR`, por defecto 5), y ninguno más viejo que
+- **Job:** el objeto Core `emision_masiva` (anio, formato, estado, total, procesados, errores como JSON, archivo, tamano,
+  mensaje, iniciado, terminado, latido). Estados: **PENDIENTE** (se lee el padrón y se crean los lotes) →
+  **EN_PROCESO** (los trabajadores generan los lotes) → **ENSAMBLANDO** (una instancia une las partes) →
+  **TERMINADA** o **FALLIDA** (con `mensaje`). `procesados` es la suma de los lotes y avanza durante la corrida.
+- **`POST /api/srtm/emisiones`** (202): exige permiso de **creación y de edición** sobre `emision_masiva` y de
+  **creación** sobre `emision_lote` antes de crear nada (403 problem+json si falta alguno, wasichai/srtm-backend#47).
+  Los lotes se crean como quien llamó, y aunque las transiciones del job las escribe el sistema, las de su preparación
+  (PENDIENTE → EN_PROCESO, o FALLIDA si falla) quedan en la auditoría como edición (UPDATE) de quien la lanzó: por eso
+  la edición. Da **409** si ya hay una emisión PENDIENTE, EN_PROCESO o
+  ENSAMBLANDO **de la misma organización y año** ("Ya hay una emisión masiva de <anio> en curso: espere a que
+  termine"); dos organizaciones emiten a la vez. Si llegan dos POST a la vez, sigue el más antiguo y el otro da 409.
+  En segundo plano, como quien llamó, lee los contribuyentes con DJ **vigentes** del año (por código, sus predios por
+  código), los corta en lotes y pasa la emisión a EN_PROCESO con su `total`. Un fallo la deja FALLIDA.
+- **Lotes** (objeto Core `emision_lote`): `emision`, `numero` (el orden), `contribuyentes` (JSON), `estado`
+  (PENDIENTE, EN_PROCESO, TERMINADO o FALLIDO), `tomado_por`, `latido`, `intentos`, `procesados`, `documentos`,
+  `errores` y `parte` (su clave en el almacén). Tienen `srtm.emision.lote` contribuyentes (`SRTM_EMISION_LOTE`, por
+  defecto 100). Un trabajador toma el siguiente con `UPDATE ... FOR UPDATE SKIP LOCKED` sobre la tabla física: dos
+  trabajadores, de esta u otra instancia, nunca toman el mismo. Las organizaciones se turnan: cada toma empieza por la
+  siguiente a la del último lote que tomó la instancia, así las emisiones de dos organizaciones avanzan a la vez. Genera la parte (`GeneradorEmision`: por cada
+  contribuyente su HR y sus PU; PDF unido con `PdfMerger` o ZIP en streaming) en sus temporales y la deja en el almacén
+  como `emision-<id>/parte-00001.pdf|zip`. Un contribuyente que falla queda en `errores`
+  (`{contribuyente: <codigo>, mensaje}`), sin sus documentos, y el resto sigue.
+- **Trabajadores** (`TrabajadoresEmision`): al arrancar, cada instancia lanza N corrutinas (`SupervisorJob`,
+  `Dispatchers.IO`) con un id de instancia `<hostname>-<uuid del arranque>`, que queda en `tomado_por`. Cada una, en
+  su ciclo: falla las emisiones abandonadas, reclama un ensamblado pendiente, o toma un lote. Sin trabajo espera
+  `srtm.emision.espera` (`SRTM_EMISION_ESPERA`, por defecto 5s); un POST a esa instancia la despierta antes.
+  - **Cuántos:** `srtm.emision.trabajadores` (`SRTM_EMISION_TRABAJADORES`, por defecto `auto`). `auto` =
+    `min(núcleos, (memoria máxima − 512 MiB) / 300 MiB)`, entre 1 y los núcleos. Un número se toma tal cual; `0` es una
+    instancia que no corre trabajadores (sigue atendiendo POST). Nunca pasa de `spring.r2dbc.pool.max-size − 2` (para
+    no dejar sin conexiones al portal; si un número lo pasa, se avisa en el log). El valor y el id de la instancia se
+    registran al arrancar.
+  - **Lease:** el trabajador renueva el `latido` de su lote cada `lease/4`. Un lote EN_PROCESO cuyo latido venció
+    `srtm.emision.lease` (`SRTM_EMISION_LEASE`, por defecto 2m) lo toma otro: así se retoma lo de una instancia que
+    murió. Cada toma suma un intento, y cada escritura del lote exige que siga siendo de esa toma: un trabajador que lo
+    perdió (lease vencido y retomado, o la emisión cancelada o borrada) aborta, borra su temporal y no toca nada del
+    nuevo dueño. Su parte se borra solo si el lote ya no existe o quedó FALLIDO.
+  - **Intentos:** un lote tomado más de `srtm.emision.intentos` veces (`SRTM_EMISION_INTENTOS`, por defecto 3) queda
+    FALLIDO y sus contribuyentes pasan a `errores` con "lote fallido tras N intentos". Un fallo inesperado al generar
+    lo suelta (PENDIENTE) para el siguiente.
+- **Identidad:** `RecordService` revisa los permisos, y wasichai 0.2.0 no ofrece cómo reconstruir el `Authentication`
+  de un usuario ni un contexto de sistema; `CurrentUser` solo lee un principal `Jwt` (`sub` y los claims `org`,
+  `email` y `roles`). Por eso cada lote se genera **como quien lo creó** (el `created_by` del lote, el mismo usuario que
+  lanzó la emisión): `IdentidadEmision` arma en memoria el `Jwt` que armaría el filtro de Core, con la fila y los roles
+  actuales de ese usuario. Ese `Jwt` nunca se firma ni sale del proceso. Si el usuario fue borrado o deshabilitado, el
+  lote falla sin reintentos ("el usuario que lanzó la emisión ya no existe o está deshabilitado"). La preparación corre
+  con la autenticación de la petición (`ReactiveSecurityContextHolder.withAuthentication(...)`); el JWT no se vuelve a
+  validar después.
+- **Ensamblado** (`EnsambladorEmision`): el trabajador que deja un lote TERMINADO o FALLIDO intenta pasar la emisión a
+  ENSAMBLANDO con un `UPDATE` condicional (EN_PROCESO y sin lotes por generar, o ENSAMBLANDO con el latido vencido):
+  solo el que obtiene la fila ensambla, y mantiene su latido cada `lease/4`. Trae las partes en orden de `numero`,
+  las une (PDF con `PdfMerger`; ZIP copiando las entradas en orden), guarda el archivo final, borra las partes y pasa
+  la emisión a TERMINADA con `archivo`, `tamano`, `terminado`, `procesados` y los `errores` de todos los lotes en
+  orden. Luego corre la retención. Si el ensamblador muere, otro trabajador lo retoma cuando vence el lease; si el
+  archivo final ya estaba guardado, lo usa tal cual. Un fallo deja la emisión FALLIDA con `mensaje` y sin partes. Una
+  emisión sin contribuyentes no tiene lotes: el primer ciclo de un trabajador la ensambla vacía.
+- **Al arrancar** (`ApplicationReadyEvent`): las emisiones abandonadas pasan a FALLIDA ("interrumpida: el proceso que
+  la corría ya no está"): las PENDIENTE cuyo latido venció (su preparación murió) y las EN_PROCESO **sin latido**, que
+  son jobs de la versión anterior a los lotes (no tienen lotes y nunca se ensamblan). Corre la retención. Los lotes de
+  una emisión viva no se tocan: se retoman al vencer su lease. Cada grupo de trabajadores limpia sus temporales antes
+  de empezar. Ya no hay advisory lock (`CerrojoEmision` se fue).
+- **Auditoría:** las transiciones del job (PENDIENTE → EN_PROCESO, → ENSAMBLANDO, → TERMINADA o FALLIDA) y la
+  retención van directo a la tabla del objeto, con los nombres de columna que da la metadata de Core, y dejan su
+  entrada en el log de auditoría con `AuditService`: operación UPDATE, con el usuario que lanzó la emisión cuando es su
+  preparación y sin usuario cuando es del sistema. El avance y el latido no se auditan, ni las escrituras de los lotes.
+  No avisan a los listeners de `RecordChange`.
+- **Varias instancias en Docker:** todas contra la misma base y con el **mismo volumen** en `srtm.emision.dir` (el
+  almacén local es compartido), y cada una con sus `temporales` **locales** (nunca compartidos: cada instancia limpia
+  los suyos al arrancar). Por ejemplo, con un servicio `backend` en `compose.yml`:
+
+  ```yaml
+  backend:
+    image: srtm-backend
+    environment:
+      SRTM_EMISION_DIR: /data/emisiones # el volumen compartido
+      SRTM_EMISION_TEMPORALES: /tmp/srtm-emision # dentro del contenedor, de cada réplica
+    volumes:
+      - emisiones:/data/emisiones
+  ```
+
+  y `docker compose up --scale backend=3`. Los lotes se reparten entre las réplicas; cualquiera atiende el POST, la
+  consulta y la descarga. Sin volumen compartido (K8s), con `srtm.emision.almacen=s3`: ver **Almacén S3 (K8s)**.
+- **Almacén** (`AlmacenEmision`, wasichai/srtm-backend#52): dónde viven los archivos ya generados. El servicio y el
+  controlador solo hablan con esta interfaz (`guardar`, `abrir`, `traer`, `borrar`, `existe`, `tamano`, `listar`), así
+  que los archivos pueden estar en el disco del servidor o en un almacén de objetos compartido por todas las
+  instancias. Se elige con `srtm.emision.almacen` (`SRTM_EMISION_ALMACEN`): `local` (por defecto, `AlmacenLocal`) o
+  `s3` (`AlmacenS3`, abajo).
+  - **Claves:** relativas, separadas por `/`, de segmentos `[A-Za-z0-9._-]`; nunca vacías, ni `.` ni `..`, ni con `/`
+    al inicio (cualquier otra es `IllegalArgumentException`: ninguna clave sale del almacén). El resultado de una
+    emisión es `emision-<id>/emision-<anio>-<id>.pdf|zip`; las partes de sus lotes, `emision-<id>/parte-00001.pdf|zip`.
+    Todo lo de una emisión cuelga de `emision-<id>/`, así que borrarla es borrar ese prefijo (`listar` + `borrar`).
+    `guardar` consume el archivo local (al volver ya no existe), `abrir` devuelve un `Resource` en streaming cuyo
+    `contentLength()` no lee el contenido, y `abrir`, `traer` y `tamano` de una clave que no está dan
+    `ClaveInexistenteException`.
+  - **`AlmacenLocal`:** `<srtm.emision.dir>/<clave>` (`SRTM_EMISION_DIR`, por defecto `./data/emisiones`, fuera de git).
+    `guardar` mueve el archivo a un nombre temporal junto a su destino y lo renombra de forma atómica (sirve entre
+    sistemas de archivos). Llevan datos personales de todo el padrón: en producción, un volumen persistente y privado.
+  - **Archivos del formato anterior:** antes los archivos eran planos, `<dir>/emision-<anio>-<id>.pdf|zip`. Al crearse,
+    `AlmacenLocal` mueve cada uno a `<dir>/emision-<id>/emision-<anio>-<id>.<ext>` y deja en el log cuántos movió. Es
+    idempotente, y un archivo que no se puede mover se registra y queda donde estaba: nunca impide arrancar. Los
+    `.part` y `.partes-` que haya dejado la versión anterior en `<dir>` ya no se limpian (la limpieza corre en
+    `temporales`): se borran a mano.
+  - **Temporales** `srtm.emision.temporales` (`SRTM_EMISION_TEMPORALES`, por defecto `${java.io.tmpdir}/srtm-emision`):
+    el `.part` de un lote, el `.partes-` de su PDF y el `ensamblado-` de un ensamblado. Es local de cada instancia y
+    descartable; no necesita persistir. Lo que deja un trabajador que murió se borra cuando los trabajadores vuelven a
+    arrancar.
+  - **Otra implementación:** implementar `AlmacenEmision` (con su IO bloqueante dentro de `Dispatchers.IO`), extender
+    `AlmacenEmisionContractTest` dando su almacén vacío en `nuevo()`, y activarla con su propio valor de
+    `srtm.emision.almacen` (`@ConditionalOnProperty(prefix = "srtm.emision", name = ["almacen"], havingValue = "...")`).
+    Las claves y su validación (`exigirClave`) son las de arriba para todas.
+- **Almacén S3 (K8s)** (`AlmacenS3`, wasichai/srtm-backend#56): con `srtm.emision.almacen=s3` los archivos van a un
+  bucket de S3 (o de un servicio con su API, como MinIO) y **no hace falta volumen**: ni `srtm.emision.dir` ni un disco
+  compartido. Cada pod solo necesita sus `temporales` locales (un `emptyDir` basta).
+  - **Variables:** `srtm.emision.s3.bucket` (`SRTM_EMISION_S3_BUCKET`), obligatoria: sin ella la aplicación no arranca
+    ("srtm.emision.s3.bucket es obligatorio con srtm.emision.almacen=s3"). `srtm.emision.s3.region`
+    (`SRTM_EMISION_S3_REGION`): vacía, la de la cadena del SDK (`AWS_REGION`, que IRSA ya pone en el pod); contra otro
+    endpoint, `us-east-1`. `srtm.emision.s3.endpoint` (`SRTM_EMISION_S3_ENDPOINT`): solo para otro servicio que AWS
+    (MinIO), al que se llega por *path-style*; vacía en AWS. `srtm.emision.s3.prefijo` (`SRTM_EMISION_S3_PREFIJO`): las
+    claves van debajo (`srtm/emisiones` da `srtm/emisiones/emision-<id>/...`; las `/` de los extremos sobran); vacío, en
+    la raíz del bucket. Al arrancar se comprueba el bucket (`HeadBucket`): si no existe o las credenciales no llegan, la
+    aplicación no arranca y lo nombra ("No se puede usar el bucket '<bucket>' de srtm.emision.s3.bucket: no existe").
+    Así un bucket equivocado nunca parece un almacén con los archivos borrados.
+  - **Credenciales:** las de la cadena por defecto del AWS SDK v2, nunca en la configuración de la app. En EKS, **IRSA**:
+    el pod corre con una ServiceAccount anotada con `eks.amazonaws.com/role-arn` y el SDK toma el rol solo
+    (`AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`; asume el rol con STS, por eso el módulo `sts` del SDK va en el
+    classpath). Si no, un **secreto** de Kubernetes con `AWS_ACCESS_KEY_ID` y
+    `AWS_SECRET_ACCESS_KEY` como variables de entorno. El rol necesita `s3:PutObject`, `s3:GetObject`,
+    `s3:DeleteObject`, `s3:AbortMultipartUpload` y `s3:ListBucket` sobre el bucket (o su prefijo). Por ejemplo:
+
+    ```yaml
+    serviceAccountName: srtm-backend # con IRSA; sin IRSA, el envFrom del secreto
+    containers:
+      - name: backend
+        image: srtm-backend
+        env:
+          - { name: SRTM_EMISION_ALMACEN, value: s3 }
+          - { name: SRTM_EMISION_S3_BUCKET, value: municipalidad-srtm-emisiones }
+          - { name: SRTM_EMISION_S3_PREFIJO, value: srtm/emisiones }
+          - { name: SRTM_EMISION_TEMPORALES, value: /tmp/srtm-emision } # un emptyDir del pod
+        # envFrom: [{ secretRef: { name: srtm-s3 } }] # AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY
+    ```
+
+  - **Cómo guarda:** un archivo de menos de 16 MiB va en un `PutObject`; uno mayor, por *multipart upload* en partes de
+    16 MiB leídas del archivo una a una (los PDF pueden pesar GB), que se aborta si algo falla. Una clave solo aparece
+    completa (`PutObject` y `CompleteMultipartUpload` son atómicos): el ensamblado que encuentra el archivo final ya
+    guardado puede usarlo tal cual. `traer` descarga a los temporales para el ensamblado, `listar` pagina por prefijo
+    y `borrar` de una clave que no está no hace nada.
+  - **Checksums:** el SDK manda checksums CRC32 (en S3 sobre HTTPS, al final del cuerpo). Las subidas en partes llevan
+    siempre CRC32, fijado en el código (`CreateMultipartUpload` y cada parte); AWS S3 y MinIO lo aceptan. Para un
+    almacén compatible que no acepte los checksums al final del cuerpo, `AWS_REQUEST_CHECKSUM_CALCULATION=when_required`
+    los apaga en los `PutObject` (archivos de menos de 16 MiB), pero no en las subidas en partes.
+  - **Descarga:** pasa por el backend, que mantiene el control de permisos, en streaming desde S3: el `Content-Length`
+    sale de un `HeadObject` y el objeto se abre recién al leerlo, sin cargarlo en memoria, en trozos de 64 KiB leídos
+    en `boundedElastic` (la lectura de S3 bloquea: nunca en el event loop de Netty). Si el cliente corta, se aborta la
+    conexión con S3 en vez de leer el resto. No responde `Range` (siempre el archivo entero). (Una URL prefirmada queda
+    como opción a futuro.)
+  - **Probar en local:** `docker compose --profile s3 up -d` levanta MinIO (`127.0.0.1:9000`, consola en
+    `127.0.0.1:9001`, usuario `srtm`, clave `srtm-minio`) y crea el bucket `srtm-emisiones`. Luego se arranca con
+    `SRTM_EMISION_ALMACEN=s3`, `SRTM_EMISION_S3_BUCKET=srtm-emisiones`, `SRTM_EMISION_S3_ENDPOINT=http://localhost:9000`,
+    `AWS_ACCESS_KEY_ID=srtm` y `AWS_SECRET_ACCESS_KEY=srtm-minio` (comentadas en `develop/example.env`). La imagen es el
+    fork comunitario `pgsty/minio`: MinIO ya no publica `minio/minio` en Docker Hub.
+- **Retención**, después de cada ensamblado y al arrancar (`RetencionEmision`): de cada organización y año se conservan
+  los últimos `srtm.emision.conservar` archivos (`SRTM_EMISION_CONSERVAR`, por defecto 5), y ninguno más viejo que
   `srtm.emision.dias` días (`SRTM_EMISION_DIAS`, por defecto 0: sin límite). 0 apaga una regla. El job depurado se
-  queda, sin `archivo` y con el mensaje "archivo depurado"; su descarga da 410. `DELETE /api/srtm/emisiones/{id}`
-  borra el job y su archivo (409 si aún corre; uno PENDIENTE o EN_PROCESO sin worker sí se borra).
-- **Descarga** `GET /api/srtm/emisiones/{id}/archivo`: `FileSystemResource`, en streaming, sin cargar el archivo en
-  memoria. El nombre se arma del job, nunca se lee del registro.
+  queda, sin `archivo` y con el mensaje "archivo depurado"; su descarga da 410.
+- **`DELETE /api/srtm/emisiones/{id}`** (204): exige permiso de borrado antes de tocar nada. Si la emisión sigue activa,
+  sus lotes por generar pasan a FALLIDO (sus trabajadores lo notan en su siguiente escritura y abortan); luego se borran
+  sus lotes, el job y todo lo que el almacén guarde bajo `emision-<id>/`. Ya no da 409.
+- **Descarga** `GET /api/srtm/emisiones/{id}/archivo`: el `Resource` del almacén, en streaming, sin cargar el archivo en
+  memoria y con su `Content-Length`, sin leer el archivo. Un archivo en disco (`AlmacenLocal`) lo escribe el
+  `ResourceHttpMessageWriter` de Spring, con un canal asíncrono y el largo de lo que responde: los `Range` con 206 (uno
+  o varios, `multipart/byteranges`; una descarga cortada puede retomarse) y uno imposible o mal formado con 416. Otro
+  recurso, como un objeto de S3, va en trozos de 64 KiB leídos en `boundedElastic`, con el `Content-Length` de `tamano`
+  del almacén, y **no responde `Range`**: siempre el archivo entero, con 200. 409 si no está TERMINADA, 410 si se
+  depuró, 404 si el almacén ya no tiene la clave. La clave y el nombre (`Content-Disposition`) se arman del job, nunca
+  se leen del registro.
+
+### Actualizar desde la versión anterior
+
+La versión con lotes cambia el modelo, los estados y dónde viven los archivos. Para pasar a ella:
+
+1. **El modelo primero**, con el backend nuevo todavía apagado: `cd model && python3 apply.py --dry-run` imprime, sin
+   llamar a Core, el modelo entero como si se creara de cero (no lo que cambiaría en una base existente), y sirve para
+   revisar `model.json`. Luego `python3 apply.py`, que sobre el modelo existente crea `emision_lote` y su relación y
+   añade `emision_masiva.latido` y el estado `ENSAMBLANDO`. Sin `emision_lote`, el backend nuevo no ve la
+   organización (le faltan las tablas de los lotes) y su POST falla.
+2. **Sin versiones mezcladas:** detener **todas** las instancias viejas (mejor sin ninguna masiva corriendo) antes de
+   arrancar las nuevas. Un POST de una instancia vieja pasa a FALLIDA los jobs activos de las nuevas: la versión vieja
+   da por huérfano todo job activo que no corra su propio worker. Y una instancia nueva falla el job que una vieja
+   esté corriendo (no tiene `latido`). Al arrancar, la versión nueva pasa a FALLIDA los jobs que dejó la anterior
+   (PENDIENTE o EN_PROCESO sin `latido`): se vuelven a emitir. Con el almacén local, `AlmacenLocal` mueve al arrancar los archivos planos de la versión anterior
+   (`<dir>/emision-<anio>-<id>.<ext>`) a su clave.
+3. **De local a S3:** los archivos existentes **no se migran solos**: si no se copian al bucket con las mismas claves,
+   sus descargas dan 404. Por ejemplo `aws s3 sync <srtm.emision.dir> s3://<bucket>/<prefijo>`. Viniendo directo de la
+   versión anterior, arrancar antes una vez con `local` (para que `AlmacenLocal` los pase a sus claves) o copiarlos ya
+   como `emision-<id>/emision-<anio>-<id>.<ext>`.
+4. **Bucket:** una regla de ciclo de vida que aborte las subidas en partes incompletas (por ejemplo, a los 7 días). Un
+   pod que muere a mitad de una subida no puede abortarla, y sus partes se cobran hasta que alguien las borre.
+
+### Medición
+
+Calibrar `srtm.emision.lote` y `srtm.emision.trabajadores` es medir (wasichai/srtm-backend#55). Cada lote lee una sola vez
+los parámetros tributarios del año (`ParametrosTributarios.todos()`, como el usuario que creó el lote) y los pasa a
+todas sus HR: antes se recargaban en cada contribuyente. La HR individual (`GET /contribuyentes/{id}/hr`) y
+`GET /contribuyentes/{id}/liquidacion` los siguen leyendo en cada llamada, y el 422 con `faltan` no cambia. El log
+(INFO, `srtm.emision.GrupoTrabajadores`) deja dos líneas:
+
+```text
+lote 3 de la emisión <id>: 100 contribuyentes, 187 documentos en 41250 ms (4.5 documentos/s)
+emisión <id> de 2026: 11800 contribuyentes, 15900 documentos en 5230.4 s (3.0 documentos/s)
+```
+
+- **Por lote:** al terminar cada lote. Los documentos son las HR y las PU que escribió (un contribuyente que falló no
+  suma). La duración es la del trabajador con ese lote: leer los parámetros, generar, guardar la parte y cerrar el lote.
+  Los documentos/s son **de un trabajador**: con `trabajadores=N` corren N lotes a la vez.
+- **Por emisión:** al pasar a TERMINADA. Los documentos son la suma de los lotes y la duración va **desde `iniciado`
+  (el POST) hasta el final**: incluye la preparación, la espera entre lotes y el ensamblado. Es el rendimiento real de
+  la emisión, el que ve quien la pidió.
+- **Cómo leerlas:** si los documentos/s de la emisión se acercan a N veces los de un lote, los trabajadores escalan; si
+  no, estorba algo compartido (el pool de conexiones, la base, el disco del almacén, el ensamblado). Un lote muy corto
+  deja la preparación y el ensamblado pesando más: suba `srtm.emision.lote`. Uno muy largo reparte mal el final y
+  repite más trabajo si un lote se reintenta: bájelo. `srtm.emision.trabajadores` no rinde más allá de los núcleos ni
+  del pool de conexiones (ver arriba), y cada uno suma memoria al renderizar.
+- **Cómo medir:** una emisión del padrón completo en dev con `SRTM_EMISION_TRABAJADORES=1` y otra con `auto`, anotando
+  la máquina (núcleos y RAM) y las dos líneas de la emisión.
+- **Medido (2026-10-02), padrón sintético:** 240 contribuyentes y 300 PU (540 documentos, PDF, `lote=20`), en una
+  máquina de 4 núcleos (Xeon 2.8 GHz) y 15 GiB de RAM, con la JVM en 4 GiB de heap y Postgres (Testcontainers) en la
+  misma máquina, después de una emisión de calentamiento:
+
+  | `trabajadores` | Duración de la emisión | Documentos/s (emisión) | Documentos/s por lote |
+  |---|---|---|---|
+  | `1` | 23.8 s | 22.7 | 23–26 |
+  | `auto` (= 4) | 10.4 s | 51.8 | 14–16 |
+
+  Con 4 trabajadores la emisión rinde 2.3 veces más: cada lote va más lento (comparten núcleos con Postgres y el
+  render), pero corren cuatro a la vez. Llevado al padrón completo (unos 11 800 contribuyentes y 15 000 PU, ~26 800
+  documentos), serían unos 20 min con `1` y unos 9 min con `auto` en esa máquina. **Falta la cifra medida en dev con el
+  padrón real** (wasichai/srtm-backend#55): ahí la base y el almacén están en otra máquina y las PU tienen más usos.
 
 ## Tests
 
@@ -931,13 +1124,26 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`,
   `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…), `Records`,
   `Registros`, `srtm.pide` (`PideReniecTest`, contra un servidor local) y `srtm.emision` (`PdfRendererTest`,
-  `PdfMergerTest`, `HojaPuTest`, `HojaHrTest`, `GeneradorEmisionTest`, que leen el PDF de vuelta con PDFBox).
+  `PdfMergerTest`, `HojaPuTest`, `HojaHrTest`, `GeneradorEmisionTest`, que leen el PDF de vuelta con PDFBox; `AlmacenLocalTest`, que corre el contrato
+  de `AlmacenEmision` sobre un directorio temporal).
 - **Integración** (`@Tag("integration")`): `SrtmSmokeTest` y las clases `*ApiTest`, que llaman a la API del portal
   sobre la app entera y PostGIS. Heredan de `SrtmApiTest`: el modelo aplicado como lo hace `apply.py`, el token del
   admin de desarrollo y las llamadas. Cada endpoint de `RentasController` y `DocumentosController` tiene un caso feliz
   y uno de error donde aplica, repartidos por tema: `RentasApiTest` (el recorrido completo), `ListasApiTest` (las
   filas de las ocho listas), `DeclaracionJuradaApiTest` (una DJ rechazada no deja nada a medias), `FichasApiTest`,
   `CatalogosApiTest`, `CatastroApiTest`, `CondominioApiTest`, `AnulacionApiTest`, `MotivoApiTest`…
+- **Trabajadores de la emisión masiva en los tests:** `src/test/resources/application.properties` fija
+  `srtm.emision.trabajadores=0` para toda la corrida (gana sobre `application.yml`; un `@TestPropertySource` gana sobre
+  ambos), así que ningún contexto corre trabajadores salvo el de `EmisionMasivaApiTest` (2), que se cierra al terminar
+  su clase (`@DirtiesContext`): un contexto queda en caché mientras corren las demás clases, y sus trabajadores
+  tomarían los lotes que esas clases crean para mirarlos. `TrabajadoresEmisionApiTest` juega dos instancias con dos
+  `GrupoTrabajadores` propios, cada uno con su `instancia` y sus temporales.
+- **Almacén S3 en los tests:** `AlmacenS3Test` corre el contrato de `AlmacenEmision` (más las partes, el aborto y el
+  streaming) contra un MinIO de Testcontainers (`pgsty/minio`, uno para toda la corrida), y `EmisionS3ApiTest` corre
+  la app con `srtm.emision.almacen=s3` contra él: dos instancias sin disco compartido completan una emisión PDF y una
+  ZIP, y una descarga de 101 MiB llega en streaming (más de mil trozos, ninguno de más de 64 KiB). `AlmacenS3ConfigTest`
+  (unitario) revisa qué almacén se arma, que no arranca sin bucket o sin llegar a él y que el módulo `sts` (IRSA) está
+  en el classpath; `DescargaEmisionTest`, que la descarga de un recurso que bloquea se lee en `boundedElastic`.
 - Los de integración corren en el CI de cada PR. Con un Docker remoto no corren en local tal cual (Testcontainers no
   llega a sus puertos): se usa una base de test externa tunelizada, con PostGIS y un nombre que termine en `_test`.
   Cómo, en [docs/develop/README.md](docs/develop/README.md#6-tests).

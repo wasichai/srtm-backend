@@ -1,11 +1,15 @@
 package srtm.emision
 
-import org.springframework.core.io.FileSystemResource
+import kotlinx.coroutines.reactor.awaitSingleOrNull
+import org.springframework.core.ResolvableType
 import org.springframework.core.io.Resource
+import org.springframework.core.io.buffer.DataBuffer
+import org.springframework.core.io.buffer.DataBufferUtils
+import org.springframework.core.io.buffer.DefaultDataBufferFactory
 import org.springframework.http.ContentDisposition
-import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
-import org.springframework.http.ResponseEntity
+import org.springframework.http.MediaType
+import org.springframework.http.codec.ResourceHttpMessageWriter
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -15,7 +19,10 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
-import java.nio.file.Files
+import org.springframework.web.server.ServerWebExchange
+import reactor.core.publisher.Flux
+import reactor.core.publisher.Mono
+import reactor.core.scheduler.Schedulers
 import java.time.LocalDate
 import java.util.UUID
 
@@ -49,31 +56,61 @@ class EmisionMasivaController(
         @PathVariable id: UUID
     ): Emision = emisiones.get(id)
 
-    // the job and its file (wasichai/srtm-backend#47): 409 while it runs
+    // the job, its lotes and its files (wasichai/srtm-backend#47, #53): one still running is cancelled
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     suspend fun eliminar(
         @PathVariable id: UUID
     ) = emisiones.eliminar(id)
 
-    // the file, streamed from disk (never whole in memory), to download
+    // the file, streamed from the almacén (never whole in memory), to download. its length comes from the store, so
+    // the response has a Content-Length without reading the file. the name is rebuilt from the job. written straight
+    // to the response: a ResponseEntity has one body type, and the file and the stream need two (escribirDescarga)
     @GetMapping("/{id}/archivo")
     suspend fun archivo(
-        @PathVariable id: UUID
-    ): ResponseEntity<Resource> {
-        val (job, archivo) = emisiones.archivo(id)
+        @PathVariable id: UUID,
+        exchange: ServerWebExchange
+    ) {
+        val descarga = emisiones.archivo(id)
+        val job = descarga.job
         val formato = FormatoEmision.valueOf(job.formato!!)
-        return ResponseEntity
-            .ok()
-            .contentType(formato.mediaType)
-            .contentLength(Files.size(archivo))
-            .header(
-                HttpHeaders.CONTENT_DISPOSITION,
-                ContentDisposition
-                    .attachment()
-                    .filename(archivo.fileName.toString())
-                    .build()
-                    .toString()
-            ).body(FileSystemResource(archivo))
+        val cabeceras = exchange.response.headers
+        cabeceras.contentType = formato.mediaType
+        cabeceras.contentDisposition =
+            ContentDisposition
+                .attachment()
+                .filename(nombreArchivo(job.anio!!, job.id, formato))
+                .build()
+        escribirDescarga(descarga.recurso, formato.mediaType, descarga.tamano, exchange).awaitSingleOrNull()
     }
 }
+
+// the chunks the download is written in
+private const val TROZO = 64 * 1024
+
+private val RECURSOS = ResourceHttpMessageWriter(TROZO)
+
+// the file as it is read, never whole in memory, after the headers the caller set. a file on disk goes to spring's own
+// writer, as a ResponseEntity<Resource> would: an async channel, and a Range answered with a 206 (or a 416). that
+// writer sets the Content-Length of what it answers (the file's, a range's, a multipart's, none for a 416): one set
+// here would stay on a multipart or a 416 and cut or hang the response. anything else (an s3 object) is a blocking
+// stream, read on boundedElastic (cuerpoDeDescarga), with `tamano` as its length, and answers no Range: always the
+// whole file
+fun escribirDescarga(
+    recurso: Resource,
+    tipo: MediaType,
+    tamano: Long,
+    exchange: ServerWebExchange
+): Mono<Void> =
+    if (recurso.isFile) {
+        val recursoTipo = ResolvableType.forClass(Resource::class.java)
+        RECURSOS.write(Mono.just(recurso), recursoTipo, recursoTipo, tipo, exchange.request, exchange.response, emptyMap<String, Any>())
+    } else {
+        exchange.response.headers.contentLength = tamano
+        exchange.response.writeWith(cuerpoDeDescarga(recurso))
+    }
+
+// a blocking stream in chunks, opened and read on boundedElastic: never on the event loop, which spring's own encoder
+// would do
+fun cuerpoDeDescarga(recurso: Resource): Flux<DataBuffer> =
+    DataBufferUtils.readInputStream(recurso::getInputStream, DefaultDataBufferFactory.sharedInstance, TROZO).subscribeOn(Schedulers.boundedElastic())

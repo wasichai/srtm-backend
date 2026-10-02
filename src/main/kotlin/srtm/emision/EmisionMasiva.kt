@@ -3,6 +3,7 @@ package srtm.emision
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
+import srtm.impuesto.ParametroTributario
 import java.io.BufferedOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
@@ -13,8 +14,8 @@ import java.util.zip.ZipOutputStream
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.deleteRecursively
 
-// the masiva's file (wasichai/srtm-backend#41), apart from core and the job: the contribuyentes come already read, the
-// documents from DocumentosDeEmision. EmisionMasivaService runs it in the background
+// the masiva's files (wasichai/srtm-backend#41), apart from core and the job: the contribuyentes come already read, the
+// documents from DocumentosDeEmision. a worker (TrabajadoresEmision) runs it for each lote
 
 enum class FormatoEmision(
     val extension: String,
@@ -30,8 +31,9 @@ data class ErrorEmision(
     val mensaje: String
 )
 
-// a contribuyente with vigente declaraciones in the year: its predios, in the order their PUs go
-class ContribuyenteAEmitir(
+// a contribuyente with vigente declaraciones in the year: its predios, in the order their PUs go. a lote keeps them as
+// json (contribuyentesJson)
+data class ContribuyenteAEmitir(
     val id: UUID,
     val codigo: String,
     val nombre: String,
@@ -41,9 +43,11 @@ class ContribuyenteAEmitir(
 // what the masiva emits: DocumentosPrediales' HR and PU. a seam so the job's tests do not depend on the HR
 // (wasichai/srtm-backend#40)
 interface DocumentosDeEmision {
+    // `parametros`: the year's parámetros tributarios, read once by the lote; null reads them
     suspend fun hr(
         contribuyenteId: UUID,
-        anio: Int
+        anio: Int,
+        parametros: List<ParametroTributario>?
     ): Documento
 
     suspend fun pu(
@@ -59,8 +63,9 @@ class DocumentosPredialesDeEmision(
 ) : DocumentosDeEmision {
     override suspend fun hr(
         contribuyenteId: UUID,
-        anio: Int
-    ) = documentos.hr(contribuyenteId, anio)
+        anio: Int,
+        parametros: List<ParametroTributario>?
+    ) = documentos.hr(contribuyenteId, anio, parametros)
 
     override suspend fun pu(
         predioId: UUID,
@@ -69,7 +74,7 @@ class DocumentosPredialesDeEmision(
     ) = documentos.pu(predioId, contribuyenteId, anio)
 }
 
-// the file's name under srtm.emision.dir, and the download's
+// the file's name, the last part of its key in the almacén (claveResultado), and the download's
 fun nombreArchivo(
     anio: Int,
     id: String,
@@ -97,27 +102,36 @@ private const val MAX_NOMBRE = 60
 // how often the job's progress is saved
 const val AVANCE_CADA = 25
 
+// what a generation left out, and how many documents (HR and PU) it wrote
+data class ResultadoGeneracion(
+    val errores: List<ErrorEmision>,
+    val documentos: Int
+)
+
 class GeneradorEmision(
     private val documentos: DocumentosDeEmision,
     private val merger: PdfMerger
 ) {
     // every contribuyente's HR and then its PUs, into `destino`: one pdf (the documents go to temp files next to it
     // and are merged at the end) or a zip written as it goes. a contribuyente whose documents fail is left out and
-    // returned among the errors; the rest go on. `avance` is told how many were processed every AVANCE_CADA and at the end
+    // returned among the errors; the rest go on. `avance` is told how many were processed every AVANCE_CADA and at the
+    // end. the documents counted are the ones written. `parametros` go to every HR: the caller reads them once
     suspend fun generar(
         anio: Int,
         formato: FormatoEmision,
         contribuyentes: List<ContribuyenteAEmitir>,
+        parametros: List<ParametroTributario>?,
         destino: Path,
         avance: suspend (procesados: Int, errores: List<ErrorEmision>) -> Unit
-    ): List<ErrorEmision> {
+    ): ResultadoGeneracion {
         val errores = mutableListOf<ErrorEmision>()
+        var escritos = 0
         val salida = if (formato == FormatoEmision.PDF) SalidaPdf(destino, merger) else SalidaZip(destino)
         salida.use {
             contribuyentes.forEachIndexed { i, c ->
                 val docs =
                     try {
-                        listOf("HR-$anio.pdf" to documentos.hr(c.id, anio)) +
+                        listOf("HR-$anio.pdf" to documentos.hr(c.id, anio, parametros)) +
                             c.predios.map { p -> documentos.pu(p, c.id, anio).let { it.nombre to it } }
                     } catch (e: CancellationException) {
                         throw e
@@ -125,13 +139,16 @@ class GeneradorEmision(
                         errores += ErrorEmision(c.codigo, e.message ?: e.javaClass.simpleName)
                         null
                     }
-                docs?.let { salida.agregar(carpeta(c.codigo, c.nombre), it.map { (nombre, d) -> nombre to d.bytes }) }
+                docs?.let {
+                    salida.agregar(carpeta(c.codigo, c.nombre), it.map { (nombre, d) -> nombre to d.bytes })
+                    escritos += it.size
+                }
                 val procesados = i + 1
                 if (procesados % AVANCE_CADA == 0 || procesados == contribuyentes.size) avance(procesados, errores.toList())
             }
             salida.terminar()
         }
-        return errores
+        return ResultadoGeneracion(errores, escritos)
     }
 
     private interface Salida : AutoCloseable {

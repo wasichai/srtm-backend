@@ -26,14 +26,15 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
     @BeforeEach
     fun adminYModelo() {
         token = bearer()
-        applyModel()
+        aplicarModelo()
     }
 
     protected fun modelo(): JsonNode = json.readTree(File("model/model.json"))
 
     // model/apply.py in kotlin: what is missing gets created (objects, fields with their geometry, enum options,
-    // required relationships), a field model.json no longer requires is relaxed, the rest is left alone
-    private fun applyModel() {
+    // required relationships), a field model.json no longer requires is relaxed, the rest is left alone. in the
+    // organization of `token`'s user: the seeded admin's by default
+    protected fun aplicarModelo(token: String = this.token) {
         val model = modelo()
         val enums = model["enums"]
 
@@ -60,7 +61,7 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                 }
             }
 
-        val existing: Set<String> = tree(send("GET", "/api/objects", null, HttpStatus.OK)).names()
+        val existing: Set<String> = tree(send("GET", "/api/objects", null, HttpStatus.OK, token)).names()
         for (obj in model["objects"]) {
             val name = obj["name"].asString()
             val fields = obj["fields"].iterator().asSequence().toList()
@@ -74,18 +75,19 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                         "pluralLabel" to obj["pluralLabel"].asString(),
                         "fields" to fields.map(::payload)
                     ),
-                    HttpStatus.CREATED
+                    HttpStatus.CREATED,
+                    token
                 )
                 continue
             }
             val stored =
                 tree(
-                    send("GET", "/api/metadata/objects/$name/fields", null, HttpStatus.OK)
+                    send("GET", "/api/metadata/objects/$name/fields", null, HttpStatus.OK, token)
                 ).iterator().asSequence().associateBy { it["name"].asString() }
             for (field in fields) {
                 val current = stored[field["name"].asString()]
                 if (current == null) {
-                    send("POST", "/api/metadata/objects/$name/fields", payload(field), HttpStatus.CREATED)
+                    send("POST", "/api/metadata/objects/$name/fields", payload(field), HttpStatus.CREATED, token)
                     continue
                 }
                 val change = mutableMapOf<String, Any>()
@@ -100,10 +102,10 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                     if (missing.isNotEmpty()) change["enumOptions"] = have + missing
                 }
                 if (current["required"].asBoolean() && !required(field)) change["required"] = false
-                if (change.isNotEmpty()) send("PUT", "/api/metadata/objects/$name/fields/${field["name"].asString()}", change, HttpStatus.OK)
+                if (change.isNotEmpty()) send("PUT", "/api/metadata/objects/$name/fields/${field["name"].asString()}", change, HttpStatus.OK, token)
             }
         }
-        val relationships: Set<String> = tree(send("GET", "/api/relationships", null, HttpStatus.OK)).names()
+        val relationships: Set<String> = tree(send("GET", "/api/relationships", null, HttpStatus.OK, token)).names()
         for (rel in model["relationships"]) {
             if (rel["name"].asString() in relationships) continue
             send(
@@ -111,13 +113,15 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                 "/api/relationships",
                 listOf("name", "label", "inverseLabel", "source", "target", "fieldName").associateWith { rel[it].asString() } +
                     ("type" to "MANY_TO_ONE"),
-                HttpStatus.CREATED
+                HttpStatus.CREATED,
+                token
             )
             send(
                 "PUT",
                 "/api/metadata/objects/${rel["source"].asString()}/fields/${rel["fieldName"].asString()}",
                 mapOf("required" to true),
-                HttpStatus.OK
+                HttpStatus.OK,
+                token
             )
         }
     }

@@ -27,8 +27,8 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 21)
-        self.assertEqual(len(self.model["relationships"]), 10)
+        self.assertEqual(len(names), 22)
+        self.assertEqual(len(self.model["relationships"]), 11)
 
     def test_the_municipalidad_holds_the_documents_header(self):
         # the PU and HR's header, one record per organization edited in the admin (the escudo is a file, not a field)
@@ -71,18 +71,43 @@ class ShippedModelTests(unittest.TestCase):
 
     def test_emision_masiva_is_the_job_of_the_contract(self):
         # wasichai/srtm-backend#41: the masiva's job, with the fields of the epic's contract (wasichai/srtm-backend#37).
-        # errores is a json list [{contribuyente, mensaje}]; archivo the file's name under srtm.emision.dir
+        # errores is a json list [{contribuyente, mensaje}]; archivo the file's name, its key in the almacén is
+        # emision-<id>/emision-<anio>-<id>.<ext>. latido is the lease of the instance preparing or assembling it
+        # (wasichai/srtm-backend#54)
         emision = next(o for o in self.model["objects"] if o["name"] == "emision_masiva")
         fields = {f["name"]: f for f in emision["fields"]}
         self.assertEqual(list(fields), ["anio", "formato", "estado", "total", "procesados", "errores", "archivo", "tamano",
-                                        "mensaje", "iniciado", "terminado"])
+                                        "mensaje", "iniciado", "terminado", "latido"])
         types = {n: f["type"] for n, f in fields.items()}
         self.assertEqual(types, {"anio": "INTEGER", "formato": "ENUM", "estado": "ENUM", "total": "INTEGER",
                                  "procesados": "INTEGER", "errores": "LONG_TEXT", "archivo": "TEXT", "tamano": "INTEGER",
-                                 "mensaje": "LONG_TEXT", "iniciado": "DATETIME", "terminado": "DATETIME"})
+                                 "mensaje": "LONG_TEXT", "iniciado": "DATETIME", "terminado": "DATETIME",
+                                 "latido": "DATETIME"})
         self.assertEqual(self.model["enums"][fields["formato"]["enum"]], ["PDF", "ZIP"])
-        self.assertEqual(self.model["enums"][fields["estado"]["enum"]], ["PENDIENTE", "EN_PROCESO", "TERMINADA", "FALLIDA"])
+        self.assertEqual(self.model["enums"][fields["estado"]["enum"]],
+                         ["PENDIENTE", "EN_PROCESO", "ENSAMBLANDO", "TERMINADA", "FALLIDA"])
         self.assertEqual({n for n, f in fields.items() if f.get("required")}, {"anio", "formato", "estado"})
+
+    def test_emision_lote_is_a_batch_of_an_emision(self):
+        # wasichai/srtm-backend#53: the padron of an emission cut in lotes that any instance's workers take.
+        # contribuyentes is the json of the lote's contribuyentes; errores a json list [{contribuyente, mensaje}];
+        # parte its file's key in the almacén
+        lote = next(o for o in self.model["objects"] if o["name"] == "emision_lote")
+        names = [o["name"] for o in self.model["objects"]]
+        self.assertEqual(names.index("emision_lote"), names.index("emision_masiva") + 1)
+        fields = {f["name"]: f for f in lote["fields"]}
+        self.assertEqual(list(fields), ["numero", "contribuyentes", "estado", "tomado_por", "latido", "intentos", "procesados",
+                                        "documentos", "errores", "parte"])
+        types = {n: f["type"] for n, f in fields.items()}
+        self.assertEqual(types, {"numero": "INTEGER", "contribuyentes": "LONG_TEXT", "estado": "ENUM", "tomado_por": "TEXT",
+                                 "latido": "DATETIME", "intentos": "INTEGER", "procesados": "INTEGER",
+                                 "documentos": "INTEGER", "errores": "LONG_TEXT", "parte": "TEXT"})
+        self.assertEqual({n for n, f in fields.items() if f.get("required")}, {"numero", "contribuyentes", "estado"})
+        self.assertEqual(self.model["enums"][fields["estado"]["enum"]], ["PENDIENTE", "EN_PROCESO", "TERMINADO", "FALLIDO"])
+        relationship = self.model["relationships"][-1]
+        self.assertEqual(relationship, {"name": "emision_lote_emision", "label": "Emisión", "inverseLabel": "Lotes",
+                                        "source": "emision_lote", "target": "emision_masiva", "fieldName": "emision",
+                                        "required": True})
 
     def test_every_enum_option_passes_core_regex(self):
         for name, options in self.model["enums"].items():

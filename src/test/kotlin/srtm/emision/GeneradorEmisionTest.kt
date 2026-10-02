@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import srtm.impuesto.ParametroTributario
+import java.math.BigDecimal
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -20,12 +22,15 @@ class GeneradorEmisionTest {
         val fallan: Set<UUID> = emptySet()
     ) : DocumentosDeEmision {
         val pedidos = mutableListOf<String>()
+        val parametrosPedidos = mutableListOf<List<ParametroTributario>?>()
 
         override suspend fun hr(
             contribuyenteId: UUID,
-            anio: Int
+            anio: Int,
+            parametros: List<ParametroTributario>?
         ): Documento {
             pedidos += "HR $contribuyenteId"
+            parametrosPedidos += parametros
             if (contribuyenteId in fallan) throw IllegalStateException("Faltan parámetros del año $anio")
             return Documento("HR-x-$anio.pdf", enBlanco(2))
         }
@@ -44,19 +49,22 @@ class GeneradorEmisionTest {
         formato: FormatoEmision,
         lotes: List<ContribuyenteAEmitir>,
         documentos: DocumentosDeEmision = Documentos(),
+        parametros: List<ParametroTributario>? = null,
         avance: suspend (Int, List<ErrorEmision>) -> Unit = { _, _ -> }
-    ): Pair<Path, List<ErrorEmision>> {
+    ): Pair<Path, ResultadoGeneracion> {
         val destino = dir.resolve("emision.${formato.extension}")
-        val errores = runBlocking { GeneradorEmision(documentos, PdfMerger()).generar(2026, formato, lotes, destino, avance) }
-        return destino to errores
+        val resultado = runBlocking { GeneradorEmision(documentos, PdfMerger()).generar(2026, formato, lotes, parametros, destino, avance) }
+        return destino to resultado
     }
 
     @Test
     fun `one pdf with each contribuyente's hr followed by its pus`() {
         val documentos = Documentos()
-        val (pdf, errores) = generar(FormatoEmision.PDF, listOf(ANA, BETO), documentos)
+        val (pdf, resultado) = generar(FormatoEmision.PDF, listOf(ANA, BETO), documentos)
 
-        assertEquals(emptyList<ErrorEmision>(), errores)
+        assertEquals(emptyList<ErrorEmision>(), resultado.errores)
+        // ana: hr + 2 pus; beto: hr + 1 pu
+        assertEquals(5, resultado.documentos)
         // ana: hr 2 + 2 pus; beto: hr 2 + 1 pu
         assertEquals(7, paginas(Files.readAllBytes(pdf)))
         assertEquals(
@@ -66,8 +74,18 @@ class GeneradorEmisionTest {
     }
 
     @Test
+    fun `every hr gets the parametros the caller read`() {
+        val documentos = Documentos()
+        val parametros = listOf(ParametroTributario(tipo = "UIT", valorNumerico = BigDecimal("5500")))
+
+        generar(FormatoEmision.PDF, listOf(ANA, BETO), documentos, parametros)
+
+        assertEquals(listOf(parametros, parametros), documentos.parametrosPedidos)
+    }
+
+    @Test
     fun `a zip with a folder per contribuyente, its hr and a pu per predio`() {
-        val (zip, _) = generar(FormatoEmision.ZIP, listOf(ANA, BETO))
+        val (zip, resultado) = generar(FormatoEmision.ZIP, listOf(ANA, BETO))
 
         val entradas = entradas(zip)
         assertEquals(
@@ -80,23 +98,27 @@ class GeneradorEmisionTest {
             ),
             entradas.keys.toList()
         )
+        assertEquals(5, resultado.documentos)
         assertEquals(2, paginas(entradas.getValue("000001-FLORES-ANA/HR-2026.pdf")))
         assertEquals(1, paginas(entradas.getValue("000002-NUNEZ-BETO/PU-P-002-2026.pdf")))
     }
 
     @Test
     fun `a contribuyente that fails goes to errores, without its documents, and the rest goes on`() {
-        val (pdf, errores) = generar(FormatoEmision.PDF, listOf(ANA, BETO), Documentos(fallan = setOf(ANA.id)))
+        val (pdf, resultado) = generar(FormatoEmision.PDF, listOf(ANA, BETO), Documentos(fallan = setOf(ANA.id)))
 
-        assertEquals(listOf(ErrorEmision("000001", "Faltan parámetros del año 2026")), errores)
+        assertEquals(listOf(ErrorEmision("000001", "Faltan parámetros del año 2026")), resultado.errores)
+        // only beto's: his hr and his pu
+        assertEquals(2, resultado.documentos)
         assertEquals(3, paginas(Files.readAllBytes(pdf)))
     }
 
     @Test
     fun `a failed contribuyente leaves nothing in the zip`() {
-        val (zip, errores) = generar(FormatoEmision.ZIP, listOf(ANA, BETO), Documentos(fallan = setOf(BETO.id)))
+        val (zip, resultado) = generar(FormatoEmision.ZIP, listOf(ANA, BETO), Documentos(fallan = setOf(BETO.id)))
 
-        assertEquals(listOf("000002"), errores.map { it.contribuyente })
+        assertEquals(listOf("000002"), resultado.errores.map { it.contribuyente })
+        assertEquals(3, resultado.documentos)
         assertFalse(entradas(zip).keys.any { it.startsWith("000002") })
     }
 
@@ -112,6 +134,7 @@ class GeneradorEmisionTest {
 
     @Test
     fun `no contribuyentes is an empty zip and a pdf of no pages`() {
+        assertEquals(0, generar(FormatoEmision.ZIP, emptyList()).second.documentos)
         assertEquals(emptyMap<String, ByteArray>(), entradas(generar(FormatoEmision.ZIP, emptyList()).first))
         assertEquals(0, paginas(Files.readAllBytes(generar(FormatoEmision.PDF, emptyList()).first)))
     }

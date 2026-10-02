@@ -77,12 +77,17 @@ class DepuracionTest {
         val parcial = Files.writeString(dir.resolve("emision-2026-b.zip.part"), "zip a medias")
         val partes = Files.createDirectory(dir.resolve(".partes-123"))
         Files.writeString(partes.resolve("00000000.pdf"), "parte")
+        val lote = Files.writeString(dir.resolve("lote-1-1.part"), "lote a medias")
+        val ensamblado = Files.createDirectory(dir.resolve("ensamblado-456"))
+        Files.writeString(ensamblado.resolve("00000.pdf"), "parte traída")
 
-        assertEquals(2, limpiarTemporales(dir))
+        assertEquals(4, limpiarTemporales(dir))
 
         assertTrue(Files.exists(terminado))
         assertFalse(Files.exists(parcial))
         assertFalse(Files.exists(partes))
+        assertFalse(Files.exists(lote))
+        assertFalse(Files.exists(ensamblado))
     }
 
     @Test
