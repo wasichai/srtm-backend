@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Loads the verified tax parameters of the impuesto predial into parametro_tributario: the UIT of each year, the
-tramos and their límites, the mínimo and the deducciones.
+tramos and their límites, the mínimo and the deducciones. With --csv, the rows of an ordinance of arbitrios too: its
+tasas and the mappings of zona and uso (TIPOS_ARBITRIO), whose shape is checked before anything is sent.
 
 They come from data/parametros-predial.csv, a verbatim copy of the predial rows of normativa's
 docs/10-negocio/valores-normativos/publicacion/parametros-2026.csv (double-signed: transcribio, verifico). No figure
@@ -10,13 +11,15 @@ The natural key is (tipo, clave, vigencia_desde). A row Core lacks is created an
 updated in place; a row the CSV does not have is left alone (a parameter of another year or source is not this
 script's to delete). Idempotent: a second run writes nothing.
 
-Run: python3 import_parametros.py [--dry-run]
-Exit: 0 ok, 1 Core refused something.
+Run: python3 import_parametros.py [--csv <file>] [--dry-run]
+Exit: 0 ok, 1 Core refused something, 2 an arbitrios row is malformed (nothing is sent).
 """
 import argparse
 import csv
 import os
+import re
 import sys
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from core_client import Client, CoreError
@@ -31,6 +34,67 @@ def read_parametros(path):
     with open(path, encoding="utf-8") as f:
         rows = csv.DictReader(line for line in f if not line.startswith("#"))
         return [{k: r[k].strip() for k in FIELDS if r.get(k) and r[k].strip()} for r in rows]
+
+
+# the ordinance's rows the arbitrios read (srtm.arbitrios.Llaves names the same tipos; its test compares both lists):
+# TASA_ARBITRIO servicio:zona:uso the monthly tasa in soles; ARBITRIO_ZONA <sector catastral> its zona in texto;
+# ARBITRIO_USO <prefix of a uso_predio code, 2, 4 or 6 digits> its uso de arbitrio in texto; ARBITRIO_VENCIMIENTO
+# <month> its due date in texto (YYYY-MM-DD)
+TASA_ARBITRIO = "TASA_ARBITRIO"
+ARBITRIO_ZONA = "ARBITRIO_ZONA"
+ARBITRIO_USO = "ARBITRIO_USO"
+ARBITRIO_VENCIMIENTO = "ARBITRIO_VENCIMIENTO"
+TIPOS_ARBITRIO = (TASA_ARBITRIO, ARBITRIO_ZONA, ARBITRIO_USO, ARBITRIO_VENCIMIENTO)
+
+
+def _firmante(firma):
+    """'ANA, 2026-01-05' -> 'ANA': normativa's signature is a name and a date."""
+    return (firma or "").split(",")[0].strip().upper()
+
+
+def _error_arbitrio(p):
+    """Why an arbitrios row does not fit, or None. A tasa is never invented nor negative; a mapping names its value;
+    every ordinance figure is signed by two different people (normativa's double signature)."""
+    tipo, clave, texto = p["tipo"], (p.get("clave") or "").strip(), (p.get("texto") or "").strip()
+    if not _firmante(p.get("transcribio")) or not _firmante(p.get("verifico")):
+        return "falta una firma (transcribio, verifico)"
+    if _firmante(p.get("transcribio")) == _firmante(p.get("verifico")):
+        return "transcribio y verifico son la misma persona"
+    if tipo == TASA_ARBITRIO:
+        partes = clave.split(":")
+        if len(partes) != 3 or not all(x.strip() for x in partes):
+            return "la clave de una tasa es servicio:zona:uso"
+        try:
+            valor = Decimal(str(p.get("valor_numerico")))
+        except InvalidOperation:
+            return "una tasa necesita su valor_numerico"
+        if valor < 0:
+            return "una tasa no es negativa"
+    elif tipo == ARBITRIO_ZONA:
+        if not clave or not texto:
+            return "una zona es el sector catastral (clave) y su zona (texto)"
+    elif tipo == ARBITRIO_USO:
+        if not re.fullmatch(r"\d{2}|\d{4}|\d{6}", clave) or not texto:
+            return "un uso es un prefijo de código de uso_predio de 2, 4 o 6 dígitos (clave) y su uso de arbitrio (texto)"
+    elif tipo == ARBITRIO_VENCIMIENTO:
+        if not clave.isdigit() or not 1 <= int(clave) <= 12:
+            return "un vencimiento es de un mes, de 1 a 12"
+        try:
+            date.fromisoformat(texto)
+        except ValueError:
+            return "un vencimiento es una fecha AAAA-MM-DD en texto"
+    return None
+
+
+def errores(parametros):
+    """The arbitrios rows that do not fit, as '<tipo> <clave>: why'. The predial's are not checked here."""
+    malas = []
+    for p in parametros:
+        if p.get("tipo") in TIPOS_ARBITRIO:
+            motivo = _error_arbitrio(p)
+            if motivo:
+                malas.append(f"{p['tipo']} {p.get('clave') or ''}: {motivo}")
+    return malas
 
 
 def key(attributes):
@@ -100,6 +164,11 @@ def main(argv=None):
     args = _parse_args(sys.argv[1:] if argv is None else argv)
     parametros = read_parametros(args.csv)
     print(f"parámetros: {len(parametros)}")
+    malas = errores(parametros)
+    if malas:
+        for e in malas:
+            print(f"error: {e}", file=sys.stderr)
+        return 2
     client = Client(args.core)
     try:
         client.login(args.email, args.password)

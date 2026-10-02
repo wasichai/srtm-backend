@@ -129,5 +129,63 @@ class LoadTests(unittest.TestCase):
         self.assertIn("boom-record", err)
 
 
+
+# the arbitrios rows of an ordinance's transcription (plan of the arbitrios module, decisión 1 and 4). FICTITIOUS values,
+# written here only to test their shape: no ordinance of Perené is transcribed and verified yet (D-02b)
+def fila(tipo, clave, valor_numerico=None, texto=None, transcribio="ANA, 2026-01-05", verifico="BETO, 2026-01-09"):
+    return {k: v for k, v in {
+        "tipo": tipo, "clave": clave, "vigencia_desde": "2026-01-01", "valor_numerico": valor_numerico, "texto": texto,
+        "norma": "Ordenanza ficticia de prueba", "fuente": "test", "transcribio": transcribio, "verifico": verifico,
+    }.items() if v is not None}
+
+
+class ArbitriosRowsTests(unittest.TestCase):
+    def test_well_formed_rows_pass(self):
+        filas = [
+            fila("TASA_ARBITRIO", "BARRIDO:Z1:CASA", valor_numerico="8.50"),
+            fila("ARBITRIO_ZONA", "01", texto="Z1"),
+            fila("ARBITRIO_USO", "0101", texto="CASA"),
+            fila("ARBITRIO_VENCIMIENTO", "3", texto="2026-03-31"),
+        ]
+        self.assertEqual(ip.errores(filas), [])
+
+    def test_the_predial_rows_are_not_checked_here(self):
+        self.assertEqual(ip.errores(ip.read_parametros(SHIPPED)), [])
+
+    def test_a_tasa_is_a_non_negative_figure_of_servicio_zona_uso(self):
+        for clave, valor in [("BARRIDO:Z1", "8.50"), ("BARRIDO::CASA", "8.50"), ("BARRIDO:Z1:CASA", None), ("BARRIDO:Z1:CASA", "-1"),
+                             ("BARRIDO:Z1:CASA", "ocho")]:
+            with self.subTest(clave=clave, valor=valor):
+                self.assertEqual(len(ip.errores([fila("TASA_ARBITRIO", clave, valor_numerico=valor)])), 1)
+
+    def test_a_mapping_names_its_zona_or_uso(self):
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_ZONA", "01")])), 1)
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_USO", "010", texto="CASA")])), 1)
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_USO", "01A1", texto="CASA")])), 1)
+
+    def test_a_vencimiento_is_a_month_and_a_date(self):
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_VENCIMIENTO", "13", texto="2026-03-31")])), 1)
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_VENCIMIENTO", "3", texto="31/03/2026")])), 1)
+
+    def test_an_ordinance_value_is_signed_by_two_people(self):
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_ZONA", "01", texto="Z1", verifico="ANA, 2026-01-09")])), 1)
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_ZONA", "01", texto="Z1", verifico=None)])), 1)
+
+    def test_a_malformed_csv_exits_2_before_calling_core(self):
+        core = FakeCore()
+        self.addCleanup(core.stop)
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write("# ficticio\n" + ",".join(ip.FIELDS) + "\n")
+            f.write("TASA_ARBITRIO,BARRIDO:Z1,2026-01-01,,8.50,,norma,test,ANA,BETO\n")
+        self.addCleanup(os.unlink, f.name)
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = ip.main(["--core", core.base_url, "--csv", f.name])
+        self.assertEqual(code, 2, err.getvalue())
+        self.assertIn("TASA_ARBITRIO BARRIDO:Z1", err.getvalue())
+        self.assertEqual(core.requests, [])
+
+
 if __name__ == "__main__":
     unittest.main()

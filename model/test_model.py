@@ -27,8 +27,8 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 22)
-        self.assertEqual(len(self.model["relationships"]), 11)
+        self.assertEqual(len(names), 28)
+        self.assertEqual(len(self.model["relationships"]), 19)
 
     def test_the_municipalidad_holds_the_documents_header(self):
         # the PU and HR's header, one record per organization edited in the admin (the escudo is a file, not a field)
@@ -104,10 +104,48 @@ class ShippedModelTests(unittest.TestCase):
                                  "documentos": "INTEGER", "errores": "LONG_TEXT", "parte": "TEXT"})
         self.assertEqual({n for n, f in fields.items() if f.get("required")}, {"numero", "contribuyentes", "estado"})
         self.assertEqual(self.model["enums"][fields["estado"]["enum"]], ["PENDIENTE", "EN_PROCESO", "TERMINADO", "FALLIDO"])
-        relationship = self.model["relationships"][-1]
+        relationship = next(r for r in self.model["relationships"] if r["source"] == "emision_lote")
         self.assertEqual(relationship, {"name": "emision_lote_emision", "label": "Emisión", "inverseLabel": "Lotes",
                                         "source": "emision_lote", "target": "emision_masiva", "fieldName": "emision",
                                         "required": True})
+
+    def test_the_arbitrios_objects_carry_rentas_guarantees(self):
+        # determinacion_arbitrio of rentas, carried over: one cuota per predio, servicio, year and month (the unique
+        # clave), every relation required, the amount, period and key required. periodo 1..12, monto >= 0 and the
+        # 120 characters of parametro_aplicado are kotlin's; immutability is the RecordStore's (README, Arbitrios)
+        objetos = {o["name"]: o for o in self.model["objects"]}
+        cuota = {f["name"]: f for f in objetos["cuota_arbitrio"]["fields"]}
+        self.assertEqual(list(cuota), ["anio", "periodo", "monto", "parametro_aplicado", "zona", "uso_arbitrio", "fecha_calculo",
+                                       "observacion", "clave"])
+        self.assertEqual({n for n, f in cuota.items() if f.get("required")},
+                         {"anio", "periodo", "monto", "parametro_aplicado", "fecha_calculo", "observacion", "clave"})
+        self.assertEqual({n for n, f in cuota.items() if f.get("unique")}, {"clave"})
+        self.assertEqual(cuota["monto"]["type"], "DECIMAL")
+        relaciones = {(r["source"], r["fieldName"]): r for r in self.model["relationships"]}
+        for campo, destino in [("predio", "predio"), ("contribuyente", "contribuyente"), ("servicio", "servicio_arbitrio"),
+                               ("parametro", "parametro_tributario")]:
+            relacion = relaciones[("cuota_arbitrio", campo)]
+            self.assertEqual((relacion["target"], relacion["required"]), (destino, True), campo)
+        ordenanza = {f["name"]: f for f in objetos["ordenanza_arbitrio"]["fields"]}
+        self.assertTrue(ordenanza["anio"]["unique"])
+        servicio = {f["name"]: f for f in objetos["servicio_arbitrio"]["fields"]}
+        self.assertTrue(servicio["codigo"]["unique"])
+        self.assertEqual(relaciones[("servicio_arbitrio", "ordenanza")]["target"], "ordenanza_arbitrio")
+        self.assertEqual(relaciones[("inafectacion_arbitrio", "servicio")]["target"], "servicio_arbitrio")
+        self.assertEqual(relaciones[("inafectacion_arbitrio", "predio")]["target"], "predio")
+
+    def test_the_masiva_de_arbitrios_is_a_twin_of_the_emision(self):
+        # the same lotes, lease and attempts as emision_masiva / emision_lote; it writes cuotas, never a file
+        objetos = {o["name"]: o for o in self.model["objects"]}
+        masiva = [f["name"] for f in objetos["determinacion_arbitrio_masiva"]["fields"]]
+        lote = [f["name"] for f in objetos["determinacion_arbitrio_lote"]["fields"]]
+        self.assertEqual(masiva, ["anio", "estado", "total", "procesados", "generadas", "errores", "mensaje", "observacion", "iniciado",
+                                  "terminado", "latido"])
+        self.assertEqual(lote, ["numero", "predios", "estado", "tomado_por", "latido", "intentos", "procesados", "generadas", "errores"])
+        self.assertNotIn("archivo", masiva)
+        relacion = next(r for r in self.model["relationships"] if r["source"] == "determinacion_arbitrio_lote")
+        self.assertEqual((relacion["target"], relacion["fieldName"], relacion["required"]),
+                         ("determinacion_arbitrio_masiva", "determinacion", True))
 
     def test_every_enum_option_passes_core_regex(self):
         for name, options in self.model["enums"].items():

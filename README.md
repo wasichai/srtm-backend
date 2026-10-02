@@ -293,6 +293,72 @@ python3 import_parametros.py             # parametro_tributario: 13 created, 0 u
 Fuera de alcance: el reajuste de las cuotas 2 a 4 por el IPM, la prórroga de los vencimientos por ordenanza, el derecho
 de emisión y las deducciones (los parámetros ya se cargan, pero la DJ guarda su `deduccion`).
 
+## Arbitrios
+
+Los arbitrios se portan del negocio de `rentas` (`DeterminarArbitrios`). Por ahora está el modelo y la carga de una
+ordenanza; la determinación, sus consultas y la Hoja de Liquidación de Arbitrios (HLA) llegan en los PR siguientes.
+
+**Modelo:**
+
+| Objeto | Qué es |
+|---|---|
+| `ordenanza_arbitrio` | La ordenanza de un año (`anio` único) y su ratificación por la provincial (`acuerdo_ratificacion`, `fecha_ratificacion`, `municipalidad_ratificante`). Sin ordenanza ratificada no se determina ni se emite (D-02b). |
+| `servicio_arbitrio` | Un servicio que la ordenanza cobra (barrido, residuos, serenazgo…), con `codigo` único de hasta 20 caracteres y su vigencia. Ningún servicio está escrito en el código. |
+| `inafectacion_arbitrio` | Un predio que no paga un servicio en una vigencia (ambos extremos cuentan), con su motivo, documento y observación. |
+| `cuota_arbitrio` | Lo determinado de un predio, un servicio y un mes: `monto`, `parametro_aplicado` (la llave leída), `zona` y `uso_arbitrio` usados, `fecha_calculo` y `observacion`, más relaciones obligatorias a `predio`, `contribuyente` (el titular principal ese mes), `servicio` y `parametro` (la fila de `parametro_tributario`). |
+| `determinacion_arbitrio_masiva`, `determinacion_arbitrio_lote` | El job de la determinación de un año en segundo plano y sus lotes de predios, gemelos de `emision_masiva` y `emision_lote`. No generan archivo. |
+
+Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
+- **Una cuota por predio, servicio, año y mes:** `cuota_arbitrio.clave` es única y vale `predio|servicio|anio|periodo|version`.
+  Core no tiene unicidad compuesta; como cada organización tiene su tabla física, la unicidad es por organización.
+- **Inmutable:** una cuota no se edita ni se borra, ni siquiera un ADMIN; una corrección será una anulación que se
+  agrega y una versión nueva de la `clave`. Lo hará cumplir el backend (los permisos de Core no lo pueden: ADMIN se los
+  salta).
+- **`periodo` de 1 a 12, `monto` no negativo y `parametro_aplicado` de hasta 120 caracteres:** los valida el backend al
+  crear.
+- **Observación de 5 a 500 caracteres:** va en la propia cuota, porque la auditoría de Core no guarda observación.
+
+**Parámetros de la ordenanza.** Las tasas y los mapeos son filas de `parametro_tributario`, con vigencia y doble
+firma, y se cargan con `import_parametros.py --csv <archivo>`:
+
+| `tipo` | `clave` | Valor |
+|---|---|---|
+| `TASA_ARBITRIO` | `servicio:zona:uso` | `valor_numerico`: la tasa mensual en soles, no negativa |
+| `ARBITRIO_ZONA` | el sector catastral | `texto`: su zona según la ordenanza |
+| `ARBITRIO_USO` | un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos (gana el más largo) | `texto`: su uso de arbitrio |
+| `ARBITRIO_VENCIMIENTO` | el mes, de 1 a 12 | `texto`: su vencimiento, `AAAA-MM-DD` |
+
+`import_parametros.py` revisa la forma de estas filas antes de enviar nada: la llave de la tasa, el valor, el mes, la
+fecha y que `transcribio` y `verifico` sean dos personas distintas. Si una no encaja, la nombra y sale con `2`.
+
+**La ordenanza, los servicios y las inafectaciones** se cargan con `import_arbitrios.py`, desde un JSON:
+
+```json
+{"ordenanzas": [{"anio": 2026, "numero": "…", "fecha_publicacion": "…", "acuerdo_ratificacion": "…",
+                 "fecha_ratificacion": "…", "municipalidad_ratificante": "…"}],
+ "servicios": [{"codigo": "…", "nombre": "…", "orden": 1, "vigencia_desde": "2026-01-01", "ordenanza": 2026}],
+ "inafectaciones": [{"predio": "<codigo del predio>", "servicio": "<codigo del servicio>", "vigencia_desde": "…",
+                     "motivo": "…", "observacion": "…"}]}
+```
+
+```bash
+cd model
+python3 import_arbitrios.py --archivo arbitrios-2026.json --dry-run   # lee Core y dice qué haría, sin escribir
+python3 import_arbitrios.py --archivo arbitrios-2026.json
+```
+
+`import_arbitrios.py`:
+- un servicio nombra su ordenanza por el año, y una inafectación nombra su predio y su servicio por el código;
+- antes de la primera escritura revisa el archivo (campos obligatorios, fechas, vigencias, códigos repetidos,
+  observación de 5 a 500 caracteres) y que existan los predios, los servicios y las ordenanzas que nombra;
+- es idempotente con claves naturales: la ordenanza por `anio`, el servicio por `codigo`, la inafectación por predio,
+  servicio y `vigencia_desde`; actualiza en su lugar lo que cambió y no borra nada;
+- sale con `0` si todo va bien, `1` si Core rechaza algo y `2` si el archivo no encaja (sin escribir nada).
+
+**Ninguna cifra inventada.** Todavía no hay una transcripción verificada de la ordenanza de arbitrios de Perené y su
+ratificación (E-6 del plan de desbloqueo D-02 de `normativa`). Hasta que la haya, el repo no lleva ni el JSON ni el CSV
+de tasas, y los tests usan valores ficticios escritos dentro del propio test.
+
 ## Importar el catastro fiscal
 
 Los lotes del catastro fiscal (código CPU y polígono) se cargan desde un GeoJSON en EPSG:4326. También se pueden
@@ -507,7 +573,7 @@ python3 apply.py                                  # 3. quita ANEXO, HABILITACION
 
 ## Modelo
 
-Veintidós objetos (`model/model.json`):
+Veintiocho objetos (`model/model.json`):
 - **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
   *Formato Padrón Municipal Armonización 2026*.
 - **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
@@ -520,6 +586,9 @@ Veintidós objetos (`model/model.json`):
   [Impuesto predial](#impuesto-predial)).
 - **Emisión masiva:** `emision_masiva`, el job de la emisión de un año en segundo plano, y `emision_lote`, sus lotes (ver
   [Emisión masiva](#emisión-masiva)).
+- **Arbitrios:** `ordenanza_arbitrio`, `servicio_arbitrio`, `inafectacion_arbitrio` y `cuota_arbitrio`, y el job de la
+  determinación masiva con sus lotes, `determinacion_arbitrio_masiva` y `determinacion_arbitrio_lote` (ver
+  [Arbitrios](#arbitrios)).
 
 Geometrías (wasichai-gis, GeoJSON en EPSG:4326 por la API):
 - `predio.lote_geom` y `catastro_fiscal.lote_geom`: POLYGON, guardados en UTM 18S (EPSG:32718).
