@@ -8,6 +8,7 @@ import org.springframework.r2dbc.core.awaitRowsUpdated
 import org.springframework.stereotype.Component
 import java.time.Duration
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
 
 // model/model.json
 const val EMISION_LOTE = "emision_lote"
@@ -113,13 +114,22 @@ class LotesEmision(
     private val db: DatabaseClient,
     private val tablas: TablasCore
 ) {
+    // the organization of the last lote this instance took: the next take starts with the one after it
+    private val ultima = AtomicReference<UUID?>(null)
+
     // the next lote of the oldest emission EN_PROCESO: a PENDIENTE one, or one EN_PROCESO whose worker stopped beating
-    // `lease` ago. it counts one more attempt and starts over. organizations are tried in turn; null: none to take
+    // `lease` ago. it counts one more attempt and starts over. the organizations take turns: each take starts with the
+    // one after the organization of the last lote taken, so one organization's emission never waits for another's to
+    // end. null: none to take
     suspend fun tomar(
         instancia: String,
         lease: Duration
     ): LoteTomado? {
-        for (t in tablas.lotes()) {
+        // in TablasCore's order (by organization), rotated to start after the last one; it may be gone: from the first
+        val todas = tablas.lotes()
+        val antes = ultima.get()
+        val desde = (todas.indexOfFirst { it.organizacion == antes } + 1) % todas.size.coerceAtLeast(1)
+        for (t in todas.drop(desde) + todas.take(desde)) {
             val l = t.lotes
             val e = t.emisiones
             val tomado =
@@ -162,7 +172,10 @@ class LotesEmision(
                         )
                     }.one()
                     .awaitFirstOrNull()
-            if (tomado != null) return tomado
+            if (tomado != null) {
+                ultima.set(tomado.organizacion)
+                return tomado
+            }
         }
         return null
     }

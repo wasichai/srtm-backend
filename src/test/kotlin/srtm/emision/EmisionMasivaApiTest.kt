@@ -418,20 +418,8 @@ class EmisionMasivaApiTest : ConEscenarioApiTest() {
         id: String
     ): Boolean = runBlocking { almacen.existe(claveResultado(UUID.fromString(id), anio, FormatoEmision.PDF)) }
 
-    // a new organization with the model applied, as core provisions one: its admin's token
-    private fun otraOrganizacion(): String {
-        val slug = uniqueName("org").lowercase()
-        val email = "admin@$slug.test"
-        post("/api/organizations", mapOf("name" to slug, "slug" to slug, "adminEmail" to email, "adminPassword" to CLAVE))
-        val suyo = bearer(email, CLAVE)
-        aplicarModelo(suyo)
-        return suyo
-    }
-
     private companion object {
         val TEMPORALES: Path = Path.of("build/emisiones-test-tmp")
-
-        const val CLAVE = "clave-de-la-otra-organizacion"
 
         @Volatile
         var fallan: Set<String> = emptySet()

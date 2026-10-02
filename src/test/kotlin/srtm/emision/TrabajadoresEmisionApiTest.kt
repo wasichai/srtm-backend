@@ -26,6 +26,7 @@ import java.time.Duration
 import java.time.Instant
 import java.util.Base64
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.io.path.writeText
@@ -66,8 +67,10 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
 
     private val grupos = mutableListOf<GrupoTrabajadores>()
 
-    // the real documents; armed, the first HR asked for waits on `puerta`
+    // the real documents; armed, the first HR asked for waits on `puerta`. every HR asked for is in `pedidas`, in order
     private val primera = AtomicBoolean(false)
+
+    private val pedidas = CopyOnWriteArrayList<UUID>()
 
     @Volatile
     private var puerta: CompletableDeferred<Unit>? = null
@@ -79,6 +82,7 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
                 anio: Int,
                 parametros: List<ParametroTributario>?
             ): Documento {
+                pedidas += contribuyenteId
                 if (primera.compareAndSet(false, true)) puerta?.await()
                 return documentosPrediales.hr(contribuyenteId, anio, parametros)
             }
@@ -265,6 +269,30 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
     }
 
     @Test
+    fun `one worker takes the lotes of two organizations in turn, not one organization's after the other's`() {
+        val anio = anio()
+        val otra = otraOrganizacion()
+        // two lotes each, of contribuyentes that exist nowhere: their HR fails, and asking for it is what is looked at
+        val propios = List(2) { ficticio() }
+        val ajenos = List(2) { ficticio() }
+        val propia = enProceso(anio, 2)
+        val ajena = enProceso(anio, 2, otra)
+        propios.forEachIndexed { i, c -> loteNuevo(propia, i + 1, listOf(c)) }
+        ajenos.forEachIndexed { i, c -> loteNuevo(ajena, i + 1, listOf(c), otra) }
+
+        grupo("sola", cantidad = 1)
+
+        assertEquals("TERMINADA", esperar(propia)["estado"].asString())
+        assertEquals("TERMINADA", esperar(ajena, otra)["estado"].asString())
+        val deCual = propios.associate { it.id to "propia" } + ajenos.associate { it.id to "ajena" }
+        val orden = pedidas.mapNotNull { deCual[it] }
+        assertEquals(4, orden.size, "$orden")
+        // each one's first lote is taken before the other one's last
+        assertTrue(orden.indexOf("ajena") < orden.lastIndexOf("propia"), "$orden")
+        assertTrue(orden.indexOf("propia") < orden.lastIndexOf("ajena"), "$orden")
+    }
+
+    @Test
     fun `the identity of a lote is its creator's as the jwt filter would build it, and none for an unknown user`() {
         val admin = admin()
 
@@ -340,6 +368,9 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
             token
         )
     }
+
+    // a contribuyente of no padrón
+    private fun ficticio() = ContribuyenteAEmitir(UUID.randomUUID(), uniqueDocumento(), "FICTICIO", emptyList())
 
     // a started group of this context playing an instance, with its own work dir
     private fun grupo(

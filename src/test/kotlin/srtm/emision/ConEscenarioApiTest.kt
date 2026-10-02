@@ -224,6 +224,17 @@ abstract class ConEscenarioApiTest : ConParametrosApiTest() {
         }
     }
 
+    // a new organization with the model applied, as core provisions one: its admin's token
+    protected fun otraOrganizacion(): String {
+        val slug = uniqueName("org").lowercase()
+        val email = "admin@$slug.test"
+        val clave = "clave-de-la-otra-organizacion"
+        post("/api/organizations", mapOf("name" to slug, "slug" to slug, "adminEmail" to email, "adminPassword" to clave))
+        val suyo = bearer(email, clave)
+        aplicarModelo(suyo)
+        return suyo
+    }
+
     // a lote as its row has it
     protected data class FilaLote(
         val id: UUID,
