@@ -76,13 +76,12 @@ class EmisionMasivaController(
         val formato = FormatoEmision.valueOf(job.formato!!)
         val cabeceras = exchange.response.headers
         cabeceras.contentType = formato.mediaType
-        cabeceras.contentLength = descarga.tamano
         cabeceras.contentDisposition =
             ContentDisposition
                 .attachment()
                 .filename(nombreArchivo(job.anio!!, job.id, formato))
                 .build()
-        escribirDescarga(descarga.recurso, formato.mediaType, exchange).awaitSingleOrNull()
+        escribirDescarga(descarga.recurso, formato.mediaType, descarga.tamano, exchange).awaitSingleOrNull()
     }
 }
 
@@ -92,17 +91,22 @@ private const val TROZO = 64 * 1024
 private val RECURSOS = ResourceHttpMessageWriter(TROZO)
 
 // the file as it is read, never whole in memory, after the headers the caller set. a file on disk goes to spring's own
-// writer, as a ResponseEntity<Resource> would: an async channel, and a Range answered with a 206. anything else (an s3
-// object) is a blocking stream, read on boundedElastic (cuerpoDeDescarga), and answers no Range: always the whole file
+// writer, as a ResponseEntity<Resource> would: an async channel, and a Range answered with a 206 (or a 416). that
+// writer sets the Content-Length of what it answers (the file's, a range's, a multipart's, none for a 416): one set
+// here would stay on a multipart or a 416 and cut or hang the response. anything else (an s3 object) is a blocking
+// stream, read on boundedElastic (cuerpoDeDescarga), with `tamano` as its length, and answers no Range: always the
+// whole file
 fun escribirDescarga(
     recurso: Resource,
     tipo: MediaType,
+    tamano: Long,
     exchange: ServerWebExchange
 ): Mono<Void> =
     if (recurso.isFile) {
         val recursoTipo = ResolvableType.forClass(Resource::class.java)
         RECURSOS.write(Mono.just(recurso), recursoTipo, recursoTipo, tipo, exchange.request, exchange.response, emptyMap<String, Any>())
     } else {
+        exchange.response.headers.contentLength = tamano
         exchange.response.writeWith(cuerpoDeDescarga(recurso))
     }
 

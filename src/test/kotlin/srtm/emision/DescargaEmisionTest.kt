@@ -73,6 +73,7 @@ class DescargaEmisionTest {
         assertEquals(100, parte.headers.contentLength)
         assertEquals(bytes.copyOfRange(100, 200).toList(), cuerpo(parte).toList())
         assertTrue(entera.statusCode in setOf(null, HttpStatus.OK), "${entera.statusCode}")
+        assertEquals(200_000, entera.headers.contentLength)
         assertEquals(bytes.toList(), cuerpo(entera).toList())
     }
 
@@ -89,6 +90,7 @@ class DescargaEmisionTest {
         val respuesta = descargar(recurso, "bytes=0-9")
 
         assertTrue(respuesta.statusCode in setOf(null, HttpStatus.OK), "${respuesta.statusCode}")
+        assertEquals(1000, respuesta.headers.contentLength)
         assertEquals(bytes.toList(), cuerpo(respuesta).toList())
     }
 
@@ -100,7 +102,7 @@ class DescargaEmisionTest {
         val pedido = MockServerHttpRequest.get("/api/srtm/emisiones/x/archivo")
         if (rango != null) pedido.header(HttpHeaders.RANGE, rango)
         val exchange = MockServerWebExchange.from(pedido)
-        escribirDescarga(recurso, MediaType.APPLICATION_PDF, exchange).block(Duration.ofSeconds(10))
+        escribirDescarga(recurso, MediaType.APPLICATION_PDF, recurso.contentLength(), exchange).block(Duration.ofSeconds(10))
         return exchange.response
     }
 

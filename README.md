@@ -1014,10 +1014,11 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
   sus lotes por generar pasan a FALLIDO (sus trabajadores lo notan en su siguiente escritura y abortan); luego se borran
   sus lotes, el job y todo lo que el almacén guarde bajo `emision-<id>/`. Ya no da 409.
 - **Descarga** `GET /api/srtm/emisiones/{id}/archivo`: el `Resource` del almacén, en streaming, sin cargar el archivo en
-  memoria; el `Content-Length` sale de `tamano` del almacén, sin leer el archivo. Un archivo en disco (`AlmacenLocal`)
-  lo escribe el `ResourceHttpMessageWriter` de Spring, con un canal asíncrono, y responde los `Range` con 206 (una
-  descarga cortada puede retomarse). Otro recurso, como un objeto de S3, va en trozos de 64 KiB leídos en
-  `boundedElastic` y **no responde `Range`**: siempre el archivo entero, con 200. 409 si no está TERMINADA, 410 si se
+  memoria y con su `Content-Length`, sin leer el archivo. Un archivo en disco (`AlmacenLocal`) lo escribe el
+  `ResourceHttpMessageWriter` de Spring, con un canal asíncrono y el largo de lo que responde: los `Range` con 206 (uno
+  o varios, `multipart/byteranges`; una descarga cortada puede retomarse) y uno imposible o mal formado con 416. Otro
+  recurso, como un objeto de S3, va en trozos de 64 KiB leídos en `boundedElastic`, con el `Content-Length` de `tamano`
+  del almacén, y **no responde `Range`**: siempre el archivo entero, con 200. 409 si no está TERMINADA, 410 si se
   depuró, 404 si el almacén ya no tiene la clave. La clave y el nombre (`Content-Disposition`) se arman del job, nunca
   se leen del registro.
 
@@ -1025,15 +1026,16 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
 
 La versión con lotes cambia el modelo, los estados y dónde viven los archivos. Para pasar a ella:
 
-1. **El modelo primero**, con el backend nuevo todavía apagado: `cd model && python3 apply.py --dry-run` (muestra lo
-   que mandaría, sin llamar a Core) y luego `python3 apply.py`, que sobre el modelo existente crea `emision_lote` y su
-   relación y añade `emision_masiva.latido` y el estado `ENSAMBLANDO`. Sin `emision_lote`, el backend nuevo no ve la
+1. **El modelo primero**, con el backend nuevo todavía apagado: `cd model && python3 apply.py --dry-run` imprime, sin
+   llamar a Core, el modelo entero como si se creara de cero (no lo que cambiaría en una base existente), y sirve para
+   revisar `model.json`. Luego `python3 apply.py`, que sobre el modelo existente crea `emision_lote` y su relación y
+   añade `emision_masiva.latido` y el estado `ENSAMBLANDO`. Sin `emision_lote`, el backend nuevo no ve la
    organización (le faltan las tablas de los lotes) y su POST falla.
 2. **Sin versiones mezcladas:** detener **todas** las instancias viejas (mejor sin ninguna masiva corriendo) antes de
-   arrancar las nuevas. Un POST de una instancia vieja pasa a FALLIDA los jobs activos de las nuevas (los cree sin
-   worker), y una instancia nueva falla el job que una vieja esté corriendo (no tiene `latido`). Al arrancar, la
-   versión nueva pasa a FALLIDA los jobs que dejó la anterior (PENDIENTE o EN_PROCESO sin `latido`): se vuelven a
-   emitir. Con el almacén local, `AlmacenLocal` mueve al arrancar los archivos planos de la versión anterior
+   arrancar las nuevas. Un POST de una instancia vieja pasa a FALLIDA los jobs activos de las nuevas: la versión vieja
+   da por huérfano todo job activo que no corra su propio worker. Y una instancia nueva falla el job que una vieja
+   esté corriendo (no tiene `latido`). Al arrancar, la versión nueva pasa a FALLIDA los jobs que dejó la anterior
+   (PENDIENTE o EN_PROCESO sin `latido`): se vuelven a emitir. Con el almacén local, `AlmacenLocal` mueve al arrancar los archivos planos de la versión anterior
    (`<dir>/emision-<anio>-<id>.<ext>`) a su clave.
 3. **De local a S3:** los archivos existentes **no se migran solos**: si no se copian al bucket con las mismas claves,
    sus descargas dan 404. Por ejemplo `aws s3 sync <srtm.emision.dir> s3://<bucket>/<prefijo>`. Viniendo directo de la

@@ -350,20 +350,42 @@ class EmisionMasivaApiTest : ConEscenarioApiTest() {
         val anio = anio()
         val id = terminadaConArchivo(anio, "2020-01-01T00:00:00Z")
 
-        val result =
-            client
-                .get()
-                .uri("/api/srtm/emisiones/$id/archivo")
-                .header(HttpHeaders.AUTHORIZATION, token)
-                .header(HttpHeaders.RANGE, "bytes=1-2")
-                .exchange()
-                .expectBody(String::class.java)
-                .returnResult()
+        val parte = rango(id, "bytes=1-2")
+        val entero = rango(id, null)
 
-        assertEquals(HttpStatus.PARTIAL_CONTENT.value(), result.status.value(), result.responseBody)
-        assertEquals("df", result.responseBody)
-        assertEquals("bytes 1-2/3", result.responseHeaders.getFirst(HttpHeaders.CONTENT_RANGE))
-        assertEquals("attachment; filename=\"emision-$anio-$id.pdf\"", result.responseHeaders.getFirst(HttpHeaders.CONTENT_DISPOSITION))
+        assertEquals(HttpStatus.PARTIAL_CONTENT, parte.status, String(parte.cuerpo))
+        assertEquals("df", String(parte.cuerpo))
+        assertEquals(2, parte.longitud)
+        assertEquals("bytes 1-2/3", parte.cabeceras.getFirst(HttpHeaders.CONTENT_RANGE))
+        assertEquals("attachment; filename=\"emision-$anio-$id.pdf\"", parte.cabeceras.getFirst(HttpHeaders.CONTENT_DISPOSITION))
+        assertEquals(HttpStatus.OK, entero.status)
+        assertEquals("pdf", String(entero.cuerpo))
+        assertEquals(3, entero.longitud)
+    }
+
+    @Test
+    fun `a range the file cannot satisfy is a 416 that ends, also the one of a download already complete`() {
+        val id = terminadaConArchivo(anio(), "2020-01-01T00:00:00Z")
+
+        // a client resuming a download it already has asks from its size on; a hang would time the call out
+        for (pedido in listOf("bytes=3-", "bytes=10-20", "basura")) {
+            val r = rango(id, pedido)
+            assertEquals(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE, r.status, pedido)
+            assertTrue(r.longitud <= 0 || r.longitud == r.cuerpo.size.toLong(), "$pedido: Content-Length ${r.longitud}, ${r.cuerpo.size} bytes")
+        }
+    }
+
+    @Test
+    fun `several ranges of a file are a 206 with every part, and a length that is the body's`() {
+        val id = terminadaConArchivo(anio(), "2020-01-01T00:00:00Z")
+
+        val r = rango(id, "bytes=0-0,2-2")
+
+        assertEquals(HttpStatus.PARTIAL_CONTENT, r.status, String(r.cuerpo))
+        assertTrue(MediaType.parseMediaType("multipart/byteranges").isCompatibleWith(r.cabeceras.contentType), "${r.cabeceras.contentType}")
+        val cuerpo = String(r.cuerpo)
+        assertTrue("Content-Range: bytes 0-0/3" in cuerpo && "Content-Range: bytes 2-2/3" in cuerpo, cuerpo)
+        assertTrue(r.longitud <= 0 || r.longitud == r.cuerpo.size.toLong(), "Content-Length ${r.longitud}, ${r.cuerpo.size} bytes")
     }
 
     @Test
@@ -427,6 +449,31 @@ class EmisionMasivaApiTest : ConEscenarioApiTest() {
         val archivo = Files.writeString(Files.createTempFile("emision-test", ".pdf"), "pdf")
         runBlocking { almacen.guardar(claveResultado(UUID.fromString(id), anio, FormatoEmision.PDF), archivo) }
         return id
+    }
+
+    private class Rango(
+        val status: HttpStatus,
+        val cabeceras: HttpHeaders,
+        val longitud: Long,
+        val cuerpo: ByteArray
+    )
+
+    // the file of the job asked for with that Range header (none: the whole file), within the client's timeout
+    private fun rango(
+        id: String,
+        pedido: String?
+    ): Rango {
+        val result =
+            client
+                .get()
+                .uri("/api/srtm/emisiones/$id/archivo")
+                .header(HttpHeaders.AUTHORIZATION, token)
+                .headers { if (pedido != null) it.set(HttpHeaders.RANGE, pedido) }
+                .exchange()
+                .expectBody(ByteArray::class.java)
+                .returnResult()
+        val cabeceras = result.responseHeaders
+        return Rango(HttpStatus.valueOf(result.status.value()), cabeceras, cabeceras.contentLength, result.responseBody ?: ByteArray(0))
     }
 
     // what is in the workers' work dir
