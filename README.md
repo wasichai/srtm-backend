@@ -295,9 +295,9 @@ de emisión y las deducciones (los parámetros ya se cargan, pero la DJ guarda s
 
 ## Arbitrios
 
-Los arbitrios se portan del negocio de `rentas` (`DeterminarArbitrios`). Por ahora están el modelo, la carga de una
-ordenanza y el cálculo (`srtm.arbitrios.Arbitrios`, una función pura). Los endpoints de la determinación, sus
-consultas y la Hoja de Liquidación de Arbitrios (HLA) llegan en los PR siguientes.
+Los arbitrios se portan del negocio de `rentas` (`DeterminarArbitrios`). Ya están el modelo, la carga de una
+ordenanza, el cálculo (`srtm.arbitrios.Arbitrios`, una función pura) y la determinación por predio y por contribuyente
+con sus consultas. La determinación masiva y la Hoja de Liquidación de Arbitrios (HLA) llegan en los PR siguientes.
 
 **Modelo:**
 
@@ -313,10 +313,14 @@ Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
 - **Una cuota por predio, servicio, año y mes:** `cuota_arbitrio.clave` es única y vale `predio|servicio|anio|periodo|version`.
   Core no tiene unicidad compuesta; como cada organización tiene su tabla física, la unicidad es por organización.
 - **Inmutable:** una cuota no se edita ni se borra, ni siquiera un ADMIN; una corrección será una anulación que se
-  agrega y una versión nueva de la `clave`. Lo hará cumplir el backend (los permisos de Core no lo pueden: ADMIN se los
-  salta).
-- **`periodo` de 1 a 12, `monto` no negativo y `parametro_aplicado` de hasta 120 caracteres:** los valida el backend al
-  crear.
+  agrega y una versión nueva de la `clave`. Los permisos de Core no pueden decirlo (ADMIN se los salta, y `/admin` usa
+  la misma API), así que lo hace cumplir `CuotasInmutables`, que envuelve el `RecordStore` de Core: un PUT o DELETE de
+  una cuota, por cualquier vía, responde **409**. Su límite: borrar el objeto entero desde los metadatos sigue siendo
+  posible.
+- **`periodo` de 1 a 12, `monto` no negativo, `parametro_aplicado` de hasta 120 caracteres, relaciones obligatorias y
+  `clave` coherente:** los revisa el mismo `RecordStore` al insertar, venga la cuota de donde venga; si no, **400**.
+- **Un valor único repetido** (dos cuotas con la misma `clave`, o cualquier otro campo único del modelo) responde
+  **409** y no 500 (`srtm.Duplicados`; Core 0.2.0 lo deja caer como error interno).
 - **Observación de 5 a 500 caracteres:** va en la propia cuota, porque la auditoría de Core no guarda observación.
 
 **Parámetros de la ordenanza.** Las tasas y los mapeos son filas de `parametro_tributario`, con vigencia y doble
@@ -378,6 +382,31 @@ python3 import_arbitrios.py --archivo arbitrios-2026.json
 - **Todo o nada:** si falta un parámetro (una zona, un uso, una tasa), no se determina nada de ese predio. `faltan`
   nombra cada uno una vez (`TASA_ARBITRIO LIMPIEZA:Z1:CASA 2026`).
 - **Reejecutar no duplica:** las cuotas que ya existen no se recalculan.
+
+**Escritura.** Las cuotas de un predio se escriben en una transacción: todas o ninguna. Si otra determinación del mismo
+predio escribe alguna entre la lectura y la escritura (la `clave` es única), no queda nada de esta: se lee y se calcula
+otra vez, una sola vez, y lo que la otra escribió ya no se recalcula.
+
+**Índices.** Core indexa solo `organization_id`, el estado y los campos únicos, y un año trae de 540 000 a 900 000
+cuotas. La app crea dos índices propios sobre la tabla física de `cuota_arbitrio` de cada organización:
+`(anio, predio)` y `(anio, contribuyente)`. Los crea al arrancar y, para una organización cuyo modelo llegó después,
+en su primer uso (`IndicesArbitrios`). Medido en el CI sobre 505 000 filas: listar un predio pasa de 62 ms a 3,3 ms.
+
+**API** (`/api/srtm`, JSON en snake_case; sin `anio`, el año en curso):
+
+| Método | Ruta | Responde |
+|---|---|---|
+| GET | `/arbitrios/servicios?anio` | Los servicios vigentes algún día del año, en su orden. |
+| GET | `/arbitrios/parametros?anio` | La ordenanza, los servicios y las filas de la ordenanza vigentes en el año, con `faltan`. Siempre 200. |
+| GET | `/arbitrios?anio&predio&contribuyente&servicio&page&size` | Una página de cuotas. Un parámetro desconocido o mal formado es **422** y lo nombra en `errors` (nunca un filtro ignorado). |
+| GET | `/predios/{id}/arbitrios?anio` | La matriz servicio × mes, el titular de cada mes según la regla, los totales por servicio, por mes y del año, la `fecha_calculo` de la última cuota, cuántas cuotas agregaría determinar ahora (`pendientes`) y qué falta para hacerlo (`faltan`). |
+| GET | `/contribuyentes/{id}/arbitrios?anio` | Lo mismo por cada predio de sus DJ del año (o del que tiene cuotas), solo con las cuotas a su nombre, y su total. |
+| POST | `/predios/{id}/arbitrios` `{anio, observacion}` | **201** con las cuotas escritas; **200** con `[]` si no había nada pendiente; **422** con `faltan`; **400** si la observación no tiene de 5 a 500 caracteres; **403** sin permiso de creación sobre `cuota_arbitrio`. |
+| POST | `/contribuyentes/{id}/arbitrios` `{anio, observacion}` | Determina cada predio de sus DJ del año (también una anulada: puede cubrir los meses previos a una venta). Calcula todos antes de escribir: si uno no se puede determinar, **422** que lo nombra (`Predio <código>: …`) y no escribe ninguno. |
+
+**Permisos.** Consultar pide lectura de `cuota_arbitrio`, `servicio_arbitrio`, `ordenanza_arbitrio`,
+`inafectacion_arbitrio` y `parametro_tributario`. Determinar pide, además, creación sobre `cuota_arbitrio`. Nadie
+actualiza ni borra cuotas.
 
 **Ninguna cifra inventada.** Todavía no hay una transcripción verificada de la ordenanza de arbitrios de Perené y su
 ratificación (E-6 del plan de desbloqueo D-02 de `normativa`). Hasta que la haya, el repo no lleva ni el JSON ni el CSV
