@@ -1041,6 +1041,19 @@ emisión <id> de 2026: 11800 contribuyentes, 15900 documentos en 5230.4 s (3.0 d
   del pool de conexiones (ver arriba), y cada uno suma memoria al renderizar.
 - **Cómo medir:** una emisión del padrón completo en dev con `SRTM_EMISION_TRABAJADORES=1` y otra con `auto`, anotando
   la máquina (núcleos y RAM) y las dos líneas de la emisión.
+- **Medido (2026-10-02), padrón sintético:** 240 contribuyentes y 300 PU (540 documentos, PDF, `lote=20`), en una
+  máquina de 4 núcleos (Xeon 2.8 GHz) y 15 GiB de RAM, con la JVM en 4 GiB de heap y Postgres (Testcontainers) en la
+  misma máquina, después de una emisión de calentamiento:
+
+  | `trabajadores` | Duración de la emisión | Documentos/s (emisión) | Documentos/s por lote |
+  |---|---|---|---|
+  | `1` | 23.8 s | 22.7 | 23–26 |
+  | `auto` (= 4) | 10.4 s | 51.8 | 14–16 |
+
+  Con 4 trabajadores la emisión rinde 2.3 veces más: cada lote va más lento (comparten núcleos con Postgres y el
+  render), pero corren cuatro a la vez. Llevado al padrón completo (unos 11 800 contribuyentes y 15 000 PU, ~26 800
+  documentos), serían unos 20 min con `1` y unos 9 min con `auto` en esa máquina. **Falta la cifra medida en dev con el
+  padrón real** (wasichai/srtm-backend#55): ahí la base y el almacén están en otra máquina y las PU tienen más usos.
 
 ## Tests
 
