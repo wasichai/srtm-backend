@@ -859,6 +859,114 @@
           "description": "JSON: [{contribuyente, mensaje}], el código del contribuyente que no se pudo emitir y por qué."},
         {"name": "parte", "label": "Parte", "type": "TEXT", "description": "La clave de su archivo en el almacén: emision-<id>/parte-00001.pdf|zip."}
       ]
+    },
+    {
+      "name": "ordenanza_arbitrio",
+      "label": "Ordenanza de arbitrios",
+      "pluralLabel": "Ordenanzas de arbitrios",
+      "description": "La ordenanza de arbitrios de un año y su ratificación por la municipalidad provincial (D-02b: sin ella no se determina ni se emite). Una por año.",
+      "fields": [
+        {"name": "anio", "label": "Año", "type": "INTEGER", "required": true, "unique": true, "description": "El ejercicio que rige."},
+        {"name": "numero", "label": "Número", "type": "TEXT", "required": true, "description": "Ordenanza N.° …, como se publicó."},
+        {"name": "fecha_publicacion", "label": "Fecha de publicación", "type": "DATE"},
+        {"name": "acuerdo_ratificacion", "label": "Acuerdo de ratificación", "type": "TEXT",
+          "description": "El acuerdo de concejo de la provincial que la ratifica. Sin él, la ordenanza no rige."},
+        {"name": "fecha_ratificacion", "label": "Fecha de ratificación", "type": "DATE"},
+        {"name": "municipalidad_ratificante", "label": "Municipalidad que ratifica", "type": "TEXT",
+          "description": "La provincial (Chanchamayo, para Perené)."},
+        {"name": "informe_costos", "label": "Informe técnico de costos", "type": "TEXT"},
+        {"name": "observacion", "label": "Observación", "type": "LONG_TEXT"}
+      ]
+    },
+    {
+      "name": "servicio_arbitrio",
+      "label": "Servicio de arbitrio",
+      "pluralLabel": "Servicios de arbitrio",
+      "description": "Un servicio que la ordenanza del año cobra como arbitrio (barrido de calles, residuos sólidos, parques y jardines, serenazgo…). Su código es la clave en tasas e inafectaciones; ningún nombre de servicio está en el código.",
+      "fields": [
+        {"name": "codigo", "label": "Código", "type": "TEXT", "required": true, "unique": true,
+          "description": "Corto y estable, hasta 20 caracteres: va en la llave de la tasa (TASA_ARBITRIO servicio:zona:uso)."},
+        {"name": "nombre", "label": "Nombre", "type": "TEXT", "required": true},
+        {"name": "orden", "label": "Orden", "type": "INTEGER", "description": "En el que se listan y se imprimen."},
+        {"name": "vigencia_desde", "label": "Vigencia desde", "type": "DATE", "required": true},
+        {"name": "vigencia_hasta", "label": "Vigencia hasta", "type": "DATE", "description": "Vacía: sigue vigente."}
+      ]
+    },
+    {
+      "name": "inafectacion_arbitrio",
+      "label": "Inafectación de arbitrio",
+      "pluralLabel": "Inafectaciones de arbitrio",
+      "description": "Un predio que no paga un servicio en un periodo (por ejemplo, sin recojo de residuos). Se mira a la fecha de cada mes; es solo de arbitrios, no la condición especial del predial.",
+      "fields": [
+        {"name": "vigencia_desde", "label": "Vigencia desde", "type": "DATE", "required": true},
+        {"name": "vigencia_hasta", "label": "Vigencia hasta", "type": "DATE", "description": "Vacía: sigue vigente. Ambos extremos cuentan."},
+        {"name": "tipo_documento", "label": "Tipo de documento", "type": "TEXT", "description": "Resolución, informe…"},
+        {"name": "numero_documento", "label": "Número de documento", "type": "TEXT"},
+        {"name": "motivo", "label": "Motivo", "type": "TEXT", "required": true},
+        {"name": "observacion", "label": "Observación", "type": "LONG_TEXT", "required": true}
+      ]
+    },
+    {
+      "name": "cuota_arbitrio",
+      "label": "Cuota de arbitrio",
+      "pluralLabel": "Cuotas de arbitrio",
+      "description": "Lo determinado de un servicio, un predio y un mes. Inmutable: nunca se edita ni se borra (una corrección es una anulación que se agrega). No es deuda: es lo determinado a su fecha_calculo.",
+      "fields": [
+        {"name": "anio", "label": "Año", "type": "INTEGER", "required": true},
+        {"name": "periodo", "label": "Periodo", "type": "INTEGER", "required": true, "description": "El mes, de 1 a 12."},
+        {"name": "monto", "label": "Monto", "type": "DECIMAL", "required": true, "description": "La tasa mensual del parámetro, tal cual: sin prorrateo ni redondeo, nunca negativa."},
+        {"name": "parametro_aplicado", "label": "Parámetro aplicado", "type": "TEXT", "required": true,
+          "description": "La llave exacta que se leyó (TASA_ARBITRIO servicio:zona:uso), hasta 120 caracteres."},
+        {"name": "zona", "label": "Zona", "type": "TEXT", "description": "La zona del predio ese mes, según la ordenanza."},
+        {"name": "uso_arbitrio", "label": "Uso de arbitrio", "type": "TEXT", "description": "El uso del predio ese mes, según la ordenanza."},
+        {"name": "fecha_calculo", "label": "Fecha de cálculo", "type": "DATE", "required": true},
+        {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true,
+          "description": "Por qué se determinó, de 5 a 500 caracteres: core no guarda observación en su auditoría."},
+        {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true,
+          "description": "predio|servicio|anio|periodo|version: una sola cuota por predio, servicio, año y mes (det_arbitrio_uq de rentas). La versión sube con cada anulación."}
+      ]
+    },
+    {
+      "name": "determinacion_arbitrio_masiva",
+      "label": "Determinación masiva de arbitrios",
+      "pluralLabel": "Determinaciones masivas de arbitrios",
+      "description": "La determinación en segundo plano de los arbitrios de un año, por lotes de predios, en cualquier instancia (como emision_masiva). No genera archivo.",
+      "fields": [
+        {"name": "anio", "label": "Año", "type": "INTEGER", "required": true},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_emision", "required": true},
+        {"name": "total", "label": "Predios", "type": "INTEGER", "description": "Predios con DJ vigente en el año."},
+        {"name": "procesados", "label": "Procesados", "type": "INTEGER"},
+        {"name": "generadas", "label": "Cuotas generadas", "type": "INTEGER"},
+        {"name": "errores", "label": "Errores", "type": "LONG_TEXT",
+          "description": "JSON: [{predio, mensaje}], el código del predio que no se pudo determinar y por qué."},
+        {"name": "mensaje", "label": "Mensaje", "type": "LONG_TEXT", "description": "Por qué falló."},
+        {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true,
+          "description": "La de cada cuota que genera, de 5 a 500 caracteres."},
+        {"name": "iniciado", "label": "Iniciado", "type": "DATETIME"},
+        {"name": "terminado", "label": "Terminado", "type": "DATETIME"},
+        {"name": "latido", "label": "Latido", "type": "DATETIME",
+          "description": "Lease de la instancia que la prepara: la renueva mientras trabaja; vencida, otra la toma."}
+      ]
+    },
+    {
+      "name": "determinacion_arbitrio_lote",
+      "label": "Lote de determinación de arbitrios",
+      "pluralLabel": "Lotes de determinación de arbitrios",
+      "description": "Un tramo de los predios de una determinación masiva, que toma un trabajador de cualquier instancia (como emision_lote).",
+      "fields": [
+        {"name": "numero", "label": "Número", "type": "INTEGER", "required": true},
+        {"name": "predios", "label": "Predios", "type": "LONG_TEXT", "required": true,
+          "description": "JSON: [{id, codigo}], los predios del lote en el orden en que se determinan."},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_lote", "required": true},
+        {"name": "tomado_por", "label": "Tomado por", "type": "TEXT", "description": "La instancia cuyo trabajador lo determina."},
+        {"name": "latido", "label": "Latido", "type": "DATETIME",
+          "description": "Lease del trabajador que lo determina: la renueva mientras trabaja; vencida, otro lo toma."},
+        {"name": "intentos", "label": "Intentos", "type": "INTEGER", "description": "Cuántas veces fue tomado."},
+        {"name": "procesados", "label": "Procesados", "type": "INTEGER"},
+        {"name": "generadas", "label": "Cuotas generadas", "type": "INTEGER"},
+        {"name": "errores", "label": "Errores", "type": "LONG_TEXT",
+          "description": "JSON: [{predio, mensaje}], el código del predio que no se pudo determinar y por qué."}
+      ]
     }
   ],
   "relationships": [
@@ -959,6 +1067,78 @@
       "source": "emision_lote",
       "target": "emision_masiva",
       "fieldName": "emision",
+      "required": true
+    },
+    {
+      "name": "servicio_arbitrio_ordenanza",
+      "label": "Ordenanza",
+      "inverseLabel": "Servicios",
+      "source": "servicio_arbitrio",
+      "target": "ordenanza_arbitrio",
+      "fieldName": "ordenanza",
+      "required": true
+    },
+    {
+      "name": "inafectacion_arbitrio_predio",
+      "label": "Predio",
+      "inverseLabel": "Inafectaciones de arbitrio",
+      "source": "inafectacion_arbitrio",
+      "target": "predio",
+      "fieldName": "predio",
+      "required": true
+    },
+    {
+      "name": "inafectacion_arbitrio_servicio",
+      "label": "Servicio",
+      "inverseLabel": "Inafectaciones",
+      "source": "inafectacion_arbitrio",
+      "target": "servicio_arbitrio",
+      "fieldName": "servicio",
+      "required": true
+    },
+    {
+      "name": "cuota_arbitrio_predio",
+      "label": "Predio",
+      "inverseLabel": "Cuotas de arbitrio",
+      "source": "cuota_arbitrio",
+      "target": "predio",
+      "fieldName": "predio",
+      "required": true
+    },
+    {
+      "name": "cuota_arbitrio_contribuyente",
+      "label": "Contribuyente",
+      "inverseLabel": "Cuotas de arbitrio",
+      "source": "cuota_arbitrio",
+      "target": "contribuyente",
+      "fieldName": "contribuyente",
+      "required": true
+    },
+    {
+      "name": "cuota_arbitrio_servicio",
+      "label": "Servicio",
+      "inverseLabel": "Cuotas",
+      "source": "cuota_arbitrio",
+      "target": "servicio_arbitrio",
+      "fieldName": "servicio",
+      "required": true
+    },
+    {
+      "name": "cuota_arbitrio_parametro",
+      "label": "Parámetro aplicado",
+      "inverseLabel": "Cuotas de arbitrio",
+      "source": "cuota_arbitrio",
+      "target": "parametro_tributario",
+      "fieldName": "parametro",
+      "required": true
+    },
+    {
+      "name": "determinacion_arbitrio_lote_masiva",
+      "label": "Determinación",
+      "inverseLabel": "Lotes",
+      "source": "determinacion_arbitrio_lote",
+      "target": "determinacion_arbitrio_masiva",
+      "fieldName": "determinacion",
       "required": true
     }
   ]
