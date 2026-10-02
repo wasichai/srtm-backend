@@ -2,6 +2,7 @@ package srtm.emision
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -150,11 +151,21 @@ class EmisionS3ApiTest : ConEscenarioApiTest() {
             { it.bucket(BUCKET).key("$PREFIJO/" + claveResultado(UUID.fromString(id), anio, FormatoEmision.PDF)) },
             RequestBody.fromContentProvider({ Generado(tamano) }, tamano, "application/pdf")
         )
-        val esperado = CRC32().also { crc -> Generado(tamano).use { crc.update(it.readAllBytes()) } }.value
+        val esperado = CRC32()
+        Generado(tamano).use { generado ->
+            val trozo = ByteArray(64 * 1024)
+            while (true) {
+                val n = generado.read(trozo, 0, trozo.size)
+                if (n < 0) break
+                esperado.update(trozo, 0, n)
+            }
+        }
 
         // a plain client on the server's port, that counts the buffers as they come and lets each one go: the test
         // client would keep a copy of the body
         val crc = CRC32()
+        var buffers = 0
+        var mayor = 0
         val (longitud, leidos) =
             WebClient
                 .create("http://localhost:$puerto")
@@ -168,6 +179,8 @@ class EmisionS3ApiTest : ConEscenarioApiTest() {
                         .reduce(0L) { total, buffer ->
                             try {
                                 val n = buffer.readableByteCount()
+                                buffers++
+                                mayor = maxOf(mayor, n)
                                 buffer.readableByteBuffers().use { it.forEach(crc::update) }
                                 total + n
                             } finally {
@@ -178,7 +191,10 @@ class EmisionS3ApiTest : ConEscenarioApiTest() {
 
         assertEquals(tamano, longitud)
         assertEquals(tamano, leidos)
-        assertEquals(esperado, crc.value)
+        assertEquals(esperado.value, crc.value)
+        // it came in pieces, none of them anywhere near the file
+        assertTrue(buffers > 1000, "$buffers buffers")
+        assertTrue(mayor <= 64 * 1024, "un buffer de $mayor bytes")
     }
 
     // the emission run by both instances: the first lote taken waits until the other instance has taken one too, so
@@ -254,16 +270,30 @@ class EmisionS3ApiTest : ConEscenarioApiTest() {
 
         private fun anio() = anios.getAndIncrement()
 
-        // the minio, its bucket, and the credentials where the sdk's default chain looks first
+        private val CREDENCIALES = listOf("aws.accessKeyId", "aws.secretAccessKey")
+
+        // the system properties of the credentials as they were before the class
+        private var antes: Map<String, String?>? = null
+
+        // the minio, its bucket, and the credentials where the sdk's default chain looks first, until the class ends
         @JvmStatic
         @DynamicPropertySource
         fun s3(registro: DynamicPropertyRegistry) {
             MinioS3.bucket(BUCKET)
+            if (antes == null) antes = CREDENCIALES.associateWith { System.getProperty(it) }
             System.setProperty("aws.accessKeyId", MinioS3.usuario)
             System.setProperty("aws.secretAccessKey", MinioS3.clave)
             registro.add("srtm.emision.s3.bucket") { BUCKET }
             registro.add("srtm.emision.s3.endpoint") { MinioS3.endpoint }
             registro.add("srtm.emision.s3.prefijo") { PREFIJO }
+        }
+
+        // no other class finds them set: nothing else of the suite should reach a bucket by the default chain
+        @JvmStatic
+        @AfterAll
+        fun restaurarCredenciales() {
+            antes?.forEach { (propiedad, valor) -> if (valor == null) System.clearProperty(propiedad) else System.setProperty(propiedad, valor) }
+            antes = null
         }
     }
 }

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
+import org.springframework.boot.test.context.runner.ApplicationContextRunner
 import org.springframework.core.io.InputStreamResource
 import org.testcontainers.containers.MinIOContainer
 import org.testcontainers.utility.DockerImageName
@@ -15,6 +16,7 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.NoSuchBucketException
 import software.amazon.awssdk.services.s3.model.S3Exception
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
@@ -129,25 +131,43 @@ class AlmacenS3Test : AlmacenEmisionContractTest() {
     }
 
     @Test
-    fun `the client of the configuration reaches the bucket with the sdk's default credentials`() {
-        val antes = listOf("aws.accessKeyId", "aws.secretAccessKey").associateWith { System.getProperty(it) }
-        System.setProperty("aws.accessKeyId", MinioS3.usuario)
-        System.setProperty("aws.secretAccessKey", MinioS3.clave)
-        try {
-            clienteS3(EmisionProperties.S3(bucket = BUCKET, endpoint = MinioS3.endpoint)).use { cliente ->
-                runBlocking {
-                    val almacen = AlmacenS3(cliente, BUCKET, aparte())
-                    almacen.guardar("emision-a/x.pdf", Files.writeString(local.resolve("x.bin"), "pdf"))
-                    assertTrue(almacen.existe("emision-a/x.pdf"))
-                }
-            }
-        } finally {
-            // as they were: EmisionS3ApiTest's context reads them too
-            antes.forEach { (propiedad, valor) -> if (valor == null) System.clearProperty(propiedad) else System.setProperty(propiedad, valor) }
+    fun `the configuration's almacen reaches the bucket with the sdk's default credentials`() {
+        val prefijo = aparte()
+        contexto(BUCKET, "srtm.emision.s3.prefijo=$prefijo").run {
+            assertTrue(it.startupFailure == null, "${it.startupFailure}")
+            val almacen = it.getBean(AlmacenEmision::class.java)
+            assertTrue(almacen is AlmacenS3, "${almacen::class}")
+            runBlocking { almacen.guardar("emision-a/x.pdf", Files.writeString(local.resolve("x.bin"), "pdf")) }
+            assertEquals(3L, s3.headObject { h -> h.bucket(BUCKET).key("$prefijo/emision-a/x.pdf") }.contentLength())
         }
-        val sinBucket = assertThrows(IllegalArgumentException::class.java) { clienteS3(EmisionProperties.S3(endpoint = MinioS3.endpoint)) }
-        assertEquals("srtm.emision.s3.bucket es obligatorio con srtm.emision.almacen=s3", sinBucket.message)
     }
+
+    @Test
+    fun `a bucket that is not there stops the startup with its name, and is never a missing key`() =
+        runBlocking<Unit> {
+            val falta = "no-existe-${UUID.randomUUID().toString().take(8)}"
+            contexto(falta).run {
+                val causas = generateSequence(it.startupFailure) { e -> e.cause }.mapNotNull { e -> e.message }.toList()
+                assertTrue("No se puede usar el bucket '$falta' de srtm.emision.s3.bucket: no existe" in causas, "$causas")
+            }
+            // a store made anyway: a get says the bucket is missing, not the file
+            val almacen = AlmacenS3(s3, falta, aparte())
+            assertThrows(NoSuchBucketException::class.java) { runBlocking { almacen.traer("emision-a/x.pdf", local.resolve("x.bin")) } }
+            val error = assertThrows(IllegalStateException::class.java) { almacen.comprobarBucket() }
+            assertEquals("No se puede usar el bucket '$falta' de srtm.emision.s3.bucket: no existe", error.message)
+            AlmacenS3(s3, BUCKET).comprobarBucket()
+        }
+
+    // the app's s3 configuration against the minio, its credentials where the sdk's default chain looks first (set
+    // and restored by the runner)
+    private fun contexto(
+        bucket: String,
+        vararg propiedades: String
+    ): ApplicationContextRunner =
+        ApplicationContextRunner()
+            .withUserConfiguration(EmisionConfig::class.java, AlmacenS3Config::class.java)
+            .withPropertyValues("srtm.emision.almacen=s3", "srtm.emision.s3.bucket=$bucket", "srtm.emision.s3.endpoint=${MinioS3.endpoint}", *propiedades)
+            .withSystemProperties("aws.accessKeyId=${MinioS3.usuario}", "aws.secretAccessKey=${MinioS3.clave}")
 
     private fun aparte(): String = "pruebas/${UUID.randomUUID()}"
 

@@ -961,10 +961,13 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
     endpoint, `us-east-1`. `srtm.emision.s3.endpoint` (`SRTM_EMISION_S3_ENDPOINT`): solo para otro servicio que AWS
     (MinIO), al que se llega por *path-style*; vacía en AWS. `srtm.emision.s3.prefijo` (`SRTM_EMISION_S3_PREFIJO`): las
     claves van debajo (`srtm/emisiones` da `srtm/emisiones/emision-<id>/...`; las `/` de los extremos sobran); vacío, en
-    la raíz del bucket.
+    la raíz del bucket. Al arrancar se comprueba el bucket (`HeadBucket`): si no existe o las credenciales no llegan, la
+    aplicación no arranca y lo nombra ("No se puede usar el bucket '<bucket>' de srtm.emision.s3.bucket: no existe").
+    Así un bucket equivocado nunca parece un almacén con los archivos borrados.
   - **Credenciales:** las de la cadena por defecto del AWS SDK v2, nunca en la configuración de la app. En EKS, **IRSA**:
     el pod corre con una ServiceAccount anotada con `eks.amazonaws.com/role-arn` y el SDK toma el rol solo
-    (`AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`). Si no, un **secreto** de Kubernetes con `AWS_ACCESS_KEY_ID` y
+    (`AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`; asume el rol con STS, por eso el módulo `sts` del SDK va en el
+    classpath). Si no, un **secreto** de Kubernetes con `AWS_ACCESS_KEY_ID` y
     `AWS_SECRET_ACCESS_KEY` como variables de entorno. El rol necesita `s3:PutObject`, `s3:GetObject`,
     `s3:DeleteObject`, `s3:AbortMultipartUpload` y `s3:ListBucket` sobre el bucket (o su prefijo). Por ejemplo:
 
@@ -986,9 +989,14 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
     completa (`PutObject` y `CompleteMultipartUpload` son atómicos): el ensamblado que encuentra el archivo final ya
     guardado puede usarlo tal cual. `traer` descarga a los temporales para el ensamblado, `listar` pagina por prefijo
     y `borrar` de una clave que no está no hace nada.
+  - **Checksums:** el SDK manda checksums CRC32 (en S3 sobre HTTPS, al final del cuerpo). Las subidas en partes llevan
+    siempre CRC32, fijado en el código (`CreateMultipartUpload` y cada parte); AWS S3 y MinIO lo aceptan. Para un
+    almacén compatible que no acepte los checksums al final del cuerpo, `AWS_REQUEST_CHECKSUM_CALCULATION=when_required`
+    los apaga en los `PutObject` (archivos de menos de 16 MiB), pero no en las subidas en partes.
   - **Descarga:** pasa por el backend, que mantiene el control de permisos, en streaming desde S3: el `Content-Length`
-    sale de un `HeadObject` y el objeto se abre recién al leerlo, sin cargarlo en memoria. Si el cliente corta, se
-    aborta la conexión con S3 en vez de leer el resto. (Una URL prefirmada queda como opción a futuro.)
+    sale de un `HeadObject` y el objeto se abre recién al leerlo, sin cargarlo en memoria, en trozos de 64 KiB leídos
+    en `boundedElastic` (la lectura de S3 bloquea: nunca en el event loop de Netty). Si el cliente corta, se aborta la
+    conexión con S3 en vez de leer el resto. (Una URL prefirmada queda como opción a futuro.)
   - **Probar en local:** `docker compose --profile s3 up -d` levanta MinIO (`127.0.0.1:9000`, consola en
     `127.0.0.1:9001`, usuario `srtm`, clave `srtm-minio`) y crea el bucket `srtm-emisiones`. Luego se arranca con
     `SRTM_EMISION_ALMACEN=s3`, `SRTM_EMISION_S3_BUCKET=srtm-emisiones`, `SRTM_EMISION_S3_ENDPOINT=http://localhost:9000`,
@@ -1002,7 +1010,8 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
   sus lotes por generar pasan a FALLIDO (sus trabajadores lo notan en su siguiente escritura y abortan); luego se borran
   sus lotes, el job y todo lo que el almacén guarde bajo `emision-<id>/`. Ya no da 409.
 - **Descarga** `GET /api/srtm/emisiones/{id}/archivo`: el `Resource` del almacén, en streaming, sin cargar el archivo en
-  memoria; el `Content-Length` sale de `tamano` del almacén, sin leer el archivo. 409 si no está TERMINADA, 410 si se
+  memoria, en trozos de 64 KiB (un archivo en disco, con un canal asíncrono; otro recurso, como un objeto de S3, en
+  `boundedElastic`); el `Content-Length` sale de `tamano` del almacén, sin leer el archivo. 409 si no está TERMINADA, 410 si se
   depuró, 404 si el almacén ya no tiene la clave. La clave y el nombre (`Content-Disposition`) se arman del job, nunca
   se leen del registro.
 
@@ -1062,7 +1071,9 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - **Almacén S3 en los tests:** `AlmacenS3Test` corre el contrato de `AlmacenEmision` (más las partes, el aborto y el
   streaming) contra un MinIO de Testcontainers (`pgsty/minio`, uno para toda la corrida), y `EmisionS3ApiTest` corre
   la app con `srtm.emision.almacen=s3` contra él: dos instancias sin disco compartido completan una emisión PDF y una
-  ZIP, y una descarga de 101 MiB se lee en streaming. `AlmacenS3ConfigTest` (unitario) revisa qué almacén se arma.
+  ZIP, y una descarga de 101 MiB llega en streaming (más de mil trozos, ninguno de más de 64 KiB). `AlmacenS3ConfigTest`
+  (unitario) revisa qué almacén se arma, que no arranca sin bucket o sin llegar a él y que el módulo `sts` (IRSA) está
+  en el classpath; `DescargaEmisionTest`, que la descarga de un recurso que bloquea se lee en `boundedElastic`.
 - Los de integración corren en el CI de cada PR. Con un Docker remoto no corren en local tal cual (Testcontainers no
   llega a sus puertos): se usa una base de test externa tunelizada, con PostGIS y un nombre que termine en `_test`.
   Cómo, en [docs/develop/README.md](docs/develop/README.md#6-tests).

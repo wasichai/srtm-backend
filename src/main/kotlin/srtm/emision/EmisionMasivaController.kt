@@ -1,6 +1,9 @@
 package srtm.emision
 
 import org.springframework.core.io.Resource
+import org.springframework.core.io.buffer.DataBuffer
+import org.springframework.core.io.buffer.DataBufferUtils
+import org.springframework.core.io.buffer.DefaultDataBufferFactory
 import org.springframework.http.ContentDisposition
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
@@ -14,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import reactor.core.publisher.Flux
+import reactor.core.scheduler.Schedulers
 import java.time.LocalDate
 import java.util.UUID
 
@@ -59,7 +64,7 @@ class EmisionMasivaController(
     @GetMapping("/{id}/archivo")
     suspend fun archivo(
         @PathVariable id: UUID
-    ): ResponseEntity<Resource> {
+    ): ResponseEntity<Flux<DataBuffer>> {
         val descarga = emisiones.archivo(id)
         val job = descarga.job
         val formato = FormatoEmision.valueOf(job.formato!!)
@@ -74,6 +79,18 @@ class EmisionMasivaController(
                     .filename(nombreArchivo(job.anio!!, job.id, formato))
                     .build()
                     .toString()
-            ).body(descarga.recurso)
+            ).body(cuerpoDeDescarga(descarga.recurso))
     }
 }
+
+// the chunks the download is written in
+private const val TROZO = 64 * 1024
+
+// the file as it is read, never whole in memory. a file on disk is read with an async channel; anything else (an s3
+// object) is a blocking stream, read on boundedElastic: never on the event loop, which spring's own encoder would do
+fun cuerpoDeDescarga(recurso: Resource): Flux<DataBuffer> =
+    if (recurso.isFile) {
+        DataBufferUtils.read(recurso, DefaultDataBufferFactory.sharedInstance, TROZO)
+    } else {
+        DataBufferUtils.readInputStream(recurso::getInputStream, DefaultDataBufferFactory.sharedInstance, TROZO).subscribeOn(Schedulers.boundedElastic())
+    }

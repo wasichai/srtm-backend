@@ -10,6 +10,8 @@ thymeleaf = "3.1.5.RELEASE"
 [libraries]
 awssdk-bom = { module = "software.amazon.awssdk:bom", version.ref = "awssdk" }
 awssdk-s3 = { module = "software.amazon.awssdk:s3" }
+# the sdk's web identity provider (irsa) loads it by reflection: without it, every call of an eks pod fails
+awssdk-sts = { module = "software.amazon.awssdk:sts" }
 openhtmltopdf-pdfbox = { module = "io.github.openhtmltopdf:openhtmltopdf-pdfbox", version.ref = "openhtmltopdf" }
 # its log through slf4j (spring's logging) instead of java.util.logging on stderr
 openhtmltopdf-slf4j = { module = "io.github.openhtmltopdf:openhtmltopdf-slf4j", version.ref = "openhtmltopdf" }

@@ -36,6 +36,10 @@ dependencies {
     implementation(libs.awssdk.s3) {
         exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
     }
+    // irsa: the default chain's web identity provider assumes the pod's role through sts, which it loads by reflection
+    runtimeOnly(libs.awssdk.sts) {
+        exclude(group = "software.amazon.awssdk", module = "netty-nio-client")
+    }
 
     // WasichaiIntegrationTest; brings spring-boot-starter-test, webflux-test and testcontainers
     testImplementation("wasichai:wasichai-test")

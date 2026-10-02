@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.core.io.AbstractResource
 import org.springframework.core.io.Resource
 import software.amazon.awssdk.core.ResponseInputStream
+import software.amazon.awssdk.core.exception.SdkException
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.http.ContentStreamProvider
 import software.amazon.awssdk.regions.Region
@@ -15,6 +16,7 @@ import software.amazon.awssdk.services.s3.S3Client
 import software.amazon.awssdk.services.s3.model.ChecksumAlgorithm
 import software.amazon.awssdk.services.s3.model.CompletedPart
 import software.amazon.awssdk.services.s3.model.GetObjectResponse
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException
 import software.amazon.awssdk.services.s3.model.S3Exception
 import java.io.FilterInputStream
 import java.io.InputStream
@@ -75,7 +77,13 @@ class AlmacenS3(
     ) {
         val objeto = objeto(clave)
         withContext(Dispatchers.IO) {
-            val respuesta = sinClave(clave) { s3.getObject { it.bucket(bucket).key(objeto) } }
+            // only NoSuchKey: a bucket that is not there (NoSuchBucket) is an error, never a missing file
+            val respuesta =
+                try {
+                    s3.getObject { it.bucket(bucket).key(objeto) }
+                } catch (_: NoSuchKeyException) {
+                    throw ClaveInexistenteException(clave)
+                }
             try {
                 Files.copy(respuesta, destino, StandardCopyOption.REPLACE_EXISTING)
             } catch (e: Exception) {
@@ -174,19 +182,30 @@ class AlmacenS3(
         }
     }
 
-    // the object's size; a missing key is a ClaveInexistenteException
+    // at startup (AlmacenS3Config): a wrong bucket or credentials without access stop the app with the bucket's name,
+    // instead of every file looking missing (a head of a key in a missing bucket is a 404 too)
+    fun comprobarBucket() {
+        try {
+            s3.headBucket { it.bucket(bucket) }
+        } catch (e: SdkException) {
+            val motivo =
+                when ((e as? S3Exception)?.statusCode()) {
+                    404 -> "no existe"
+                    403 -> "las credenciales no tienen acceso (s3:ListBucket)"
+                    else -> e.message
+                }
+            throw IllegalStateException("No se puede usar el bucket '$bucket' de srtm.emision.s3.bucket: $motivo", e)
+        }
+    }
+
+    // the object's size. a 404 is a missing key: a head has no body to tell NoSuchKey from NoSuchBucket, and the
+    // bucket was checked at startup
     private fun cabecera(
         clave: String,
         objeto: String
-    ): Long = sinClave(clave) { s3.headObject { it.bucket(bucket).key(objeto) }.contentLength() }
-
-    // a 404 of s3 (a head has no body to say NoSuchKey) is a missing key
-    private fun <T> sinClave(
-        clave: String,
-        llamada: () -> T
-    ): T =
+    ): Long =
         try {
-            llamada()
+            s3.headObject { it.bucket(bucket).key(objeto) }.contentLength()
         } catch (e: S3Exception) {
             if (e.statusCode() == 404) throw ClaveInexistenteException(clave)
             throw e
@@ -299,8 +318,9 @@ private class HastaElFinal(
     }
 }
 
-// the client and the almacén of srtm.emision.almacen=s3. the credentials come from the sdk's default chain: the
-// environment (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY), the pod's web identity (irsa), a profile, the instance
+// the client and the almacén of srtm.emision.almacen=s3, its bucket checked at startup. the credentials come from the
+// sdk's default chain: the environment (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY), the pod's web identity (irsa,
+// through sts), a profile, the instance
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(prefix = "srtm.emision", name = ["almacen"], havingValue = "s3")
 class AlmacenS3Config {
@@ -311,7 +331,7 @@ class AlmacenS3Config {
     fun almacenS3(
         s3: S3Client,
         config: EmisionProperties
-    ): AlmacenEmision = AlmacenS3(s3, config.s3.bucket, config.s3.prefijo)
+    ): AlmacenEmision = AlmacenS3(s3, config.s3.bucket, config.s3.prefijo).also { it.comprobarBucket() }
 }
 
 // without region, the sdk's chain (AWS_REGION, the profile, the instance); against another endpoint (minio), whose
