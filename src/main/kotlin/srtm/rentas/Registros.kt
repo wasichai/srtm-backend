@@ -1,6 +1,8 @@
 package srtm.rentas
 
+import kotlinx.coroutines.withContext
 import org.springframework.stereotype.Component
+import srtm.EscrituraDeSrtm
 import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
 import wasichai.core.data.RecordCriterion
@@ -14,7 +16,9 @@ import java.util.UUID
 
 // wasichai's RecordService with the portal's dtos on it. RecordService checks the caller's object and field
 // permissions and validates every write, so nothing here repeats that. a dto carries every field, though, and
-// core refuses a whole write that names a field the caller may not write: writes send only the writable ones
+// core refuses a whole write that names a field the caller may not write: writes send only the writable ones.
+// each write carries the mark EscrituraDeSrtm: it is srtm's api, and an object only srtm writes needs it
+// (srtm.AlmacenGuardado)
 @Component
 class Registros(
     private val records: RecordService,
@@ -84,7 +88,7 @@ class Registros(
         objectName: String,
         type: Class<T>,
         attributes: Map<String, Any?>
-    ): T = read(type, records.create(objectName, request(escribibles(objectName, attributes))))
+    ): T = withContext(EscrituraDeSrtm) { read(type, records.create(objectName, request(escribibles(objectName, attributes)))) }
 
     // core's update replaces every field the caller may write: one left out of the request is cleared. the
     // portal sends what its dto knows, merged over what is stored, so a field added in the admin (and absent
@@ -97,7 +101,7 @@ class Registros(
         attributes: Map<String, Any?>
     ): T {
         val stored = records.get(objectName, id).attributes
-        return read(type, records.update(objectName, id, request(escribibles(objectName, stored + attributes))))
+        return withContext(EscrituraDeSrtm) { read(type, records.update(objectName, id, request(escribibles(objectName, stored + attributes)))) }
     }
 
     suspend fun delete(

@@ -1,5 +1,6 @@
 package srtm.arbitrios
 
+import srtm.Observacion
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import wasichai.core.common.FieldViolation

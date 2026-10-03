@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.stereotype.Service
+import srtm.Observacion
 import srtm.emision.EmisionProperties
 import srtm.emision.TrabajadoresEmision
 import srtm.emision.conLatido

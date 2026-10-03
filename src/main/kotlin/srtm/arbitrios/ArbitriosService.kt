@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.ReactiveTransactionManager
 import org.springframework.transaction.reactive.TransactionalOperator
 import org.springframework.transaction.reactive.executeAndAwait
+import srtm.Observacion
 import srtm.impuesto.ParametrosTributarios
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
