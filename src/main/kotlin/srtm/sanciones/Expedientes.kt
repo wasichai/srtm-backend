@@ -80,9 +80,9 @@ object Expedientes {
         }
     }
 
-    private val GRADO = mapOf(PRIMERA to "primera vez", SEGUNDA to "segunda vez", TERCERA_O_MAS to "tercera o más")
+    internal val GRADO = mapOf(PRIMERA to "primera vez", SEGUNDA to "segunda vez", TERCERA_O_MAS to "tercera o más")
 
-    private val RECURSO =
+    internal val RECURSO =
         mapOf(
             "DESCARGO" to "Descargo",
             "RECONSIDERACION" to "Recurso de reconsideración",

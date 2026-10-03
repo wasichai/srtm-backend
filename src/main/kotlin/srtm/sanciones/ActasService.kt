@@ -332,7 +332,7 @@ class ActasService(
             acciones =
                 AccionesDelActa(
                     descargo = accion(Procedimiento.impedimento("impugnar", h)),
-                    resolucion = accion(Procedimiento.impedimento("resolver", h)),
+                    resolucion = accion(Resoluciones.impedimento(h, descargos)),
                     anulacion = accion(Procedimiento.impedimentoDeAnular(h))
                 )
         )

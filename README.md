@@ -484,8 +484,9 @@ de tasas, y los tests usan valores ficticios escritos dentro del propio test.
 
 Las multas administrativas (familia `ADMINISTRATIVA`) se portan del contexto `sanciones` de `rentas`. Ya están el
 modelo, la guardia de escritura y la carga del CUIS (ver [Modelo](#modelo)), las reglas puras de `srtm.sanciones`, la
-api del CUIS y de las notificaciones previas (`InfraccionesController`) y la de las actas (`ActasController`), bajo
-`/api/srtm/infracciones/...`; faltan los descargos, las resoluciones y los padrones.
+api del CUIS y de las notificaciones previas (`InfraccionesController`), la de las actas (`ActasController`) y la de
+los descargos, las resoluciones con su PDF y sus notificaciones (`ResolucionesController`), bajo
+`/api/srtm/infracciones/...`; faltan los padrones y el panel.
 
 ### API de infracciones
 
@@ -510,6 +511,10 @@ ADMIN). `FaltanSanciones` sale como **422** con `faltan: [...]` (`ErroresDeSanci
 | GET | `/actas?numero&administrado&codigo&fase&desde&hasta&page&size` | Página de filas `{id, numero, fecha_infraccion, administrado, documento, codigo, descripcion_infraccion, porcentaje_infraccion, importe_a_pagar, fecha_calculo, medida_complementaria, fase, fase_al_dia, estado_de_la_deuda}`, la infracción más reciente primero. `administrado` busca una parte del documento o del nombre del obligado; `codigo`, el texto del CUIS (cualquier versión); `fase` ∈ PREVENTIVA, CONSTATADA, SANCIONADA (otra → **422** que las nombra). `fase` es null en un acta anulada o dejada sin efecto. |
 | GET | `/actas/{id}` | `{acta, referencia, codigo_infraccion (la versión usada), notificacion_previa, actos: [{orden, acto, fecha, documento, id, detalle}], descargos, resoluciones (cada una con sus notificaciones), anulacion, fase, fase_al_dia, estado_de_la_deuda, acciones: {descargo, resolucion, anulacion: {permitida, motivo}}}`. |
 | POST | `/actas/{id}/anulacion` `{motivo, fecha?, observacion}` | **201** con el registro plano de `anulacion_papeleta` (`clave` = id del acta). `fecha` por omisión hoy. **409** si ya está anulada; **422** si una resolución la dejó sin efecto, o si la fecha es anterior a la infracción o posterior a hoy. |
+| POST | `/actas/{id}/descargos` `{numero_expediente, tipo_recurso, fecha, sustento, observacion}` | **201** con el registro plano de `descargo_papeleta`: `presentado_hasta`, `en_plazo`, `plazo_texto` (`5 DIAS_HABILES`) y la relación `plazo` (la fila leída). El tardío se registra con `en_plazo: false`. **422** con `faltan` (`PLAZO DESCARGO_PAPELETA 1991`, `FERIADOS 1991`; no escribe nada), si el acta está anulada o sin efecto, o si la fecha es anterior a la infracción o posterior a hoy; **409** si el expediente ya está; **404** si el acta no existe; **400** por campo. |
+| POST | `/actas/{id}/resoluciones` `{tipo, descargo, sentido, efecto, fecha?, sustento, sancion_accesoria, observacion}` | **201** con el registro plano de `resolucion_gerencia`: `numero` (`RIS-AAAA-NNNNNN` o `RGR-AAAA-NNNNNN`), `anio`, `correlativo`, `plazo_texto` y `plazo`. Lo que no aplica va null; `fecha` por omisión hoy. **422** con `faltan` (`PLAZO RG_RECURSO 1991`), por `SE_REDUCE`, por una RECURSO sin descargo, por un fallo sin descargo (o un descargo sin fallo), por un descargo de otra acta, si el acta está anulada o sin efecto, o si la fecha es anterior a la infracción o al descargo, o posterior a hoy; **409** por una segunda RIS del acta o una segunda resolución del descargo; **404** si el acta o el descargo no existen. |
+| GET | `/resoluciones/{id}/pdf` | La resolución en PDF, `inline; filename="RIS-1991-000001.pdf"`, dibujada otra vez desde las filas congeladas. **404** si no existe; **403** sin lectura sobre `resolucion_gerencia`. |
+| POST | `/resoluciones/{id}/notificacion` `{fecha_diligencia?, modalidad, resultado, notificador, direccion, receptor, documento_receptor, vinculo, acuse, observacion}` | **201** con el registro plano de `notificacion_resolucion`: `intento`, la `direccion` usada (sin `direccion`, el domicilio fiscal del obligado) y, si surte efecto (NOTIFICADO o RECHAZADO), `exigible_desde`, `plazo_texto` y `plazo`; con NO_UBICADO van null. `fecha_diligencia` por omisión hoy. **422** sin dirección (ni dada ni domicilio fiscal), con `faltan` (`PLAZO RG_RECURSO`, `FERIADOS`) si surte efecto, o si la diligencia es anterior a la resolución o posterior a hoy; **404** si la resolución no existe. |
 
 Y bajo `/api/srtm`, en las fichas: `GET /contribuyentes/{id}/infracciones` (las actas donde es el obligado o el
 contribuyente) y `GET /predios/{id}/infracciones` (las que nombran el predio) responden `{al_dia, actas: [fila]}`, con
@@ -565,8 +570,50 @@ Así el filtro encuentra exactamente lo que la columna muestra (#397).
 La ficha (`GET /actas/{id}`) lista los actos en **orden legal** (`Expedientes.actos`): la notificación previa, el
 acta, los descargos, las resoluciones, las notificaciones de las resoluciones y la anulación; dentro de cada tipo, por
 fecha. `detalle` dice qué es cada uno hoy (la previa «Vence el …» o «Vencida el …», el descargo en plazo o no, la
-resolución notificada o no). `acciones` sale de las reglas: `Procedimiento.impedimento("impugnar" | "resolver")` y
-`impedimentoDeAnular`, con el mismo texto que daría el acto.
+resolución notificada o no). `acciones` sale de las reglas: `Procedimiento.impedimento("impugnar")` para el
+descargo, `Resoluciones.impedimento(hechos, descargos)` para la resolución (además de anulada o sin efecto: con la RIS
+dictada y ningún descargo sin resolver no queda resolución que dictar) e `impedimentoDeAnular`, con el mismo texto
+que daría el acto.
+
+### Descargos y resoluciones
+
+`ResolucionesService` registra los actos que contestan un acta, cada uno un objeto que solo se agrega y que **copia**
+lo que leyó:
+
+- **Descargo.** `Descargos.registrar` con el `PLAZO DESCARGO_PAPELETA` y los `FERIADOS` vigentes **el día de la
+  infracción** (como `rentas`): `presentado_hasta`, `en_plazo` y `plazo_texto` quedan en la fila, con la relación
+  `plazo` a la fila leída. El tardío se registra (`en_plazo` false): lo que corresponde es declararlo improcedente.
+  No procede contra un acta anulada o sin efecto (`Procedimiento.exigirQueQuedeAlgoQue("impugnar")`) y su fecha va
+  entre la infracción y hoy (`OrdenDeLosActos`). El número de expediente se recorta, va en mayúsculas y es único.
+- **Resolución.** `Resoluciones.validar` (SE_REDUCE 422, RECURSO con descargo, fallo ⇔ descargo, el descargo es de
+  esta acta, nada contra un acta anulada o sin efecto, una RIS por acta y una por descargo), `OrdenDeLosActos` (después
+  de la infracción y de la presentación del descargo) y el `PLAZO RG_RECURSO` vigente a su fecha, que copia
+  (`plazo_texto`, lo imprime el papel). El número es `RIS-AAAA-NNNNNN` (ADMINISTRATIVA) o `RGR-AAAA-NNNNNN` (RECURSO),
+  por tipo y año de la fecha: el correlativo es el mayor + 1, leído bajo el candado `Candado.RESOLUCION` de
+  `tipo|anio` en la misma transacción que el insert (`numeroDeResolucion`). La transacción toma antes `Candado.ACTA`
+  (el de la anulación): una resolución que deja sin efecto y una anulación no se cruzan, y dentro del candado se
+  vuelve a validar. `clave_ris` (id del acta en la RIS) y `clave_descargo` (id del descargo) son la red de la base.
+  - **El papel se dibuja antes de abrir la transacción**, con los datos que se van a guardar (y el correlativo
+    esperado en ese momento): si no se puede dibujar no se escribe nada, y el dibujo no retiene el candado. No se
+    guardan los bytes: `GET /resoluciones/{id}/pdf` lo vuelve a dibujar de las filas congeladas (decisión 8).
+- **Notificación de la resolución.** Un intento por fila: `intento` = los que hay + 1, bajo el candado
+  `Candado.NOTIFICACION_RESOLUCION` del id de la resolución (`clave` = `resolucion|intento`). Sin `direccion`, el
+  domicilio fiscal del obligado (`contribuyente.domicilio_fiscal`, que sigue al domicilio fiscal activo); sin ninguno,
+  422. `NotificacionesDeResolucion.exigibilidad` con el `PLAZO RG_RECURSO` y los `FERIADOS` vigentes a la diligencia:
+  NOTIFICADO y RECHAZADO surten efecto (`exigible_desde`, `plazo_texto`, `plazo`); NO_UBICADO no hace exigible nada
+  y se registra otro intento. La diligencia va entre la resolución y hoy.
+
+**El papel** (`templates/emision/resolucion.html`, con `HojaResolucion.kt` que deja cada valor ya formateado): la
+cabecera de los documentos con la fecha de la resolución, el número y la fecha; el acta (número, fecha y hora,
+lugar, código, descripción y base legal de la versión del CUIS que usó, reincidencia, medida complementaria y el
+desglose congelado con su `fecha_calculo`); el obligado (nombre, documento y domicilio fiscal); el recurso si lo hay
+(expediente, tipo, presentado el, «Presentado dentro del plazo: SÍ, el plazo vencía el …» o «NO, el plazo venció el
+…»); el sentido, el efecto, la sanción accesoria y el sustento; «Plazo para impugnar: `plazo_texto`», con la cita del
+art. 218.2 del TUO de la Ley 27444 (sin cifras de la norma en el código); y las líneas de firma de Gerente y
+Secretario, «sin firma digital (D-05)». Los considerandos no se inventan: un párrafo marcado dice «Considerandos: los
+provee la municipalidad (decisión 8)». Corregir la UIT, el plazo o agregar una versión del CUIS no cambia el papel de
+una resolución ya dictada. srtm no guarda la historia de los domicilios: el domicilio que imprime es el fiscal
+vigente al dibujarlo.
 
 ### Reglas
 
@@ -585,6 +632,8 @@ ficticias.
 | `Descargos.registrar(infraccion, fecha, parametros)` | `presentado_hasta` = `Plazos.hasta` con el `PLAZO DESCARGO_PAPELETA` vigente el día de la infracción, `en_plazo` = fecha ≤ `presentado_hasta`, `plazo_texto`; el tardío se registra. | `RegistrarDescargo`, `DescargosResolucionesYDepositoTest` |
 | `Resoluciones.validar(...)` / `plazo(tipo, fecha, parametros)` | RECURSO exige descargo; sentido y efecto van con el descargo y solo con él; el descargo es de esta acta; nada contra un acta `ANULADA` o `DEJADA_SIN_EFECTO` (422); una RIS por acta y una por descargo (409, además de `clave_ris` y `clave_descargo`). La RIS y la RGR conceden `RG_RECURSO` y, sin él, no toman otro. | `ResolverConResolucionDeGerencia`, `ElPlazoQueConcedeCadaTipoTest` (#410, #412) |
 | `NotificacionesDeResolucion.exigibilidad(...)` | Surte efecto ⇔ `NOTIFICADO` o `RECHAZADO`; entonces `exigible_desde` y el plazo, contados desde la diligencia (2026-08-03 con 15 → 2026-08-27, porque el 6 de agosto es feriado nacional; sin él sería el 26). | `NotificarResolucionDeGerencia`, `Exigibilidad` |
+| `Resoluciones.impedimento(hechos, descargos)` | Por qué no se puede dictar una resolución ahora (la `acciones.resolucion` de la ficha): el acta anulada o sin efecto, o la RIS ya dictada y ningún descargo sin su resolución. | — |
+| `hojaResolucion(cabecera, resolucion, acta, codigo, obligado, descargo)` | Lo que imprime el papel de una resolución, todo desde filas congeladas: nada se vuelve a calcular. | `ModeloDeLaResolucionDeGerencia` |
 | `OrdenDeLosActos.exigir(acto, fecha, hoy, previos)` | Ningún acto antes del que lo origina ni después de hoy; el mismo día vale. 422 que nombra las dos fechas (`ActoFueraDeOrden`). | `OrdenDeLosActos` (#402) |
 
 **Errores.** `FaltanSanciones(acto, faltan)` es el 422 con `faltan` (gemelo de `FaltanArbitrios`; el controlador lo
@@ -1576,8 +1625,12 @@ yarn format:check           # prettier: yaml y json, model.json incluido
   FISCALIZACIÓN o DE OFICIO y su modificación de oficio.
 - **En el modelo:** workflows y plantillas de documentos.
 - **Infracciones administrativas y anuncios:** el modelo, la guardia y la carga ya están, las reglas puras de las
-  infracciones ([Reglas](#reglas)) y la api del CUIS, de las notificaciones previas y de las actas
-  ([API de infracciones](#api-de-infracciones)); faltan los descargos, las resoluciones, el panel y los anuncios
+  infracciones ([Reglas](#reglas)) y la api del CUIS, de las notificaciones previas, de las actas y de los descargos y
+  resoluciones ([API de infracciones](#api-de-infracciones)); faltan los padrones, el panel y los anuncios
   (`/api/srtm/anuncios/...`).
+- **Resoluciones de las infracciones:** la firma digital del papel (D-05; hoy dice «sin firma digital» y se firma a
+  mano); los considerandos, que provee la municipalidad (decisión 8; hoy un párrafo marcado los reserva); la orden de
+  cobro a caja de la multa con la referencia `PAPELETA-<id>` (srtm no cobra); la regla de reducción (`SE_REDUCE`, D-02b);
+  y, si se decide, la historia de los domicilios para imprimir el fiscal vigente a la fecha de la resolución.
 
 El frontend web está en `srtm-ui`.
