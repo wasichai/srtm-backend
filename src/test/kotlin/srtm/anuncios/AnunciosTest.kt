@@ -176,14 +176,14 @@ class AnunciosTest {
         @Test
         fun `a prorroga from 2027 to 2028 spans two ejercicios and is not charged as one`() {
             val e = assertThrows(ActoNoAdmitido::class.java) { Anuncios.ejercicioQueRenueva(fin(2026), diciembre, fin(2028)) }
-            assertTrue(e.message.contains("2027-01-01") && e.message.contains("2028-12-31"), e.message)
+            assertTrue(e.message.contains("del 01/01/2027 al 31/12/2028"), e.message)
             assertEquals(422, e.status.value())
         }
 
         @Test
         fun `expired, it counts from the act - december and the next year are two`() {
             val e = assertThrows(ActoNoAdmitido::class.java) { Anuncios.ejercicioQueRenueva(fin(2025), diciembre, fin(2027)) }
-            assertTrue(e.message.contains(diciembre.toString()), e.message)
+            assertTrue(e.message.contains("del 15/12/2026 al 31/12/2027"), e.message)
         }
 
         @Test
@@ -286,9 +286,9 @@ class AnunciosTest {
             Anuncios.exigirOrden("el cese", AUTORIZADO, hoy, previo)
             Anuncios.exigirOrden("el cese", hoy, hoy, previo)
             val futuro = assertThrows(ActoNoAdmitido::class.java) { Anuncios.exigirOrden("el cese", hoy.plusDays(1), hoy, previo) }
-            assertTrue(futuro.message.contains("2026-10-04") && futuro.message.contains("2026-10-03"), futuro.message)
+            assertTrue(futuro.message.contains("(04/10/2026)") && futuro.message.contains("(03/10/2026)"), futuro.message)
             val antes = assertThrows(ActoNoAdmitido::class.java) { Anuncios.exigirOrden("el cese", AUTORIZADO.minusDays(1), hoy, previo) }
-            assertTrue(antes.message.contains("2026-03-15") && antes.message.contains("2026-03-16"), antes.message)
+            assertTrue(antes.message.contains("(15/03/2026)") && antes.message.contains("(16/03/2026)"), antes.message)
         }
 
         @Test

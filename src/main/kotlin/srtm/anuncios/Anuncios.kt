@@ -2,6 +2,7 @@ package srtm.anuncios
 
 import org.springframework.http.HttpStatus
 import srtm.impuesto.ParametroTributario
+import srtm.legible
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import wasichai.core.common.WasichaiException
@@ -100,7 +101,7 @@ object Anuncios {
         val desde = if (vigenciaActual != null && vigenciaActual >= fechaActo) vigenciaActual.plusDays(1) else fechaActo
         if (desde.year < nuevaVigencia.year) {
             throw ActoNoAdmitido(
-                "La prórroga del $desde al $nuevaVigencia abarca los ejercicios ${desde.year} a ${nuevaVigencia.year}, y una " +
+                "La prórroga del ${desde.legible()} al ${nuevaVigencia.legible()} abarca los ejercicios ${desde.year} a ${nuevaVigencia.year}, y una " +
                     "renovación devenga uno solo: se renueva ejercicio a ejercicio"
             )
         }
@@ -199,9 +200,9 @@ object Anuncios {
         hoy: LocalDate,
         previos: List<ActoPrevio>
     ) {
-        if (fecha > hoy) throw ActoNoAdmitido("La fecha de $acto ($fecha) es posterior a hoy ($hoy): un acto no se fecha en el futuro")
+        if (fecha > hoy) throw ActoNoAdmitido("La fecha de $acto (${fecha.legible()}) es posterior a hoy (${hoy.legible()}): un acto no se fecha en el futuro")
         previos.firstOrNull { fecha < it.fecha }?.let {
-            throw ActoNoAdmitido("La fecha de $acto ($fecha) es anterior a la de ${it.nombre} (${it.fecha}): los actos van en orden")
+            throw ActoNoAdmitido("La fecha de $acto (${fecha.legible()}) es anterior a la de ${it.nombre} (${it.fecha.legible()}): los actos van en orden")
         }
     }
 

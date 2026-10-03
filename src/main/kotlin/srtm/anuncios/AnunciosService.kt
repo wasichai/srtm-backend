@@ -12,6 +12,7 @@ import srtm.Observacion
 import srtm.Violaciones
 import srtm.impuesto.PARAMETRO_TRIBUTARIO
 import srtm.impuesto.ParametroTributario
+import srtm.legible
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
 import srtm.rentas.PREDIO
@@ -233,7 +234,7 @@ class AnunciosService(
         Anuncios.exigirOrden("la renovación de $numero", dia, hoy, previos(anuncio, movimientos))
         if (vigencia != null && vigencia < dia) {
             throw ActoNoAdmitido(
-                "La renovación de $numero del $dia no puede vencer el $vigencia: una prórroga que termina antes de empezar cobra una tasa por nada"
+                "La renovación de $numero del ${dia.legible()} no puede vencer el ${vigencia.legible()}: una prórroga que termina antes de empezar cobra una tasa por nada"
             )
         }
         val anio = Anuncios.ejercicioQueRenueva(Anuncios.vigencia(movimientos, dia), dia, vigencia)

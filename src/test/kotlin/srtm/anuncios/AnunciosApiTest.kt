@@ -164,18 +164,27 @@ class AnunciosApiTest : SrtmApiTest() {
         val otro = registrado(e)
         val ruta = "/api/srtm/anuncios/$otro/renovacion"
         val porQue = "Renovación de prueba"
-        send(
-            "POST",
-            ruta,
-            mapOf("fecha" to "${e.anio}-12-15", "vigencia_hasta" to "${e.anio + 2}-12-31", "observacion" to porQue),
-            HttpStatus.UNPROCESSABLE_CONTENT
-        )
-        send(
-            "POST",
-            ruta,
-            mapOf("fecha" to "${e.anio}-12-15", "vigencia_hasta" to "${e.anio}-12-01", "observacion" to porQue),
-            HttpStatus.UNPROCESSABLE_CONTENT
-        )
+        // the dates of a 422 read dd/MM/yyyy
+        val varios =
+            tree(
+                send(
+                    "POST",
+                    ruta,
+                    mapOf("fecha" to "${e.anio}-12-15", "vigencia_hasta" to "${e.anio + 2}-12-31", "observacion" to porQue),
+                    HttpStatus.UNPROCESSABLE_CONTENT
+                )
+            )
+        assertTrue(varios["detail"].asString().contains("al 31/12/${e.anio + 2}"), varios.toString())
+        val atras =
+            tree(
+                send(
+                    "POST",
+                    ruta,
+                    mapOf("fecha" to "${e.anio}-12-15", "vigencia_hasta" to "${e.anio}-12-01", "observacion" to porQue),
+                    HttpStatus.UNPROCESSABLE_CONTENT
+                )
+            )
+        assertTrue(atras["detail"].asString().contains("del 15/12/${e.anio} no puede vencer el 01/12/${e.anio}"), atras.toString())
         send("POST", ruta, mapOf("fecha" to "${e.anio}-03-01", "observacion" to porQue), HttpStatus.UNPROCESSABLE_CONTENT)
         send("POST", ruta, mapOf("fecha" to LocalDate.now().plusDays(1).toString(), "observacion" to porQue), HttpStatus.UNPROCESSABLE_CONTENT)
         tree(send("POST", ruta, mapOf("fecha" to "${e.anio}-12-15", "observacion" to "x"), HttpStatus.BAD_REQUEST))
