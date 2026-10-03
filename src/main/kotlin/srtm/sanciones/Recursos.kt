@@ -10,6 +10,15 @@ const val SE_MANTIENE = "SE_MANTIENE"
 const val SE_DEJA_SIN_EFECTO = "SE_DEJA_SIN_EFECTO"
 const val SE_REDUCE = "SE_REDUCE"
 
+// the options of the enums the acts receive (model/model.json): one that is not among them is a 400 that names its field
+object Opciones {
+    val TIPOS_RECURSO = listOf("DESCARGO", "RECONSIDERACION", "APELACION", "NULIDAD")
+    val SENTIDOS = listOf("FUNDADO", "FUNDADO_EN_PARTE", "INFUNDADO", "IMPROCEDENTE")
+    val EFECTOS = listOf(SE_MANTIENE, SE_DEJA_SIN_EFECTO, SE_REDUCE)
+    val MODALIDADES = listOf("PERSONAL", "CEDULON", "PUBLICACION", "CORREO")
+    val RESULTADOS = listOf("NOTIFICADO", "NO_UBICADO", "RECHAZADO")
+}
+
 // what a descargo copies of its plazo: the day it could be filed by, whether it was, and the plazo read
 data class PlazoDelDescargo(
     val presentadoHasta: LocalDate,
@@ -106,6 +115,21 @@ object Resoluciones {
                 throw ConflictException("El descargo ${descargo.numeroExpediente} ya se resolvió con la ${it.numero}")
             }
         }
+    }
+
+    // why no resolución can be dictated now, or null: the ficha's acciones.resolucion. nothing left to resolve (an
+    // ANULADA or DEJADA_SIN_EFECTO acta); or its RIS is dictated and every descargo has its resolución, so neither a
+    // RIS nor a RGR is left to dictate until a new descargo comes
+    fun impedimento(
+        h: HechosDelActa,
+        descargos: List<DescargoPapeleta>
+    ): String? {
+        Procedimiento.impedimento("resolver", h)?.let { return it }
+        val ris = h.resoluciones.firstOrNull { it.tipo == RESOLUCION_ADMINISTRATIVA } ?: return null
+        val resueltos = h.resoluciones.mapNotNull { it.descargo }.toSet()
+        if (descargos.any { it.id !in resueltos }) return null
+        return "El acta ya tiene su RIS, la ${ris.numero}, y ningún descargo espera su resolución: " +
+            "solo queda dictar la de un descargo nuevo"
     }
 
     private fun tipoDesconocido(tipo: String) =

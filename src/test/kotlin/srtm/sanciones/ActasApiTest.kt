@@ -255,7 +255,8 @@ class ActasApiTest : ConSancionesApiTest() {
     @Test
     fun `the fase moves at the previa's vencimiento, and the fase filter finds exactly what the column shows`() {
         val c = inscribir()
-        val uit = uit(ANIO_PASADO)
+        uit(ANIO_PASADO)
+        plazos(ANIO_PASADO)
         val codigo = nuevoCodigo()
         post(CUIS, version(codigo, "$ANIO_PASADO-01-01"))
         val hoy = LocalDate.now()
@@ -272,10 +273,10 @@ class ActasApiTest : ConSancionesApiTest() {
         val sancionada = registrarActa(codigo, c)["id"].asString()
         val sinEfecto = registrarActa(codigo, c)["id"].asString()
         post("$ACTAS/$anulada/anulacion", mapOf("motivo" to "Error en el número", "observacion" to "Se anula"))
-        ris(sancionada, uit)
-        val descargo = descargo(sinEfecto, uit)
-        ris(sinEfecto, uit)
-        recurso(sinEfecto, descargo, uit, "SE_DEJA_SIN_EFECTO")
+        ris(sancionada)
+        val descargo = descargo(sinEfecto)
+        ris(sinEfecto)
+        recurso(sinEfecto, descargo, "SE_DEJA_SIN_EFECTO")
 
         val fases = filas("codigo=$codigo").associate { it["id"].asString() to it["fase"] }
         assertEquals("PREVENTIVA", fases.getValue(preventiva).asString())
@@ -307,7 +308,8 @@ class ActasApiTest : ConSancionesApiTest() {
     @Test
     fun `the ficha gives the acta, the version it used, its acts in legal order and what the rules allow now`() {
         val c = inscribir()
-        val uit = uit(ANIO_PASADO)
+        uit(ANIO_PASADO)
+        plazos(ANIO_PASADO)
         val codigo = nuevoCodigo()
         val version = post(CUIS, version(codigo, "$ANIO_PASADO-01-01"))["id"].asString()
         val npNumero = numeroNp()
@@ -339,11 +341,11 @@ class ActasApiTest : ConSancionesApiTest() {
         assertEquals(listOf(n, id), actos.map { it["id"].asString() })
         assertEquals("Vencida el $ANIO_PASADO-03-07", actos[0]["detalle"].asString())
 
-        // the acts B5 writes, as its services will: a descargo, the RIS notified, the recurso that leaves it without effect
-        val descargo = descargo(id, uit)
-        val ris = ris(id, uit)
-        val notificada = conLaMarca(NOTIFICACION_RESOLUCION, notificacionDe(ris, uit))
-        val recurso = recurso(id, descargo, uit, "SE_DEJA_SIN_EFECTO")
+        // a descargo, the RIS notified, the recurso that leaves it without effect
+        val descargo = descargo(id)
+        val ris = ris(id)
+        val notificada = notificar(ris, "$ANIO_PASADO-03-23")["id"].asString()
+        val recurso = recurso(id, descargo, "SE_DEJA_SIN_EFECTO")
         val f = expediente(id)
         assertEquals(
             listOf(
@@ -374,7 +376,8 @@ class ActasApiTest : ConSancionesApiTest() {
     @Test
     fun `an acta is anulada once, not before its infracción, and not when a resolución left it without effect`() {
         val c = inscribir()
-        val uit = uit(ANIO_PASADO)
+        uit(ANIO_PASADO)
+        plazos(ANIO_PASADO)
         val codigo = nuevoCodigo()
         post(CUIS, version(codigo, "$ANIO_PASADO-01-01"))
         val id = registrarActa(codigo, c)["id"].asString()
@@ -418,7 +421,7 @@ class ActasApiTest : ConSancionesApiTest() {
 
         // one a resolución left without effect has nothing left to anular (422)
         val sinEfecto = registrarActa(codigo, c)["id"].asString()
-        recurso(sinEfecto, descargo(sinEfecto, uit), uit, "SE_DEJA_SIN_EFECTO")
+        recurso(sinEfecto, descargo(sinEfecto), "SE_DEJA_SIN_EFECTO")
         val problema =
             tree(send("POST", "$ACTAS/$sinEfecto/anulacion", mapOf("motivo" to "Error", "observacion" to "Se anula"), HttpStatus.UNPROCESSABLE_CONTENT))
         assertTrue(problema["detail"].asString().contains("sin efecto"), problema.toString())
@@ -504,54 +507,16 @@ class ActasApiTest : ConSancionesApiTest() {
 
     private fun expediente(id: String): JsonNode = tree(send("GET", "$ACTAS/$id", null, HttpStatus.OK))
 
-    // what B5's services will write, written here as they will: the plazo relation is any parametro_tributario row
-    private fun descargo(
-        acta: String,
-        plazo: String
-    ): String =
-        conLaMarca(
-            DESCARGO_PAPELETA,
-            Ejemplos.descargo(acta, plazo, fecha = "$ANIO_PASADO-03-06", presentadoHasta = "$ANIO_PASADO-03-12") +
-                ("numero_expediente" to "EXP-${uniqueDocumento()}")
-        )
+    // the acts that answer an acta, through their endpoints (the PLAZO and FERIADOS rows of ANIO_PASADO loaded)
+    private fun descargo(acta: String): String = descargar(acta, "$ANIO_PASADO-03-06")["id"].asString()
 
-    private fun ris(
-        acta: String,
-        plazo: String
-    ): String = conLaMarca(RESOLUCION_GERENCIA, resolucion(acta, RESOLUCION_ADMINISTRATIVA, null, plazo, "$ANIO_PASADO-03-20"))
+    private fun ris(acta: String): String = dictar(acta, "$ANIO_PASADO-03-20")["id"].asString()
 
     private fun recurso(
         acta: String,
         descargo: String,
-        plazo: String,
         efecto: String
-    ): String = conLaMarca(RESOLUCION_GERENCIA, resolucion(acta, RESOLUCION_RECURSO, descargo, plazo, "$ANIO_PASADO-04-20") + ("efecto" to efecto))
-
-    // a resolución with a correlativo of its own (the número is unique)
-    private fun resolucion(
-        acta: String,
-        tipo: String,
-        descargo: String?,
-        plazo: String,
-        fecha: String
-    ): Map<String, Any?> {
-        val correlativo = uniqueDocumento().take(6).toInt() + 1
-        return Ejemplos.resolucion(acta, tipo, descargo) +
-            mapOf(
-                "anio" to ANIO_PASADO,
-                "correlativo" to correlativo,
-                "numero" to numeroDeResolucion(tipo, ANIO_PASADO, correlativo),
-                "fecha" to fecha,
-                "plazo" to plazo
-            )
-    }
-
-    private fun notificacionDe(
-        resolucion: String,
-        plazo: String
-    ): Map<String, Any?> =
-        Ejemplos.notificacionResolucion(resolucion) +
-            mapOf("fecha_diligencia" to "$ANIO_PASADO-03-23", "exigible_desde" to "$ANIO_PASADO-04-14", "plazo" to plazo)
+    ): String = dictar(acta, "$ANIO_PASADO-04-20", RESOLUCION_RECURSO, descargo, efecto)["id"].asString()
 
     private companion object {
         const val CUIS = "/api/srtm/infracciones/cuis"

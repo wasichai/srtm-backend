@@ -1,0 +1,206 @@
+<!doctype html>
+<!-- a resolución of the sanciones (RIS or RGR), drawn again from its frozen data: `r` is a HojaResolucion
+     (srtm.sanciones.hojaResolucion). no considerando is invented and there is no digital signature (D-05) -->
+<html xmlns:th="http://www.thymeleaf.org" lang="es">
+    <head>
+        <meta charset="UTF-8" />
+        <title th:text="${r.numero}">RIS</title>
+        <style th:utext="${css}"></style>
+        <style>
+            .texto {
+                padding: 1.2mm 2mm;
+                font-size: 8pt;
+                white-space: pre-wrap;
+            }
+
+            .pendiente {
+                border: 0.8pt dashed #000;
+                margin-bottom: 2.5mm;
+                padding: 2mm;
+                font-style: italic;
+            }
+
+            .firmas {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 22mm;
+                table-layout: fixed;
+            }
+
+            .firmas td {
+                text-align: center;
+                padding: 0 8mm;
+            }
+
+            .firmas .linea {
+                border-top: 0.8pt solid #000;
+                padding-top: 1mm;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="pie">
+            <span th:text="${r.pie}">RIS-2026-000001</span>
+        </div>
+
+        <div th:replace="~{cabecera :: cabecera(${r.cabecera}, ${r.fecha}, ${r.titulo}, 'Infracciones administrativas')}"></div>
+
+        <table class="identificacion">
+            <tr>
+                <td>
+                    <span class="etiqueta">Resolución</span>
+                    <span class="valor" th:text="${r.numero}">RIS-2026-000001</span>
+                </td>
+                <td>
+                    <span class="etiqueta">Fecha</span>
+                    <span class="valor" th:text="${r.fecha}">01/01/2026</span>
+                </td>
+            </tr>
+        </table>
+
+        <div class="bloque junto">
+            <div class="titulo">I. Acta de constatación</div>
+            <table class="datos">
+                <tr>
+                    <td style="width: 25%">
+                        <div class="etiqueta">Número del acta</div>
+                        <div class="valor" th:text="${r.acta.numero}">AC-0001</div>
+                    </td>
+                    <td style="width: 25%">
+                        <div class="etiqueta">Fecha de la infracción</div>
+                        <div class="valor" th:text="${r.acta.hora} ? |${r.acta.fecha} ${r.acta.hora}| : ${r.acta.fecha}">01/01/2026</div>
+                    </td>
+                    <td style="width: 50%">
+                        <div class="etiqueta">Lugar</div>
+                        <div class="valor" th:text="${r.acta.lugar}">lugar</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="etiqueta">Código CUIS</div>
+                        <div class="valor" th:text="${r.acta.codigo}">A-042</div>
+                    </td>
+                    <td colspan="2">
+                        <div class="etiqueta">Infracción</div>
+                        <div class="valor" th:text="${r.acta.descripcion}">descripción</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="etiqueta">Reincidencia</div>
+                        <div class="valor" th:text="${r.acta.reincidencia}">Primera vez</div>
+                    </td>
+                    <td colspan="2">
+                        <div class="etiqueta">Base legal</div>
+                        <div class="valor" th:text="${r.acta.baseLegal}">base legal</div>
+                    </td>
+                </tr>
+                <tr th:if="${r.acta.medidaComplementaria}">
+                    <td colspan="3">
+                        <div class="etiqueta">Medida complementaria</div>
+                        <div class="valor" th:text="${r.acta.medidaComplementaria}">medida</div>
+                    </td>
+                </tr>
+            </table>
+            <table class="tabla">
+                <thead>
+                    <tr>
+                        <th style="width: 70%">Multa del acta</th>
+                        <th style="width: 30%">Valor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr th:each="f : ${r.acta.desglose}">
+                        <td th:text="${f.concepto}">concepto</td>
+                        <td class="num" th:text="${f.valor}">S/ 0.00</td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="nota" th:text="|${r.acta.calculo} Referencia ${r.acta.referencia}.|">Multa calculada el</div>
+        </div>
+
+        <div class="bloque junto">
+            <div class="titulo">II. Obligado</div>
+            <table class="datos">
+                <tr>
+                    <td style="width: 60%">
+                        <div class="etiqueta">Apellidos y nombres / razón social</div>
+                        <div class="valor" th:text="${r.obligado.nombre}">nombre</div>
+                    </td>
+                    <td style="width: 40%">
+                        <div class="etiqueta">Documento de identidad</div>
+                        <div class="valor" th:text="${r.obligado.documento}">DNI</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="2">
+                        <div class="etiqueta">Domicilio fiscal</div>
+                        <div class="valor" th:text="${r.obligado.domicilio}">domicilio</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="bloque junto" th:if="${r.recurso}">
+            <div class="titulo">III. Recurso</div>
+            <table class="datos">
+                <tr>
+                    <td style="width: 25%">
+                        <div class="etiqueta">Expediente</div>
+                        <div class="valor" th:text="${r.recurso.expediente}">EXP-0001</div>
+                    </td>
+                    <td style="width: 35%">
+                        <div class="etiqueta">Tipo de recurso</div>
+                        <div class="valor" th:text="${r.recurso.tipo}">Descargo</div>
+                    </td>
+                    <td style="width: 40%">
+                        <div class="etiqueta">Presentado el</div>
+                        <div class="valor" th:text="${r.recurso.presentado}">01/01/2026</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3">
+                        <div class="etiqueta">Plazo del recurso</div>
+                        <div class="valor" th:text="|Presentado dentro del plazo: ${r.recurso.enPlazo}|">SÍ</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="pendiente" th:text="${r.considerandos}">Considerandos</div>
+
+        <div class="bloque junto">
+            <div class="titulo" th:text="${r.recurso} ? 'IV. Se resuelve' : 'III. Se resuelve'">Se resuelve</div>
+            <table class="datos">
+                <tr th:if="${r.sentido}">
+                    <td style="width: 40%">
+                        <div class="etiqueta">Sentido del fallo</div>
+                        <div class="valor" th:text="${r.sentido}">Fundado</div>
+                    </td>
+                    <td style="width: 60%">
+                        <div class="etiqueta">Efecto sobre la multa</div>
+                        <div class="valor" th:text="${r.efecto}">Se mantiene</div>
+                    </td>
+                </tr>
+                <tr th:if="${r.sancionAccesoria}">
+                    <td colspan="2">
+                        <div class="etiqueta">Sanción accesoria</div>
+                        <div class="valor" th:text="${r.sancionAccesoria}">sanción</div>
+                    </td>
+                </tr>
+            </table>
+            <div class="subtitulo">Sustento</div>
+            <div class="texto" th:text="${r.sustento}">sustento</div>
+            <div class="contado" th:text="${r.plazo}">Plazo para impugnar</div>
+            <div class="nota" th:text="${r.basePlazo}">art. 218.2</div>
+        </div>
+
+        <table class="firmas">
+            <tr>
+                <td th:each="f : ${r.firmas}"><div class="linea" th:text="${f}">Gerente</div></td>
+            </tr>
+        </table>
+        <div class="nota centrada" th:text="${r.sinFirma}">sin firma digital</div>
+    </body>
+</html>

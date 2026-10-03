@@ -112,6 +112,22 @@ class RecursosTest {
     }
 
     @Test
+    fun `a resolucion can be dictated while there is no RIS or a descargo waits for its own - the ficha says why not`() {
+        assertNull(Resoluciones.impedimento(HechosDelActa(), emptyList()))
+        val conRis = HechosDelActa(resoluciones = listOf(resolucion()))
+        val sinNada = Resoluciones.impedimento(conRis, emptyList())!!
+        assertTrue(sinNada.contains("RIS-2026-000001") && sinNada.contains("ningún descargo"), sinNada)
+        assertNull(Resoluciones.impedimento(conRis, listOf(descargo(id = "desc-1"))))
+        val resuelto = HechosDelActa(resoluciones = listOf(resolucion(), resolucion(RESOLUCION_RECURSO, SE_MANTIENE, "desc-1", correlativo = 2)))
+        assertTrue(Resoluciones.impedimento(resuelto, listOf(descargo(id = "desc-1"))) != null)
+        assertNull(Resoluciones.impedimento(resuelto, listOf(descargo(id = "desc-1"), descargo(id = "desc-2"))))
+        // without a RIS a RIS is still due, whatever the descargos
+        assertNull(Resoluciones.impedimento(HechosDelActa(), listOf(descargo(id = "desc-1"))))
+        val anulada = Resoluciones.impedimento(HechosDelActa(anulacion = anulacion()), listOf(descargo()))!!
+        assertTrue(anulada.contains("anulada"), anulada)
+    }
+
+    @Test
     fun `a tipo that is not one is a 422`() {
         assertThrows(NoProcede::class.java) { Resoluciones.validar("acta", "SANCIONADORA", null, null, null, HechosDelActa()) }
         assertThrows(NoProcede::class.java) { Resoluciones.plazoQueConcede("ORDINARIA") }
