@@ -108,7 +108,7 @@ class SancionesCuisApiTest : ConSancionesApiTest() {
             assertEquals("vigencia_desde", problema["errors"][0]["field"].asString(), problema.toString())
         }
         rejected("POST", CUIS, version(codigo, "2027-01-01") + ("observacion" to "no"), "observacion")
-        rejected("POST", CUIS, version(codigo, "2027-01-01", porcentaje = 120), "porcentaje_uit")
+        rejected("POST", CUIS, version(codigo, "2027-01-01", porcentaje = 10001), "porcentaje_uit")
         rejected("POST", CUIS, version(codigo, "2027-01-01") + ("familia" to "TRANSITO"), "familia")
         // nothing of those was written
         assertEquals(2, versiones(codigo).size)
@@ -179,6 +179,52 @@ class SancionesCuisApiTest : ConSancionesApiTest() {
         assertEquals(1, versiones(codigo).size)
     }
 
+    @Test
+    fun `a derogation ends the version in force with no new one, and the catalog stops listing it`() {
+        val codigo = nuevoCodigo()
+        val id = post(CUIS, version(codigo, "2026-01-01"))["id"].asString()
+
+        val derogada = tree(send("POST", DEROGACION, mapOf("codigo" to " ${codigo.lowercase()} ", "vigencia_hasta" to "2026-05-06"), HttpStatus.OK))
+        assertEquals(id, derogada["id"].asString())
+        assertEquals("2026-05-06", derogada["vigencia_hasta"].asString())
+        assertTrue(derogada["clave_vigente"].isNull, derogada.toString())
+        assertEquals(10.0, registro(CODIGO_INFRACCION, id)["porcentaje_uit"].asDouble(), "it keeps its figures")
+        assertEquals(1, catalogo("vigentes_a=2026-05-06&q=$codigo")["codigos"].size(), "its last day")
+        assertEquals(0, catalogo("vigentes_a=2026-05-07&q=$codigo")["codigos"].size(), "the day after")
+
+        // once only; a code the CUIS does not have is a 404; a day before it started a 422; a missing field a 400
+        send("POST", DEROGACION, mapOf("codigo" to codigo, "vigencia_hasta" to "2026-06-01"), HttpStatus.CONFLICT)
+        send("POST", DEROGACION, mapOf("codigo" to nuevoCodigo(), "vigencia_hasta" to "2026-06-01"), HttpStatus.NOT_FOUND)
+        val otro = nuevoCodigo()
+        post(CUIS, version(otro, "2026-01-01"))
+        val antes = tree(send("POST", DEROGACION, mapOf("codigo" to otro, "vigencia_hasta" to "2025-12-31"), HttpStatus.UNPROCESSABLE_CONTENT))
+        assertEquals("vigencia_hasta", antes["errors"][0]["field"].asString(), antes.toString())
+        rejected("POST", DEROGACION, mapOf("codigo" to otro), "vigencia_hasta")
+        // a new version after the derogation is the code's next one
+        val despues = post(CUIS, version(codigo, "2026-08-01"))
+        assertTrue(despues["cerrada"].isNull, despues.toString())
+    }
+
+    @Test
+    fun `a derogation asks the permission to create the CUIS`() {
+        val codigo = nuevoCodigo()
+        post(CUIS, version(codigo, "2026-01-01"))
+        val lector = funcionario(listOf(permiso(null, "READ")))
+        val problema = tree(send("POST", DEROGACION, mapOf("codigo" to codigo, "vigencia_hasta" to "2026-05-06"), HttpStatus.FORBIDDEN, lector))
+        assertTrue(problema["detail"].asString().contains(CODIGO_INFRACCION), problema.toString())
+        assertTrue(versiones(codigo).single()["vigencia_hasta"].isNull)
+    }
+
+    @Test
+    fun `a version as long as the CUIEMA of Perené is written`() {
+        val codigo = nuevoCodigo()
+        val larga =
+            version(codigo, "2026-01-01") +
+                mapOf("descripcion" to "d".repeat(1000), "medida_complementaria" to "m".repeat(500), "base_legal" to "b".repeat(2000))
+        assertEquals(2000, post(CUIS, larga)["base_legal"].asString().length)
+        rejected("POST", CUIS, version(nuevoCodigo(), "2026-01-01") + ("base_legal" to "b".repeat(2001)), "base_legal")
+    }
+
     private fun catalogo(query: String): JsonNode = tree(send("GET", "$CUIS?$query", null, HttpStatus.OK))
 
     private fun versiones(codigo: String): List<JsonNode> =
@@ -194,6 +240,7 @@ class SancionesCuisApiTest : ConSancionesApiTest() {
 
     private companion object {
         const val CUIS = "/api/srtm/infracciones/cuis"
+        const val DEROGACION = "$CUIS/derogacion"
         const val ANIO_CON_UIT = 2041
         const val ANIO_SIN_UIT = 2042
     }

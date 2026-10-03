@@ -16,6 +16,8 @@ import srtm.rentas.Registros
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import wasichai.core.common.ConflictException
+import wasichai.core.common.FieldViolation
+import wasichai.core.common.NotFoundException
 import wasichai.core.common.ValidationException
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -37,6 +39,15 @@ data class PedidoVersionCuis(
     val baseLegal: String? = null,
     val vigenciaDesde: LocalDate? = null,
     val observacion: String? = null
+)
+
+// POST /infracciones/cuis/derogacion: the code's version in force rules until vigencia_hasta and none follows it (a
+// norm that derogates the CUIS without giving the code a new version)
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class PedidoDerogacionCuis(
+    val familia: String? = null,
+    val codigo: String? = null,
+    val vigenciaHasta: LocalDate? = null
 )
 
 // its 201: the new version, flat, and the one it closed (null for a code's first version)
@@ -141,6 +152,43 @@ class CuisService(
         } catch (_: DuplicateKeyException) {
             // another transaction got there first: what it wrote stands
             throw repetida(nueva)
+        }
+    }
+
+    // a derogation: the version in force rules until vigencia_hasta (srtm.sanciones.Cuis.derogar), under the code's
+    // lock. a code without versions is a 404, one without a version in force a 409, a day before it started a 422
+    suspend fun derogar(pedido: PedidoDerogacionCuis): CodigoInfraccion {
+        permisos.exigirCrear(CODIGO_INFRACCION, "derogar un código del CUIS")
+        val familia = pedido.familia?.trim()?.ifEmpty { null } ?: ADMINISTRATIVA
+        val codigo = pedido.codigo?.let(Cuis::normalizar)?.ifEmpty { null }
+        val hasta = pedido.vigenciaHasta
+        if (codigo == null || hasta == null) {
+            throw ValidationException(
+                "La derogación no es válida",
+                listOfNotNull(
+                    if (codigo == null) FieldViolation("codigo", "es obligatorio") else null,
+                    if (hasta == null) FieldViolation("vigencia_hasta", "es obligatoria (AAAA-MM-DD)") else null
+                )
+            )
+        }
+        if (familia != ADMINISTRATIVA) {
+            throw ValidationException("La familia '$familia' no es del CUIS de srtm", "familia", "es $ADMINISTRATIVA")
+        }
+        return transaccion.executeAndAwait {
+            candados.bloquear(Candado.CODIGO_INFRACCION, claveVigenteDe(familia, codigo))
+            val versiones =
+                registros.all(CODIGO_INFRACCION, CodigoInfraccion::class.java, filters = mapOf("familia" to familia, "codigo" to codigo))
+            if (versiones.isEmpty()) throw NotFoundException("El código $codigo no está en el CUIS")
+            val vigente =
+                versiones.filter { it.vigenciaHasta == null }.maxByOrNull { it.vigenciaDesde!! }
+                    ?: throw ConflictException("El código $codigo no tiene una versión vigente: ya está cerrado")
+            val derogada = Cuis.derogar(vigente, hasta)
+            registros.replace(
+                CODIGO_INFRACCION,
+                CodigoInfraccion::class.java,
+                UUID.fromString(derogada.id),
+                mapOf("vigencia_hasta" to hasta.toString(), "clave_vigente" to null)
+            )
         }
     }
 

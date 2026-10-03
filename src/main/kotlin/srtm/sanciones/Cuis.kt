@@ -39,6 +39,27 @@ object Cuis {
         return vigente.copy(vigenciaHasta = nuevaDesde.minusDays(1), claveVigente = null)
     }
 
+    // the version in force derogated: it rules until `hasta`, both ends counting, and no version follows it. as when a
+    // new version closes it, only vigencia_hasta and clave_vigente change. a closed one is not closed again (409); it
+    // ends on or after the day it started (422)
+    fun derogar(
+        vigente: CodigoInfraccion,
+        hasta: LocalDate
+    ): CodigoInfraccion {
+        if (vigente.vigenciaHasta != null) {
+            throw ConflictException(
+                "La versión de ${vigente.codigo} del ${vigente.vigenciaDesde!!.legible()} ya está cerrada (el ${vigente.vigenciaHasta.legible()})"
+            )
+        }
+        if (hasta < vigente.vigenciaDesde!!) {
+            throw NoProcede(
+                "La derogación de ${vigente.codigo} rige hasta el ${hasta.legible()}: es anterior a su versión del ${vigente.vigenciaDesde.legible()}",
+                listOf(FieldViolation("vigencia_hasta", "no es anterior a la versión del ${vigente.vigenciaDesde.legible()}"))
+            )
+        }
+        return vigente.copy(vigenciaHasta = hasta, claveVigente = null)
+    }
+
     // what a new version from `nuevaDesde` writes besides itself: the version in force closed, or null for a code
     // without one. never overlaps: it starts after every version of the code
     fun versionNueva(

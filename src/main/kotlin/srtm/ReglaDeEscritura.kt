@@ -134,17 +134,18 @@ class Violaciones {
         }
     }
 
-    // an alícuota: above 0 and up to 100
+    // an alícuota: above 0 and up to `maximo` (100, unless the norm allows more: a multa of 1000 % of the UIT)
     fun porcentaje(
         campo: String,
         valor: BigDecimal?,
-        obligatorio: Boolean = false
+        obligatorio: Boolean = false,
+        maximo: BigDecimal = CIEN
     ) {
         if (valor == null) {
             if (obligatorio) mal(campo, "es obligatorio")
             return
         }
-        if (valor.signum() <= 0 || valor > CIEN) mal(campo, "es mayor que 0 y hasta 100")
+        if (valor.signum() <= 0 || valor > maximo) mal(campo, "es mayor que 0 y hasta ${maximo.toPlainString()}")
     }
 
     // an amount of money: required and not negative

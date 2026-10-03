@@ -505,6 +505,7 @@ ADMIN). `FaltanSanciones` sale como **422** con `faltan: [...]` (`ErroresDeSanci
 |---|---|---|
 | GET | `/cuis?vigentes_a&materia&q` | `{vigentes_a, uit: {valor, anio, parametro_id} \| null, faltan, codigos}`: las versiones vigentes ese día (por omisión hoy), por código; `materia` y `q` (código o descripción) buscan una parte. Cada código lleva `multa`, `multa_segunda` y `multa_tercera` a la UIT de `vigentes_a` (`Multas.calcular`); null si el grado no tiene % o si no hay UIT. Sin UIT: `uit: null` y `faltan: ["UIT 2026"]`. Siempre 200. Es también el reporte de códigos del brief: el catálogo vigente a una fecha, con sus multas. |
 | POST | `/cuis` `{familia?, codigo, descripcion, materia?, porcentaje_uit, porcentaje_uit_segunda?, porcentaje_uit_tercera?, medida_complementaria?, base_legal, vigencia_desde, observacion}` | **201** con el registro plano de la versión nueva y `cerrada` (la que cerró, o null). **409** si esa versión (`familia\|codigo\|vigencia_desde`) ya existe; **422** si no empieza después de la vigente (o pisa una cerrada); **400** por campo. Es lo que llama `import_cuis.py`. |
+| POST | `/cuis/derogacion` `{familia?, codigo, vigencia_hasta}` | **200** con el registro plano de la versión derogada: rige hasta `vigencia_hasta` (inclusive) y ninguna la sigue. **404** si el CUIS no tiene el código; **409** si no tiene versión vigente; **422** si `vigencia_hasta` es anterior a su `vigencia_desde`; **400** por campo. Es lo que llama `import_cuis.py --completo`. |
 | GET | `/notificaciones?numero&q&contribuyente&desde&hasta&vencidas_a&page&size` | Página (`size` 20 por omisión) de notificaciones, la más reciente primero, **como estaban a `vencidas_a`** (por omisión hoy): el registro plano + `vencimiento` (null sin plazo), `vencida`, `vencidas_a`, `subsanada: {fecha} \| null`, `acta: {id, numero} \| null` y `contribuyente_nombre`. Una notificación fechada después de `vencidas_a` no sale (no existía), y la subsanación y el acta solo cuentan si su fecha es ≤ `vencidas_a`. `numero` es el número entero (exacto); `q`, una parte del número sin distinguir mayúsculas (`%` y `_` se toman literales); `contribuyente`, su id. |
 | POST | `/notificaciones` `{numero, fecha, contribuyente?, predio?, direccion, motivo, plazo_dias?, observacion}` | **201** con la fila de arriba. **404** si el contribuyente o el predio no existen; **409** si el número ya está; **422** si la fecha es posterior a hoy; **400** por campo (`plazo_dias` de 1 a 32767). |
 | POST | `/notificaciones/{id}/subsanacion` `{fecha?, observacion}` | **201** con la subsanación. `fecha` por omisión hoy. **409** si ya está subsanada; **422** si venció a esa fecha, si ya originó un acta, o si la fecha es posterior a hoy o anterior a la notificación. |
@@ -535,6 +536,15 @@ y aplica `Cuis.versionNueva`: dos versiones nuevas a la vez no se pisan (una esp
 veces da 409). La versión cerrada conserva sus cifras, y un acta que la usó sigue apuntándola. El código se recorta y
 se pasa a mayúsculas; `familia` por omisión es `ADMINISTRATIVA` (otra es 400). Los porcentajes llegan como número o
 como texto (`import_cuis.py` manda las celdas del CSV como texto).
+
+Una norma que **deroga** un código sin darle versión nueva (la OM 006-2026-MDP deroga el CUIEMA de la OM 01-2021, cuyos
+códigos `01.01.001`… no siguen en el nuevo, que numera `001`…) lo cierra con `Cuis.derogar`: la vigente rige hasta el
+día que dice la norma, bajo el mismo candado, y solo cambian `vigencia_hasta` y `clave_vigente`. Un código derogado
+puede volver con una versión nueva posterior.
+
+**Largos y alícuotas del CUIS.** Son más anchos que en `rentas`, porque el CUIEMA de Perené no cabía: descripción ≤ 1000
+(llega a 537), materia ≤ 120 (66), medida complementaria ≤ 500 (169) y base legal ≤ 2000 (938). `porcentaje_uit` y los de reincidencia, y
+los porcentajes del acta, van de más de 0 a 10 000 (100 UIT; Perené llega a 1000 %).
 
 ### Notificaciones previas
 
@@ -1010,7 +1020,7 @@ Las garantías de `rentas` sobre las infracciones y los anuncios, y dónde queda
   (solo la notificación que surte efecto), `anuncio_predio` y `movimiento_parametro` (solo el movimiento que devenga).
   Todas las demás son obligatorias.
 - **Largos y rangos:** TEXT y LONG_TEXT no tienen largo en Core; los revisa la regla de escritura (código ≤ 20 en
-  mayúsculas, descripción ≤ 500, `porcentaje_uit` mayor que 0 y hasta 100, área mayor que 0, lados y cantidad desde 1…).
+  mayúsculas, descripción del CUIS ≤ 1000, `porcentaje_uit` mayor que 0 y hasta 10 000, área mayor que 0, lados y cantidad desde 1…).
 
 **Guardia de escritura** (`srtm.AlmacenGuardado`). Toda escritura de un registro pasa por el `RecordStore` de Core, venga
 de la API genérica (`/api/objects/{objeto}/records`), de `/admin` o de un servicio de srtm. `AlmacenGuardado` lo envuelve
@@ -1056,17 +1066,21 @@ cabecera `#` que cita la fuente (el repo no trae ninguno: los tests usan uno fic
 ```bash
 cd model
 python3 import_cuis.py --csv cuis.csv --dry-run   # lee Core y dice qué versiones agregaría y cuáles cerraría
-python3 import_cuis.py --csv cuis.csv             # codigo_infraccion: N created, M closed, K skipped
+python3 import_cuis.py --csv cuis.csv             # codigo_infraccion: N created, M closed, K skipped, 0 derogated
+python3 import_cuis.py --csv cuis.csv --completo  # además deroga los códigos vigentes que el archivo no trae
 ```
 
 - `familia` vacía es `ADMINISTRATIVA`; el código se pasa a mayúsculas.
-- Antes de la primera escritura revisa el archivo (obligatorios, largos, alícuotas de 0 a 100, fechas, versiones
-  repetidas) y lo que hay en Core.
+- Antes de la primera escritura revisa el archivo (obligatorios, largos, alícuotas de más de 0 a 10 000, fechas,
+  versiones repetidas) y lo que hay en Core.
 - Es idempotente por `clave`: salta la versión que Core ya tiene. Si Core la tiene con otros valores, sale con `2`: un
   cambio es una versión nueva, con otra `vigencia_desde`.
 - Una versión nueva de un código vigente cierra la anterior (`vigencia_hasta` = el día antes, `clave_vigente` = NULL) y se
   agrega; una no posterior a la vigente sale con `2`. Como el CUIS es `soloDesdeElServicio`, cada versión va a
   `POST /api/srtm/infracciones/cuis`, que cierra y agrega en una transacción.
+- Con `--completo` el archivo es el CUIS entero desde su única `vigencia_desde` (dos fechas distintas salen con `2`): cada
+  código vigente en Core que el archivo no trae se deroga el día antes, por `POST /api/srtm/infracciones/cuis/derogacion`.
+  Sin la opción, un código que el archivo no trae no se toca.
 - Sale con `0` si todo va bien, `1` si el servidor rechaza algo y `2` si el archivo no encaja (sin escribir nada).
 
 Geometrías (wasichai-gis, GeoJSON en EPSG:4326 por la API):

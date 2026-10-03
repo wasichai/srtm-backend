@@ -10,9 +10,11 @@ clave_vigente is emptied) and is added. codigo_infraccion is written only by srt
 one transaction under a lock per codigo, so every version goes to POST /api/srtm/infracciones/cuis (the generic API
 answers 403). Everything is checked against the file and Core before the first write.
 
-The CUIS of Perené is not transcribed and verified yet: the repo ships no such file (the tests use a fictitious one).
+With --completo the file is the whole CUIS from its one vigencia_desde (a norm that replaces the previous CUIS, as
+OM 006-2026-MDP derogates OM 01-2021): a code in force in Core that the file does not bring is derogated the day
+before, through POST /api/srtm/infracciones/cuis/derogacion. Without it, a code the file does not bring is left alone.
 
-Run: python3 import_cuis.py --csv cuis.csv [--dry-run]
+Run: python3 import_cuis.py --csv cuis.csv [--completo] [--dry-run]
 Exit: 0 ok, 1 Core refused something, 2 the file is malformed, or a row clashes with what Core has (nothing is sent).
 """
 import argparse
@@ -28,13 +30,16 @@ from core_client import Client, CoreError
 HERE = os.path.dirname(os.path.abspath(__file__))
 OBJECT = "codigo_infraccion"
 ENDPOINT = "/api/srtm/infracciones/cuis"
+DEROGACION = ENDPOINT + "/derogacion"
 COLUMNS = ("familia", "codigo", "descripcion", "materia", "porcentaje_uit", "porcentaje_uit_segunda", "porcentaje_uit_tercera",
            "medida_complementaria", "base_legal", "vigencia_desde", "observacion")
 REQUIRED = ("codigo", "descripcion", "porcentaje_uit", "base_legal", "vigencia_desde", "observacion")
 FAMILIA = "ADMINISTRATIVA"
 # the lengths kotlin's rule checks (srtm.sanciones): core's TEXT has none
-LARGOS = {"codigo": 20, "descripcion": 500, "materia": 60, "medida_complementaria": 160, "base_legal": 200}
+LARGOS = {"codigo": 20, "descripcion": 1000, "materia": 120, "medida_complementaria": 500, "base_legal": 2000}
 OBSERVACION = (5, 500)
+# kotlin's Largos.PORCENTAJE_UIT: a multa of the CUIS goes over the UIT (Perené's reach 1000 %)
+PORCENTAJE_MAXIMO = Decimal(10000)
 PORCENTAJES = ("porcentaje_uit", "porcentaje_uit_segunda", "porcentaje_uit_tercera")
 # what a version is: a row whose clave Core has must say the same (the observación only explains the load)
 VALORES = ("descripcion", "materia", "porcentaje_uit", "porcentaje_uit_segunda", "porcentaje_uit_tercera", "medida_complementaria",
@@ -92,8 +97,8 @@ def _errores_de(i, fila, familias):
     for campo in PORCENTAJES:
         if campo in fila:
             valor = _decimal(fila[campo])
-            if valor is None or not valor.is_finite() or not Decimal(0) < valor <= Decimal(100):
-                malas.append(f"{nombre}: {campo} es una alícuota mayor que 0 y hasta 100")
+            if valor is None or not valor.is_finite() or not Decimal(0) < valor <= PORCENTAJE_MAXIMO:
+                malas.append(f"{nombre}: {campo} es una alícuota mayor que 0 y hasta {PORCENTAJE_MAXIMO}")
     if "vigencia_desde" in fila and _fecha(fila["vigencia_desde"]) is None:
         malas.append(f"{nombre}: vigencia_desde no es una fecha AAAA-MM-DD")
     if "observacion" in fila and not OBSERVACION[0] <= len(fila["observacion"]) <= OBSERVACION[1]:
@@ -122,9 +127,10 @@ def _igual(guardado, deseado):
     return str(guardado) == str(deseado)
 
 
-def plan(registros, filas):
-    """(create, close, skipped): the rows to send, in order, and (stored clave, vigencia_hasta) of each version they
-    close. NoEncaja when a row clashes with Core."""
+def plan(registros, filas, completo=False):
+    """(create, close, skipped, derogate): the rows to send, in order, (stored clave, vigencia_hasta) of each version
+    they close and, with completo, (familia, codigo, vigencia_hasta) of each code in force the file does not bring.
+    NoEncaja when a row clashes with Core."""
     por_clave = {r["attributes"].get("clave"): r["attributes"] for r in registros}
     vigentes = {a["clave_vigente"]: a for a in por_clave.values() if a.get("clave_vigente")}
     crear, cerrar, iguales, choques = [], [], 0, []
@@ -148,22 +154,41 @@ def plan(registros, filas):
             cerrar.append((vigente["clave"], (desde - timedelta(days=1)).isoformat()))
         crear.append(fila)
         vigentes[codigo] = {"clave": clave(fila), "vigencia_desde": fila["vigencia_desde"]}
+    derogar = []
+    if completo:
+        desdes = sorted({f["vigencia_desde"] for f in filas})
+        if len(desdes) != 1:
+            raise NoEncaja([f"--completo pide una sola vigencia_desde en el archivo; trae {', '.join(desdes) or 'ninguna'}"])
+        hasta = _fecha(desdes[0]) - timedelta(days=1)
+        traidos = {f"{f['familia']}|{f['codigo']}" for f in filas}
+        for codigo, a in sorted(vigentes.items()):
+            if codigo in traidos:
+                continue
+            if _fecha(a["vigencia_desde"]) > hasta:
+                choques.append(f"{codigo} rige desde {a['vigencia_desde']}: no se deroga el {hasta.isoformat()}, antes de empezar")
+                continue
+            familia, cod = codigo.split("|", 1)
+            derogar.append((familia, cod, hasta.isoformat()))
     if choques:
         raise NoEncaja(choques)
-    return crear, cerrar, iguales
+    return crear, cerrar, iguales, derogar
 
 
-def cargar(client, filas, dry_run=False):
-    """Sends each new version, in order. Returns (created, closed, skipped)."""
-    crear, cerrar, iguales = plan(client.list_all(OBJECT), filas)
+def cargar(client, filas, dry_run=False, completo=False):
+    """Sends each new version, in order, then each derogation. Returns (created, closed, skipped, derogated)."""
+    crear, cerrar, iguales, derogar = plan(client.list_all(OBJECT), filas, completo)
     for anterior, hasta in cerrar:
         print(f"  close  {anterior}: vigencia_hasta {hasta}")
     for fila in crear:
         print(f"  create {clave(fila)}: {fila['porcentaje_uit']}% UIT")
+    for familia, codigo, hasta in derogar:
+        print(f"  derogate {familia}|{codigo}: vigencia_hasta {hasta}")
     if not dry_run:
         for fila in crear:
             client.post(ENDPOINT, fila)
-    return len(crear), len(cerrar), iguales
+        for familia, codigo, hasta in derogar:
+            client.post(DEROGACION, {"familia": familia, "codigo": codigo, "vigencia_hasta": hasta})
+    return len(crear), len(cerrar), iguales, len(derogar)
 
 
 def _parse_args(argv):
@@ -172,6 +197,8 @@ def _parse_args(argv):
     p.add_argument("--core", default=os.environ.get("WASICHAI_CORE", "http://localhost:8090"))
     p.add_argument("--email", default=os.environ.get("WASICHAI_EMAIL", "admin@wasichai.local"))
     p.add_argument("--password", default=os.environ.get("WASICHAI_PASSWORD", "admin"))
+    p.add_argument("--completo", action="store_true",
+                   help="the file is the whole CUIS from its vigencia_desde: derogate the codes in force it does not bring")
     p.add_argument("--dry-run", action="store_true", help="read Core and say what it would do; write nothing")
     return p.parse_args(argv)
 
@@ -188,7 +215,7 @@ def main(argv=None):
     client = Client(args.core)
     try:
         client.login(args.email, args.password)
-        creadas, cerradas, iguales = cargar(client, filas, args.dry_run)
+        creadas, cerradas, iguales, derogadas = cargar(client, filas, args.dry_run, args.completo)
     except NoEncaja as e:
         for choque in e.args[0]:
             print(f"error: {choque}", file=sys.stderr)
@@ -197,9 +224,9 @@ def main(argv=None):
         print(f"error -> {e.status}\n{e.body}", file=sys.stderr)
         return 1
     if args.dry_run:
-        print(f"dry run: {creadas} to create, {cerradas} to close, {iguales} skipped; nothing written")
+        print(f"dry run: {creadas} to create, {cerradas} to close, {iguales} skipped, {derogadas} to derogate; nothing written")
     else:
-        print(f"{OBJECT}: {creadas} created, {cerradas} closed, {iguales} skipped")
+        print(f"{OBJECT}: {creadas} created, {cerradas} closed, {iguales} skipped, {derogadas} derogated")
     return 0
 
 

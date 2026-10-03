@@ -66,10 +66,11 @@ class ReadTests(CuisTestCase):
         base = "ADMINISTRATIVA,A-1,Descripción,,10,,,,Base legal,2026-01-01,Carga de prueba"
         for fila, motivo in [
             (base.replace(",10,", ",0,"), "porcentaje_uit es una alícuota"),
-            (base.replace(",10,", ",100.01,"), "porcentaje_uit es una alícuota"),
+            (base.replace(",10,", ",10000.01,"), "porcentaje_uit es una alícuota"),
             (base.replace(",10,,", ",10,cero,"), "porcentaje_uit_segunda es una alícuota"),
             (base.replace("A-1", "A" * 21), "codigo tiene más de 20"),
-            (base.replace("Base legal", "B" * 201), "base_legal tiene más de 200"),
+            (base.replace("Base legal", "B" * 2001), "base_legal tiene más de 2000"),
+            (base.replace("Descripción", "D" * 1001), "descripcion tiene más de 1000"),
             (base.replace("Base legal", ""), "falta base_legal"),
             (base.replace("2026-01-01", "01/01/2026"), "vigencia_desde no es una fecha"),
             (base.replace("Carga de prueba", "Ok"), "la observacion tiene 2 caracteres"),
@@ -145,7 +146,7 @@ class LoadTests(CuisTestCase):
         self.assertEqual(self.writes(), [])
         self.assertIsNone(self.versiones()["ADMINISTRATIVA|A-042|2026-01-01"].get("vigencia_hasta"))
         self.assertIn("  close  ADMINISTRATIVA|A-042|2026-01-01: vigencia_hasta 2026-06-30", out)
-        self.assertIn("dry run: 1 to create, 1 to close, 2 skipped; nothing written", out)
+        self.assertIn("dry run: 1 to create, 1 to close, 2 skipped, 0 to derogate; nothing written", out)
 
     def test_a_changed_version_is_not_overwritten(self):
         # a change is a new version, with another vigencia_desde: the stored one stays as it was read
@@ -167,8 +168,40 @@ class LoadTests(CuisTestCase):
     def test_a_malformed_file_exits_2_before_calling_core(self):
         code, out, err = self.run_main(CUIS.replace(",25.5,", ",-1,"))
         self.assertEqual(code, 2)
-        self.assertIn("porcentaje_uit es una alícuota mayor que 0 y hasta 100", err)
+        self.assertIn("porcentaje_uit es una alícuota mayor que 0 y hasta 10000", err)
         self.assertEqual(self.core.requests, [])
+
+    def test_a_complete_file_derogates_the_codes_in_force_it_does_not_bring(self):
+        # a norm that replaces the CUIS: B-001 is not in it, so it rules until the day before; A-042 gets its new version
+        self.run_main(CUIS)
+        self.core.requests.clear()
+        code, out, err = self.run_main(f"{CABECERA}\n{NUEVA}", "--completo")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.writes(), [("POST", ic.ENDPOINT), ("POST", ic.DEROGACION)])
+        b001 = self.versiones()["ADMINISTRATIVA|B-001|2026-01-01"]
+        self.assertEqual((b001["vigencia_hasta"], b001["clave_vigente"]), ("2026-06-30", None))
+        self.assertEqual(b001["porcentaje_uit"], "25.5", "the derogated version keeps its figures")
+        self.assertIn("  derogate ADMINISTRATIVA|B-001: vigencia_hasta 2026-06-30", out)
+        self.assertIn(f"{OBJECT}: 1 created, 1 closed, 0 skipped, 1 derogated", out)
+        # idempotent: a second run writes nothing
+        self.core.requests.clear()
+        code, out, err = self.run_main(f"{CABECERA}\n{NUEVA}", "--completo")
+        self.assertEqual((code, self.writes()), (0, []))
+        self.assertIn(f"{OBJECT}: 0 created, 0 closed, 1 skipped, 0 derogated", out)
+
+    def test_without_completo_a_code_the_file_does_not_bring_is_left_alone(self):
+        self.run_main(CUIS)
+        code, out, err = self.run_main(f"{CABECERA}\n{NUEVA}")
+        self.assertEqual(code, 0, err)
+        self.assertIsNone(self.versiones()["ADMINISTRATIVA|B-001|2026-01-01"].get("vigencia_hasta"))
+
+    def test_a_complete_file_has_one_vigencia_desde(self):
+        self.run_main(CUIS)
+        self.core.requests.clear()
+        code, out, err = self.run_main(CUIS + NUEVA, "--completo")
+        self.assertEqual(code, 2)
+        self.assertIn("--completo pide una sola vigencia_desde en el archivo; trae 2026-01-01, 2026-07-01", err)
+        self.assertEqual(self.writes(), [])
 
     def test_a_refusal_exits_1(self):
         self.core.fail_on_record = OBJECT
