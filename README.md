@@ -760,9 +760,22 @@ que lo nombra. La ficha da el estado, la vigencia, lo devengado (`{importe, al_d
 actos que devengan hasta ese día, no una deuda) y `acciones` (`{renovacion, cese, retiro}`, cada una
 `{permitida, motivo}`). `GET /api/srtm/anuncios/tasas?anio` da la tasa de cada clase y las que faltan, nunca un 0.
 
-**Ninguna cifra inventada.** La tasa es de ordenanza (D-02b) y el repo no trae ninguna: se carga como `TASA_ANUNCIO`
-con `import_parametros.py`, una por clase y ejercicio completo, sin multiplicar por el área (la fórmula por área está
-pendiente de la ordenanza). Los tests usan tasas ficticias, en un año pasado propio.
+**Ninguna cifra inventada.** La tasa se carga como `TASA_ANUNCIO` con `import_parametros.py`, una por clase y ejercicio
+completo, sin multiplicar por el área (la fórmula por área está pendiente de la ordenanza, D-02b). Los tests usan tasas
+ficticias, en un año pasado propio.
+
+**La de Perené** (`model/data/parametros-anuncios-perene.csv`). Perené no tiene ordenanza de tasa por anuncios: su TUPA 2019
+cobra un derecho de trámite, y se toma como tasa del ejercicio por decisión del usuario. Desde 2026-01-01 (el PDF no dice
+desde cuándo rige el TUPA):
+- S/ 90,20 para LETRERO, PANEL, TOLDO, PANTALLA_DIGITAL y GLOBO_AEROSTATICO (proc. 71 C, anuncio de publicidad
+  exterior en predio o vía pública);
+- S/ 31,00 para BANDEROLA (proc. 73, banderola o pasacalle, cada una, máximo 15 días).
+
+```bash
+cd model
+python3 import_parametros.py --csv data/parametros-anuncios-perene.csv --dry-run
+python3 import_parametros.py --csv data/parametros-anuncios-perene.csv
+```
 
 ## Importar el catastro fiscal
 
@@ -1057,7 +1070,8 @@ se cargan con `import_parametros.py --csv <archivo>`; su forma se revisa antes d
 | `TASA_ANUNCIO` | una `clase_anuncio` (`PANEL`…) | `valor_numerico`: la tasa del ejercicio completo, mayor que 0 |
 
 La UIT es la del predial (`UIT`, en `data/parametros-predial.csv`). Ninguno de estos valores está transcrito y
-verificado en `normativa` todavía: el repo no trae un CSV con cifras reales.
+verificado en `normativa` todavía; la tasa de anuncios de Perené viene de su TUPA (ver [Anuncios y
+propaganda](#anuncios-y-propaganda)).
 
 **El CUIS** se carga con `import_cuis.py`, desde un CSV con `familia,codigo,descripcion,materia,porcentaje_uit,
 porcentaje_uit_segunda,porcentaje_uit_tercera,medida_complementaria,base_legal,vigencia_desde,observacion` y una

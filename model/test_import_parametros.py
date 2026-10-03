@@ -193,6 +193,24 @@ def fila_del(tipo, clave, desde="2026-01-01", hasta=None, **campos):
     return {k: v for k, v in {**fila(tipo, clave, **campos), "vigencia_desde": desde, "vigencia_hasta": hasta}.items() if v is not None}
 
 
+class AnunciosDePereneTests(unittest.TestCase):
+    """data/parametros-anuncios-perene.csv: the TUPA 2019 of Perené, taken as the tasa of the ejercicio."""
+
+    def setUp(self):
+        self.filas = ip.read_parametros(os.path.join(HERE, "data", "parametros-anuncios-perene.csv"))
+
+    def test_every_clase_has_its_tasa_and_every_row_fits(self):
+        self.assertEqual(ip.errores(self.filas), [])
+        self.assertEqual(sorted(f["clave"] for f in self.filas), sorted(ip._clases_de_anuncio()))
+        self.assertEqual({f["tipo"] for f in self.filas}, {"TASA_ANUNCIO"})
+
+    def test_the_figures_of_the_tupa(self):
+        tasas = {f["clave"]: f["valor_numerico"] for f in self.filas}
+        self.assertEqual(tasas.pop("BANDEROLA"), "31.00")
+        self.assertEqual(set(tasas.values()), {"90.20"})
+        self.assertTrue(all(f["vigencia_desde"] == "2026-01-01" and "vigencia_hasta" not in f for f in self.filas))
+
+
 class SancionesYAnunciosRowsTests(unittest.TestCase):
     def test_the_tipos_the_code_reads(self):
         self.assertEqual(ip.TIPOS_SANCIONES, ("PLAZO", "FERIADOS"))
