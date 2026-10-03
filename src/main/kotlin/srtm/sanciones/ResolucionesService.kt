@@ -213,7 +213,8 @@ class ResolucionesService(
     }
 
     // POST /infracciones/resoluciones/{id}/notificacion. 400 by field; 404 for a resolución that does not exist; 422 when
-    // nothing is left to notify (the acta ANULADA or DEJADA_SIN_EFECTO), when the diligencia is before the resolución or
+    // the resolución is not notifiable (Procedimiento.impedimentoDeNotificar: the acta ANULADA, or DEJADA_SIN_EFECTO and
+    // this is not the resolución that left the multa without effect), when the diligencia is before the resolución or
     // after today, without a direccion (none given and the obligado has no domicilio fiscal), or with `faltan` (PLAZO
     // RG_RECURSO, FERIADOS) when it takes effect. a NO_UBICADO makes nothing exigible: another intento follows. under
     // the acta's lock (so it does not cross an anulación) and then the resolución's, where the intento is the count + 1
@@ -246,7 +247,7 @@ class ResolucionesService(
         malas += opcion("resultado", datos.resultado, Opciones.RESULTADOS)
         if (malas.isNotEmpty()) throw ValidationException("La notificación no es válida", malas)
         val acta = registros.get(PAPELETA, Papeleta::class.java, UUID.fromString(resolucion.papeleta))
-        Procedimiento.exigirQueQuedeAlgoQue("notificar", hechos(acta))
+        Procedimiento.exigirNotificable(hechos(acta), resolucion)
         val acto = "la notificación de la resolución $numero"
         OrdenDeLosActos.exigir(acto, fecha, hoy, ActoPrevio("la resolución $numero", resolucion.fecha!!), campo = "fecha_diligencia")
         val direccion = datos.direccion ?: domicilioDelObligado(resolucion, acta)
@@ -256,7 +257,7 @@ class ResolucionesService(
             transaccion.executeAndAwait {
                 candados.bloquear(Candado.ACTA, acta.id!!)
                 // read again under the lock: an anulación or a resolución that left the multa without effect stands
-                Procedimiento.exigirQueQuedeAlgoQue("notificar", hechos(acta))
+                Procedimiento.exigirNotificable(hechos(acta), resolucion)
                 candados.bloquear(Candado.NOTIFICACION_RESOLUCION, resolucion.id!!)
                 val intento =
                     registros.all(NOTIFICACION_RESOLUCION, NotificacionResolucion::class.java, filters = mapOf("resolucion" to resolucion.id)).size + 1

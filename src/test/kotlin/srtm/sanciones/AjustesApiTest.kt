@@ -14,7 +14,7 @@ import java.time.LocalDate
 // figures, in years only this class gives rows to
 class AjustesApiTest : ConSancionesApiTest() {
     @Test
-    fun `a resolución of an acta anulada or dejada sin efecto is not notified, the ficha says why and the panel does not count it`() {
+    fun `nothing of an acta anulada is notified, of one dejada sin efecto only the resolución that did it, and the panel knows`() {
         val (c, codigo) = preparar(ANIO)
         val anulada = registrarActa(codigo, c, "$ANIO-03-06")["id"].asString()
         val sinEfecto = registrarActa(codigo, c, "$ANIO-03-06")["id"].asString()
@@ -27,43 +27,57 @@ class AjustesApiTest : ConSancionesApiTest() {
         val risSinEfecto = dictar(sinEfecto, "$ANIO-03-20")["id"].asString()
         notificar(risSinEfecto, "$ANIO-03-21")
         val descargo = descargar(sinEfecto, "$ANIO-03-08")["id"].asString()
-        dictar(sinEfecto, "$ANIO-03-27", RESOLUCION_RECURSO, descargo, efecto = SE_DEJA_SIN_EFECTO)
+        val rgr = dictar(sinEfecto, "$ANIO-03-27", RESOLUCION_RECURSO, descargo, efecto = SE_DEJA_SIN_EFECTO)["id"].asString()
         val risPendiente = dictar(pendiente, "$ANIO-03-20")["id"].asString()
         notificar(risPendiente, "$ANIO-03-21")
 
         for ((ris, motivo) in listOf(
             risAnulada to "El acta está anulada: no queda nada que notificar",
-            risSinEfecto to "Una resolución dejó sin efecto la multa: no queda nada que notificar"
+            risSinEfecto to "Una resolución dejó sin efecto la multa: esta ya no se notifica"
         )) {
             val problema = tree(send("POST", "$RESOLUCIONES/$ris/notificacion", pedidoNotificacion("$ANIO-03-30"), HttpStatus.UNPROCESSABLE_CONTENT))
             assertEquals(motivo, problema["detail"].asString(), problema.toString())
         }
         notificar(risPendiente, "$ANIO-03-30", resultado = "NO_UBICADO")
 
-        // every resolución of the ficha carries the same text
+        // each resolución of the ficha carries the same text: the RGR that left the multa without effect is notifiable
         val fichaAnulada = expediente(anulada)
         assertEquals(
             listOf(false to "El acta está anulada: no queda nada que notificar"),
             fichaAnulada["resoluciones"].filas().map { it["acciones"]["notificacion"].let { a -> a["permitida"].asBoolean() to a["motivo"].asString() } }
         )
         val fichaSinEfecto = expediente(sinEfecto)
-        assertEquals(2, fichaSinEfecto["resoluciones"].size())
-        assertTrue(fichaSinEfecto["resoluciones"].filas().all { !it["acciones"]["notificacion"]["permitida"].asBoolean() }, fichaSinEfecto.toString())
+        assertEquals(
+            mapOf(
+                risSinEfecto to (false to "Una resolución dejó sin efecto la multa: esta ya no se notifica"),
+                rgr to (true to null)
+            ),
+            fichaSinEfecto["resoluciones"].filas().associate {
+                val a = it["acciones"]["notificacion"]
+                it["id"].asString() to (a["permitida"].asBoolean() to a["motivo"].takeUnless { m -> m.isNull }?.asString())
+            }
+        )
         val notificable = expediente(pendiente)["resoluciones"][0]["acciones"]["notificacion"]
         assertTrue(notificable["permitida"].asBoolean())
         assertTrue(notificable["motivo"].isNull, notificable.toString())
 
         // the detalle reads in words and dd/MM/yyyy
         val actos = fichaSinEfecto["actos"].filas().associate { it["acto"].asString() + "|" + it["documento"].asString() to it["detalle"].asString() }
-        val rgr = fichaSinEfecto["resoluciones"].filas().single { it["tipo"].asString() == RESOLUCION_RECURSO }["numero"].asString()
-        assertEquals("Infundado, se deja sin efecto. Sin notificar", actos["Resolución del recurso|$rgr"], actos.toString())
+        val numeroRgr = fichaSinEfecto["resoluciones"].filas().single { it["tipo"].asString() == RESOLUCION_RECURSO }["numero"].asString()
+        assertEquals("Infundado, se deja sin efecto. Sin notificar", actos["Resolución del recurso|$numeroRgr"], actos.toString())
         val numeroRis = fichaSinEfecto["resoluciones"].filas().single { it["tipo"].asString() == RESOLUCION_ADMINISTRATIVA }["numero"].asString()
         assertEquals("Notificada el 21/03/$ANIO", actos["Resolución de sanción|$numeroRis"], actos.toString())
         assertTrue(actos["Notificación de la resolución|$numeroRis (intento 1)"]!!.startsWith("Notificado, exigible desde el "), actos.toString())
         val noUbicado = expediente(pendiente)["actos"].filas().last()
         assertEquals("No ubicado", noUbicado["detalle"].asString())
 
-        // the three RIS were dictated; only the pending acta's is notified
+        // the RGR is served like any other: its plazo (RG_RECURSO) runs from the diligencia
+        val notificada = notificar(rgr, "$ANIO-03-30")
+        assertEquals(1, notificada["intento"].asInt())
+        assertFalse(notificada["exigible_desde"].isNull, notificada.toString())
+        assertEquals("15 DIAS_HABILES", notificada["plazo_texto"].asString())
+
+        // the three RIS were dictated; only the pending acta's is notified (a RGR is not a RIS: it does not count)
         val panel = tree(send("GET", "/api/srtm/infracciones/panel?anio=$ANIO", null, HttpStatus.OK))
         assertEquals(listOf(3, 3, 1), listOf(panel["actas"], panel["resoluciones"], panel["notificadas"]).map { it.asInt() }, panel.toString())
     }

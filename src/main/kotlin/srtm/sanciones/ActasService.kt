@@ -355,9 +355,12 @@ class ActasService(
             en(NOTIFICACION_RESOLUCION, NotificacionResolucion::class.java, "resolucion", resoluciones.mapNotNull { it.id })
                 .groupBy { it.resolucion!! }
                 .mapValues { (_, ns) -> ns.sortedBy { it.intento } }
-        // a notificación has nothing left to notify on an ANULADA or DEJADA_SIN_EFECTO acta: the same text its 422 gives
-        val notificacion = AccionesDeLaResolucion(accion(Procedimiento.impedimento("notificar", h)))
-        val conNotificaciones = resoluciones.map { ResolucionConNotificaciones(it, notificacionesDe[it.id].orEmpty(), notificacion) }
+        // whether each resolución is notified now, with the same text its 422 gives
+        val conNotificaciones =
+            resoluciones.map { r ->
+                val notificacion = AccionesDeLaResolucion(accion(Procedimiento.impedimentoDeNotificar(h, r)))
+                ResolucionConNotificaciones(r, notificacionesDe[r.id].orEmpty(), notificacion)
+            }
         return ExpedienteDelActa(
             acta = acta,
             referencia = referenciaDePapeleta(acta.id),
