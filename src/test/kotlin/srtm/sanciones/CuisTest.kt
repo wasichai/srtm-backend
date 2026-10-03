@@ -92,4 +92,39 @@ class CuisTest {
         val vigente = codigo(desde = "2026-07-01")
         assertThrows(NoProcede::class.java) { Cuis.versionNueva(listOf(cerrada, vigente), d("2026-03-01")) }
     }
+
+    @Test
+    fun `a derogation ends the version in force on its day, both ends counting, and changes nothing else`() {
+        val vigente = codigo(desde = "2021-01-26")
+        val derogada = Cuis.derogar(vigente, d("2026-05-06"))
+        assertEquals(vigente.copy(vigenciaHasta = d("2026-05-06"), claveVigente = null), derogada)
+        assertTrue(Cuis.rigeEn(derogada, d("2026-05-06")), "its last day")
+        assertFalse(Cuis.rigeEn(derogada, d("2026-05-07")), "the day after")
+        assertEquals(emptyList<Any>(), invariantes(derogada), "the derogated row still holds")
+        // a version may rule a single day
+        assertEquals(d("2021-01-26"), Cuis.derogar(vigente, d("2021-01-26")).vigenciaHasta)
+    }
+
+    @Test
+    fun `a closed version is not derogated (409), nor before it started (422)`() {
+        val cerrada = Cuis.cerrar(codigo(desde = "2026-01-01"), d("2026-03-01"))
+        assertThrows(ConflictException::class.java) { Cuis.derogar(cerrada, d("2026-04-01")) }
+        val antes = assertThrows(NoProcede::class.java) { Cuis.derogar(codigo(desde = "2026-06-01"), d("2026-05-31")) }
+        assertEquals(listOf("vigencia_hasta"), antes.violations.map { it.field })
+    }
+
+    @Test
+    fun `a multa of the CUIEMA of Perené goes over the UIT, up to 100 UIT`() {
+        assertEquals(emptyList<Any>(), invariantes(codigo(primera = "1000", segunda = null, tercera = null)))
+        assertEquals(emptyList<Any>(), invariantes(codigo(primera = "10000", segunda = null, tercera = null)))
+        assertEquals(listOf("porcentaje_uit"), invariantes(codigo(primera = "10000.01", segunda = null, tercera = null)).map { it.field })
+    }
+
+    @Test
+    fun `the descripcion, medida and base legal of a norm as long as Perené's fit`() {
+        val larga = codigo().copy(descripcion = "d".repeat(1000), medidaComplementaria = "m".repeat(500), baseLegal = "b".repeat(2000))
+        assertEquals(emptyList<Any>(), invariantes(larga))
+        val demasiado = larga.copy(descripcion = "d".repeat(1001), medidaComplementaria = "m".repeat(501), baseLegal = "b".repeat(2001))
+        assertEquals(listOf("descripcion", "medida_complementaria", "base_legal"), invariantes(demasiado).map { it.field })
+    }
 }

@@ -1,5 +1,5 @@
 """A scripted fake wasichai Core for the tests: metadata routes plus in-memory records, and srtm's
-POST /api/srtm/infracciones/cuis (what import_cuis.py calls) as the service does it.
+POST /api/srtm/infracciones/cuis and /cuis/derogacion (what import_cuis.py calls) as the service does it.
 
 Adapted from wasichai's examples/gis-sample/perene/test_apply.py. Test helper only.
 """
@@ -154,10 +154,28 @@ class FakeCore:
         cerrada = {"id": vigente["id"], **vigente["attributes"]} if vigente is not None else None
         return 201, {"id": nueva["id"], **nueva["attributes"], "cerrada": cerrada}
 
+    def _derogacion(self, body):
+        """srtm's derogation of a code: its version in force rules until vigencia_hasta and clave_vigente is emptied.
+        A code without versions is a 404, without one in force a 409, a day before it started a 422."""
+        familia = body.get("familia") or "ADMINISTRATIVA"
+        codigo = f"{familia}|{body['codigo']}"
+        versiones = [r for r in self.records.get("codigo_infraccion", []) if r["attributes"].get("clave", "").startswith(codigo + "|")]
+        if not versiones:
+            return 404, {"detail": f"El código {body['codigo']} no está en el CUIS"}
+        vigente = next((r for r in versiones if r["attributes"].get("clave_vigente") == codigo), None)
+        if vigente is None:
+            return 409, {"detail": "ya está cerrado"}
+        if date.fromisoformat(body["vigencia_hasta"]) < date.fromisoformat(vigente["attributes"]["vigencia_desde"]):
+            return 422, {"detail": "vigencia_hasta es anterior a vigencia_desde"}
+        vigente["attributes"].update(vigencia_hasta=body["vigencia_hasta"], clave_vigente=None)
+        return 200, {"id": vigente["id"], **vigente["attributes"]}
+
     def _script(self, method, full_path, body):
         path, _, query = full_path.partition("?")
         if path == CUIS and method == "POST":
             return self._cuis(body)
+        if path == CUIS + "/derogacion" and method == "POST":
+            return self._derogacion(body)
         if path == "/api/auth/login" and method == "POST":
             if self.login_response is not None:
                 return 200, self.login_response

@@ -204,13 +204,14 @@ fun claveDeNotificacionResolucion(
     intento: Int
 ) = "$resolucion|$intento"
 
-// lengths of rentas' columns: core's TEXT has none
+// lengths of rentas' columns: core's TEXT has none. the CUIS's descripción, materia, medida and base legal are wider
+// than rentas': the CUIEMA of Perené (OM 01-2021 and 006-2026-MDP) cites up to 938 characters of base legal
 object Largos {
     const val CODIGO = 20
-    const val DESCRIPCION = 500
-    const val MATERIA = 60
-    const val MEDIDA = 160
-    const val BASE_LEGAL = 200
+    const val DESCRIPCION = 1000
+    const val MATERIA = 120
+    const val MEDIDA = 500
+    const val BASE_LEGAL = 2000
     const val NUMERO = 20
     const val DIRECCION = 300
     const val MOTIVO = 500
@@ -226,6 +227,9 @@ object Largos {
     const val DOCUMENTO = 20
     const val VINCULO = 40
     const val ACUSE = 80
+
+    // a multa of the CUIS goes over the UIT: Perené's reach 1000 % (10 UIT). up to 100 UIT
+    val PORCENTAJE_UIT: BigDecimal = BigDecimal(10000)
 }
 
 private val HORA = Regex("""([01]\d|2[0-3]):[0-5]\d""")
@@ -239,9 +243,9 @@ fun invariantes(c: CodigoInfraccion): List<FieldViolation> {
     v.codigo("codigo", c.codigo, Largos.CODIGO)
     v.texto("descripcion", c.descripcion, Largos.DESCRIPCION, obligatorio = true)
     v.texto("materia", c.materia, Largos.MATERIA)
-    v.porcentaje("porcentaje_uit", c.porcentajeUit, obligatorio = true)
-    v.porcentaje("porcentaje_uit_segunda", c.porcentajeUitSegunda)
-    v.porcentaje("porcentaje_uit_tercera", c.porcentajeUitTercera)
+    v.porcentaje("porcentaje_uit", c.porcentajeUit, obligatorio = true, maximo = Largos.PORCENTAJE_UIT)
+    v.porcentaje("porcentaje_uit_segunda", c.porcentajeUitSegunda, maximo = Largos.PORCENTAJE_UIT)
+    v.porcentaje("porcentaje_uit_tercera", c.porcentajeUitTercera, maximo = Largos.PORCENTAJE_UIT)
     v.texto("medida_complementaria", c.medidaComplementaria, Largos.MEDIDA)
     v.texto("base_legal", c.baseLegal, Largos.BASE_LEGAL, obligatorio = true)
     v.requerido("vigencia_desde", c.vigenciaDesde)
@@ -292,9 +296,9 @@ fun invariantes(p: Papeleta): List<FieldViolation> {
     v.requerido("reincidencia", p.reincidencia)
     v.texto("medida_complementaria", p.medidaComplementaria, Largos.MEDIDA)
     if (v.requerido("base_imponible", p.baseImponible) && p.baseImponible!!.signum() <= 0) v.mal("base_imponible", "la UIT es mayor que 0")
-    v.porcentaje("porcentaje_infraccion", p.porcentajeInfraccion, obligatorio = true)
+    v.porcentaje("porcentaje_infraccion", p.porcentajeInfraccion, obligatorio = true, maximo = Largos.PORCENTAJE_UIT)
     v.importe("importe_infraccion", p.importeInfraccion)
-    v.porcentaje("porcentaje_a_cobrar", p.porcentajeACobrar, obligatorio = true)
+    v.porcentaje("porcentaje_a_cobrar", p.porcentajeACobrar, obligatorio = true, maximo = Largos.PORCENTAJE_UIT)
     v.importe("importe_a_pagar", p.importeAPagar)
     v.importe("importe_con_beneficio", p.importeConBeneficio, obligatorio = false)
     v.requerido("fecha_calculo", p.fechaCalculo)

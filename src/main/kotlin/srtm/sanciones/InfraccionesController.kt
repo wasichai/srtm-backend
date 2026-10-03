@@ -47,6 +47,12 @@ class InfraccionesController(
         @RequestBody pedido: PedidoVersionCuis
     ): VersionCuisCreada = cuis.nuevaVersion(pedido)
 
+    // 200 with the version derogated, flat: it rules until vigencia_hasta and no version follows it
+    @PostMapping("/cuis/derogacion")
+    suspend fun derogar(
+        @RequestBody pedido: PedidoDerogacionCuis
+    ): CodigoInfraccion = cuis.derogar(pedido)
+
     @GetMapping("/notificaciones")
     suspend fun notificaciones(
         @RequestParam params: Map<String, String>
