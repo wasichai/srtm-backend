@@ -25,7 +25,7 @@ class OrdenDeLosActosTest {
     fun `before the previo is a 422 that names both dates`() {
         val e = assertThrows(ActoFueraDeOrden::class.java) { OrdenDeLosActos.exigir("la anulación del acta AC-0001", d("2026-03-03"), hoy, infraccion) }
         assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, e.status)
-        assertEquals("La anulación del acta AC-0001 no puede fecharse el 2026-03-03: es anterior a la infracción del acta AC-0001, del 2026-03-04", e.message)
+        assertEquals("La anulación del acta AC-0001 no puede fecharse el 03/03/2026: es anterior a la infracción del acta AC-0001, del 04/03/2026", e.message)
         assertEquals(listOf("fecha"), e.violations.map { it.field })
         assertEquals(infraccion, e.previo)
     }
@@ -45,7 +45,7 @@ class OrdenDeLosActosTest {
             assertThrows(ActoFueraDeOrden::class.java) {
                 OrdenDeLosActos.exigir("la notificación de la RIS-2026-000001", d("2026-03-21"), hoy, infraccion, campo = "fecha_diligencia")
             }
-        assertEquals("La notificación de la RIS-2026-000001 no puede fecharse el 2026-03-21: es posterior a hoy, 2026-03-20", e.message)
+        assertEquals("La notificación de la RIS-2026-000001 no puede fecharse el 21/03/2026: es posterior a hoy, 20/03/2026", e.message)
         assertEquals(listOf("fecha_diligencia"), e.violations.map { it.field })
         assertNull(e.previo)
     }

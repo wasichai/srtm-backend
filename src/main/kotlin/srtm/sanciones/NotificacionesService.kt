@@ -90,9 +90,11 @@ class NotificacionesService(
 ) {
     private val transaccion = TransactionalOperator.create(transacciones)
 
-    // GET /infracciones/notificaciones: the newest first. numero is the whole number; desde and hasta bound fecha
+    // GET /infracciones/notificaciones: the newest first, as they stood at vencidas_a: one dated after it did not exist
+    // yet. numero is the whole number; q, a part of it in any case; desde and hasta bound fecha
     suspend fun pagina(
         numero: String?,
+        q: String?,
         contribuyente: UUID?,
         desde: LocalDate?,
         hasta: LocalDate?,
@@ -111,7 +113,11 @@ class NotificacionesService(
                     sort = "fecha",
                     descending = true,
                     filters = filtros,
-                    criteria = listOfNotNull(Filtros.entre("fecha", desde, hasta))
+                    criteria =
+                        listOfNotNull(
+                            Filtros.entre("fecha", desde, hasta?.let { minOf(it, vencidasA) } ?: vencidasA),
+                            q?.let { Filtros.contiene(Cuis.normalizar(it), "numero") }
+                        )
                 )
             )
         val hechos = hechos(pagina.content)
@@ -119,8 +125,8 @@ class NotificacionesService(
     }
 
     // GET /infracciones/notificaciones/vencidas: the ones neither subsanadas nor with an acta, vencidas at `corte`, the
-    // oldest vencimiento first. vencida is Notificaciones.vencida, here as everywhere: the candidates are read (only
-    // those with a plazo, from before corte: a vencida has both) and the page is cut after deriving them
+    // oldest vencimiento first. vencida, subsanada and acta are derivar's at corte, here as everywhere: the candidates
+    // are read (only those with a plazo, from before corte: a vencida has both) and the page is cut after deriving them
     suspend fun vencidas(
         corte: LocalDate,
         page: Int,
@@ -131,9 +137,10 @@ class NotificacionesService(
         val hechos = hechos(candidatas)
         val vencidas =
             candidatas
-                .filter { Notificaciones.vencida(it, corte) && it.id !in hechos.subsanaciones && it.id !in hechos.actas }
-                .sortedWith(compareBy({ Notificaciones.vencimiento(it.fecha!!, it.plazoDias) }, { it.numero }))
-        val filas = vencidas.drop(page * size).take(size).map { derivar(it, corte, hechos).copy(corte = corte) }
+                .map { derivar(it, corte, hechos) }
+                .filter { it.vencida && it.subsanada == null && it.acta == null }
+                .sortedWith(compareBy({ it.vencimiento }, { it.registro.numero }))
+        val filas = vencidas.drop(page * size).take(size).map { it.copy(corte = corte) }
         return PageResponse.of(filas, page, size, vencidas.size.toLong())
     }
 
@@ -145,7 +152,7 @@ class NotificacionesService(
         size: Int
     ): PageResponse<NotificacionPrevia> {
         registros.get(CONTRIBUYENTE, Contribuyente::class.java, contribuyente)
-        return pagina(null, contribuyente, null, null, hoy, page, size)
+        return pagina(null, null, contribuyente, null, null, hoy, page, size)
     }
 
     // POST /infracciones/notificaciones: 201 with the record and its derivados at `hoy`. a contribuyente or predio
@@ -238,25 +245,28 @@ class NotificacionesService(
         )
     }
 
-    // one notificación with what is derived at `al`
-    fun derivar(
-        n: NotificacionAdministrativa,
-        al: LocalDate,
-        hechos: HechosDeNotificaciones
-    ) = NotificacionPrevia(
-        registro = n,
-        vencimiento = Notificaciones.vencimiento(n.fecha!!, n.plazoDias),
-        vencida = Notificaciones.vencida(n, al),
-        vencidasA = al,
-        subsanada = hechos.subsanaciones[n.id]?.let { Subsanada(it.fecha!!) },
-        acta = hechos.actas[n.id]?.let { ActaDeLaNotificacion(it.id!!, it.numero!!) },
-        contribuyenteNombre = n.contribuyente?.let { hechos.contribuyentes[it]?.nombreCompleto }
-    )
-
     // a notificación with a plazo, dated before `corte`: every vencida is one (plazo_dias is at least 1)
     private fun conPlazoAntesDe(corte: LocalDate) =
         RecordCriterion { definition, bind ->
             fun columna(campo: String) = "\"${definition.fields.first { it.name == campo }.columnName}\""
             "${columna("plazo_dias")} IS NOT NULL AND ${columna("fecha")} < ${bind(corte)}"
         }
+
+    companion object {
+        // one notificación with what is derived at `al` (pure: the hechos are an argument). a subsanación or an acta
+        // dated after `al` had not happened yet: the padrón at a past day shows the notificación as it stood then
+        fun derivar(
+            n: NotificacionAdministrativa,
+            al: LocalDate,
+            hechos: HechosDeNotificaciones
+        ) = NotificacionPrevia(
+            registro = n,
+            vencimiento = Notificaciones.vencimiento(n.fecha!!, n.plazoDias),
+            vencida = Notificaciones.vencida(n, al),
+            vencidasA = al,
+            subsanada = hechos.subsanaciones[n.id]?.takeIf { it.fecha!! <= al }?.let { Subsanada(it.fecha!!) },
+            acta = hechos.actas[n.id]?.takeIf { it.fechaInfraccion!! <= al }?.let { ActaDeLaNotificacion(it.id!!, it.numero!!) },
+            contribuyenteNombre = n.contribuyente?.let { hechos.contribuyentes[it]?.nombreCompleto }
+        )
+    }
 }

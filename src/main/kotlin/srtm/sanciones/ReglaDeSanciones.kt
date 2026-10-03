@@ -5,6 +5,7 @@ import srtm.ReglaDeEscritura
 import srtm.fecha
 import srtm.iguales
 import srtm.leerRegistro
+import srtm.legible
 import wasichai.core.common.ConflictException
 import wasichai.core.common.FieldViolation
 import wasichai.core.common.ValidationException
@@ -71,7 +72,7 @@ class ReglaDeSanciones : ReglaDeEscritura {
                 ?: throw ConflictException("De una versión del CUIS solo se cierra la vigencia: cerrarla es poner vigencia_hasta")
         val desde = fecha(guardado["vigencia_desde"])
         if (desde != null && hasta < desde) {
-            throw ValidationException("La vigencia termina antes de empezar", VIGENCIA_HASTA, "no es anterior a vigencia_desde ($desde)")
+            throw ValidationException("La vigencia termina antes de empezar", VIGENCIA_HASTA, "no es anterior a vigencia_desde (${desde.legible()})")
         }
         if (nuevo[CLAVE_VIGENTE] != null) {
             throw ValidationException("Una versión cerrada deja de ser la vigente", CLAVE_VIGENTE, "queda vacía (null) al cerrarse")

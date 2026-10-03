@@ -87,6 +87,28 @@ object Procedimiento {
         impedimento(verbo, h)?.let { throw NoProcede(it) }
     }
 
+    // why `resolucion` is not notified now, or null: nothing of an ANULADA acta; of a DEJADA_SIN_EFECTO one, only the
+    // resolución that left the multa without effect (it is served like any other, and its plazo runs from it). the
+    // ficha's acciones.notificacion shows this same text
+    fun impedimentoDeNotificar(
+        h: HechosDelActa,
+        resolucion: ResolucionGerencia
+    ): String? =
+        when (estadoDeLaDeuda(h)) {
+            ANULADA -> impedimento("notificar", h)
+            DEJADA_SIN_EFECTO ->
+                if (resolucion.efecto == SE_DEJA_SIN_EFECTO) null else "Una resolución dejó sin efecto la multa: esta ya no se notifica"
+            else -> null
+        }
+
+    // a notificación of `resolucion` needs it to be notifiable (422)
+    fun exigirNotificable(
+        h: HechosDelActa,
+        resolucion: ResolucionGerencia
+    ) {
+        impedimentoDeNotificar(h, resolucion)?.let { throw NoProcede(it) }
+    }
+
     // an anulación: once (409), and not of an acta left without effect (422)
     fun exigirAnulable(h: HechosDelActa) {
         if (h.anulacion != null) throw ConflictException(ANULADA_YA)

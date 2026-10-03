@@ -1,5 +1,6 @@
 package srtm.sanciones
 
+import srtm.legible
 import wasichai.core.common.ConflictException
 import wasichai.core.common.FieldViolation
 import java.time.LocalDate
@@ -30,7 +31,9 @@ object Cuis {
         nuevaDesde: LocalDate
     ): CodigoInfraccion {
         if (vigente.vigenciaHasta != null) {
-            throw ConflictException("La versión de ${vigente.codigo} del ${vigente.vigenciaDesde} ya está cerrada (el ${vigente.vigenciaHasta})")
+            throw ConflictException(
+                "La versión de ${vigente.codigo} del ${vigente.vigenciaDesde!!.legible()} ya está cerrada (el ${vigente.vigenciaHasta.legible()})"
+            )
         }
         if (nuevaDesde <= vigente.vigenciaDesde!!) throw noPosterior(vigente, nuevaDesde)
         return vigente.copy(vigenciaHasta = nuevaDesde.minusDays(1), claveVigente = null)
@@ -53,8 +56,8 @@ object Cuis {
         version: CodigoInfraccion,
         nuevaDesde: LocalDate
     ) = NoProcede(
-        "La versión nueva de ${version.codigo} rige desde el $nuevaDesde: no es posterior a la del ${version.vigenciaDesde}" +
-            (version.vigenciaHasta?.let { ", que rige hasta el $it" } ?: ", la vigente"),
-        listOf(FieldViolation("vigencia_desde", "es posterior a la versión del ${version.vigenciaDesde}"))
+        "La versión nueva de ${version.codigo} rige desde el ${nuevaDesde.legible()}: no es posterior a la del ${version.vigenciaDesde!!.legible()}" +
+            (version.vigenciaHasta?.let { ", que rige hasta el ${it.legible()}" } ?: ", la vigente"),
+        listOf(FieldViolation("vigencia_desde", "es posterior a la versión del ${version.vigenciaDesde!!.legible()}"))
     )
 }

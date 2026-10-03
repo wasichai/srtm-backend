@@ -47,13 +47,13 @@ class ResolucionesApiTest : ConSancionesApiTest() {
         assertEquals(listOf(enPlazo["id"].asString(), tardio["id"].asString()), ficha["descargos"].filas().map { it["id"].asString() })
         val actos = ficha["actos"].filas()
         assertEquals(listOf("Acta de constatación", "Recurso de reconsideración", "Descargo"), actos.map { it["acto"].asString() })
-        assertEquals("En plazo (hasta el $ANIO_PASADO-03-12)", actos[1]["detalle"].asString())
-        assertEquals("Fuera de plazo (venció el $ANIO_PASADO-03-12)", actos[2]["detalle"].asString())
+        assertEquals("En plazo (hasta el 12/03/$ANIO_PASADO)", actos[1]["detalle"].asString())
+        assertEquals("Fuera de plazo (venció el 12/03/$ANIO_PASADO)", actos[2]["detalle"].asString())
 
         val repetido = tree(send("POST", "$ACTAS/$acta/descargos", pedidoDescargo("$ANIO_PASADO-03-12", expediente = expediente), HttpStatus.CONFLICT))
         assertTrue(repetido["detail"].asString().contains(expediente), repetido.toString())
         val antes = tree(send("POST", "$ACTAS/$acta/descargos", pedidoDescargo("$ANIO_PASADO-03-03"), HttpStatus.UNPROCESSABLE_CONTENT))
-        assertTrue(antes["detail"].asString().contains("$ANIO_PASADO-03-03") && antes["detail"].asString().contains("$ANIO_PASADO-03-04"), antes.toString())
+        assertTrue(antes["detail"].asString().contains("03/03/$ANIO_PASADO") && antes["detail"].asString().contains("04/03/$ANIO_PASADO"), antes.toString())
         send("POST", "$ACTAS/$acta/descargos", pedidoDescargo(LocalDate.now().plusDays(1).toString()), HttpStatus.UNPROCESSABLE_CONTENT)
         send("POST", "$ACTAS/${UUID.randomUUID()}/descargos", pedidoDescargo("$ANIO_PASADO-03-12"), HttpStatus.NOT_FOUND)
         rejected("POST", "$ACTAS/$acta/descargos", pedidoDescargo("$ANIO_PASADO-03-12", tipo = "QUEJA"), "tipo_recurso")
@@ -191,7 +191,7 @@ class ResolucionesApiTest : ConSancionesApiTest() {
         send("POST", resoluciones, pedidoResolucion("$ANIO_PASADO-03-25", sentido = "FUNDADO", efecto = SE_MANTIENE), HttpStatus.UNPROCESSABLE_CONTENT)
         // not before the presentación of the descargo it resolves
         val antes = tree(send("POST", resoluciones, pedidoResolucion("$ANIO_PASADO-03-21", RESOLUCION_RECURSO, descargo), HttpStatus.UNPROCESSABLE_CONTENT))
-        assertTrue(antes["detail"].asString().contains("$ANIO_PASADO-03-22"), antes.toString())
+        assertTrue(antes["detail"].asString().contains("22/03/$ANIO_PASADO"), antes.toString())
         // a descargo of another acta, or none at all
         val otra = registrarActa(codigo, c)["id"].asString()
         val ajeno =
@@ -335,7 +335,7 @@ class ResolucionesApiTest : ConSancionesApiTest() {
         val ficha = expediente(acta)
         assertEquals(listOf(1, 2, 3), ficha["resoluciones"][0]["notificaciones"].filas().map { it["intento"].asInt() })
         assertEquals("Notificación de la resolución", ficha["actos"].filas().last()["acto"].asString())
-        assertTrue(ficha["actos"].filas().any { it["detalle"].asString() == "NOTIFICADO, exigible desde el $ANIO_PASADO-04-16" }, ficha.toString())
+        assertTrue(ficha["actos"].filas().any { it["detalle"].asString() == "Notificado, exigible desde el 16/04/$ANIO_PASADO" }, ficha.toString())
 
         // an obligado without a domicilio fiscal: the direccion has to be given
         val sinDomicilio = dictar(registrarActa(codigo, inscribir())["id"].asString(), "$ANIO_PASADO-03-20")["id"].asString()

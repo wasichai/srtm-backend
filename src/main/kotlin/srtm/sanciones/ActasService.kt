@@ -11,6 +11,7 @@ import srtm.Candado
 import srtm.Candados
 import srtm.Observacion
 import srtm.impuesto.ParametrosTributarios
+import srtm.legible
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
 import srtm.rentas.PREDIO
@@ -123,10 +124,45 @@ data class AccionesDelActa(
     val anulacion: AccionDelActa
 )
 
+// what the rules allow on a resolución now: its notificación
+data class AccionesDeLaResolucion(
+    val notificacion: AccionDelActa
+)
+
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class ResolucionConNotificaciones(
     @get:JsonUnwrapped val resolucion: ResolucionGerencia,
-    val notificaciones: List<NotificacionResolucion>
+    val notificaciones: List<NotificacionResolucion>,
+    val acciones: AccionesDeLaResolucion
+)
+
+// the parties of an expediente as the ficha names them: the obligado with the domicilio fiscal a resolución is
+// notified at, the contribuyente and the predio the acta names (null when it names none). a field the reader may not
+// see, or that is blank, is null
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class ObligadoDelActa(
+    val id: String,
+    val nombre: String?,
+    val documento: String?,
+    val domicilioFiscal: String?
+)
+
+data class ContribuyenteDelActa(
+    val id: String,
+    val nombre: String?,
+    val documento: String?
+)
+
+data class PredioDelActa(
+    val id: String,
+    val codigo: String?,
+    val direccion: String?
+)
+
+data class PartesDelActa(
+    val obligado: ObligadoDelActa,
+    val contribuyente: ContribuyenteDelActa?,
+    val predio: PredioDelActa?
 )
 
 // GET /infracciones/actas/{id}: the acta with every act recorded about it, in legal order
@@ -137,6 +173,7 @@ data class ExpedienteDelActa(
     // the version in force on the infracción's day, the one the multa was computed with (closed since, maybe)
     val codigoInfraccion: CodigoInfraccion,
     val notificacionPrevia: NotificacionAdministrativa?,
+    val partes: PartesDelActa,
     val actos: List<ActoDelExpediente>,
     val descargos: List<DescargoPapeleta>,
     val resoluciones: List<ResolucionConNotificaciones>,
@@ -251,7 +288,9 @@ class ActasService(
             criterios += Filtros.entre("codigo_infraccion", versiones.mapNotNull { it.id })
         }
         filtros.administrado?.let { texto ->
-            val ids = registros.donde(CONTRIBUYENTE, Contribuyente::class.java, listOf(documentoONombre(texto))).mapNotNull { it.id }
+            // a contribuyente whose documento or nombre contains it
+            val criterio = Filtros.contiene(texto, "numero_documento", "nombre_completo")
+            val ids = registros.donde(CONTRIBUYENTE, Contribuyente::class.java, listOf(criterio)).mapNotNull { it.id }
             if (ids.isEmpty()) return vacia
             criterios += Filtros.entre("obligado", ids)
         }
@@ -316,12 +355,18 @@ class ActasService(
             en(NOTIFICACION_RESOLUCION, NotificacionResolucion::class.java, "resolucion", resoluciones.mapNotNull { it.id })
                 .groupBy { it.resolucion!! }
                 .mapValues { (_, ns) -> ns.sortedBy { it.intento } }
-        val conNotificaciones = resoluciones.map { ResolucionConNotificaciones(it, notificacionesDe[it.id].orEmpty()) }
+        // whether each resolución is notified now, with the same text its 422 gives
+        val conNotificaciones =
+            resoluciones.map { r ->
+                val notificacion = AccionesDeLaResolucion(accion(Procedimiento.impedimentoDeNotificar(h, r)))
+                ResolucionConNotificaciones(r, notificacionesDe[r.id].orEmpty(), notificacion)
+            }
         return ExpedienteDelActa(
             acta = acta,
             referencia = referenciaDePapeleta(acta.id),
             codigoInfraccion = codigo,
             notificacionPrevia = h.previa,
+            partes = partes(acta),
             actos = Expedientes.actos(acta, codigo, h, descargos, conNotificaciones, hoy),
             descargos = descargos,
             resoluciones = conNotificaciones,
@@ -405,6 +450,13 @@ class ActasService(
         return actas.map { fila(it, hechos.getValue(it.id!!), obligados[it.obligado], codigos[it.codigoInfraccion], corte) }
     }
 
+    // the obligado, the contribuyente and the predio the acta names, read once each
+    private suspend fun partes(acta: Papeleta): PartesDelActa {
+        val personas = registros.byIds(CONTRIBUYENTE, Contribuyente::class.java, listOfNotNull(acta.obligado, acta.contribuyente))
+        val predio = acta.predio?.let { registros.byIds(PREDIO, Predio::class.java, listOf(it))[it] }
+        return Partes.de(acta, personas, predio)
+    }
+
     // the version of `codigo` in force on `fecha`, or a 422 that names both
     private suspend fun versionDelDia(
         codigo: String,
@@ -418,11 +470,11 @@ class ActasService(
             } else {
                 "sus versiones rigen " +
                     versiones.sortedBy { it.vigenciaDesde }.joinToString(", ") { v ->
-                        "desde el ${v.vigenciaDesde}" +
-                            (v.vigenciaHasta?.let { " hasta el $it" } ?: "")
+                        "desde el ${v.vigenciaDesde!!.legible()}" +
+                            (v.vigenciaHasta?.let { " hasta el ${it.legible()}" } ?: "")
                     }
             }
-        throw NoProcede("El código $codigo no rige el $fecha: $porque", listOf(FieldViolation("codigo", "no rige el $fecha")))
+        throw NoProcede("El código $codigo no rige el ${fecha.legible()}: $porque", listOf(FieldViolation("codigo", "no rige el ${fecha.legible()}")))
     }
 
     // the acta as asked, every field it is given checked before anything is read: a 400 that names each one
@@ -522,13 +574,5 @@ class ActasService(
         fun ordenadas(filas: List<FilaDeActa>) = filas.sortedWith(compareByDescending<FilaDeActa> { it.fechaInfraccion }.thenBy { it.numero })
 
         private fun accion(impedimento: String?) = AccionDelActa(impedimento == null, impedimento)
-
-        // a contribuyente whose documento or nombre contains `texto`, in any case (LIKE's wildcards taken literally)
-        private fun documentoONombre(texto: String) =
-            RecordCriterion { definition, bind ->
-                fun columna(campo: String) = "\"${definition.fields.first { it.name == campo }.columnName}\""
-                val patron = "%" + texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-                "${columna("numero_documento")} ILIKE ${bind(patron)} OR ${columna("nombre_completo")} ILIKE ${bind(patron)}"
-            }
     }
 }

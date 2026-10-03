@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import srtm.impuesto.ParametrosTributarios
+import srtm.sanciones.Filtros.entero
 import srtm.sanciones.Filtros.fecha
 import srtm.sanciones.Filtros.id
 import srtm.sanciones.Filtros.page
@@ -19,13 +21,16 @@ import wasichai.core.common.PageResponse
 import java.time.LocalDate
 import java.util.UUID
 
-// the CUIS and the notificaciones previas of the portal (SPEC §7, Multas). a query parameter an endpoint does not know,
-// or cannot read, is a 422 that names it; an act answers 201. «hoy» is the server's day
+// the CUIS, the notificaciones previas, the plazos loaded and the panel of the portal (SPEC §7, Multas). a query
+// parameter an endpoint does not know, or cannot read, is a 422 that names it; an act answers 201. «hoy» is the
+// server's day
 @RestController
 @RequestMapping("/api/srtm/infracciones")
 class InfraccionesController(
     private val cuis: CuisService,
-    private val notificaciones: NotificacionesService
+    private val notificaciones: NotificacionesService,
+    private val paneles: PanelService,
+    private val parametros: ParametrosTributarios
 ) {
     @GetMapping("/cuis")
     suspend fun cuis(
@@ -46,9 +51,10 @@ class InfraccionesController(
     suspend fun notificaciones(
         @RequestParam params: Map<String, String>
     ): PageResponse<NotificacionPrevia> {
-        soloConoce(params, "numero", "contribuyente", "desde", "hasta", "vencidas_a", "page", "size")
+        soloConoce(params, "numero", "q", "contribuyente", "desde", "hasta", "vencidas_a", "page", "size")
         return notificaciones.pagina(
             texto(params, "numero"),
+            texto(params, "q"),
             id(params, "contribuyente"),
             fecha(params, "desde"),
             fecha(params, "hasta"),
@@ -86,5 +92,31 @@ class InfraccionesController(
         soloConoce(params, "contribuyente", "page", "size")
         val contribuyente = id(params, "contribuyente") ?: throw ParametroInvalido("contribuyente", "es obligatorio: el id del contribuyente")
         return notificaciones.delContribuyente(contribuyente, LocalDate.now(), page(params), size(params))
+    }
+
+    // the year's counts (anio, by default the current one) and the previas that end this week, at today
+    @GetMapping("/panel")
+    suspend fun panel(
+        @RequestParam params: Map<String, String>
+    ): PanelDeInfracciones {
+        soloConoce(params, "anio")
+        val hoy = LocalDate.now()
+        return paneles.panel(entero(params, "anio", hoy.year, ANIOS), hoy)
+    }
+
+    // the PLAZO and FERIADOS rows of the year (anio, by default the current one) that the acts would read: always a
+    // 200, what is missing in faltan
+    @GetMapping("/plazos")
+    suspend fun plazos(
+        @RequestParam params: Map<String, String>
+    ): PlazosCargados {
+        soloConoce(params, "anio")
+        val hoy = LocalDate.now()
+        return Plazos.cargados(entero(params, "anio", hoy.year, ANIOS), hoy, parametros.todos())
+    }
+
+    private companion object {
+        // a year as the arbitrios read it
+        val ANIOS = 1900..9999
     }
 }

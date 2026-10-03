@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
+import srtm.legible
 import tools.jackson.databind.JsonNode
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -111,7 +112,7 @@ class ActasApiTest : ConSancionesApiTest() {
         post(CUIS, version(codigo, "$ANIO_PASADO-06-01", tercera = null))
 
         val antes = tree(send("POST", ACTAS, pedidoActa(codigo, c, "$ANIO_PASADO-03-04"), HttpStatus.UNPROCESSABLE_CONTENT))
-        assertTrue(antes["detail"].asString().contains(codigo) && antes["detail"].asString().contains("$ANIO_PASADO-03-04"), antes.toString())
+        assertTrue(antes["detail"].asString().contains(codigo) && antes["detail"].asString().contains("04/03/$ANIO_PASADO"), antes.toString())
         assertEquals("codigo", antes["errors"][0]["field"].asString())
         val inexistente = tree(send("POST", ACTAS, pedidoActa("NO-${uniqueDocumento()}", c), HttpStatus.UNPROCESSABLE_CONTENT))
         assertTrue(inexistente["detail"].asString().contains("no está en el CUIS"), inexistente.toString())
@@ -170,7 +171,7 @@ class ActasApiTest : ConSancionesApiTest() {
         assertTrue(problema["detail"].asString().contains("subsanada"), problema.toString())
         val posterior = post(NOTIFICACIONES, notificacion(numeroNp(), "$ANIO_PASADO-03-10", c))["id"].asString()
         val antes = tree(send("POST", ACTAS, pedidoActa(codigo, c, "$ANIO_PASADO-03-04", previa = posterior), HttpStatus.UNPROCESSABLE_CONTENT))
-        assertTrue(antes["detail"].asString().contains("$ANIO_PASADO-03-04") && antes["detail"].asString().contains("$ANIO_PASADO-03-10"), antes.toString())
+        assertTrue(antes["detail"].asString().contains("04/03/$ANIO_PASADO") && antes["detail"].asString().contains("10/03/$ANIO_PASADO"), antes.toString())
         assertEquals(posterior, registrarActa(codigo, c, "$ANIO_PASADO-03-10", previa = posterior)["notificacion_previa"].asString())
     }
 
@@ -298,8 +299,8 @@ class ActasApiTest : ConSancionesApiTest() {
         }
 
         assertEquals("PREVENTIVA", expediente(preventiva)["fase"].asString())
-        assertEquals("Vence el $hoy", expediente(preventiva)["actos"][0]["detalle"].asString())
-        assertEquals("Vencida el ${hoy.minusDays(1)}", expediente(constatada)["actos"][0]["detalle"].asString())
+        assertEquals("Vence el ${hoy.legible()}", expediente(preventiva)["actos"][0]["detalle"].asString())
+        assertEquals("Vencida el ${hoy.minusDays(1).legible()}", expediente(constatada)["actos"][0]["detalle"].asString())
         val anuladaFicha = expediente(anulada)
         assertTrue(anuladaFicha["fase"].isNull, anuladaFicha.toString())
         assertEquals("ANULADA", anuladaFicha["estado_de_la_deuda"].asString())
@@ -339,7 +340,7 @@ class ActasApiTest : ConSancionesApiTest() {
         assertEquals(listOf("$ANIO_PASADO-03-02", "$ANIO_PASADO-03-04"), actos.map { it["fecha"].asString() })
         assertEquals(listOf(npNumero, a["numero"].asString()), actos.map { it["documento"].asString() })
         assertEquals(listOf(n, id), actos.map { it["id"].asString() })
-        assertEquals("Vencida el $ANIO_PASADO-03-07", actos[0]["detalle"].asString())
+        assertEquals("Vencida el 07/03/$ANIO_PASADO", actos[0]["detalle"].asString())
 
         // a descargo, the RIS notified, the recurso that leaves it without effect
         val descargo = descargo(id)

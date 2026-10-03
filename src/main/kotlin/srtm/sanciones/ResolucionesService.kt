@@ -213,9 +213,11 @@ class ResolucionesService(
     }
 
     // POST /infracciones/resoluciones/{id}/notificacion. 400 by field; 404 for a resolución that does not exist; 422 when
-    // the diligencia is before the resolución or after today, without a direccion (none given and the obligado has no
-    // domicilio fiscal), or with `faltan` (PLAZO RG_RECURSO, FERIADOS) when it takes effect. a NO_UBICADO makes nothing
-    // exigible: another intento follows. the intento is the count + 1 under the resolución's lock
+    // the resolución is not notifiable (Procedimiento.impedimentoDeNotificar: the acta ANULADA, or DEJADA_SIN_EFECTO and
+    // this is not the resolución that left the multa without effect), when the diligencia is before the resolución or
+    // after today, without a direccion (none given and the obligado has no domicilio fiscal), or with `faltan` (PLAZO
+    // RG_RECURSO, FERIADOS) when it takes effect. a NO_UBICADO makes nothing exigible: another intento follows. under
+    // the acta's lock (so it does not cross an anulación) and then the resolución's, where the intento is the count + 1
     suspend fun notificar(
         resolucionId: UUID,
         pedido: PedidoNotificacionResolucion,
@@ -244,13 +246,18 @@ class ResolucionesService(
         malas += opcion("modalidad", datos.modalidad, Opciones.MODALIDADES)
         malas += opcion("resultado", datos.resultado, Opciones.RESULTADOS)
         if (malas.isNotEmpty()) throw ValidationException("La notificación no es válida", malas)
+        val acta = registros.get(PAPELETA, Papeleta::class.java, UUID.fromString(resolucion.papeleta))
+        Procedimiento.exigirNotificable(hechos(acta), resolucion)
         val acto = "la notificación de la resolución $numero"
         OrdenDeLosActos.exigir(acto, fecha, hoy, ActoPrevio("la resolución $numero", resolucion.fecha!!), campo = "fecha_diligencia")
-        val direccion = datos.direccion ?: domicilioDelObligado(resolucion)
+        val direccion = datos.direccion ?: domicilioDelObligado(resolucion, acta)
         val exigibilidad =
             NotificacionesDeResolucion.exigibilidad(resolucion.tipo!!, datos.resultado!!, fecha, parametros.todos()).exigir("registrar $acto")
         return try {
             transaccion.executeAndAwait {
+                candados.bloquear(Candado.ACTA, acta.id!!)
+                // read again under the lock: an anulación or a resolución that left the multa without effect stands
+                Procedimiento.exigirNotificable(hechos(acta), resolucion)
                 candados.bloquear(Candado.NOTIFICACION_RESOLUCION, resolucion.id!!)
                 val intento =
                     registros.all(NOTIFICACION_RESOLUCION, NotificacionResolucion::class.java, filters = mapOf("resolucion" to resolucion.id)).size + 1
@@ -274,8 +281,10 @@ class ResolucionesService(
 
     // the obligado's domicilio fiscal (rentas' direccionDe: srtm keeps no history of domicilios, so the one in force on
     // the diligencia is the active one), or a 422 that says there is no address to notify at
-    private suspend fun domicilioDelObligado(resolucion: ResolucionGerencia): String {
-        val acta = registros.get(PAPELETA, Papeleta::class.java, UUID.fromString(resolucion.papeleta))
+    private suspend fun domicilioDelObligado(
+        resolucion: ResolucionGerencia,
+        acta: Papeleta
+    ): String {
         val obligado = registros.get(CONTRIBUYENTE, Contribuyente::class.java, UUID.fromString(acta.obligado))
         return domicilioFiscalDe(obligado)
             ?: throw NoProcede(

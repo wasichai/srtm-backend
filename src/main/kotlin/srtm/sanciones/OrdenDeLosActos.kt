@@ -1,5 +1,6 @@
 package srtm.sanciones
 
+import srtm.legible
 import java.time.LocalDate
 
 // an act this one answers: what it is, as the operator reads it («la infracción del acta AC-0001»), and its day
@@ -30,8 +31,8 @@ object OrdenDeLosActos {
         // the latest one it breaks: the bound the operator has to respect, so the date is corrected once
         val incumplido = previos.filter { fecha < it.fecha }.maxByOrNull { it.fecha }
         if (incumplido != null) {
-            throw ActoFueraDeOrden(acto, fecha, incumplido, campo, "es anterior a ${incumplido.nombre}, del ${incumplido.fecha}")
+            throw ActoFueraDeOrden(acto, fecha, incumplido, campo, "es anterior a ${incumplido.nombre}, del ${incumplido.fecha.legible()}")
         }
-        if (fecha > hoy) throw ActoFueraDeOrden(acto, fecha, null, campo, "es posterior a hoy, $hoy")
+        if (fecha > hoy) throw ActoFueraDeOrden(acto, fecha, null, campo, "es posterior a hoy, ${hoy.legible()}")
     }
 }

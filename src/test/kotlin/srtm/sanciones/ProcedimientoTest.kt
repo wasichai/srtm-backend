@@ -141,4 +141,28 @@ class ProcedimientoTest {
         assertEquals("El acta ya está anulada", Procedimiento.impedimentoDeAnular(anulada))
         assertNull(Procedimiento.impedimento("resolver", HechosDelActa()))
     }
+
+    @Test
+    fun `nothing is notified of an ANULADA acta, and of a DEJADA_SIN_EFECTO one only the resolucion that left it without effect`() {
+        val ris = resolucion(correlativo = 1)
+        val sinEfecto = resolucion(RESOLUCION_RECURSO, SE_DEJA_SIN_EFECTO, "desc-1", correlativo = 2)
+        val seMantiene = resolucion(RESOLUCION_RECURSO, SE_MANTIENE, "desc-2", correlativo = 3)
+
+        assertNull(Procedimiento.impedimentoDeNotificar(HechosDelActa(resoluciones = listOf(ris, seMantiene)), ris))
+        assertNull(Procedimiento.impedimentoDeNotificar(HechosDelActa(resoluciones = listOf(ris, seMantiene)), seMantiene))
+
+        val dejada = HechosDelActa(resoluciones = listOf(ris, sinEfecto, seMantiene))
+        assertNull(Procedimiento.impedimentoDeNotificar(dejada, sinEfecto), "it is served like any other")
+        val noSe = "Una resolución dejó sin efecto la multa: esta ya no se notifica"
+        assertEquals(noSe, Procedimiento.impedimentoDeNotificar(dejada, ris))
+        assertEquals(noSe, Procedimiento.impedimentoDeNotificar(dejada, seMantiene))
+        assertDoesNotThrow { Procedimiento.exigirNotificable(dejada, sinEfecto) }
+        assertEquals(noSe, assertThrows(NoProcede::class.java) { Procedimiento.exigirNotificable(dejada, ris) }.message)
+
+        // anulada, not even the one that left it without effect
+        val anulada = dejada.copy(anulacion = anulacion())
+        for (r in listOf(ris, sinEfecto)) {
+            assertEquals("El acta está anulada: no queda nada que notificar", Procedimiento.impedimentoDeNotificar(anulada, r))
+        }
+    }
 }

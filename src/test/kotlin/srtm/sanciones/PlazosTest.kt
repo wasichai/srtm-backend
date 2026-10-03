@@ -112,4 +112,60 @@ class PlazosTest {
         val sinRecurso = Resoluciones.plazo(RESOLUCION_ADMINISTRATIVA, d("2026-08-03"), listOf(plazo(Llaves.DESCARGO_PAPELETA, "5")))
         assertEquals(listOf("PLAZO RG_RECURSO 2026"), sinRecurso.faltan)
     }
+
+    @Test
+    fun `the plazos loaded for a past year are the rows in force on january 1st, with the year's feriados`() {
+        val descargo = plazo(Llaves.DESCARGO_PAPELETA, "5", "2025-01-01", "2025-12-31")
+        val recurso = plazo(Llaves.RG_RECURSO, "15", "2020-01-01")
+        // one from february does not rule on january 1st
+        val tardio = plazo(Llaves.DESCARGO_PAPELETA, "7", "2025-02-01")
+        val cargados = Plazos.cargados(2025, d("2026-10-03"), listOf(descargo, recurso, tardio, feriados(2025, "2025-06-29", "2025-04-17")))
+
+        assertEquals(2025, cargados.anio)
+        assertEquals(d("2025-01-01"), cargados.alDia)
+        assertEquals(
+            listOf(
+                PlazoCargado(Llaves.DESCARGO_PAPELETA, 5, Llaves.DIAS_HABILES, "5 DIAS_HABILES", d("2025-01-01"), d("2025-12-31"), descargo.id),
+                PlazoCargado(Llaves.RG_RECURSO, 15, Llaves.DIAS_HABILES, "15 DIAS_HABILES", d("2020-01-01"), null, recurso.id)
+            ),
+            cargados.plazos
+        )
+        assertEquals(FeriadosCargados(listOf(d("2025-04-17"), d("2025-06-29")), "feriados-2025"), cargados.feriados)
+        assertEquals(emptyList<String>(), cargados.faltan)
+    }
+
+    @Test
+    fun `in the current year they are the ones in force today`() {
+        val enero = plazo(Llaves.RG_RECURSO, "15", "2026-01-01", "2026-06-30")
+        val julio = plazo(Llaves.RG_RECURSO, "10", "2026-07-01")
+        val cargados = Plazos.cargados(2026, d("2026-10-03"), listOf(enero, julio, feriados(2026)))
+        assertEquals(d("2026-10-03"), cargados.alDia)
+        assertEquals(listOf(10), cargados.plazos.map { it.dias })
+        assertEquals(FeriadosCargados(emptyList(), "feriados-2026"), cargados.feriados, "a year declared without movable feriados")
+        assertEquals(listOf("PLAZO DESCARGO_PAPELETA 2026"), cargados.faltan)
+    }
+
+    @Test
+    fun `what is missing or malformed goes in faltan, named as an act would name it`() {
+        val nada = Plazos.cargados(2027, d("2026-10-03"), emptyList())
+        assertEquals(emptyList<PlazoCargado>(), nada.plazos)
+        assertEquals(null, nada.feriados)
+        assertEquals(listOf("PLAZO DESCARGO_PAPELETA 2027", "PLAZO RG_RECURSO 2027", "FERIADOS 2027"), nada.faltan)
+
+        val malos =
+            Plazos.cargados(
+                2027,
+                d("2026-10-03"),
+                listOf(plazo(Llaves.RG_RECURSO, "15", "2027-01-01", unidad = "DIAS"), feriados(2027, "29/06/2027"))
+            )
+        assertEquals(
+            listOf(
+                "PLAZO DESCARGO_PAPELETA 2027",
+                "PLAZO RG_RECURSO 2027: es un número entero de días mayor que 0 en DIAS_HABILES",
+                "FERIADOS 2027: no son fechas AAAA-MM-DD de 2027 separadas por comas"
+            ),
+            malos.faltan
+        )
+        assertEquals(null, malos.feriados)
+    }
 }

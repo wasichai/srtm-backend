@@ -2,6 +2,7 @@ package srtm.sanciones
 
 import org.springframework.http.HttpStatus
 import org.springframework.http.ProblemDetail
+import srtm.legible
 import wasichai.core.common.FieldViolation
 import wasichai.core.common.WasichaiException
 import wasichai.core.platform.WasichaiWebProperties
@@ -29,7 +30,7 @@ class ActoFueraDeOrden(
     val previo: ActoPrevio?,
     campo: String,
     motivo: String
-) : NoProcede("${acto.replaceFirstChar { it.uppercase() }} no puede fecharse el $fecha: $motivo", listOf(FieldViolation(campo, motivo)))
+) : NoProcede("${acto.replaceFirstChar { it.uppercase() }} no puede fecharse el ${fecha.legible()}: $motivo", listOf(FieldViolation(campo, motivo)))
 
 // a figure, or what is missing to give it: never both. a query answers 200 with the faltan; an act throws them
 data class Resultado<T>(
