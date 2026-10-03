@@ -14,7 +14,22 @@ enum class Candado(
     val clase: Int
 ) {
     // the correlativo of a numbered serie in a year: AN-AAAA-NNNNNN
-    SERIE(0x5352_0001)
+    SERIE(0x5352_0001),
+
+    // the versions of one CUIS code: closing the one in force and adding the next are one step (familia|codigo)
+    CODIGO_INFRACCION(0x5352_0002),
+
+    // a notificación previa: its subsanación and the acta that names it do not cross (the notificación's id)
+    NOTIFICACION(0x5352_0003),
+
+    // an acta: the acts that end it (its anulación, a resolución that leaves it without effect) do not cross (its id)
+    ACTA(0x5352_0004),
+
+    // the correlativo of a resolución's serie in a year: RIS-AAAA-NNNNNN and RGR-AAAA-NNNNNN (tipo|anio)
+    RESOLUCION(0x5352_0005),
+
+    // a resolución's notificaciones: each intento is the count so far + 1 (the resolución's id)
+    NOTIFICACION_RESOLUCION(0x5352_0006)
 }
 
 // postgres' transaction advisory locks, by kind and key (caja-backend's Candados). wasichai has no row lock nor

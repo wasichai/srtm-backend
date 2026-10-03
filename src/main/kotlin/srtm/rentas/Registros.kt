@@ -55,6 +55,29 @@ class Registros(
         return rows.map { read(type, it) }
     }
 
+    // every record that meets `criteria` (conditions a module writes on the object's columns; core binds their
+    // values) and `filters`, page by page
+    suspend fun <T : Any> donde(
+        objectName: String,
+        type: Class<T>,
+        criteria: List<RecordCriterion>,
+        filters: Map<String, String> = emptyMap(),
+        sort: String? = null
+    ): List<T> {
+        val rows = mutableListOf<RecordResponse>()
+        var page = 0
+        do {
+            val result =
+                records.list(
+                    objectName,
+                    RecordQuery(page = PageRequest.of(page, PageRequest.MAX_SIZE), sort = sort, filters = filters, criteria = criteria)
+                )
+            rows += result.content
+            page++
+        } while (page < result.totalPages)
+        return rows.map { read(type, it) }
+    }
+
     suspend fun <T : Any> get(
         objectName: String,
         type: Class<T>,

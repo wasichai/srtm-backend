@@ -480,6 +480,231 @@ actualiza ni borra cuotas ni anulaciones; anular pide creación sobre `anulacion
 ratificación (E-6 del plan de desbloqueo D-02 de `normativa`). Hasta que la haya, el repo no lleva ni el JSON ni el CSV
 de tasas, y los tests usan valores ficticios escritos dentro del propio test.
 
+## Infracciones administrativas
+
+Las multas administrativas (familia `ADMINISTRATIVA`) se portan del contexto `sanciones` de `rentas`: el modelo, la
+guardia de escritura y la carga del CUIS (ver [Modelo](#modelo)), las reglas puras de `srtm.sanciones` y su api bajo
+`/api/srtm/infracciones/...`: el CUIS, las notificaciones previas con sus padrones, los plazos cargados y el panel
+(`InfraccionesController`),
+las actas (`ActasController`) y los descargos, las resoluciones con su PDF y sus notificaciones
+(`ResolucionesController`). srtm no cobra: la multa queda determinada en el acta, sin deuda, pagos ni coactiva
+([Siguientes pasos](#siguientes-pasos-fuera-de-este-alcance)).
+
+### API de infracciones
+
+Bajo `/api/srtm/infracciones`, con las convenciones de arbitrios: registros en snake_case con los nombres del modelo,
+relaciones como id, fechas ISO, dinero como número (los textos para leer, como los `detail` de los 409/422 y el
+`detalle` de los actos, citan las fechas en `dd/MM/yyyy`, con `srtm.legible()`). Un parámetro de consulta desconocido o mal formado es **422** y lo
+nombra en `errors` (`Filtros.soloConoce`). Cada acto pide permiso de creación sobre su objeto **antes** de leer nada
+(**403** que nombra el objeto), exige `observacion` de 5 a 500 caracteres (**400**) y escribe con la marca de srtm
+(`Registros.create`/`replace`): la API genérica no escribe estos objetos (POST **403**, PUT/DELETE **409**, también un
+ADMIN). `FaltanSanciones` sale como **422** con `faltan: [...]` (`ErroresDeSanciones`, para todos los controladores de
+`srtm.sanciones`).
+
+| Método | Ruta | |
+|---|---|---|
+| GET | `/cuis?vigentes_a&materia&q` | `{vigentes_a, uit: {valor, anio, parametro_id} \| null, faltan, codigos}`: las versiones vigentes ese día (por omisión hoy), por código; `materia` y `q` (código o descripción) buscan una parte. Cada código lleva `multa`, `multa_segunda` y `multa_tercera` a la UIT de `vigentes_a` (`Multas.calcular`); null si el grado no tiene % o si no hay UIT. Sin UIT: `uit: null` y `faltan: ["UIT 2026"]`. Siempre 200. Es también el reporte de códigos del brief: el catálogo vigente a una fecha, con sus multas. |
+| POST | `/cuis` `{familia?, codigo, descripcion, materia?, porcentaje_uit, porcentaje_uit_segunda?, porcentaje_uit_tercera?, medida_complementaria?, base_legal, vigencia_desde, observacion}` | **201** con el registro plano de la versión nueva y `cerrada` (la que cerró, o null). **409** si esa versión (`familia\|codigo\|vigencia_desde`) ya existe; **422** si no empieza después de la vigente (o pisa una cerrada); **400** por campo. Es lo que llama `import_cuis.py`. |
+| GET | `/notificaciones?numero&q&contribuyente&desde&hasta&vencidas_a&page&size` | Página (`size` 20 por omisión) de notificaciones, la más reciente primero, **como estaban a `vencidas_a`** (por omisión hoy): el registro plano + `vencimiento` (null sin plazo), `vencida`, `vencidas_a`, `subsanada: {fecha} \| null`, `acta: {id, numero} \| null` y `contribuyente_nombre`. Una notificación fechada después de `vencidas_a` no sale (no existía), y la subsanación y el acta solo cuentan si su fecha es ≤ `vencidas_a`. `numero` es el número entero (exacto); `q`, una parte del número sin distinguir mayúsculas (`%` y `_` se toman literales); `contribuyente`, su id. |
+| POST | `/notificaciones` `{numero, fecha, contribuyente?, predio?, direccion, motivo, plazo_dias?, observacion}` | **201** con la fila de arriba. **404** si el contribuyente o el predio no existen; **409** si el número ya está; **422** si la fecha es posterior a hoy; **400** por campo (`plazo_dias` de 1 a 32767). |
+| POST | `/notificaciones/{id}/subsanacion` `{fecha?, observacion}` | **201** con la subsanación. `fecha` por omisión hoy. **409** si ya está subsanada; **422** si venció a esa fecha, si ya originó un acta, o si la fecha es posterior a hoy o anterior a la notificación. |
+| GET | `/notificaciones/vencidas?corte&page&size` | El padrón de vencidas: las no subsanadas, sin acta y vencidas a `corte` (por omisión hoy; con la misma regla de fechas: un acta posterior al corte no la saca), la de vencimiento más antiguo primero; cada fila es la de arriba más `corte` (y `vencimiento` nunca es null). |
+| GET | `/notificaciones/por-contribuyente?contribuyente&page&size` | El padrón por contribuyente: las del contribuyente (obligatorio, su id; **404** si no existe), la más reciente primero, con las filas de arriba a hoy. |
+| GET | `/panel?anio` | `{anio, al_dia, actas, resoluciones, notificadas, vencen_esta_semana, semana: {desde, hasta}, coactiva: null, nota}` del año (por omisión el actual) a hoy ([Panel](#panel)); `notificadas` no cuenta las RIS de actas anuladas o dejadas sin efecto. `coactiva` siempre es null y `nota` dice por qué: «En coactiva no existe en srtm: no hay cobranza». **422** si `anio` no es un año o con otro parámetro; **403** sin lectura sobre lo que cuenta. |
+| GET | `/plazos?anio` | `{anio, al_dia, plazos: [{clave, dias, unidad, texto, vigencia_desde, vigencia_hasta, parametro_id}], feriados: {fechas, parametro_id} \| null, faltan}`: los `PLAZO DESCARGO_PAPELETA` y `PLAZO RG_RECURSO` vigentes al 1 de enero del año (por omisión el actual; en el año en curso, a hoy: `al_dia` es el día leído) y el `FERIADOS <anio>` (sus fechas movibles, ordenadas), leídos como los leen los actos (`Plazos.cargados`). Lo que falta o está mal formado va en `faltan` con el nombre que daría el 422 de un acto (`PLAZO RG_RECURSO 2027`, `FERIADOS 2027`). Siempre 200; **422** si `anio` no es un año o con otro parámetro. |
+| POST | `/actas` `{numero, fecha_infraccion, hora_infraccion?, lugar, codigo, reincidencia, obligado, contribuyente?, predio?, notificacion_previa?, expediente?, inspector?, descripcion_hecho?, observacion}` | **201** con el registro plano de `papeleta` + `referencia` (`PAPELETA-<id>`) + `desglose {base_imponible, porcentaje_infraccion, importe_infraccion, porcentaje_a_cobrar, importe_a_pagar, importe_con_beneficio, fecha_calculo}`. `codigo` es el texto del CUIS; `hora_infraccion` `HH:mm`. **422** si el código no rige ese día (nombra código y fecha), con `faltan` (`UIT 1991`, `CUIS A-042 porcentaje_uit_segunda`, todos a la vez), si la previa está subsanada o si la fecha es posterior a hoy o anterior a la previa; **404** si el obligado, el contribuyente, el predio o la previa no existen; **409** si el número ya está; **400** por campo (contribuyente o predio, al menos uno). |
+| GET | `/actas?numero&administrado&codigo&fase&desde&hasta&page&size` | Página de filas `{id, numero, fecha_infraccion, administrado, documento, codigo, descripcion_infraccion, porcentaje_infraccion, importe_a_pagar, fecha_calculo, medida_complementaria, fase, fase_al_dia, estado_de_la_deuda}`, la infracción más reciente primero. `administrado` busca una parte del documento o del nombre del obligado; `codigo`, el texto del CUIS (cualquier versión); `fase` ∈ PREVENTIVA, CONSTATADA, SANCIONADA (otra → **422** que las nombra). `fase` es null en un acta anulada o dejada sin efecto. |
+| GET | `/actas/{id}` | `{acta, referencia, codigo_infraccion (la versión usada), notificacion_previa, partes, actos: [{orden, acto, fecha, documento, id, detalle}], descargos, resoluciones, anulacion, fase, fase_al_dia, estado_de_la_deuda, acciones: {descargo, resolucion, anulacion: {permitida, motivo}}}`. `partes` = `{obligado: {id, nombre, documento, domicilio_fiscal \| null}, contribuyente: {id, nombre, documento} \| null, predio: {id, codigo, direccion \| null} \| null}`. Cada resolución lleva sus `notificaciones` y `acciones: {notificacion: {permitida, motivo}}` (impedida si el acta está anulada, o si está dejada sin efecto y la resolución no es la que la dejó sin efecto, con el texto del 422). `detalle` es legible: fechas `dd/MM/yyyy` y palabras («Fundado, se deja sin efecto», «No ubicado»), no los códigos. |
+| POST | `/actas/{id}/anulacion` `{motivo, fecha?, observacion}` | **201** con el registro plano de `anulacion_papeleta` (`clave` = id del acta). `fecha` por omisión hoy. **409** si ya está anulada; **422** si una resolución la dejó sin efecto, o si la fecha es anterior a la infracción o posterior a hoy. |
+| POST | `/actas/{id}/descargos` `{numero_expediente, tipo_recurso, fecha, sustento, observacion}` | **201** con el registro plano de `descargo_papeleta`: `presentado_hasta`, `en_plazo`, `plazo_texto` (`5 DIAS_HABILES`) y la relación `plazo` (la fila leída). El tardío se registra con `en_plazo: false`. **422** con `faltan` (`PLAZO DESCARGO_PAPELETA 1991`, `FERIADOS 1991`; no escribe nada), si el acta está anulada o sin efecto, o si la fecha es anterior a la infracción o posterior a hoy; **409** si el expediente ya está; **404** si el acta no existe; **400** por campo. |
+| POST | `/actas/{id}/resoluciones` `{tipo, descargo, sentido, efecto, fecha?, sustento, sancion_accesoria, observacion}` | **201** con el registro plano de `resolucion_gerencia`: `numero` (`RIS-AAAA-NNNNNN` o `RGR-AAAA-NNNNNN`), `anio`, `correlativo`, `plazo_texto` y `plazo`. Lo que no aplica va null; `fecha` por omisión hoy. **422** con `faltan` (`PLAZO RG_RECURSO 1991`), por `SE_REDUCE`, por una RECURSO sin descargo, por un fallo sin descargo (o un descargo sin fallo), por un descargo de otra acta, si el acta está anulada o sin efecto, o si la fecha es anterior a la infracción o al descargo, o posterior a hoy; **409** por una segunda RIS del acta o una segunda resolución del descargo; **404** si el acta o el descargo no existen. |
+| GET | `/resoluciones/{id}/pdf` | La resolución en PDF, `inline; filename="RIS-1991-000001.pdf"`, dibujada otra vez desde las filas congeladas. **404** si no existe; **403** sin lectura sobre `resolucion_gerencia`. |
+| POST | `/resoluciones/{id}/notificacion` `{fecha_diligencia?, modalidad, resultado, notificador, direccion, receptor, documento_receptor, vinculo, acuse, observacion}` | **201** con el registro plano de `notificacion_resolucion`: `intento`, la `direccion` usada (sin `direccion`, el domicilio fiscal del obligado) y, si surte efecto (NOTIFICADO o RECHAZADO), `exigible_desde`, `plazo_texto` y `plazo`; con NO_UBICADO van null. `fecha_diligencia` por omisión hoy. **422** si el acta está anulada («no queda nada que notificar») o, dejada sin efecto, si no es la resolución que la dejó sin efecto («esta ya no se notifica»; la que la dejó sin efecto se notifica como cualquiera), sin dirección (ni dada ni domicilio fiscal), con `faltan` (`PLAZO RG_RECURSO`, `FERIADOS`) si surte efecto, o si la diligencia es anterior a la resolución o posterior a hoy; **404** si la resolución no existe. |
+
+Y bajo `/api/srtm`, en las fichas: `GET /contribuyentes/{id}/infracciones` (las actas donde es el obligado o el
+contribuyente) y `GET /predios/{id}/infracciones` (las que nombran el predio) responden `{al_dia, actas: [fila]}`, con
+las filas de `GET /actas` a hoy; **404** si el contribuyente o el predio no existen.
+
+### CUIS
+
+El cuadro único de infracciones y sanciones se versiona por vigencia: un cambio nunca edita una fila. `CuisService`
+agrega la versión nueva y cierra la vigente (`vigencia_hasta` = el día antes, `clave_vigente` = NULL, con
+`registros.replace`) en **una transacción**, bajo el candado consultivo `Candado.CODIGO_INFRACCION` de
+`familia|codigo` (`srtm.Candados`, `pg_advisory_xact_lock`). Dentro del candado vuelve a leer las versiones del código
+y aplica `Cuis.versionNueva`: dos versiones nuevas a la vez no se pisan (una espera a la otra; la misma versión dos
+veces da 409). La versión cerrada conserva sus cifras, y un acta que la usó sigue apuntándola. El código se recorta y
+se pasa a mayúsculas; `familia` por omisión es `ADMINISTRATIVA` (otra es 400). Los porcentajes llegan como número o
+como texto (`import_cuis.py` manda las celdas del CSV como texto).
+
+### Notificaciones previas
+
+`NotificacionesService` registra la notificación previa (número del formulario, único y en mayúsculas) y su
+subsanación, que es un objeto que se agrega (una por notificación: `clave` = id de la notificación). Lo derivado nunca
+se guarda: `vencimiento` y `vencida` salen de `Notificaciones` (el último día del plazo todavía vale, #411; sin plazo
+no vence), la subsanación de su registro y el acta de la `papeleta` que la nombra (`notificacion_previa`). La
+subsanación toma el candado `Candado.NOTIFICACION` del id de la notificación y aplica
+`Notificaciones.exigirSubsanable`; el alta del acta toma el mismo candado para que no se crucen ([Actas](#actas)). El padrón de
+vencidas lee las candidatas (con plazo y fecha anterior al corte), aplica `Notificaciones.vencida` y corta la página
+después: la definición de vencida es una sola.
+
+**El padrón a una fecha pasada** muestra cada notificación como estaba ese día (`NotificacionesService.derivar(n, al,
+hechos)`, pura): la subsanación y el acta solo cuentan si su fecha (la de la subsanación, la de la infracción) es ≤
+`vencidas_a`, y el padrón no trae las notificaciones fechadas después de `vencidas_a` (`hasta`, si se da, no pasa de
+ahí). El padrón de vencidas usa la misma regla al `corte`. `q` busca una parte del número (`Filtros.contiene`, `ILIKE`
+con los comodines escapados); `numero` sigue siendo exacto.
+
+### Actas
+
+`ActasService` registra el acta (papeleta, familia `ADMINISTRATIVA`) con su multa **calculada una vez y congelada**:
+toma la versión del código que rige el día de la infracción (`Cuis.vigenteA` sobre las versiones de ese código, no la
+última), la UIT vigente ese día (`Multas.uit`) y aplica `Multas.calcular` con el grado que declara el inspector. Copia
+en la fila el desglose, la `medida_complementaria` de la versión y las relaciones `codigo_infraccion` (la versión
+usada) y `uit` (la fila leída): corregir la fila de la UIT o agregar una versión nueva del CUIS no cambia un acta ya
+escrita. `fecha_calculo` es el día del registro. El número se recorta y se pasa a mayúsculas, y `clave` =
+`familia|numero` lo hace único. El `obligado` es explícito (no se deduce) y el acta nombra un contribuyente o un predio,
+al menos uno.
+
+Con `notificacion_previa`, el alta toma el candado `Candado.NOTIFICACION` del id de la notificación (el mismo que la
+subsanación), la vuelve a leer y aplica `Notificaciones.exigirQueOrigineActa` y `OrdenDeLosActos` (la infracción no es
+anterior a la previa), todo en la misma transacción que el insert: un acta y una subsanación de la misma previa a la
+vez no se escriben las dos. La anulación es un objeto que se agrega (`clave` = id del acta), bajo el candado
+`Candado.ACTA` del acta, con `Procedimiento.exigirAnulable` (409 si ya está anulada, 422 si una resolución la dejó sin
+efecto).
+
+La **fase** y el **estado de la deuda** nunca se guardan: `ActasService.hechos(actas)` lee, una consulta por tipo, la
+previa y su subsanación, la anulación y las resoluciones de cada acta, y `Procedimiento.fase` / `estadoDeLaDeuda` los
+derivan a hoy (`fase_al_dia`). Por eso el filtro `fase` de la grilla es el único que no va a la base: con `fase`, la
+consulta lee todas las actas que dejan los demás filtros (número, código, administrado, fechas, en la base), deriva la
+fase de cada una con la misma función que pinta la columna y corta la página después; sin `fase`, pagina en la base.
+Así el filtro encuentra exactamente lo que la columna muestra (#397).
+
+La ficha (`GET /actas/{id}`) lista los actos en **orden legal** (`Expedientes.actos`): la notificación previa, el
+acta, los descargos, las resoluciones, las notificaciones de las resoluciones y la anulación; dentro de cada tipo, por
+fecha. `detalle` dice qué es cada uno hoy, para leerlo: fechas `dd/MM/yyyy` y palabras en vez de códigos (la previa
+«Vence el 15/08/2026» o «Vencida el …», el descargo «En plazo (hasta el …)» o no, la resolución «Fundado, se deja sin
+efecto. Notificada el …», la notificación «No ubicado» o «Notificado, exigible desde el …»). `acciones` sale de las
+reglas: `Procedimiento.impedimento("impugnar")` para el descargo, `Resoluciones.impedimento(hechos, descargos)` para
+la resolución (además de anulada o sin efecto: con la RIS dictada y ningún descargo sin resolver no queda resolución
+que dictar) e `impedimentoDeAnular`, con el mismo texto que daría el acto; cada resolución lleva
+`acciones.notificacion` (`Procedimiento.impedimentoDeNotificar(hechos, resolucion)`: impedida si el acta está
+anulada; si está dejada sin efecto, impedida salvo en la resolución cuyo efecto es `SE_DEJA_SIN_EFECTO`). `partes` (`Partes.de`, pura) nombra al obligado con su documento y su domicilio fiscal vigente (el que usa la
+notificación de una resolución por omisión), al contribuyente y al predio que nombra el acta; lo vacío va null.
+
+### Descargos y resoluciones
+
+`ResolucionesService` registra los actos que contestan un acta, cada uno un objeto que solo se agrega y que **copia**
+lo que leyó:
+
+- **Descargo.** `Descargos.registrar` con el `PLAZO DESCARGO_PAPELETA` y los `FERIADOS` vigentes **el día de la
+  infracción** (como `rentas`): `presentado_hasta`, `en_plazo` y `plazo_texto` quedan en la fila, con la relación
+  `plazo` a la fila leída. El tardío se registra (`en_plazo` false): lo que corresponde es declararlo improcedente.
+  No procede contra un acta anulada o sin efecto (`Procedimiento.exigirQueQuedeAlgoQue("impugnar")`) y su fecha va
+  entre la infracción y hoy (`OrdenDeLosActos`). El número de expediente se recorta, va en mayúsculas y es único.
+- **Resolución.** `Resoluciones.validar` (SE_REDUCE 422, RECURSO con descargo, fallo ⇔ descargo, el descargo es de
+  esta acta, nada contra un acta anulada o sin efecto, una RIS por acta y una por descargo), `OrdenDeLosActos` (después
+  de la infracción y de la presentación del descargo) y el `PLAZO RG_RECURSO` vigente a su fecha, que copia
+  (`plazo_texto`, lo imprime el papel). El número es `RIS-AAAA-NNNNNN` (ADMINISTRATIVA) o `RGR-AAAA-NNNNNN` (RECURSO),
+  por tipo y año de la fecha: el correlativo es el mayor + 1, leído bajo el candado `Candado.RESOLUCION` de
+  `tipo|anio` en la misma transacción que el insert (`numeroDeResolucion`). La transacción toma antes `Candado.ACTA`
+  (el de la anulación): una resolución que deja sin efecto y una anulación no se cruzan, y dentro del candado se
+  vuelve a validar. `clave_ris` (id del acta en la RIS) y `clave_descargo` (id del descargo) son la red de la base.
+  - **El papel se dibuja antes de abrir la transacción**, con los datos que se van a guardar (y el correlativo
+    esperado en ese momento): si no se puede dibujar no se escribe nada, y el dibujo no retiene el candado. No se
+    guardan los bytes: `GET /resoluciones/{id}/pdf` lo vuelve a dibujar de las filas congeladas (decisión 8).
+- **Notificación de la resolución.** Un intento por fila: `intento` = los que hay + 1, bajo el candado
+  `Candado.NOTIFICACION_RESOLUCION` del id de la resolución (`clave` = `resolucion|intento`), tomado después de
+  `Candado.ACTA`: no se notifica nada de un acta anulada (422 «no queda nada que notificar») y, de una dejada sin
+  efecto, solo la resolución que la dejó sin efecto (a las demás, 422 «esta ya no se notifica»); la que la dejó sin
+  efecto se notifica como cualquiera y su `exigible_desde` se cuenta con `RG_RECURSO`
+  (`Procedimiento.exigirNotificable`, comprobado otra vez dentro del candado), y la notificación no se cruza con la
+  anulación. Sin `direccion`, el
+  domicilio fiscal del obligado (`contribuyente.domicilio_fiscal`, que sigue al domicilio fiscal activo); sin ninguno,
+  422. `NotificacionesDeResolucion.exigibilidad` con el `PLAZO RG_RECURSO` y los `FERIADOS` vigentes a la diligencia:
+  NOTIFICADO y RECHAZADO surten efecto (`exigible_desde`, `plazo_texto`, `plazo`); NO_UBICADO no hace exigible nada
+  y se registra otro intento. La diligencia va entre la resolución y hoy.
+
+**El papel** (`templates/emision/resolucion.html`, con `HojaResolucion.kt` que deja cada valor ya formateado): la
+cabecera de los documentos con la fecha de la resolución, el número y la fecha; el acta (número, fecha y hora,
+lugar, código, descripción y base legal de la versión del CUIS que usó, reincidencia, medida complementaria y el
+desglose congelado con su `fecha_calculo`); el obligado (nombre, documento y domicilio fiscal); el recurso si lo hay
+(expediente, tipo, presentado el, «Presentado dentro del plazo: SÍ, el plazo vencía el …» o «NO, el plazo venció el
+…»); el sentido, el efecto, la sanción accesoria y el sustento; «Plazo para impugnar: `plazo_texto`», con la cita del
+art. 218.2 del TUO de la Ley 27444 (sin cifras de la norma en el código); y las líneas de firma de Gerente y
+Secretario, «sin firma digital (D-05)». Los considerandos no se inventan: un párrafo marcado dice «Considerandos: los
+provee la municipalidad (decisión 8)». Corregir la UIT, el plazo o agregar una versión del CUIS no cambia el papel de
+una resolución ya dictada. srtm no guarda la historia de los domicilios: el domicilio que imprime es el fiscal
+vigente al dibujarlo.
+
+### Panel
+
+`GET /infracciones/panel` es el `inf-panel` de `rentas` (Ejercicio; Actas levantadas, Resoluciones dictadas,
+Notificadas, Vencen esta semana). `PanelService` lee, una consulta por tipo, lo que cuenta `Panel.contar` (pura, con
+el día como argumento) y la respuesta lleva `al_dia` (hoy):
+
+- **`actas`:** las actas cuya infracción cae en el año, **todas**: también las anuladas o dejadas sin efecto, porque se
+  levantaron (es la cifra de actas levantadas, no la de deuda viva).
+- **`resoluciones`:** las RIS (tipo `ADMINISTRATIVA`) fechadas en el año. Una RGR resuelve un recurso: no sanciona y no
+  cuenta.
+- **`notificadas`:** de esas RIS, las que tienen al menos una notificación que surte efecto (NOTIFICADO o RECHAZADO);
+  una NO_UBICADO no cuenta, ni la RIS de un acta anulada o dejada sin efecto (`Procedimiento.estadoDeLaDeuda` de su
+  acta, sea cual sea el año de la anulación o de la resolución que la dejó sin efecto): ya no queda nada notificado.
+  `resoluciones` sí las cuenta, porque se dictaron.
+- **`vencen_esta_semana`:** las notificaciones previas no subsanadas y sin acta cuyo vencimiento
+  (`Notificaciones.vencimiento`, la misma definición del padrón de vencidas) cae de lunes a domingo, ambos incluidos,
+  de la semana de `al_dia` (`semana: {desde, hasta}`). Es de la semana de hoy, no del año pedido.
+- **`coactiva`:** null siempre. srtm no cobra (no hay deuda, pagos ni coactiva), así que no hay cifra que dar y `nota`
+  lo dice; nunca un 0.
+
+Como el resto de las consultas de `srtm.sanciones`, no pide un permiso propio: `RecordService` exige lectura sobre
+cada objeto que lee (`papeleta`, `resolucion_gerencia`, `notificacion_resolucion`, `notificacion_administrativa`,
+`subsanacion_notificacion`, `contribuyente`), y sin ella responde **403**.
+
+Los padrones de las notificaciones previas (vencidas y por contribuyente) y el reporte de códigos (el CUIS vigente con
+sus multas) son las consultas de la tabla de arriba.
+
+### Reglas
+
+Funciones puras (`srtm.sanciones`): sin base, sin reloj (la fecha entra como argumento) y con `BigDecimal`. Los
+servicios leen los registros y los parámetros y se los pasan; las pruebas portan los casos de `rentas` con cifras
+ficticias.
+
+| Regla | Qué decide | Fuente en `rentas` |
+|---|---|---|
+| `Multas.calcular(codigo, uit, reincidencia)` | El desglose del acta: `base_imponible` = la UIT, `porcentaje_infraccion` = `porcentaje_uit`, `porcentaje_a_cobrar` = el % del grado declarado (`porcentaje_uit`, `_segunda` o `_tercera`), los dos importes = base × % / 100, `importe_con_beneficio` vacío. Un grado sin su % falta (`CUIS A-042 porcentaje_uit_segunda`): nunca se cobra el de otro grado. `Multas.uit(parametros, dia)`: la UIT vigente el día de la infracción, o `UIT 2026`. | `Papeleta`, `PapeletaTest` |
+| `Multas.redondear` | El único redondeo: al céntimo, `HALF_UP`, una sola vez sobre el producto exacto (el mismo que `ImpuestoPredial`). | decisión 2 |
+| `Notificaciones.vencimiento` / `vencida` | `vencimiento` = fecha + `plazo_dias`; vencida a un corte si el corte es **posterior** (el último día todavía vale); sin plazo no vence nunca. Una sola definición para el padrón de vencidas, la fase y la subsanación. `exigirSubsanable`: una vez (409), no con acta ni vencida (422); `exigirQueOrigineActa`: una subsanada no origina acta (422). | `NotificacionAdministrativaTest`, `SubsanarNotificacionTest`, #411 |
+| `Plazos` | Días hábiles (art. 144 de la Ley 27444): ni sábado ni domingo, ni `Vencimientos.FERIADOS_NACIONALES`, ni los `FERIADOS <anio>` cargados (`Calendario.de(parametros)`). `siguienteHabil` (estricto), `sumarHabiles` (sin contar el primero), `hasta` (infracción del 2026-03-04 con 5 → 2026-03-12), `exigibleDesde` (diligencia + hábil siguiente + plazo + 1 día). `faltan` nombra cada `FERIADOS <anio>` que el cómputo tocó y no está. `plazo(parametros, clave, fecha)`: la fila `PLAZO` vigente, entera y en `DIAS_HABILES`, o `PLAZO DESCARGO_PAPELETA 2026`. | `CalendarioHabil`, `Exigibilidad`, `SancionesJdbcTest`, `ElPlazoQueConcedeCadaResolucionJdbcTest` |
+| `Cuis` | `vigenteA(versiones, fecha)` (los dos extremos cuentan; la de ese día, no la última), `cerrar(vigente, nuevaDesde)` (solo `vigencia_hasta` = el día antes y `clave_vigente` = NULL; una cerrada no se cierra, 409; la nueva empieza después de la vigente, 422), `versionNueva(versiones, desde)` (lo que se cierra; nunca se pisa una versión). | `CodigoInfraccionTest`, `MantenerCatalogoDeInfraccionesTest` |
+| `Procedimiento.estadoDeLaDeuda(hechos)` / `fase(hechos, corte)` | Estado: `ANULADA`, `DEJADA_SIN_EFECTO` (si **alguna** resolución, de cualquier tipo, deja la multa sin efecto) o `PENDIENTE`. Fase: ninguna si no está pendiente (nunca «la más parecida»), `SANCIONADA` con su RIS (una RGR no sanciona), `PREVENTIVA` con la previa sin subsanar ni vencida al corte, si no `CONSTATADA`. `faseDelFiltro`: otra fase → 422 que nombra las tres. | `FaseDelProcedimiento`, `ProcedimientoSancionadorRepositoryJdbcTest` (#397, frontera #411) |
+| `Descargos.registrar(infraccion, fecha, parametros)` | `presentado_hasta` = `Plazos.hasta` con el `PLAZO DESCARGO_PAPELETA` vigente el día de la infracción, `en_plazo` = fecha ≤ `presentado_hasta`, `plazo_texto`; el tardío se registra. | `RegistrarDescargo`, `DescargosResolucionesYDepositoTest` |
+| `Resoluciones.validar(...)` / `plazo(tipo, fecha, parametros)` | RECURSO exige descargo; sentido y efecto van con el descargo y solo con él; el descargo es de esta acta; nada contra un acta `ANULADA` o `DEJADA_SIN_EFECTO` (422); una RIS por acta y una por descargo (409, además de `clave_ris` y `clave_descargo`). La RIS y la RGR conceden `RG_RECURSO` y, sin él, no toman otro. | `ResolverConResolucionDeGerencia`, `ElPlazoQueConcedeCadaTipoTest` (#410, #412) |
+| `NotificacionesDeResolucion.exigibilidad(...)` | Surte efecto ⇔ `NOTIFICADO` o `RECHAZADO`; entonces `exigible_desde` y el plazo, contados desde la diligencia (2026-08-03 con 15 → 2026-08-27, porque el 6 de agosto es feriado nacional; sin él sería el 26). | `NotificarResolucionDeGerencia`, `Exigibilidad` |
+| `Procedimiento.impedimentoDeNotificar(hechos, resolucion)` | Por qué no se notifica una resolución (la `acciones.notificacion` de la ficha y el 422 del acto): el acta anulada, o dejada sin efecto y la resolución no es la que la dejó sin efecto (esa se notifica: el administrado tiene que conocerla). | — |
+| `Resoluciones.impedimento(hechos, descargos)` | Por qué no se puede dictar una resolución ahora (la `acciones.resolucion` de la ficha): el acta anulada o sin efecto, o la RIS ya dictada y ningún descargo sin su resolución. | — |
+| `hojaResolucion(cabecera, resolucion, acta, codigo, obligado, descargo)` | Lo que imprime el papel de una resolución, todo desde filas congeladas: nada se vuelve a calcular. | `ModeloDeLaResolucionDeGerencia` |
+| `Panel.contar(anio, alDia, hechos)` / `semana(dia)` | Las cifras del panel: actas del año (todas), RIS del año, las notificadas (alguna notificación que surte efecto, y el acta ni anulada ni dejada sin efecto) y las previas sin subsanar ni acta que vencen de lunes a domingo de la semana de `alDia`; `coactiva` null y la `nota`. | `inf-panel` |
+| `Plazos.cargados(anio, hoy, parametros)` | Los plazos cargados de un año (`GET /plazos`): las dos filas `PLAZO` vigentes al 1 de enero (a `hoy` en el año en curso) y el `FERIADOS <anio>` que usa `Calendario.de`, o lo que falta con el nombre del 422 de un acto. | — |
+| `NotificacionesService.derivar(n, al, hechos)` / `Partes.de(acta, personas, predio)` | La fila de una notificación a un día (la subsanación y el acta, solo si su fecha es ≤ `al`) y las partes del expediente. | — |
+| `OrdenDeLosActos.exigir(acto, fecha, hoy, previos)` | Ningún acto antes del que lo origina ni después de hoy; el mismo día vale. 422 que nombra las dos fechas (`ActoFueraDeOrden`). | `OrdenDeLosActos` (#402) |
+
+**Errores.** `FaltanSanciones(acto, faltan)` es el 422 con `faltan` (gemelo de `FaltanArbitrios`; el controlador lo
+traduce con `srtm.sanciones.problemaFaltan`); `Resultado<T>(valor, faltan)` lleva la cifra o lo que falta, nunca los
+dos, y `exigir(acto)` lanza el 422. `NoProcede` es el 422 de una petición que las reglas no admiten (con
+`errors[].field` cuando hay un campo), y `ActoFueraDeOrden` su caso de fechas. Los mensajes citan las fechas en
+`dd/MM/yyyy` («no puede fecharse el 03/03/2026: es anterior a la infracción del acta AC-0001, del 04/03/2026»). Un estado que no admite el acto (ya
+subsanada, ya anulada, segunda RIS) es `ConflictException` (409).
+
+**Lo que cambia respecto de `rentas`:**
+- **SE_REDUCE → 422** «No hay regla de reducción: la fija la ordenanza (D-02b)». En `rentas` se guardaba sin efecto.
+- **Una RIS por acta** (`clave_ris`); `rentas` no tenía índice para la ADMINISTRATIVA y admitía dos.
+- **Sin `FERIADOS <anio>` → 422 `faltan`**; `rentas` contaba sin feriados cuando el conjunto no los traía.
+- **Una notificación subsanada no origina acta** (422), y una con acta no se subsana (422); una vencida tampoco (422,
+  donde `rentas` respondía 409).
+- **La multa se calcula y se congela** con el CUIS y la UIT; `rentas` tomaba los seis importes tecleados del acta.
+- **El alta del acta se publica** (`rentas` solo exponía la consulta) y el filtro `administrado` busca una parte del
+  documento o del nombre (en `rentas`, el documento).
+- Sin `PAGADA` ni `COACTIVA` (no hay cobranza), y una versión del CUIS para un código sin vigente es su primera versión.
+
 ## Anuncios y propaganda
 
 La tasa por anuncios y propaganda se porta del negocio de `rentas` (`RegistrarAnuncio`, `RenovarAnuncio`,
@@ -1456,7 +1681,9 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 ```
 
 - **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`,
-  `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…), la guardia
+  `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…; las de
+  `srtm.sanciones`: `MultasTest`, `NotificacionesTest`, `PlazosTest`, `CuisTest`, `ProcedimientoTest`, `RecursosTest`,
+  `OrdenDeLosActosTest`, `ExpedientesTest`, `HojaResolucionTest` y `PanelTest`, con cifras ficticias), la guardia
   de escritura (`AlmacenGuardadoTest`, `ReglaDeSancionesTest`, `ReglaDeAnunciosTest`, y `AlmacenGuardadoApiTest` en
   integración), los anuncios (`AnunciosTest`, los casos de `AnuncioYSusActosTest` de rentas, y `AnunciosApiTest` en
   integración: el alta, la idempotencia, diez altas a la vez, dos renovaciones a la vez, los actos, el padrón a un
@@ -1469,7 +1696,21 @@ yarn format:check           # prettier: yaml y json, model.json incluido
   admin de desarrollo y las llamadas. Cada endpoint de `RentasController` y `DocumentosController` tiene un caso feliz
   y uno de error donde aplica, repartidos por tema: `RentasApiTest` (el recorrido completo), `ListasApiTest` (las
   filas de las ocho listas), `DeclaracionJuradaApiTest` (una DJ rechazada no deja nada a medias), `FichasApiTest`,
-  `CatalogosApiTest`, `CatastroApiTest`, `CondominioApiTest`, `AnulacionApiTest`, `MotivoApiTest`…
+  `CatalogosApiTest`, `CatastroApiTest`, `CondominioApiTest`, `AnulacionApiTest`, `MotivoApiTest`… Las de
+  `srtm.sanciones` heredan de `ConSancionesApiTest` (UIT ficticias de 2041 y de 1991, ningún año 2042 ni 1990 con UIT;
+  plazos y feriados ficticios; cada acto por su endpoint, fechado en el pasado porque ningún acto se fecha después de
+  hoy; cada clase con sus años): `SancionesCuisApiTest` (catálogo con y sin UIT, versión que cierra la vigente, dos
+  versiones a la vez, el cuerpo de `import_cuis.py`), `NotificacionesApiTest` (alta, padrón, frontera #411,
+  subsanación, vencidas, por contribuyente), `ActasApiTest` (alta y desglose, la multa congelada al corregir la UIT y
+  versionar el CUIS, código que no rige, `faltan`, previa subsanada, acta y subsanación a la vez, fases con su corte,
+  filtro de fase igual a la columna, ficha en orden legal, anulación, fichas de contribuyente y predio, API genérica y
+  permisos), `ResolucionesApiTest` (1993–1996: descargo en plazo y tardío, `faltan` de plazos y feriados, correlativos
+  a la vez, una RIS por acta, SE_REDUCE, sin efecto, el papel congelado, notificación y exigibilidad) y `PanelApiTest`
+  (1997–1999: las cifras del año con sus extremos, la semana de lunes a domingo, `coactiva` null y la `nota`, parámetros
+  y permisos) y `AjustesApiTest` (1985–1989: no se notifica la resolución de un acta anulada, ni de una dejada sin efecto salvo la
+  resolución que la dejó sin efecto, con
+  `acciones.notificacion` y sin contarla en `notificadas`; el `detalle` legible; las `partes`; `q`; el padrón a una
+  fecha pasada; `GET /plazos`).
 - **Trabajadores de la emisión masiva en los tests:** `src/test/resources/application.properties` fija
   `srtm.emision.trabajadores=0` para toda la corrida (gana sobre `application.yml`; un `@TestPropertySource` gana sobre
   ambos), así que ningún contexto corre trabajadores salvo el de `EmisionMasivaApiTest` (2), que se cierra al terminar
@@ -1499,8 +1740,19 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - **Fiscalización:** el flujo (rol y pantallas) que determina de oficio una declaración: medio de determinación
   FISCALIZACIÓN o DE OFICIO y su modificación de oficio.
 - **En el modelo:** workflows y plantillas de documentos.
-- **Infracciones administrativas:** el modelo, la guardia y la carga ya están; faltan las reglas puras, los servicios y
-  la api (`/api/srtm/infracciones/...`), entre ellos `POST /api/srtm/infracciones/cuis`, que usa `import_cuis.py`.
+- **Infracciones administrativas** ([Infracciones administrativas](#infracciones-administrativas)):
+  - **Cobro:** srtm determina la multa y no la cobra. La orden de cobro y el pago van en `caja-backend`, con la
+    referencia estable `PAPELETA-<id>` del acta; con ellos llegan los estados `PAGADA` y `COACTIVA`.
+  - **Recaudación y coactiva:** la resolución de multa (RM) y la ejecución coactiva, y el resumen de recaudación de las
+    multas; hasta entonces el panel responde `coactiva: null` con su nota.
+  - **Datos reales:** el CUIS, la UIT, los plazos y los feriados de Perené (D-02b: la ordenanza y su regla de
+    reducción, `SE_REDUCE`, hoy 422), cargados con `import_cuis.py` e `import_parametros.py`; en el repo solo hay
+    cifras ficticias.
+  - **El papel de la resolución:** la firma digital (D-05; hoy dice «sin firma digital» y se firma a mano) y los
+    considerandos, que provee la municipalidad (decisión 8; hoy un párrafo marcado los reserva).
+  - **Historia de domicilios:** si se decide, para imprimir y notificar al domicilio fiscal vigente a la fecha de la
+    resolución (hoy, el actual).
+  - **Tránsito:** la familia `TRANSITO` de `rentas` no se trae (decisión 6); solo `ADMINISTRATIVA`.
 - **Anuncios:** la orden de cobro de cada tasa devengada a caja-backend, con la referencia estable
   `ANUNCIO-<id>-<anio>` del movimiento (srtm determina, no cobra); la fórmula por área y lados, pendiente de la
   ordenanza (hoy la tasa es por clase y ejercicio completo); las tasas reales, cuando `normativa` las transcriba.
