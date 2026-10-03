@@ -2,6 +2,8 @@ package srtm.sanciones
 
 import srtm.impuesto.ParametroTributario
 import srtm.impuesto.Vencimientos
+import tools.jackson.databind.PropertyNamingStrategies
+import tools.jackson.databind.annotation.JsonNaming
 import java.time.LocalDate
 
 // the movable feriados of each year whose FERIADOS row was read (an empty set is a year declared without any). the
@@ -54,6 +56,35 @@ data class Plazo(
 ) {
     val texto: String get() = Llaves.plazoTexto(dias, unidad)
 }
+
+// a PLAZO row as the acts would read it: its days, unit and text, its vigencia and the row (the procedencia)
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class PlazoCargado(
+    val clave: String,
+    val dias: Int,
+    val unidad: String,
+    val texto: String,
+    val vigenciaDesde: LocalDate?,
+    val vigenciaHasta: LocalDate?,
+    val parametroId: String?
+)
+
+// the year's movable feriados (the fixed ones are Vencimientos.FERIADOS_NACIONALES, always) and their row
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class FeriadosCargados(
+    val fechas: List<LocalDate>,
+    val parametroId: String?
+)
+
+// GET /infracciones/plazos: what a descargo, a resolución and its notificación of `anio` would read, at al_dia
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class PlazosCargados(
+    val anio: Int,
+    val alDia: LocalDate,
+    val plazos: List<PlazoCargado>,
+    val feriados: FeriadosCargados?,
+    val faltan: List<String>
+)
 
 // business days (art. 144 of Ley 27444): monday to friday, not a fixed national feriado
 // (Vencimientos.FERIADOS_NACIONALES, the predial's list) nor one of the year's FERIADOS row. pure: the calendar is an
@@ -126,6 +157,44 @@ object Plazos {
             return Resultado.faltando(listOf("$nombre: es un número entero de días mayor que 0 en ${Llaves.DIAS_HABILES}"))
         }
         return Resultado.de(Plazo(dias, unidad, fila.id))
+    }
+
+    // the plazos loaded for `anio`: the two PLAZO rows in force on january 1st (on `hoy` in the current year: the ones an
+    // act of today reads) and the year's FERIADOS row, read as Plazos.plazo and Calendario.de read them. what is missing,
+    // or malformed, goes in faltan with the name an act's 422 would give it ("PLAZO RG_RECURSO 2027", "FERIADOS 2027")
+    fun cargados(
+        anio: Int,
+        hoy: LocalDate,
+        parametros: List<ParametroTributario>
+    ): PlazosCargados {
+        val alDia = if (anio == hoy.year) hoy else LocalDate.of(anio, 1, 1)
+        val faltan = mutableListOf<String>()
+        val plazos =
+            listOf(Llaves.DESCARGO_PAPELETA, Llaves.RG_RECURSO).mapNotNull { clave ->
+                val leido = plazo(parametros, clave, alDia)
+                val p = leido.valor
+                if (p == null) {
+                    faltan += leido.faltan
+                    null
+                } else {
+                    val fila = vigente(parametros, Llaves.PLAZO, clave, alDia)
+                    PlazoCargado(clave, p.dias, p.unidad, p.texto, fila?.vigenciaDesde, fila?.vigenciaHasta, p.parametro)
+                }
+            }
+        val calendario = Calendario.de(parametros)
+        val fechas = calendario.feriados[anio]
+        val feriados =
+            fechas?.let {
+                // the row Calendario.de kept: the last of the year's, by vigencia_desde
+                val fila =
+                    parametros
+                        .filter { p -> p.tipo == Llaves.FERIADOS && p.clave?.trim() == Llaves.feriados(anio) }
+                        .sortedBy { p -> p.vigenciaDesde }
+                        .lastOrNull()
+                FeriadosCargados(it.sorted(), fila?.id)
+            }
+        if (feriados == null) faltan += calendario.malformados[anio] ?: "${Llaves.FERIADOS} ${Llaves.feriados(anio)}"
+        return PlazosCargados(anio, alDia, plazos, feriados, faltan)
     }
 }
 

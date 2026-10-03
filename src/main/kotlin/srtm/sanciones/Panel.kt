@@ -36,7 +36,9 @@ data class HechosDelPanel(
     val previas: List<NotificacionAdministrativa>,
     // ids of the previas that are subsanadas, and of those an acta names
     val subsanadas: Set<String>,
-    val conActa: Set<String>
+    val conActa: Set<String>,
+    // ids of the actas ANULADA or DEJADA_SIN_EFECTO (Procedimiento.estadoDeLaDeuda): their RIS have nothing left notified
+    val sinEfecto: Set<String> = emptySet()
 )
 
 // the panel of the infracciones: pure, the day as an argument
@@ -51,7 +53,8 @@ object Panel {
 
     // actas: every acta whose infracción is in `anio`, anuladas and dejadas sin efecto included (they were levantadas);
     // resoluciones: the RIS (ADMINISTRATIVA; a RGR resolves a recurso, it does not sanction) dated in `anio`;
-    // notificadas: those RIS with at least one notificación that takes effect (NOTIFICADO or RECHAZADO);
+    // notificadas: those RIS with at least one notificación that takes effect (NOTIFICADO or RECHAZADO), but not the
+    // RIS of an acta anulada or dejada sin efecto (resoluciones still counts them: they were dictated);
     // vencen_esta_semana: the previas neither subsanadas nor with an acta whose vencimiento (Notificaciones.vencimiento,
     // the one definition) falls in the week of `alDia`, whatever their year
     fun contar(
@@ -77,7 +80,7 @@ object Panel {
             alDia = alDia,
             actas = hechos.actas.count { it.fechaInfraccion!!.year == anio },
             resoluciones = ris.size,
-            notificadas = ris.count { it.id in surtieronEfecto },
+            notificadas = ris.count { it.id in surtieronEfecto && it.papeleta !in hechos.sinEfecto },
             vencenEstaSemana = vencen,
             semana = semana,
             nota = NOTA

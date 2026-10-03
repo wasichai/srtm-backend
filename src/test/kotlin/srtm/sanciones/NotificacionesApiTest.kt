@@ -108,7 +108,7 @@ class NotificacionesApiTest : ConSancionesApiTest() {
         send("POST", subsanacion(enPlazo), mapOf("fecha" to "2026-03-07", "observacion" to "Otra vez"), HttpStatus.CONFLICT)
         // the day after, it is vencida
         val vencida = tree(send("POST", subsanacion(tarde), mapOf("fecha" to "2026-03-08", "observacion" to "Tarde"), HttpStatus.UNPROCESSABLE_CONTENT))
-        assertTrue(vencida["detail"].asString().contains("venció el 2026-03-07"), vencida.toString())
+        assertTrue(vencida["detail"].asString().contains("venció el 07/03/2026"), vencida.toString())
         // not after today, nor before the notificación
         for (fecha in listOf(LocalDate.now().plusDays(1).toString(), "2026-03-01")) {
             send("POST", subsanacion(tarde), mapOf("fecha" to fecha, "observacion" to "Fuera de orden"), HttpStatus.UNPROCESSABLE_CONTENT)

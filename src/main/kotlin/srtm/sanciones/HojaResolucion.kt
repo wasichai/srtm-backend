@@ -106,7 +106,7 @@ fun hojaResolucion(
                 domicilio = domicilioFiscalDe(obligado) ?: "Sin domicilio fiscal registrado"
             ),
         recurso = descargo?.let(::recursoDeLaHoja),
-        sentido = resolucion.sentido?.let { SENTIDOS[it] ?: it },
+        sentido = resolucion.sentido?.let { Expedientes.etiqueta(Expedientes.SENTIDO, it) },
         efecto = resolucion.efecto?.let { EFECTOS[it] ?: it },
         sancionAccesoria = resolucion.sancionAccesoria?.trim()?.ifEmpty { null },
         sustento = resolucion.sustento.orEmpty(),
@@ -160,14 +160,6 @@ private fun recursoDeLaHoja(d: DescargoPapeleta): RecursoDeLaHoja {
 }
 
 private fun porcentaje(valor: BigDecimal?) = "${numero(valor)} %"
-
-private val SENTIDOS =
-    mapOf(
-        "FUNDADO" to "Fundado",
-        "FUNDADO_EN_PARTE" to "Fundado en parte",
-        "INFUNDADO" to "Infundado",
-        "IMPROCEDENTE" to "Improcedente"
-    )
 
 private val EFECTOS =
     mapOf(

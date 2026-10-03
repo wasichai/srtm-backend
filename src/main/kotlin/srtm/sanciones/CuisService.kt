@@ -10,6 +10,7 @@ import srtm.Candado
 import srtm.Candados
 import srtm.Observacion
 import srtm.impuesto.ParametrosTributarios
+import srtm.legible
 import srtm.rentas.Records
 import srtm.rentas.Registros
 import tools.jackson.databind.PropertyNamingStrategies
@@ -174,7 +175,9 @@ class CuisService(
     }
 
     private fun repetida(c: CodigoInfraccion) =
-        ConflictException("La versión de ${c.codigo} desde el ${c.vigenciaDesde} ya existe: un cambio es una versión nueva, con otra vigencia_desde")
+        ConflictException(
+            "La versión de ${c.codigo} desde el ${c.vigenciaDesde!!.legible()} ya existe: un cambio es una versión nueva, con otra vigencia_desde"
+        )
 
     private fun String?.limpio() = this?.trim()?.ifEmpty { null }
 

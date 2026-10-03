@@ -11,7 +11,8 @@ import java.time.LocalDate
 @Service
 class PanelService(
     private val registros: Registros,
-    private val notificaciones: NotificacionesService
+    private val notificaciones: NotificacionesService,
+    private val actas: ActasService
 ) {
     suspend fun panel(
         anio: Int,
@@ -19,7 +20,7 @@ class PanelService(
     ): PanelDeInfracciones {
         val enero = LocalDate.of(anio, 1, 1)
         val diciembre = LocalDate.of(anio, 12, 31)
-        val actas = registros.donde(PAPELETA, Papeleta::class.java, listOfNotNull(Filtros.entre("fecha_infraccion", enero, diciembre)))
+        val delAnio = registros.donde(PAPELETA, Papeleta::class.java, listOfNotNull(Filtros.entre("fecha_infraccion", enero, diciembre)))
         val ris =
             registros.donde(
                 RESOLUCION_GERENCIA,
@@ -34,7 +35,14 @@ class PanelService(
         val previas =
             registros.donde(NOTIFICACION_ADMINISTRATIVA, NotificacionAdministrativa::class.java, listOf(vencenEntre(Panel.semana(alDia))))
         val hechos = notificaciones.hechos(previas)
-        return Panel.contar(anio, alDia, HechosDelPanel(actas, ris, notificadas, previas, hechos.subsanaciones.keys, hechos.actas.keys))
+        // the actas of the RIS (whatever their year), to leave out of notificadas those anuladas or sin efecto
+        val actasDeLasRis = registros.byIds(PAPELETA, Papeleta::class.java, ris.mapNotNull { it.papeleta }).values.toList()
+        val sinEfecto = actas.hechos(actasDeLasRis).filterValues { Procedimiento.estadoDeLaDeuda(it) != Procedimiento.PENDIENTE }.keys
+        return Panel.contar(
+            anio,
+            alDia,
+            HechosDelPanel(delAnio, ris, notificadas, previas, hechos.subsanaciones.keys, hechos.actas.keys, sinEfecto)
+        )
     }
 
     // a notificación whose fecha + plazo_dias falls in the week: Panel.contar decides again with Notificaciones. core

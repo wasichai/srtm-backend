@@ -88,6 +88,16 @@ object Filtros {
         }
     }
 
+    // one of `campos` contains `texto`, in any case: LIKE's wildcards in `texto` are taken literally
+    fun contiene(
+        texto: String,
+        vararg campos: String
+    ): RecordCriterion =
+        RecordCriterion { definition, bind ->
+            val patron = "%" + texto.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            campos.joinToString(" OR ", "(", ")") { campo -> "\"${definition.fields.first { it.name == campo }.columnName}\" ILIKE ${bind(patron)}" }
+        }
+
     // `campo` (a relation) is one of `ids`
     fun entre(
         campo: String,

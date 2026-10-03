@@ -1,5 +1,6 @@
 package srtm.sanciones
 
+import srtm.legible
 import wasichai.core.common.ConflictException
 import java.time.LocalDate
 
@@ -35,7 +36,7 @@ object Notificaciones {
         if (subsanada) throw ConflictException("La notificación ${n.numero} ya está subsanada")
         if (conActa) throw NoProcede("La notificación ${n.numero} ya originó un acta: no se subsana")
         if (vencida(n, fecha)) {
-            throw NoProcede("La notificación ${n.numero} venció el ${vencimiento(n.fecha!!, n.plazoDias)}: no se subsana el $fecha")
+            throw NoProcede("La notificación ${n.numero} venció el ${vencimiento(n.fecha!!, n.plazoDias)!!.legible()}: no se subsana el ${fecha.legible()}")
         }
     }
 

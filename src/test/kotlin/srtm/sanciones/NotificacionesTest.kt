@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertDoesNotThrow
 import srtm.sanciones.Ficticios.d
 import srtm.sanciones.Ficticios.notificacion
+import srtm.sanciones.Ficticios.subsanacion
 import wasichai.core.common.ConflictException
 
 // rentas' NotificacionAdministrativaTest and SubsanarNotificacionTest: when a notificación previa ends (#411, one
@@ -46,7 +47,7 @@ class NotificacionesTest {
     fun `after the vencimiento it is not subsanada - a 422 that names the day it ended`() {
         val n = notificacion(fecha = "2026-03-01", plazoDias = 10)
         val e = assertThrows(NoProcede::class.java) { Notificaciones.exigirSubsanable(n, subsanada = false, conActa = false, fecha = d("2026-03-12")) }
-        assertTrue(e.message!!.contains("2026-03-11"), e.message)
+        assertTrue(e.message!!.contains("venció el 11/03/2026: no se subsana el 12/03/2026"), e.message)
     }
 
     @Test
@@ -67,5 +68,29 @@ class NotificacionesTest {
         val n = notificacion()
         assertThrows(NoProcede::class.java) { Notificaciones.exigirQueOrigineActa(n, subsanada = true) }
         assertDoesNotThrow { Notificaciones.exigirQueOrigineActa(n, subsanada = false) }
+    }
+
+    @Test
+    fun `derived at a past day, a subsanación or an acta dated after it had not happened yet`() {
+        val n = notificacion("NP-0001", "2026-03-01", 10)
+        val hechos =
+            HechosDeNotificaciones(
+                mapOf(n.id!! to subsanacion(n).copy(fecha = d("2026-03-05"))),
+                mapOf(n.id!! to Papeleta(id = "acta", numero = "AC-0001", fechaInfraccion = d("2026-03-08"))),
+                emptyMap()
+            )
+
+        val antes = NotificacionesService.derivar(n, d("2026-03-04"), hechos)
+        assertNull(antes.subsanada)
+        assertNull(antes.acta)
+        assertEquals(d("2026-03-04"), antes.vencidasA)
+        // the same day counts
+        assertEquals(Subsanada(d("2026-03-05")), NotificacionesService.derivar(n, d("2026-03-05"), hechos).subsanada)
+        assertNull(NotificacionesService.derivar(n, d("2026-03-07"), hechos).acta)
+        val despues = NotificacionesService.derivar(n, d("2026-03-08"), hechos)
+        assertEquals(ActaDeLaNotificacion("acta", "AC-0001"), despues.acta)
+        assertEquals(d("2026-03-11"), despues.vencimiento)
+        assertFalse(despues.vencida)
+        assertTrue(NotificacionesService.derivar(n, d("2026-03-12"), hechos).vencida)
     }
 }

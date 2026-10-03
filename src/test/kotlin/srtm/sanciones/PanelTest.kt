@@ -113,4 +113,15 @@ class PanelTest {
         assertEquals("En coactiva no existe en srtm: no hay cobranza", panel.nota)
         assertEquals(listOf(0, 0, 0, 0), listOf(panel.actas, panel.resoluciones, panel.notificadas, panel.vencenEstaSemana))
     }
+
+    @Test
+    fun `a RIS of an acta anulada or dejada sin efecto is dictated but has nothing left notified`() {
+        val ris = { n: Int -> resolucion(correlativo = n, acta = "a$n").copy(fecha = d("2026-03-02")) }
+        val resoluciones = listOf(ris(1), ris(2), ris(3))
+        val notificaciones = resoluciones.map { notificada(it.id!!, "NOTIFICADO") }
+        val panel =
+            Panel.contar(2026, alDia, vacio(resoluciones = resoluciones, notificaciones = notificaciones).copy(sinEfecto = setOf("a1", "a2")))
+        assertEquals(3, panel.resoluciones, "the RIS were dictated: they all count")
+        assertEquals(1, panel.notificadas)
+    }
 }
