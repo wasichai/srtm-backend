@@ -187,5 +187,72 @@ class ArbitriosRowsTests(unittest.TestCase):
         self.assertEqual(core.requests, [])
 
 
+# the rows of the sanciones and the anuncios (SPEC §4, Parámetros nuevos). FICTITIOUS values, written here only to test
+# their shape: no plazo, feriado or tasa de anuncios of Perené is transcribed and verified yet
+def fila_del(tipo, clave, desde="2026-01-01", hasta=None, **campos):
+    return {k: v for k, v in {**fila(tipo, clave, **campos), "vigencia_desde": desde, "vigencia_hasta": hasta}.items() if v is not None}
+
+
+class SancionesYAnunciosRowsTests(unittest.TestCase):
+    def test_the_tipos_the_code_reads(self):
+        self.assertEqual(ip.TIPOS_SANCIONES, ("PLAZO", "FERIADOS"))
+        self.assertEqual(ip.TIPOS_ANUNCIO, ("TASA_ANUNCIO",))
+        self.assertEqual(ip.CLAVES_PLAZO, ("DESCARGO_PAPELETA", "RG_RECURSO"))
+
+    def test_well_formed_rows_pass(self):
+        filas = [
+            fila_del("PLAZO", "DESCARGO_PAPELETA", valor_numerico="5", texto="DIAS_HABILES"),
+            fila_del("PLAZO", "RG_RECURSO", valor_numerico="15.00", texto="DIAS_HABILES"),
+            fila_del("FERIADOS", "2026", hasta="2026-12-31", texto="2026-04-02, 2026-04-03"),
+            # a year without movable holidays: an empty texto
+            fila_del("FERIADOS", "2027", desde="2027-01-01", hasta="2027-12-31"),
+            fila_del("TASA_ANUNCIO", "PANEL", valor_numerico="12.50"),
+        ]
+        self.assertEqual(ip.errores(filas), [])
+
+    def test_a_plazo_is_a_whole_number_of_dias_habiles_of_a_known_clave(self):
+        for clave, valor, texto in [("DESCARGO", "5", "DIAS_HABILES"), ("RG_RECURSO", "0", "DIAS_HABILES"),
+                                    ("RG_RECURSO", "-3", "DIAS_HABILES"), ("RG_RECURSO", "2.5", "DIAS_HABILES"),
+                                    ("RG_RECURSO", None, "DIAS_HABILES"), ("RG_RECURSO", "15", "DIAS_CALENDARIO"),
+                                    ("RG_RECURSO", "15", None)]:
+            with self.subTest(clave=clave, valor=valor, texto=texto):
+                malas = ip.errores([fila_del("PLAZO", clave, valor_numerico=valor, texto=texto)])
+                self.assertEqual(len(malas), 1)
+                self.assertTrue(malas[0].startswith(f"PLAZO {clave}: "), malas)
+
+    def test_the_feriados_are_dates_of_their_year_for_the_whole_year(self):
+        for clave, desde, hasta, texto in [("26", "2026-01-01", "2026-12-31", None),
+                                           ("2026", "2026-01-01", "2026-12-31", "2026-04-02,2027-01-01"),
+                                           ("2026", "2026-01-01", "2026-12-31", "02/04/2026"),
+                                           ("2026", "2026-03-01", "2026-12-31", "2026-04-02"),
+                                           ("2026", "2026-01-01", None, "2026-04-02")]:
+            with self.subTest(clave=clave, desde=desde, hasta=hasta, texto=texto):
+                self.assertEqual(len(ip.errores([fila_del("FERIADOS", clave, desde=desde, hasta=hasta, texto=texto)])), 1)
+
+    def test_a_tasa_de_anuncio_is_above_zero_for_a_clase_of_the_model(self):
+        for clave, valor in [("PANEL", "0"), ("PANEL", "-1"), ("PANEL", None), ("PANEL", "doce"), ("CARTEL", "12.50")]:
+            with self.subTest(clave=clave, valor=valor):
+                self.assertEqual(len(ip.errores([fila_del("TASA_ANUNCIO", clave, valor_numerico=valor)])), 1)
+
+    def test_they_are_signed_by_two_people_too(self):
+        self.assertEqual(len(ip.errores([fila_del("TASA_ANUNCIO", "PANEL", valor_numerico="12.50", verifico="ANA, 2026-01-09")])), 1)
+        self.assertEqual(len(ip.errores([fila_del("PLAZO", "RG_RECURSO", valor_numerico="15", texto="DIAS_HABILES", transcribio=None)])), 1)
+
+    def test_a_tasa_de_anuncio_at_zero_exits_2_before_calling_core(self):
+        core = FakeCore()
+        self.addCleanup(core.stop)
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write("# ficticio\n" + ",".join(ip.FIELDS) + "\n")
+            f.write("TASA_ANUNCIO,PANEL,2026-01-01,,0,,norma,test,ANA,BETO\n")
+        self.addCleanup(os.unlink, f.name)
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = ip.main(["--core", core.base_url, "--csv", f.name])
+        self.assertEqual(code, 2, err.getvalue())
+        self.assertIn("TASA_ANUNCIO PANEL", err.getvalue())
+        self.assertEqual(core.requests, [])
+
+
 if __name__ == "__main__":
     unittest.main()
