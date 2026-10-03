@@ -336,7 +336,18 @@
     "estado_declaracion": ["VIGENTE", "ANULADA"],
     "formato_emision": ["PDF", "ZIP"],
     "estado_emision": ["PENDIENTE", "EN_PROCESO", "ENSAMBLANDO", "TERMINADA", "FALLIDA"],
-    "estado_lote": ["PENDIENTE", "EN_PROCESO", "TERMINADO", "FALLIDO"]
+    "estado_lote": ["PENDIENTE", "EN_PROCESO", "TERMINADO", "FALLIDO"],
+    "familia_infraccion": ["ADMINISTRATIVA"],
+    "grado_reincidencia": ["PRIMERA", "SEGUNDA", "TERCERA_O_MAS"],
+    "tipo_recurso": ["DESCARGO", "RECONSIDERACION", "APELACION", "NULIDAD"],
+    "tipo_resolucion_gerencia": ["ADMINISTRATIVA", "RECURSO"],
+    "sentido_fallo": ["FUNDADO", "FUNDADO_EN_PARTE", "INFUNDADO", "IMPROCEDENTE"],
+    "efecto_multa": ["SE_MANTIENE", "SE_DEJA_SIN_EFECTO", "SE_REDUCE"],
+    "modalidad_notificacion": ["PERSONAL", "CEDULON", "PUBLICACION", "CORREO"],
+    "resultado_notificacion": ["NOTIFICADO", "NO_UBICADO", "RECHAZADO"],
+    "clase_anuncio": ["LETRERO", "PANEL", "TOLDO", "BANDEROLA", "PANTALLA_DIGITAL", "GLOBO_AEROSTATICO"],
+    "tipo_anuncio": ["AVISO_SIMPLE", "AVISO_LUMINOSO", "AVISO_ILUMINADO", "AVISO_ELECTRONICO"],
+    "tipo_movimiento_anuncio": ["AUTORIZACION", "RENOVACION", "CESE", "RETIRO"]
   },
   "objects": [
     {
@@ -983,6 +994,219 @@
         {"name": "errores", "label": "Errores", "type": "LONG_TEXT",
           "description": "JSON: [{predio, mensaje}], el código del predio que no se pudo determinar y por qué."}
       ]
+    },
+    {
+      "name": "codigo_infraccion",
+      "label": "Código de infracción",
+      "pluralLabel": "Códigos de infracción",
+      "description": "El CUIS, versionado por vigencia: un cambio cierra la versión vigente (vigencia_hasta, clave_vigente) y agrega la nueva. Ningún otro campo se edita. Lo escribe solo el servicio de srtm.",
+      "fields": [
+        {"name": "familia", "label": "Familia", "type": "ENUM", "enum": "familia_infraccion", "required": true},
+        {"name": "codigo", "label": "Código", "type": "TEXT", "required": true,
+          "description": "Hasta 20 caracteres, recortado y en mayúsculas."},
+        {"name": "descripcion", "label": "Descripción", "type": "LONG_TEXT", "required": true, "description": "Hasta 500 caracteres."},
+        {"name": "materia", "label": "Materia", "type": "TEXT", "description": "Hasta 60 caracteres."},
+        {"name": "porcentaje_uit", "label": "% UIT", "type": "DECIMAL", "required": true,
+          "description": "La alícuota de la multa sobre la UIT: mayor que 0 y hasta 100."},
+        {"name": "porcentaje_uit_segunda", "label": "% UIT segunda vez", "type": "DECIMAL",
+          "description": "La alícuota de la segunda vez."},
+        {"name": "porcentaje_uit_tercera", "label": "% UIT tercera vez o más", "type": "DECIMAL",
+          "description": "La alícuota de la tercera vez o más."},
+        {"name": "medida_complementaria", "label": "Medida complementaria", "type": "TEXT", "description": "Hasta 160 caracteres."},
+        {"name": "base_legal", "label": "Base legal", "type": "TEXT", "required": true, "description": "Hasta 200 caracteres."},
+        {"name": "vigencia_desde", "label": "Vigente desde", "type": "DATE", "required": true},
+        {"name": "vigencia_hasta", "label": "Vigente hasta", "type": "DATE",
+          "description": "Vacía mientras rige; no antes de vigencia_desde."},
+        {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true, "description": "Por qué, de 5 a 500 caracteres."},
+        {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true,
+          "description": "familia|codigo|vigencia_desde: una versión por día de inicio."},
+        {"name": "clave_vigente", "label": "Clave vigente", "type": "TEXT", "unique": true,
+          "description": "familia|codigo mientras rige, vacía al cerrarse: una sola versión vigente por código."}
+      ]
+    },
+    {
+      "name": "notificacion_administrativa",
+      "label": "Notificación administrativa",
+      "pluralLabel": "Notificaciones administrativas",
+      "description": "La notificación previa a un acta. Vencida se deriva de fecha y plazo_dias, no se guarda. Solo se agrega.",
+      "fields": [
+        {"name": "numero", "label": "Número", "type": "TEXT", "required": true, "unique": true,
+          "description": "El del formulario: hasta 20 caracteres, en mayúsculas."},
+        {"name": "fecha", "label": "Fecha", "type": "DATE", "required": true},
+        {"name": "direccion", "label": "Dirección", "type": "TEXT", "required": true, "description": "Hasta 300 caracteres."},
+        {"name": "motivo", "label": "Motivo", "type": "LONG_TEXT", "required": true, "description": "Hasta 500 caracteres."},
+        {"name": "plazo_dias", "label": "Plazo (días)", "type": "INTEGER", "description": "Mayor que 0. Sin plazo, no vence."},
+        {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true, "description": "Por qué, de 5 a 500 caracteres."}
+      ]
+    },
+    {
+      "name": "subsanacion_notificacion",
+      "label": "Subsanación de notificación",
+      "pluralLabel": "Subsanaciones de notificaciones",
+      "description": "La subsanación de una notificación previa: una por notificación. Solo se agrega.",
+      "fields": [
+        {"name": "fecha", "label": "Fecha", "type": "DATE", "required": true},
+        {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true, "description": "Por qué, de 5 a 500 caracteres."},
+        {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true,
+          "description": "El id de la notificación: una subsanación por notificación."}
+      ]
+    },
+    {
+      "name": "papeleta",
+      "label": "Acta de infracción",
+      "pluralLabel": "Actas de infracción",
+      "description": "El acta de una infracción administrativa, con su multa calculada y congelada. No se edita ni se borra: se anula agregando una anulación. Lo escribe solo el servicio de srtm.",
+      "fields": [
+        {"name": "familia", "label": "Familia", "type": "ENUM", "enum": "familia_infraccion", "required": true},
+        {"name": "numero", "label": "Número", "type": "TEXT", "required": true,
+          "description": "El del formulario: hasta 20 caracteres, en mayúsculas."},
+        {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true,
+          "description": "familia|numero: un acta por número."},
+        {"name": "fecha_infraccion", "label": "Fecha de la infracción", "type": "DATE", "required": true},
+        {"name": "hora_infraccion", "label": "Hora de la infracción", "type": "TEXT", "description": "HH:mm."},
+        {"name": "lugar", "label": "Lugar", "type": "TEXT", "required": true, "description": "Hasta 300 caracteres."},
+        {"name": "expediente", "label": "Expediente", "type": "TEXT", "description": "Hasta 20 caracteres."},
+        {"name": "inspector", "label": "Inspector", "type": "TEXT", "description": "Hasta 120 caracteres."},
+        {"name": "descripcion_hecho", "label": "Descripción del hecho", "type": "LONG_TEXT", "description": "Hasta 1000 caracteres."},
+        {"name": "reincidencia", "label": "Reincidencia", "type": "ENUM", "enum": "grado_reincidencia", "required": true,
+          "description": "La declara el inspector."},
+        {"name": "medida_complementaria", "label": "Medida complementaria", "type": "TEXT", "description": "La del código, copiada."},
+        {"name": "base_imponible", "label": "Base imponible", "type": "DECIMAL", "required": true, "description": "La UIT leída, copiada."},
+        {"name": "porcentaje_infraccion", "label": "% de la infracción", "type": "DECIMAL", "required": true},
+        {"name": "importe_infraccion", "label": "Importe de la infracción", "type": "DECIMAL", "required": true},
+        {"name": "porcentaje_a_cobrar", "label": "% a cobrar", "type": "DECIMAL", "required": true,
+          "description": "El del grado de reincidencia."},
+        {"name": "importe_a_pagar", "label": "Importe a pagar", "type": "DECIMAL", "required": true},
+        {"name": "importe_con_beneficio", "label": "Importe con beneficio", "type": "DECIMAL", "description": "Vacío por ahora."},
+        {"name": "fecha_calculo", "label": "Fecha del cálculo", "type": "DATE", "required": true},
+        {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true, "description": "Por qué, de 5 a 500 caracteres."}
+      ]
+    },
+    {
+      "name": "anulacion_papeleta",
+      "label": "Anulación de acta",
+      "pluralLabel": "Anulaciones de actas",
+      "description": "La anulación de un acta: una por acta. Solo se agrega.",
+      "fields": [
+        {"name": "fecha", "label": "Fecha", "type": "DATE", "required": true},
+        {"name": "motivo", "label": "Motivo", "type": "LONG_TEXT", "required": true, "description": "Hasta 500 caracteres."},
+        {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true, "description": "Por qué, de 5 a 500 caracteres."},
+        {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true,
+          "description": "El id del acta: una anulación por acta."}
+      ]
+    },
+    {
+      "name": "descargo_papeleta",
+      "label": "Descargo",
+      "pluralLabel": "Descargos",
+      "description": "Un descargo o recurso contra un acta, con su plazo resuelto una vez y copiado. El tardío se registra. Solo se agrega.",
+      "fields": [
+        {"name": "numero_expediente", "label": "Número de expediente", "type": "TEXT", "required": true, "unique": true,
+          "description": "Hasta 20 caracteres, en mayúsculas."},
+        {"name": "tipo_recurso", "label": "Tipo de recurso", "type": "ENUM", "enum": "tipo_recurso", "required": true},
+        {"name": "fecha", "label": "Fecha de presentación", "type": "DATE", "required": true},
+        {"name": "presentado_hasta", "label": "Plazo hasta", "type": "DATE", "required": true},
+        {"name": "en_plazo", "label": "En plazo", "type": "BOOLEAN", "required": true, "description": "fecha <= presentado_hasta."},
+        {"name": "plazo_texto", "label": "Plazo", "type": "TEXT", "required": true,
+          "description": "El plazo leído, copiado (5 DIAS_HABILES)."},
+        {"name": "sustento", "label": "Sustento", "type": "LONG_TEXT", "required": true, "description": "Hasta 1000 caracteres."},
+        {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true, "description": "Por qué, de 5 a 500 caracteres."}
+      ]
+    },
+    {
+      "name": "resolucion_gerencia",
+      "label": "Resolución de gerencia",
+      "pluralLabel": "Resoluciones de gerencia",
+      "description": "La resolución que sanciona un acta (ADMINISTRATIVA, una por acta) o resuelve un descargo (RECURSO, una por descargo). Su PDF se regenera de lo guardado. Solo se agrega.",
+      "fields": [
+        {"name": "tipo", "label": "Tipo", "type": "ENUM", "enum": "tipo_resolucion_gerencia", "required": true},
+        {"name": "anio", "label": "Año", "type": "INTEGER", "required": true},
+        {"name": "correlativo", "label": "Correlativo", "type": "INTEGER", "required": true},
+        {"name": "numero", "label": "Número", "type": "TEXT", "required": true, "unique": true,
+          "description": "RIS-AAAA-NNNNNN o RGR-AAAA-NNNNNN."},
+        {"name": "fecha", "label": "Fecha", "type": "DATE", "required": true},
+        {"name": "sentido", "label": "Sentido del fallo", "type": "ENUM", "enum": "sentido_fallo", "description": "Con el descargo."},
+        {"name": "efecto", "label": "Efecto en la multa", "type": "ENUM", "enum": "efecto_multa", "description": "Con el descargo."},
+        {"name": "sancion_accesoria", "label": "Sanción accesoria", "type": "TEXT", "description": "Hasta 200 caracteres."},
+        {"name": "sustento", "label": "Sustento", "type": "LONG_TEXT", "required": true, "description": "Hasta 1000 caracteres."},
+        {"name": "plazo_texto", "label": "Plazo para recurrir", "type": "TEXT", "required": true,
+          "description": "El RG_RECURSO vigente a la fecha, copiado."},
+        {"name": "clave_ris", "label": "Clave de la RIS", "type": "TEXT", "unique": true,
+          "description": "El id del acta, si es ADMINISTRATIVA: una RIS por acta."},
+        {"name": "clave_descargo", "label": "Clave del descargo", "type": "TEXT", "unique": true,
+          "description": "El id del descargo, si lo hay: una resolución por descargo."},
+        {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true, "description": "Por qué, de 5 a 500 caracteres."}
+      ]
+    },
+    {
+      "name": "notificacion_resolucion",
+      "label": "Notificación de resolución",
+      "pluralLabel": "Notificaciones de resoluciones",
+      "description": "Cada intento de notificar una resolución. La que surte efecto (NOTIFICADO o RECHAZADO) lleva exigible_desde, calculado en días hábiles y copiado. Solo se agrega.",
+      "fields": [
+        {"name": "intento", "label": "Intento", "type": "INTEGER", "required": true},
+        {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true, "description": "<resolucion>|<intento>."},
+        {"name": "fecha_diligencia", "label": "Fecha de la diligencia", "type": "DATE", "required": true},
+        {"name": "modalidad", "label": "Modalidad", "type": "ENUM", "enum": "modalidad_notificacion", "required": true},
+        {"name": "resultado", "label": "Resultado", "type": "ENUM", "enum": "resultado_notificacion", "required": true},
+        {"name": "notificador", "label": "Notificador", "type": "TEXT", "required": true, "description": "Hasta 60 caracteres."},
+        {"name": "direccion", "label": "Dirección", "type": "TEXT", "required": true, "description": "Hasta 300 caracteres."},
+        {"name": "receptor", "label": "Receptor", "type": "TEXT", "description": "Hasta 120 caracteres."},
+        {"name": "documento_receptor", "label": "Documento del receptor", "type": "TEXT", "description": "Hasta 20 caracteres."},
+        {"name": "vinculo", "label": "Vínculo", "type": "TEXT", "description": "Hasta 40 caracteres."},
+        {"name": "acuse", "label": "Acuse", "type": "TEXT", "description": "Hasta 80 caracteres."},
+        {"name": "exigible_desde", "label": "Exigible desde", "type": "DATE"},
+        {"name": "plazo_texto", "label": "Plazo", "type": "TEXT"},
+        {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true, "description": "Por qué, de 5 a 500 caracteres."}
+      ]
+    },
+    {
+      "name": "anuncio",
+      "label": "Anuncio",
+      "pluralLabel": "Anuncios",
+      "description": "Un anuncio o propaganda autorizado. No se edita: su estado se deriva de sus movimientos. Solo se agrega.",
+      "fields": [
+        {"name": "anio", "label": "Año", "type": "INTEGER", "required": true},
+        {"name": "correlativo", "label": "Correlativo", "type": "INTEGER", "required": true},
+        {"name": "numero", "label": "Número", "type": "TEXT", "required": true, "unique": true, "description": "AN-AAAA-NNNNNN."},
+        {"name": "clase", "label": "Clase", "type": "ENUM", "enum": "clase_anuncio", "required": true},
+        {"name": "tipo", "label": "Tipo", "type": "ENUM", "enum": "tipo_anuncio", "required": true},
+        {"name": "emplazamiento", "label": "Emplazamiento", "type": "TEXT", "description": "Hasta 30 caracteres."},
+        {"name": "forma", "label": "Forma", "type": "TEXT", "description": "Hasta 30 caracteres."},
+        {"name": "denominacion", "label": "Denominación", "type": "TEXT", "description": "Hasta 240 caracteres."},
+        {"name": "direccion", "label": "Dirección", "type": "TEXT", "required": true, "description": "Hasta 300 caracteres."},
+        {"name": "area", "label": "Área (m²)", "type": "DECIMAL", "required": true, "description": "Mayor que 0."},
+        {"name": "lados", "label": "Lados", "type": "INTEGER", "required": true, "description": "Al menos 1."},
+        {"name": "cantidad", "label": "Cantidad", "type": "INTEGER", "required": true, "description": "Al menos 1."},
+        {"name": "fecha_autorizacion", "label": "Fecha de autorización", "type": "DATE", "required": true},
+        {"name": "vigencia_hasta", "label": "Vigente hasta", "type": "DATE",
+          "description": "No antes de la autorización. Sin ella, no vence."},
+        {"name": "expediente", "label": "Expediente", "type": "TEXT", "description": "Hasta 20 caracteres."},
+        {"name": "fecha_expediente", "label": "Fecha del expediente", "type": "DATE"},
+        {"name": "licencia_texto", "label": "Licencia", "type": "TEXT", "description": "Hasta 40 caracteres."},
+        {"name": "clave_idempotencia", "label": "Clave de idempotencia", "type": "TEXT", "unique": true,
+          "description": "La cabecera Idempotency-Key del alta, hasta 64 caracteres."},
+        {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true, "description": "Por qué, de 5 a 500 caracteres."}
+      ]
+    },
+    {
+      "name": "movimiento_anuncio",
+      "label": "Movimiento de anuncio",
+      "pluralLabel": "Movimientos de anuncios",
+      "description": "Un acto sobre un anuncio: la autorización y la renovación devengan la tasa del ejercicio; el cese y el retiro llevan motivo. Solo se agrega.",
+      "fields": [
+        {"name": "tipo", "label": "Tipo", "type": "ENUM", "enum": "tipo_movimiento_anuncio", "required": true},
+        {"name": "fecha", "label": "Fecha", "type": "DATE", "required": true},
+        {"name": "anio", "label": "Ejercicio", "type": "INTEGER", "description": "El que devenga."},
+        {"name": "referencia_cargo", "label": "Referencia del cargo", "type": "TEXT", "unique": true,
+          "description": "ANUNCIO-<anuncio>-<anio>: un devengo por anuncio y ejercicio."},
+        {"name": "tasa", "label": "Tasa", "type": "DECIMAL", "description": "La TASA_ANUNCIO leída, copiada: mayor que 0."},
+        {"name": "vigencia_hasta", "label": "Vigente hasta", "type": "DATE"},
+        {"name": "motivo", "label": "Motivo", "type": "LONG_TEXT", "description": "Del cese o del retiro, hasta 500 caracteres."},
+        {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true,
+          "description": "<anuncio>|AUTORIZACION, |CESE, |RETIRO o |RENOVACION|<anio>: un acto de cada uno."},
+        {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true, "description": "Por qué, de 5 a 500 caracteres."}
+      ]
     }
   ],
   "relationships": [
@@ -1174,6 +1398,195 @@
       "target": "predio",
       "fieldName": "predio",
       "required": true
+    },
+    {
+      "name": "notif_adm_contribuyente",
+      "label": "Contribuyente",
+      "inverseLabel": "Notificaciones administrativas",
+      "source": "notificacion_administrativa",
+      "target": "contribuyente",
+      "fieldName": "contribuyente",
+      "required": false
+    },
+    {
+      "name": "notif_adm_predio",
+      "label": "Predio",
+      "inverseLabel": "Notificaciones administrativas",
+      "source": "notificacion_administrativa",
+      "target": "predio",
+      "fieldName": "predio",
+      "required": false
+    },
+    {
+      "name": "subsanacion_notificacion_rel",
+      "label": "Notificación",
+      "inverseLabel": "Subsanación",
+      "source": "subsanacion_notificacion",
+      "target": "notificacion_administrativa",
+      "fieldName": "notificacion",
+      "required": true
+    },
+    {
+      "name": "papeleta_codigo",
+      "label": "Código de infracción",
+      "inverseLabel": "Actas",
+      "source": "papeleta",
+      "target": "codigo_infraccion",
+      "fieldName": "codigo_infraccion",
+      "required": true
+    },
+    {
+      "name": "papeleta_uit",
+      "label": "UIT",
+      "inverseLabel": "Actas",
+      "source": "papeleta",
+      "target": "parametro_tributario",
+      "fieldName": "uit",
+      "required": true
+    },
+    {
+      "name": "papeleta_obligado",
+      "label": "Obligado",
+      "inverseLabel": "Actas como obligado",
+      "source": "papeleta",
+      "target": "contribuyente",
+      "fieldName": "obligado",
+      "required": true
+    },
+    {
+      "name": "papeleta_contribuyente",
+      "label": "Contribuyente",
+      "inverseLabel": "Actas",
+      "source": "papeleta",
+      "target": "contribuyente",
+      "fieldName": "contribuyente",
+      "required": false
+    },
+    {
+      "name": "papeleta_predio",
+      "label": "Predio",
+      "inverseLabel": "Actas",
+      "source": "papeleta",
+      "target": "predio",
+      "fieldName": "predio",
+      "required": false
+    },
+    {
+      "name": "papeleta_notificacion_previa",
+      "label": "Notificación previa",
+      "inverseLabel": "Actas",
+      "source": "papeleta",
+      "target": "notificacion_administrativa",
+      "fieldName": "notificacion_previa",
+      "required": false
+    },
+    {
+      "name": "anulacion_papeleta_rel",
+      "label": "Acta",
+      "inverseLabel": "Anulación",
+      "source": "anulacion_papeleta",
+      "target": "papeleta",
+      "fieldName": "papeleta",
+      "required": true
+    },
+    {
+      "name": "descargo_papeleta_rel",
+      "label": "Acta",
+      "inverseLabel": "Descargos",
+      "source": "descargo_papeleta",
+      "target": "papeleta",
+      "fieldName": "papeleta",
+      "required": true
+    },
+    {
+      "name": "descargo_plazo",
+      "label": "Plazo",
+      "inverseLabel": "Descargos",
+      "source": "descargo_papeleta",
+      "target": "parametro_tributario",
+      "fieldName": "plazo",
+      "required": true
+    },
+    {
+      "name": "resolucion_papeleta",
+      "label": "Acta",
+      "inverseLabel": "Resoluciones",
+      "source": "resolucion_gerencia",
+      "target": "papeleta",
+      "fieldName": "papeleta",
+      "required": true
+    },
+    {
+      "name": "resolucion_descargo",
+      "label": "Descargo",
+      "inverseLabel": "Resoluciones",
+      "source": "resolucion_gerencia",
+      "target": "descargo_papeleta",
+      "fieldName": "descargo",
+      "required": false
+    },
+    {
+      "name": "resolucion_plazo",
+      "label": "Plazo",
+      "inverseLabel": "Resoluciones",
+      "source": "resolucion_gerencia",
+      "target": "parametro_tributario",
+      "fieldName": "plazo",
+      "required": true
+    },
+    {
+      "name": "notif_resolucion_rel",
+      "label": "Resolución",
+      "inverseLabel": "Notificaciones",
+      "source": "notificacion_resolucion",
+      "target": "resolucion_gerencia",
+      "fieldName": "resolucion",
+      "required": true
+    },
+    {
+      "name": "notif_resolucion_plazo",
+      "label": "Plazo",
+      "inverseLabel": "Notificaciones de resoluciones",
+      "source": "notificacion_resolucion",
+      "target": "parametro_tributario",
+      "fieldName": "plazo",
+      "required": false
+    },
+    {
+      "name": "anuncio_contribuyente",
+      "label": "Titular",
+      "inverseLabel": "Anuncios",
+      "source": "anuncio",
+      "target": "contribuyente",
+      "fieldName": "contribuyente",
+      "required": true
+    },
+    {
+      "name": "anuncio_predio",
+      "label": "Predio",
+      "inverseLabel": "Anuncios",
+      "source": "anuncio",
+      "target": "predio",
+      "fieldName": "predio",
+      "required": false
+    },
+    {
+      "name": "movimiento_anuncio_rel",
+      "label": "Anuncio",
+      "inverseLabel": "Movimientos",
+      "source": "movimiento_anuncio",
+      "target": "anuncio",
+      "fieldName": "anuncio",
+      "required": true
+    },
+    {
+      "name": "movimiento_parametro",
+      "label": "Tasa leída",
+      "inverseLabel": "Movimientos de anuncios",
+      "source": "movimiento_anuncio",
+      "target": "parametro_tributario",
+      "fieldName": "parametro",
+      "required": false
     }
   ]
 }
