@@ -1,9 +1,9 @@
-package srtm.arbitrios
+package srtm
 
 import wasichai.core.common.ValidationException
 
-// rentas' Observacion: every write of the arbitrios says why, 5 to 500 characters once trimmed. core's audit has no
-// column for it, so it goes on the record. a missing or bad one is a 400 that names the field
+// rentas' Observacion: every act of srtm (arbitrios, sanciones, anuncios) says why, 5 to 500 characters once trimmed.
+// core's audit has no column for it, so it goes on the record. a missing or bad one is a 400 that names the field
 object Observacion {
     const val MINIMO = 5
     const val MAXIMO = 500

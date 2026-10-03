@@ -32,8 +32,8 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
     protected fun modelo(): JsonNode = json.readTree(File("model/model.json"))
 
     // model/apply.py in kotlin: what is missing gets created (objects, fields with their geometry, enum options,
-    // required relationships), a field model.json no longer requires is relaxed, the rest is left alone. in the
-    // organization of `token`'s user: the seeded admin's by default
+    // relationships, required when model.json says so), a field model.json no longer requires is relaxed, the rest is
+    // left alone. in the organization of `token`'s user: the seeded admin's by default
     protected fun aplicarModelo(token: String = this.token) {
         val model = modelo()
         val enums = model["enums"]
@@ -116,6 +116,8 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                 HttpStatus.CREATED,
                 token
             )
+            // an optional relation stays optional (test_model.py's OPCIONALES)
+            if (!required(rel)) continue
             send(
                 "PUT",
                 "/api/metadata/objects/${rel["source"].asString()}/fields/${rel["fieldName"].asString()}",

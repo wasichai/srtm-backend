@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
+import srtm.Observacion
 import wasichai.core.common.ValidationException
 import java.math.BigDecimal
 import java.time.LocalDate

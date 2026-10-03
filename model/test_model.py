@@ -11,6 +11,77 @@ from apply import enum_option_valid, object_payload, relationship_payload, valid
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.json")
 
+# the relations a record may lack (SPEC §4, «opcional»); every other one is required
+OPCIONALES = {
+    "notif_adm_contribuyente", "notif_adm_predio", "papeleta_contribuyente", "papeleta_predio",
+    "papeleta_notificacion_previa", "resolucion_descargo", "notif_resolucion_plazo", "anuncio_predio",
+    "movimiento_parametro",
+}
+
+# object -> (its fields in order, the required ones, the unique ones)
+OBJETOS = {
+    "codigo_infraccion": (
+        ["familia", "codigo", "descripcion", "materia", "porcentaje_uit", "porcentaje_uit_segunda", "porcentaje_uit_tercera",
+         "medida_complementaria", "base_legal", "vigencia_desde", "vigencia_hasta", "observacion", "clave", "clave_vigente"],
+        {"familia", "codigo", "descripcion", "porcentaje_uit", "base_legal", "vigencia_desde", "observacion", "clave"},
+        {"clave", "clave_vigente"}),
+    "notificacion_administrativa": (
+        ["numero", "fecha", "direccion", "motivo", "plazo_dias", "observacion"],
+        {"numero", "fecha", "direccion", "motivo", "observacion"},
+        {"numero"}),
+    "subsanacion_notificacion": (["fecha", "observacion", "clave"], {"fecha", "observacion", "clave"}, {"clave"}),
+    "papeleta": (
+        ["familia", "numero", "clave", "fecha_infraccion", "hora_infraccion", "lugar", "expediente", "inspector",
+         "descripcion_hecho", "reincidencia", "medida_complementaria", "base_imponible", "porcentaje_infraccion",
+         "importe_infraccion", "porcentaje_a_cobrar", "importe_a_pagar", "importe_con_beneficio", "fecha_calculo", "observacion"],
+        {"familia", "numero", "clave", "fecha_infraccion", "lugar", "reincidencia", "base_imponible", "porcentaje_infraccion",
+         "importe_infraccion", "porcentaje_a_cobrar", "importe_a_pagar", "fecha_calculo", "observacion"},
+        {"clave"}),
+    "anulacion_papeleta": (["fecha", "motivo", "observacion", "clave"], {"fecha", "motivo", "observacion", "clave"}, {"clave"}),
+    "descargo_papeleta": (
+        ["numero_expediente", "tipo_recurso", "fecha", "presentado_hasta", "en_plazo", "plazo_texto", "sustento", "observacion"],
+        {"numero_expediente", "tipo_recurso", "fecha", "presentado_hasta", "en_plazo", "plazo_texto", "sustento", "observacion"},
+        {"numero_expediente"}),
+    "resolucion_gerencia": (
+        ["tipo", "anio", "correlativo", "numero", "fecha", "sentido", "efecto", "sancion_accesoria", "sustento", "plazo_texto",
+         "clave_ris", "clave_descargo", "observacion"],
+        {"tipo", "anio", "correlativo", "numero", "fecha", "sustento", "plazo_texto", "observacion"},
+        {"numero", "clave_ris", "clave_descargo"}),
+    "notificacion_resolucion": (
+        ["intento", "clave", "fecha_diligencia", "modalidad", "resultado", "notificador", "direccion", "receptor",
+         "documento_receptor", "vinculo", "acuse", "exigible_desde", "plazo_texto", "observacion"],
+        {"intento", "clave", "fecha_diligencia", "modalidad", "resultado", "notificador", "direccion", "observacion"},
+        {"clave"}),
+    "anuncio": (
+        ["anio", "correlativo", "numero", "clase", "tipo", "emplazamiento", "forma", "denominacion", "direccion", "area", "lados",
+         "cantidad", "fecha_autorizacion", "vigencia_hasta", "expediente", "fecha_expediente", "licencia_texto",
+         "clave_idempotencia", "observacion"],
+        {"anio", "correlativo", "numero", "clase", "tipo", "direccion", "area", "lados", "cantidad", "fecha_autorizacion",
+         "observacion"},
+        {"numero", "clave_idempotencia"}),
+    "movimiento_anuncio": (
+        ["tipo", "fecha", "anio", "referencia_cargo", "tasa", "vigencia_hasta", "motivo", "clave", "observacion"],
+        {"tipo", "fecha", "clave", "observacion"},
+        {"referencia_cargo", "clave"}),
+}
+
+# object -> {fieldName: (target, required)}
+RELACIONES = {
+    "codigo_infraccion": {},
+    "notificacion_administrativa": {"contribuyente": ("contribuyente", False), "predio": ("predio", False)},
+    "subsanacion_notificacion": {"notificacion": ("notificacion_administrativa", True)},
+    "papeleta": {"codigo_infraccion": ("codigo_infraccion", True), "uit": ("parametro_tributario", True),
+                 "obligado": ("contribuyente", True), "contribuyente": ("contribuyente", False), "predio": ("predio", False),
+                 "notificacion_previa": ("notificacion_administrativa", False)},
+    "anulacion_papeleta": {"papeleta": ("papeleta", True)},
+    "descargo_papeleta": {"papeleta": ("papeleta", True), "plazo": ("parametro_tributario", True)},
+    "resolucion_gerencia": {"papeleta": ("papeleta", True), "descargo": ("descargo_papeleta", False),
+                            "plazo": ("parametro_tributario", True)},
+    "notificacion_resolucion": {"resolucion": ("resolucion_gerencia", True), "plazo": ("parametro_tributario", False)},
+    "anuncio": {"contribuyente": ("contribuyente", True), "predio": ("predio", False)},
+    "movimiento_anuncio": {"anuncio": ("anuncio", True), "parametro": ("parametro_tributario", False)},
+}
+
 
 def load_model():
     with open(MODEL_PATH, encoding="utf-8") as f:
@@ -27,8 +98,8 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 29)
-        self.assertEqual(len(self.model["relationships"]), 21)
+        self.assertEqual(len(names), 39)
+        self.assertEqual(len(self.model["relationships"]), 42)
 
     def test_the_municipalidad_holds_the_documents_header(self):
         # the PU and HR's header, one record per organization edited in the admin (the escudo is a file, not a field)
@@ -157,13 +228,85 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual((relacion["target"], relacion["fieldName"], relacion["required"]),
                          ("determinacion_arbitrio_masiva", "determinacion", True))
 
+    def campos(self, objeto):
+        return {f["name"]: f for f in next(o for o in self.model["objects"] if o["name"] == objeto)["fields"]}
+
+    def relaciones(self, objeto):
+        return {r["fieldName"]: (r["target"], r["required"]) for r in self.model["relationships"] if r["source"] == objeto}
+
+    def test_the_sanciones_and_anuncios_objects_in_order(self):
+        # after the arbitrios, each one after the objects it points at
+        names = [o["name"] for o in self.model["objects"]]
+        self.assertEqual(names[29:], list(OBJETOS))
+
+    def test_each_new_object_has_its_fields_required_and_unique(self):
+        # SPEC §4, field by field: the order, what is required and what is unique. the lengths and ranges are kotlin's
+        # (ReglaDeEscritura): core's TEXT has no length
+        for objeto, (orden, requeridos, unicos) in OBJETOS.items():
+            with self.subTest(objeto=objeto):
+                campos = self.campos(objeto)
+                self.assertEqual(list(campos), orden)
+                self.assertEqual({n for n, f in campos.items() if f.get("required")}, requeridos)
+                self.assertEqual({n for n, f in campos.items() if f.get("unique")}, unicos)
+                self.assertTrue(campos["observacion"]["required"])
+
+    def test_each_new_object_points_at_what_it_read(self):
+        # the relation keeps the row that was read (a version of the CUIS, a parametro_tributario): its values are
+        # copied on the record too
+        for objeto, relaciones in RELACIONES.items():
+            with self.subTest(objeto=objeto):
+                self.assertEqual(self.relaciones(objeto), relaciones)
+
+    def test_the_new_types(self):
+        cuis = self.campos("codigo_infraccion")
+        self.assertEqual({n: f["type"] for n, f in cuis.items() if f["type"] != "TEXT"},
+                         {"familia": "ENUM", "descripcion": "LONG_TEXT", "porcentaje_uit": "DECIMAL",
+                          "porcentaje_uit_segunda": "DECIMAL", "porcentaje_uit_tercera": "DECIMAL",
+                          "vigencia_desde": "DATE", "vigencia_hasta": "DATE"})
+        papeleta = self.campos("papeleta")
+        dinero = ["base_imponible", "porcentaje_infraccion", "importe_infraccion", "porcentaje_a_cobrar", "importe_a_pagar",
+                  "importe_con_beneficio"]
+        self.assertTrue(all(papeleta[c]["type"] == "DECIMAL" for c in dinero))
+        self.assertEqual(self.campos("descargo_papeleta")["en_plazo"]["type"], "BOOLEAN")
+        self.assertEqual((self.campos("anuncio")["area"]["type"], self.campos("movimiento_anuncio")["tasa"]["type"]),
+                         ("DECIMAL", "DECIMAL"))
+        enums = {(o["name"], f["name"]): f["enum"] for o in self.model["objects"][29:] for f in o["fields"] if f["type"] == "ENUM"}
+        self.assertEqual(enums, {
+            ("codigo_infraccion", "familia"): "familia_infraccion", ("papeleta", "familia"): "familia_infraccion",
+            ("papeleta", "reincidencia"): "grado_reincidencia", ("descargo_papeleta", "tipo_recurso"): "tipo_recurso",
+            ("resolucion_gerencia", "tipo"): "tipo_resolucion_gerencia", ("resolucion_gerencia", "sentido"): "sentido_fallo",
+            ("resolucion_gerencia", "efecto"): "efecto_multa", ("notificacion_resolucion", "modalidad"): "modalidad_notificacion",
+            ("notificacion_resolucion", "resultado"): "resultado_notificacion", ("anuncio", "clase"): "clase_anuncio",
+            ("anuncio", "tipo"): "tipo_anuncio", ("movimiento_anuncio", "tipo"): "tipo_movimiento_anuncio",
+        })
+
+    def test_the_new_enums(self):
+        enums = self.model["enums"]
+        self.assertEqual(enums["familia_infraccion"], ["ADMINISTRATIVA"])
+        self.assertEqual(enums["grado_reincidencia"], ["PRIMERA", "SEGUNDA", "TERCERA_O_MAS"])
+        self.assertEqual(enums["tipo_recurso"], ["DESCARGO", "RECONSIDERACION", "APELACION", "NULIDAD"])
+        self.assertEqual(enums["tipo_resolucion_gerencia"], ["ADMINISTRATIVA", "RECURSO"])
+        self.assertEqual(enums["sentido_fallo"], ["FUNDADO", "FUNDADO_EN_PARTE", "INFUNDADO", "IMPROCEDENTE"])
+        self.assertEqual(enums["efecto_multa"], ["SE_MANTIENE", "SE_DEJA_SIN_EFECTO", "SE_REDUCE"])
+        self.assertEqual(enums["modalidad_notificacion"], ["PERSONAL", "CEDULON", "PUBLICACION", "CORREO"])
+        self.assertEqual(enums["resultado_notificacion"], ["NOTIFICADO", "NO_UBICADO", "RECHAZADO"])
+        self.assertEqual(enums["clase_anuncio"], ["LETRERO", "PANEL", "TOLDO", "BANDEROLA", "PANTALLA_DIGITAL", "GLOBO_AEROSTATICO"])
+        self.assertEqual(enums["tipo_anuncio"], ["AVISO_SIMPLE", "AVISO_LUMINOSO", "AVISO_ILUMINADO", "AVISO_ELECTRONICO"])
+        self.assertEqual(enums["tipo_movimiento_anuncio"], ["AUTORIZACION", "RENOVACION", "CESE", "RETIRO"])
+
     def test_every_enum_option_passes_core_regex(self):
         for name, options in self.model["enums"].items():
             for opt in options:
                 self.assertTrue(enum_option_valid(opt), f"{name}: {opt}")
 
-    def test_every_relation_is_required(self):
-        self.assertTrue(all(r["required"] for r in self.model["relationships"]))
+    def test_only_the_listed_relations_are_optional(self):
+        # a relation is required unless a record can lack it: a notificación or an acta names a contribuyente or a
+        # predio (the acta, at least one: kotlin's rule), a resolución has a descargo only when it resolves one, a
+        # notificación de resolución reads a plazo only when it takes effect, a movimiento reads a tasa only when it
+        # accrues. a new optional relation is added here on purpose
+        opcionales = {r["name"] for r in self.model["relationships"] if not r["required"]}
+        self.assertEqual(opcionales, OPCIONALES)
+        self.assertTrue(all(r["required"] is True for r in self.model["relationships"] if r["name"] not in OPCIONALES))
 
     def test_business_keys_are_unique(self):
         fields = {o["name"]: {f["name"]: f for f in o["fields"]} for o in self.model["objects"]}

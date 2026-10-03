@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Loads the verified tax parameters of the impuesto predial into parametro_tributario: the UIT of each year, the
-tramos and their límites, the mínimo and the deducciones. With --csv, the rows of an ordinance of arbitrios too: its
-tasas and the mappings of zona and uso (TIPOS_ARBITRIO), whose shape is checked before anything is sent.
+tramos and their límites, the mínimo and the deducciones. With --csv, the rows of an ordinance too, whose shape is
+checked before anything is sent: the arbitrios' tasas and mappings of zona and uso (TIPOS_ARBITRIO), the plazos and
+feriados of the sanciones (TIPOS_SANCIONES) and the tasas of the anuncios (TIPOS_ANUNCIO).
 
 They come from data/parametros-predial.csv, a verbatim copy of the predial rows of normativa's
 docs/10-negocio/valores-normativos/publicacion/parametros-2026.csv (double-signed: transcribio, verifico). No figure
@@ -12,10 +13,11 @@ updated in place; a row the CSV does not have is left alone (a parameter of anot
 script's to delete). Idempotent: a second run writes nothing.
 
 Run: python3 import_parametros.py [--csv <file>] [--dry-run]
-Exit: 0 ok, 1 Core refused something, 2 an arbitrios row is malformed (nothing is sent).
+Exit: 0 ok, 1 Core refused something, 2 a row of an ordinance is malformed (nothing is sent).
 """
 import argparse
 import csv
+import json
 import os
 import re
 import sys
@@ -47,26 +49,58 @@ ARBITRIO_VENCIMIENTO = "ARBITRIO_VENCIMIENTO"
 TIPOS_ARBITRIO = (TASA_ARBITRIO, ARBITRIO_ZONA, ARBITRIO_USO, ARBITRIO_VENCIMIENTO)
 
 
+# the rows the sanciones read (srtm.sanciones.Llaves names the same tipos): PLAZO DESCARGO_PAPELETA or RG_RECURSO its
+# days in valor_numerico, a whole number above 0, and its unit in texto (DIAS_HABILES, the only one for now); FERIADOS
+# <year> the year's movable holidays in texto, ISO dates of that year separated by commas (empty when it has none), in
+# force from its 1 January to its 31 December
+PLAZO = "PLAZO"
+FERIADOS = "FERIADOS"
+TIPOS_SANCIONES = (PLAZO, FERIADOS)
+PLAZO_DESCARGO_PAPELETA = "DESCARGO_PAPELETA"
+PLAZO_RG_RECURSO = "RG_RECURSO"
+CLAVES_PLAZO = (PLAZO_DESCARGO_PAPELETA, PLAZO_RG_RECURSO)
+DIAS_HABILES = "DIAS_HABILES"
+
+# the rows the anuncios read (srtm.anuncios.Llaves names the same tipo): TASA_ANUNCIO <clase_anuncio> the tasa of a
+# whole ejercicio in valor_numerico, above 0 (a clase without one is not authorized at zero)
+TASA_ANUNCIO = "TASA_ANUNCIO"
+TIPOS_ANUNCIO = (TASA_ANUNCIO,)
+
+VALIDADOS = TIPOS_ARBITRIO + TIPOS_SANCIONES + TIPOS_ANUNCIO
+
+
+def _clases_de_anuncio():
+    """model.json's clase_anuncio: a TASA_ANUNCIO's clave is one of them."""
+    with open(os.path.join(HERE, "model.json"), encoding="utf-8") as f:
+        return tuple(json.load(f)["enums"]["clase_anuncio"])
+
+
 def _firmante(firma):
     """'ANA, 2026-01-05' -> 'ANA': normativa's signature is a name and a date."""
     return (firma or "").split(",")[0].strip().upper()
 
 
-def _error_arbitrio(p):
-    """Why an arbitrios row does not fit, or None. A tasa is never invented nor negative; a mapping names its value;
-    every ordinance figure is signed by two different people (normativa's double signature)."""
-    tipo, clave, texto = p["tipo"], (p.get("clave") or "").strip(), (p.get("texto") or "").strip()
-    if not _firmante(p.get("transcribio")) or not _firmante(p.get("verifico")):
-        return "falta una firma (transcribio, verifico)"
-    if _firmante(p.get("transcribio")) == _firmante(p.get("verifico")):
-        return "transcribio y verifico son la misma persona"
+def _decimal(p):
+    try:
+        return Decimal(str(p.get("valor_numerico")))
+    except InvalidOperation:
+        return None
+
+
+def _fecha(texto):
+    try:
+        return date.fromisoformat(texto)
+    except (TypeError, ValueError):
+        return None
+
+
+def _error_arbitrio(tipo, clave, texto, p):
     if tipo == TASA_ARBITRIO:
         partes = clave.split(":")
         if len(partes) != 3 or not all(x.strip() for x in partes):
             return "la clave de una tasa es servicio:zona:uso"
-        try:
-            valor = Decimal(str(p.get("valor_numerico")))
-        except InvalidOperation:
+        valor = _decimal(p)
+        if valor is None:
             return "una tasa necesita su valor_numerico"
         if valor < 0:
             return "una tasa no es negativa"
@@ -79,19 +113,64 @@ def _error_arbitrio(p):
     elif tipo == ARBITRIO_VENCIMIENTO:
         if not clave.isdigit() or not 1 <= int(clave) <= 12:
             return "un vencimiento es de un mes, de 1 a 12"
-        try:
-            date.fromisoformat(texto)
-        except ValueError:
+        if _fecha(texto) is None:
             return "un vencimiento es una fecha AAAA-MM-DD en texto"
     return None
 
 
+def _error_sanciones(tipo, clave, texto, p):
+    if tipo == PLAZO:
+        if clave not in CLAVES_PLAZO:
+            return f"la clave de un plazo es {' o '.join(CLAVES_PLAZO)}"
+        valor = _decimal(p)
+        if valor is None or valor != valor.to_integral_value() or valor <= 0:
+            return "un plazo es un número entero de días mayor que 0 (valor_numerico)"
+        if texto != DIAS_HABILES:
+            return f"la unidad de un plazo (texto) es {DIAS_HABILES}"
+    elif tipo == FERIADOS:
+        if not re.fullmatch(r"\d{4}", clave):
+            return "la clave de los feriados es el año, AAAA"
+        if p.get("vigencia_desde") != f"{clave}-01-01" or p.get("vigencia_hasta") != f"{clave}-12-31":
+            return f"los feriados de {clave} rigen del {clave}-01-01 al {clave}-12-31"
+        fechas = [x.strip() for x in texto.split(",")] if texto else []
+        if any(_fecha(x) is None or _fecha(x).year != int(clave) for x in fechas):
+            return f"los feriados son fechas AAAA-MM-DD de {clave}, separadas por comas (texto)"
+    return None
+
+
+def _error_anuncio(tipo, clave, texto, p):
+    if tipo == TASA_ANUNCIO:
+        clases = _clases_de_anuncio()
+        if clave not in clases:
+            return f"la clave de una tasa de anuncio es una clase: {', '.join(clases)}"
+        valor = _decimal(p)
+        if valor is None or valor <= 0:
+            return "una tasa de anuncio es mayor que 0 (valor_numerico)"
+    return None
+
+
+def _error(p):
+    """Why a row of an ordinance does not fit, or None. A figure is never invented: a tasa is never negative (nor zero
+    for an anuncio), a mapping names its value, and every row is signed by two different people (normativa's double
+    signature)."""
+    tipo, clave, texto = p["tipo"], (p.get("clave") or "").strip(), (p.get("texto") or "").strip()
+    if not _firmante(p.get("transcribio")) or not _firmante(p.get("verifico")):
+        return "falta una firma (transcribio, verifico)"
+    if _firmante(p.get("transcribio")) == _firmante(p.get("verifico")):
+        return "transcribio y verifico son la misma persona"
+    if tipo in TIPOS_ARBITRIO:
+        return _error_arbitrio(tipo, clave, texto, p)
+    if tipo in TIPOS_SANCIONES:
+        return _error_sanciones(tipo, clave, texto, p)
+    return _error_anuncio(tipo, clave, texto, p)
+
+
 def errores(parametros):
-    """The arbitrios rows that do not fit, as '<tipo> <clave>: why'. The predial's are not checked here."""
+    """The rows of an ordinance that do not fit, as '<tipo> <clave>: why'. The predial's are not checked here."""
     malas = []
     for p in parametros:
-        if p.get("tipo") in TIPOS_ARBITRIO:
-            motivo = _error_arbitrio(p)
+        if p.get("tipo") in VALIDADOS:
+            motivo = _error(p)
             if motivo:
                 malas.append(f"{p['tipo']} {p.get('clave') or ''}: {motivo}")
     return malas

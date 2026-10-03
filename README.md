@@ -75,8 +75,8 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 33 created, 0 updated, 0 skipped  (22 objetos + 11 relaciones)
-python3 apply.py                   # idempotente: done: 0 created, 0 updated, 33 skipped
+python3 apply.py                   # done: 81 created, 0 updated, 0 skipped  (39 objetos + 42 relaciones)
+python3 apply.py                   # idempotente: done: 0 created, 0 updated, 81 skipped
 python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
 ```
 
@@ -106,6 +106,9 @@ registros importados siguen siendo válidos. Por ejemplo, sobre la base del padr
 - quita de `uso` los grupos de uso del padrón (`RESIDENCIAL - CASA HABITACION`, `TERRENO`…) y de `clase_uso`
   `ESTACIONAMIENTO` una vez migradas las DJ que los usan ([Migrar los usos del padrón](#migrar-los-usos-del-padrón));
 - crea los objetos y relaciones de las fases 1 y 2.
+
+Una relación queda obligatoria cuando `model.json` dice `"required": true`; las opcionales (ver
+[Modelo](#modelo)) se crean sin ese paso.
 
 Flags: `--core` (default `http://localhost:8090` o `$WASICHAI_CORE`), `--email`, `--password`, `--dry-run`,
 `--drop`, `--validate-only`. Salida: `0` ok, `1` error de Core, `2` `model.json` inválido.
@@ -316,9 +319,9 @@ Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
   Core no tiene unicidad compuesta; como cada organización tiene su tabla física, la unicidad es por organización.
 - **Inmutable:** una cuota no se edita ni se borra, ni siquiera un ADMIN; una corrección es una anulación que se
   agrega y una versión nueva de la `clave` (ver **Anulación**). Los permisos de Core no pueden decirlo (ADMIN se los salta, y `/admin` usa
-  la misma API), así que lo hace cumplir `CuotasInmutables`, que envuelve el `RecordStore` de Core: un PUT o DELETE de
-  una cuota, por cualquier vía, responde **409**. Su límite: borrar el objeto entero desde los metadatos sigue siendo
-  posible.
+  la misma API), así que lo hace cumplir la regla `CuotasInmutables` de la guardia de escritura (`srtm.AlmacenGuardado`,
+  ver [Modelo](#modelo)): un PUT o DELETE de una cuota, por cualquier vía, responde **409**. Las cuotas no exigen la
+  marca de escritura: la API genérica todavía puede agregarlas, si cumplen sus invariantes.
 - **`periodo` de 1 a 12, `monto` no negativo, `parametro_aplicado` de hasta 120 caracteres, relaciones obligatorias y
   `clave` coherente:** los revisa el mismo `RecordStore` al insertar, venga la cuota de donde venga; si no, **400**.
 - **Un valor único repetido** (dos cuotas con la misma `clave`, o cualquier otro campo único del modelo) responde
@@ -691,7 +694,7 @@ python3 apply.py                                  # 3. quita ANEXO, HABILITACION
 
 ## Modelo
 
-Veintinueve objetos (`model/model.json`):
+Treinta y nueve objetos (`model/model.json`):
 - **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
   *Formato Padrón Municipal Armonización 2026*.
 - **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
@@ -707,6 +710,90 @@ Veintinueve objetos (`model/model.json`):
 - **Arbitrios:** `ordenanza_arbitrio`, `servicio_arbitrio`, `inafectacion_arbitrio`, `cuota_arbitrio` y
   `anulacion_cuota_arbitrio`, y el job de la determinación masiva con sus lotes, `determinacion_arbitrio_masiva` y `determinacion_arbitrio_lote` (ver
   [Arbitrios](#arbitrios)).
+- **Infracciones administrativas** (`srtm.sanciones`): `codigo_infraccion` (el CUIS, versionado por vigencia),
+  `notificacion_administrativa` (la notificación previa) y su `subsanacion_notificacion`, `papeleta` (el acta, con su
+  multa calculada y congelada), `anulacion_papeleta`, `descargo_papeleta`, `resolucion_gerencia` (RIS o RGR) y
+  `notificacion_resolucion`.
+- **Anuncios y propaganda** (`srtm.anuncios`): `anuncio` y `movimiento_anuncio` (autorización, renovación, cese y
+  retiro; la autorización y la renovación devengan la tasa).
+
+Las garantías de `rentas` sobre las infracciones y los anuncios, y dónde quedan:
+- **Unicidad:** Core no tiene unicidad compuesta, así que un campo único guarda las partes unidas: `codigo_infraccion.clave`
+  (`familia|codigo|vigencia_desde`), `papeleta.clave` (`familia|numero`), una subsanación, una anulación y una RIS por
+  cosa (su `clave` o `clave_ris` es el id de lo que toca), una resolución por descargo (`clave_descargo`),
+  `notificacion_resolucion.clave` (`resolucion|intento`), y del movimiento la `clave` por acto (`<anuncio>|AUTORIZACION`,
+  `|CESE`, `|RETIRO`, `|RENOVACION|<anio>`) y la `referencia_cargo` (`ANUNCIO-<anuncio>-<anio>`), que choca entre una
+  autorización y una renovación del mismo año. Los números de formulario (`notificacion_administrativa.numero`,
+  `descargo_papeleta.numero_expediente`), de resolución y de anuncio, y `anuncio.clave_idempotencia`, también son únicos.
+- **Una sola versión vigente del CUIS por código:** `codigo_infraccion.clave_vigente` es única y vale `familia|codigo`
+  mientras la versión rige; al cerrarse queda vacía (NULL, nunca `""`), y PostgreSQL admite muchos NULL en un único.
+- **Lo que se lee se copia:** el acta guarda la UIT (`base_imponible`), los porcentajes y los importes; el descargo y la
+  resolución, el plazo (`plazo_texto`); el movimiento, la tasa. La relación (`uit`, `plazo`, `parametro`,
+  `codigo_infraccion`) queda como procedencia: `import_parametros.py` actualiza una fila en su lugar.
+- **Relaciones opcionales:** las únicas que un registro puede no tener (`test_model.py`, `OPCIONALES`):
+  `notif_adm_contribuyente`, `notif_adm_predio`, `papeleta_contribuyente`, `papeleta_predio` (un acta nombra al menos
+  uno de los dos: lo revisa la regla), `papeleta_notificacion_previa`, `resolucion_descargo`, `notif_resolucion_plazo`
+  (solo la notificación que surte efecto), `anuncio_predio` y `movimiento_parametro` (solo el movimiento que devenga).
+  Todas las demás son obligatorias.
+- **Largos y rangos:** TEXT y LONG_TEXT no tienen largo en Core; los revisa la regla de escritura (código ≤ 20 en
+  mayúsculas, descripción ≤ 500, `porcentaje_uit` mayor que 0 y hasta 100, área mayor que 0, lados y cantidad desde 1…).
+
+**Guardia de escritura** (`srtm.AlmacenGuardado`). Toda escritura de un registro pasa por el `RecordStore` de Core, venga
+de la API genérica (`/api/objects/{objeto}/records`), de `/admin` o de un servicio de srtm. `AlmacenGuardado` lo envuelve
+(un solo `@Bean recordStore`; el de Core es `@ConditionalOnMissingBean`) y, antes de escribir, consulta la
+`ReglaDeEscritura` del objeto. Cada módulo tiene la suya, como bean de su paquete (`CuotasInmutables` en
+`srtm.arbitrios`, `ReglaDeSanciones` en `srtm.sanciones`, `ReglaDeAnuncios` en `srtm.anuncios`), y ninguno importa a
+otro:
+- **Alta:** los invariantes del registro (los `CHECK` de rentas, los largos y las claves), venga de donde venga; si no,
+  **400** que nombra cada campo en `errors[].field`.
+- **Cambio, borrado o transición:** **409**. La única excepción: cerrar una versión del CUIS, una vez (su
+  `vigencia_hasta` pasa de vacía a una fecha no anterior a `vigencia_desde`, su `clave_vigente` a NULL, y nada más
+  cambia). La regla compara la fila entera, normalizada, porque el update de Core reemplaza todos los campos.
+- **Marca de escritura:** los objetos de sanciones y de anuncios son `soloDesdeElServicio`: solo los escribe la api de
+  srtm, que corre sus reglas. `Registros` pone la marca `EscrituraDeSrtm` (un elemento del contexto de la corrutina, el
+  patrón `EscrituraDeCaja` de caja-backend) alrededor de cada `create` y `replace`; un cliente HTTP no puede ponerla.
+  Sin ella, un alta (o el cierre del CUIS) responde **403**, también a un ADMIN, sin tocar la base, y deja una línea
+  WARN `ESCRITURA FUERA DE SRTM RECHAZADA`. Los arbitrios no la exigen.
+- `AlmacenGuardadoTest` falla si una versión nueva de wasichai agrega un método al `RecordStore`: delega por `by`, y un
+  método nuevo de escritura pasaría sin preguntar a ninguna regla.
+
+Lo que la guardia no ve (límites de wasichai 0.2.0): borrar el objeto entero, un campo o el `unique` de un campo por la
+API de metadatos (`/api/metadata/...`, con `MANAGE_METADATA`); una escritura directa a la base (así escriben sus
+estados la emisión y la determinación masivas, que no son de estos objetos); y un módulo que escriba sin pasar por el
+`RecordStore`.
+
+**Parámetros de las infracciones y los anuncios.** Son filas de `parametro_tributario`, con vigencia y doble firma, que
+se cargan con `import_parametros.py --csv <archivo>`; su forma se revisa antes de enviar nada (`TIPOS_SANCIONES`,
+`TIPOS_ANUNCIO`, y `srtm.sanciones.Llaves` / `srtm.anuncios.Llaves` nombran los mismos tipos):
+
+| `tipo` | `clave` | Valor |
+|---|---|---|
+| `PLAZO` | `DESCARGO_PAPELETA` o `RG_RECURSO` | `valor_numerico`: los días, entero mayor que 0; `texto`: `DIAS_HABILES` (la única unidad, por ahora) |
+| `FERIADOS` | el año (`2026`) | `texto`: los feriados movibles del año, fechas ISO de ese año separadas por coma (vacío si no hay); rige del 1 de enero al 31 de diciembre |
+| `TASA_ANUNCIO` | una `clase_anuncio` (`PANEL`…) | `valor_numerico`: la tasa del ejercicio completo, mayor que 0 |
+
+La UIT es la del predial (`UIT`, en `data/parametros-predial.csv`). Ninguno de estos valores está transcrito y
+verificado en `normativa` todavía: el repo no trae un CSV con cifras reales.
+
+**El CUIS** se carga con `import_cuis.py`, desde un CSV con `familia,codigo,descripcion,materia,porcentaje_uit,
+porcentaje_uit_segunda,porcentaje_uit_tercera,medida_complementaria,base_legal,vigencia_desde,observacion` y una
+cabecera `#` que cita la fuente (el repo no trae ninguno: los tests usan uno ficticio):
+
+```bash
+cd model
+python3 import_cuis.py --csv cuis.csv --dry-run   # lee Core y dice qué versiones agregaría y cuáles cerraría
+python3 import_cuis.py --csv cuis.csv             # codigo_infraccion: N created, M closed, K skipped
+```
+
+- `familia` vacía es `ADMINISTRATIVA`; el código se pasa a mayúsculas.
+- Antes de la primera escritura revisa el archivo (obligatorios, largos, alícuotas de 0 a 100, fechas, versiones
+  repetidas) y lo que hay en Core.
+- Es idempotente por `clave`: salta la versión que Core ya tiene. Si Core la tiene con otros valores, sale con `2`: un
+  cambio es una versión nueva, con otra `vigencia_desde`.
+- Una versión nueva de un código vigente cierra la anterior (`vigencia_hasta` = el día antes, `clave_vigente` = NULL) y se
+  agrega; una no posterior a la vigente sale con `2`. Como el CUIS es `soloDesdeElServicio`, cada versión va a
+  `POST /api/srtm/infracciones/cuis`, que cierra y agrega en una transacción.
+- Sale con `0` si todo va bien, `1` si el servidor rechaza algo y `2` si el archivo no encaja (sin escribir nada).
 
 Geometrías (wasichai-gis, GeoJSON en EPSG:4326 por la API):
 - `predio.lote_geom` y `catastro_fiscal.lote_geom`: POLYGON, guardados en UTM 18S (EPSG:32718).
@@ -1314,7 +1401,9 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 ```
 
 - **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`,
-  `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…), `Records`,
+  `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…), la guardia
+  de escritura (`AlmacenGuardadoTest`, `ReglaDeSancionesTest`, `ReglaDeAnunciosTest`, y `AlmacenGuardadoApiTest` en
+  integración), `Records`,
   `Registros`, `srtm.pide` (`PideReniecTest`, contra un servidor local) y `srtm.emision` (`PdfRendererTest`,
   `PdfMergerTest`, `HojaPuTest`, `HojaHrTest`, `GeneradorEmisionTest`, que leen el PDF de vuelta con PDFBox; `AlmacenLocalTest`, que corre el contrato
   de `AlmacenEmision` sobre un directorio temporal).
@@ -1353,5 +1442,8 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - **Fiscalización:** el flujo (rol y pantallas) que determina de oficio una declaración: medio de determinación
   FISCALIZACIÓN o DE OFICIO y su modificación de oficio.
 - **En el modelo:** workflows y plantillas de documentos.
+- **Infracciones administrativas y anuncios:** el modelo, la guardia y la carga ya están; faltan las reglas puras, los
+  servicios y la api de cada uno (`/api/srtm/infracciones/...`, `/api/srtm/anuncios/...`), entre ellos
+  `POST /api/srtm/infracciones/cuis`, que usa `import_cuis.py`.
 
 El frontend web está en `srtm-ui`.

@@ -1,9 +1,11 @@
-"""A scripted fake wasichai Core for the tests: metadata routes plus in-memory records.
+"""A scripted fake wasichai Core for the tests: metadata routes plus in-memory records, and srtm's
+POST /api/srtm/infracciones/cuis (what import_cuis.py calls) as the service does it.
 
 Adapted from wasichai's examples/gis-sample/perene/test_apply.py. Test helper only.
 """
 import json
 import re
+from datetime import date, timedelta
 import threading
 import urllib.parse
 import uuid
@@ -12,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 RECORDS = re.compile(r"^/api/objects/([a-z0-9_]+)/records$")
 RECORD = re.compile(r"^/api/objects/([a-z0-9_]+)/records/([0-9a-f-]+)$")
 FIELDS = re.compile(r"^/api/metadata/objects/([a-z0-9_]+)/fields$")
+CUIS = "/api/srtm/infracciones/cuis"
 
 
 class FakeCoreHandler(BaseHTTPRequestHandler):
@@ -129,8 +132,30 @@ class FakeCore:
         self.records[name] = [r for r in records if r["id"] != record_id]
         return 204, None
 
+    def _cuis(self, body):
+        """srtm's new version of a codigo_infraccion: it closes the one in force (vigencia_hasta the day before,
+        clave_vigente emptied) and adds this one. A repeated clave is a 409, one not after the vigente a 422."""
+        if self.fail_on_record == "codigo_infraccion":
+            return 400, {"detail": "Invalid value", "errors": [{"field": "porcentaje_uit", "message": "boom-cuis"}]}
+        familia = body.get("familia") or "ADMINISTRATIVA"
+        codigo = f"{familia}|{body['codigo']}"
+        clave = f"{codigo}|{body['vigencia_desde']}"
+        versiones = self.records.setdefault("codigo_infraccion", [])
+        if any(r["attributes"].get("clave") == clave for r in versiones):
+            return 409, {"detail": "Ya existe un registro con ese valor"}
+        vigente = next((r for r in versiones if r["attributes"].get("clave_vigente") == codigo), None)
+        desde = date.fromisoformat(body["vigencia_desde"])
+        if vigente is not None:
+            if date.fromisoformat(vigente["attributes"]["vigencia_desde"]) >= desde:
+                return 422, {"detail": "vigencia_desde no es posterior a la de la vigente"}
+            vigente["attributes"].update(vigencia_hasta=(desde - timedelta(days=1)).isoformat(), clave_vigente=None)
+        nueva = self.add_record("codigo_infraccion", {**body, "familia": familia, "clave": clave, "clave_vigente": codigo})
+        return 201, {"codigo": nueva, "cerrada": vigente}
+
     def _script(self, method, full_path, body):
         path, _, query = full_path.partition("?")
+        if path == CUIS and method == "POST":
+            return self._cuis(body)
         if path == "/api/auth/login" and method == "POST":
             if self.login_response is not None:
                 return 200, self.login_response
