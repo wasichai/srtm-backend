@@ -1061,7 +1061,7 @@ verificado en `normativa` todavía: el repo no trae un CSV con cifras reales.
 
 **El CUIS** se carga con `import_cuis.py`, desde un CSV con `familia,codigo,descripcion,materia,porcentaje_uit,
 porcentaje_uit_segunda,porcentaje_uit_tercera,medida_complementaria,base_legal,vigencia_desde,observacion` y una
-cabecera `#` que cita la fuente (el repo no trae ninguno: los tests usan uno ficticio):
+cabecera `#` que cita la fuente. Los de Perené están en `data/cuiema/` (ver abajo); los tests usan uno ficticio:
 
 ```bash
 cd model
@@ -1082,6 +1082,36 @@ python3 import_cuis.py --csv cuis.csv --completo  # además deroga los códigos 
   código vigente en Core que el archivo no trae se deroga el día antes, por `POST /api/srtm/infracciones/cuis/derogacion`.
   Sin la opción, un código que el archivo no trae no se toca.
 - Sale con `0` si todo va bien, `1` si el servidor rechaza algo y `2` si el archivo no encaja (sin escribir nada).
+
+**El CUIEMA de Perené** (`model/data/cuiema/`). Dos normas. Los PDF son escaneos sin texto y se transcribieron en
+doble lectura, con las diferencias resueltas sobre la imagen y verificadas contra el PDF:
+
+| Norma | Vigencia | Transcripción | Carga | Fuera |
+|---|---|---|---|---|
+| OM N.° 01-2021/MDP (anexo, págs. 29-157) | desde 2021-01-26 | `perene-2021-transcripcion.csv` | `perene-2021-cuis.csv` | `perene-2021-excluidas.csv` |
+| OM N.° 006-2026-MDP (anexo, págs. 16-33), que deroga la anterior | desde 2026-05-07 | `perene-2026-transcripcion.csv` | `perene-2026-cuis.csv` | `perene-2026-excluidas.csv` |
+
+- La **transcripción** es la norma literal, con sus erratas: código, infracción, calificación, medida cautelar,
+  pecuniaria, no pecuniaria y base legal, más la página, la materia (el encabezado de sección) y una nota por cada
+  decisión de lectura. La calificación y la medida cautelar no tienen campo en `codigo_infraccion`: quedan aquí.
+- La **carga** la deriva `derivar_cuiema.py` (nada se teclea en ella): el % de la columna pecuniaria va a
+  `porcentaje_uit`, y su condición («100% si es modalidad A») va entre paréntesis en la descripción. La no pecuniaria
+  va a la medida complementaria. La tabla de 2026 no tiene base legal: va la ordenanza. Un código impreso con un
+  solo dígito al inicio (`5.02.114`) recibe su cero (`05.02.114`).
+- **Fuera** quedan, con su motivo, las filas que no son una versión del CUIS: sin multa pecuniaria, con 0 %, una
+  multa que no es un % de la UIT («1% del valor de la obra»), una por unidad («por cada árbol», «por metro³»: el acta
+  calcula una sola multa), una cifra ilegible y un código impreso dos veces con multas distintas (`06.01.032`).
+
+```bash
+cd model
+python3 import_cuis.py --csv data/cuiema/perene-2021-cuis.csv --dry-run
+python3 import_cuis.py --csv data/cuiema/perene-2021-cuis.csv
+python3 import_cuis.py --csv data/cuiema/perene-2026-cuis.csv --completo --dry-run   # deroga los de 2021 al 2026-05-06
+python3 import_cuis.py --csv data/cuiema/perene-2026-cuis.csv --completo
+```
+
+El orden importa: 2021 primero, y 2026 con `--completo`. Así los códigos de 2021 rigen hasta el 2026-05-06 y un
+acta de esas fechas toma la versión de su día.
 
 Geometrías (wasichai-gis, GeoJSON en EPSG:4326 por la API):
 - `predio.lote_geom` y `catastro_fiscal.lote_geom`: POLYGON, guardados en UTM 18S (EPSG:32718).
