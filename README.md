@@ -480,6 +480,46 @@ actualiza ni borra cuotas ni anulaciones; anular pide creación sobre `anulacion
 ratificación (E-6 del plan de desbloqueo D-02 de `normativa`). Hasta que la haya, el repo no lleva ni el JSON ni el CSV
 de tasas, y los tests usan valores ficticios escritos dentro del propio test.
 
+## Infracciones administrativas
+
+Las multas administrativas (familia `ADMINISTRATIVA`) se portan del contexto `sanciones` de `rentas`. Ya están el
+modelo, la guardia de escritura y la carga del CUIS (ver [Modelo](#modelo)) y las reglas puras de `srtm.sanciones`;
+faltan los servicios y la api (`/api/srtm/infracciones/...`).
+
+### Reglas
+
+Funciones puras (`srtm.sanciones`): sin base, sin reloj (la fecha entra como argumento) y con `BigDecimal`. Los
+servicios leen los registros y los parámetros y se los pasan; las pruebas portan los casos de `rentas` con cifras
+ficticias.
+
+| Regla | Qué decide | Fuente en `rentas` |
+|---|---|---|
+| `Multas.calcular(codigo, uit, reincidencia)` | El desglose del acta: `base_imponible` = la UIT, `porcentaje_infraccion` = `porcentaje_uit`, `porcentaje_a_cobrar` = el % del grado declarado (`porcentaje_uit`, `_segunda` o `_tercera`), los dos importes = base × % / 100, `importe_con_beneficio` vacío. Un grado sin su % falta (`CUIS A-042 porcentaje_uit_segunda`): nunca se cobra el de otro grado. `Multas.uit(parametros, dia)`: la UIT vigente el día de la infracción, o `UIT 2026`. | `Papeleta`, `PapeletaTest` |
+| `Multas.redondear` | El único redondeo: al céntimo, `HALF_UP`, una sola vez sobre el producto exacto (el mismo que `ImpuestoPredial`). | decisión 2 |
+| `Notificaciones.vencimiento` / `vencida` | `vencimiento` = fecha + `plazo_dias`; vencida a un corte si el corte es **posterior** (el último día todavía vale); sin plazo no vence nunca. Una sola definición para el padrón de vencidas, la fase y la subsanación. `exigirSubsanable`: una vez (409), no con acta ni vencida (422); `exigirQueOrigineActa`: una subsanada no origina acta (422). | `NotificacionAdministrativaTest`, `SubsanarNotificacionTest`, #411 |
+| `Plazos` | Días hábiles (art. 144 de la Ley 27444): ni sábado ni domingo, ni `Vencimientos.FERIADOS_NACIONALES`, ni los `FERIADOS <anio>` cargados (`Calendario.de(parametros)`). `siguienteHabil` (estricto), `sumarHabiles` (sin contar el primero), `hasta` (infracción del 2026-03-04 con 5 → 2026-03-12), `exigibleDesde` (diligencia + hábil siguiente + plazo + 1 día). `faltan` nombra cada `FERIADOS <anio>` que el cómputo tocó y no está. `plazo(parametros, clave, fecha)`: la fila `PLAZO` vigente, entera y en `DIAS_HABILES`, o `PLAZO DESCARGO_PAPELETA 2026`. | `CalendarioHabil`, `Exigibilidad`, `SancionesJdbcTest`, `ElPlazoQueConcedeCadaResolucionJdbcTest` |
+| `Cuis` | `vigenteA(versiones, fecha)` (los dos extremos cuentan; la de ese día, no la última), `cerrar(vigente, nuevaDesde)` (solo `vigencia_hasta` = el día antes y `clave_vigente` = NULL; una cerrada no se cierra, 409; la nueva empieza después de la vigente, 422), `versionNueva(versiones, desde)` (lo que se cierra; nunca se pisa una versión). | `CodigoInfraccionTest`, `MantenerCatalogoDeInfraccionesTest` |
+| `Procedimiento.estadoDeLaDeuda(hechos)` / `fase(hechos, corte)` | Estado: `ANULADA`, `DEJADA_SIN_EFECTO` (si **alguna** resolución, de cualquier tipo, deja la multa sin efecto) o `PENDIENTE`. Fase: ninguna si no está pendiente (nunca «la más parecida»), `SANCIONADA` con su RIS (una RGR no sanciona), `PREVENTIVA` con la previa sin subsanar ni vencida al corte, si no `CONSTATADA`. `faseDelFiltro`: otra fase → 422 que nombra las tres. | `FaseDelProcedimiento`, `ProcedimientoSancionadorRepositoryJdbcTest` (#397, frontera #411) |
+| `Descargos.registrar(infraccion, fecha, parametros)` | `presentado_hasta` = `Plazos.hasta` con el `PLAZO DESCARGO_PAPELETA` vigente el día de la infracción, `en_plazo` = fecha ≤ `presentado_hasta`, `plazo_texto`; el tardío se registra. | `RegistrarDescargo`, `DescargosResolucionesYDepositoTest` |
+| `Resoluciones.validar(...)` / `plazo(tipo, fecha, parametros)` | RECURSO exige descargo; sentido y efecto van con el descargo y solo con él; el descargo es de esta acta; nada contra un acta `ANULADA` o `DEJADA_SIN_EFECTO` (422); una RIS por acta y una por descargo (409, además de `clave_ris` y `clave_descargo`). La RIS y la RGR conceden `RG_RECURSO` y, sin él, no toman otro. | `ResolverConResolucionDeGerencia`, `ElPlazoQueConcedeCadaTipoTest` (#410, #412) |
+| `NotificacionesDeResolucion.exigibilidad(...)` | Surte efecto ⇔ `NOTIFICADO` o `RECHAZADO`; entonces `exigible_desde` y el plazo, contados desde la diligencia (2026-08-03 con 15 → 2026-08-27, porque el 6 de agosto es feriado nacional; sin él sería el 26). | `NotificarResolucionDeGerencia`, `Exigibilidad` |
+| `OrdenDeLosActos.exigir(acto, fecha, hoy, previos)` | Ningún acto antes del que lo origina ni después de hoy; el mismo día vale. 422 que nombra las dos fechas (`ActoFueraDeOrden`). | `OrdenDeLosActos` (#402) |
+
+**Errores.** `FaltanSanciones(acto, faltan)` es el 422 con `faltan` (gemelo de `FaltanArbitrios`; el controlador lo
+traduce con `srtm.sanciones.problemaFaltan`); `Resultado<T>(valor, faltan)` lleva la cifra o lo que falta, nunca los
+dos, y `exigir(acto)` lanza el 422. `NoProcede` es el 422 de una petición que las reglas no admiten (con
+`errors[].field` cuando hay un campo), y `ActoFueraDeOrden` su caso de fechas. Un estado que no admite el acto (ya
+subsanada, ya anulada, segunda RIS) es `ConflictException` (409).
+
+**Lo que cambia respecto de `rentas`:**
+- **SE_REDUCE → 422** «No hay regla de reducción: la fija la ordenanza (D-02b)». En `rentas` se guardaba sin efecto.
+- **Una RIS por acta** (`clave_ris`); `rentas` no tenía índice para la ADMINISTRATIVA y admitía dos.
+- **Sin `FERIADOS <anio>` → 422 `faltan`**; `rentas` contaba sin feriados cuando el conjunto no los traía.
+- **Una notificación subsanada no origina acta** (422), y una con acta no se subsana (422); una vencida tampoco (422,
+  donde `rentas` respondía 409).
+- **La multa se calcula y se congela** con el CUIS y la UIT; `rentas` tomaba los seis importes tecleados del acta.
+- Sin `PAGADA` ni `COACTIVA` (no hay cobranza), y una versión del CUIS para un código sin vigente es su primera versión.
+
 ## Importar el catastro fiscal
 
 Los lotes del catastro fiscal (código CPU y polígono) se cargan desde un GeoJSON en EPSG:4326. También se pueden
@@ -1401,7 +1441,9 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 ```
 
 - **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`,
-  `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…), la guardia
+  `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…; las de
+  `srtm.sanciones`: `MultasTest`, `NotificacionesTest`, `PlazosTest`, `CuisTest`, `ProcedimientoTest`, `RecursosTest`
+  y `OrdenDeLosActosTest`, con cifras ficticias), la guardia
   de escritura (`AlmacenGuardadoTest`, `ReglaDeSancionesTest`, `ReglaDeAnunciosTest`, y `AlmacenGuardadoApiTest` en
   integración), `Records`,
   `Registros`, `srtm.pide` (`PideReniecTest`, contra un servidor local) y `srtm.emision` (`PdfRendererTest`,
@@ -1442,8 +1484,8 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - **Fiscalización:** el flujo (rol y pantallas) que determina de oficio una declaración: medio de determinación
   FISCALIZACIÓN o DE OFICIO y su modificación de oficio.
 - **En el modelo:** workflows y plantillas de documentos.
-- **Infracciones administrativas y anuncios:** el modelo, la guardia y la carga ya están; faltan las reglas puras, los
-  servicios y la api de cada uno (`/api/srtm/infracciones/...`, `/api/srtm/anuncios/...`), entre ellos
+- **Infracciones administrativas y anuncios:** el modelo, la guardia y la carga ya están, y las reglas puras de las
+  infracciones ([Reglas](#reglas)); faltan las reglas de los anuncios, los servicios y la api de cada uno (`/api/srtm/infracciones/...`, `/api/srtm/anuncios/...`), entre ellos
   `POST /api/srtm/infracciones/cuis`, que usa `import_cuis.py`.
 
 El frontend web está en `srtm-ui`.
