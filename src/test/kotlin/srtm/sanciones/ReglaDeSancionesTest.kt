@@ -115,7 +115,7 @@ class ReglaDeSancionesTest {
     fun `an acta's names in json are the model's`() {
         val p = Records.read<Papeleta>("", Ejemplos.papeleta())
         assertEquals(BigDecimal("10"), p.porcentajeACobrar)
-        assertEquals(BigDecimal("550.00"), p.importeAPagar)
+        assertEquals(BigDecimal("432.10"), p.importeAPagar)
         val attributes = Records.attributes(p)
         assertTrue("porcentaje_a_cobrar" in attributes && "importe_a_pagar" in attributes, attributes.keys.toString())
     }

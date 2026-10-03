@@ -483,8 +483,51 @@ de tasas, y los tests usan valores ficticios escritos dentro del propio test.
 ## Infracciones administrativas
 
 Las multas administrativas (familia `ADMINISTRATIVA`) se portan del contexto `sanciones` de `rentas`. Ya están el
-modelo, la guardia de escritura y la carga del CUIS (ver [Modelo](#modelo)) y las reglas puras de `srtm.sanciones`;
-faltan los servicios y la api (`/api/srtm/infracciones/...`).
+modelo, la guardia de escritura y la carga del CUIS (ver [Modelo](#modelo)), las reglas puras de `srtm.sanciones`, y la
+api del CUIS y de las notificaciones previas (`InfraccionesController`, `/api/srtm/infracciones/...`); faltan las
+actas, los descargos, las resoluciones y los padrones.
+
+### API de infracciones
+
+Bajo `/api/srtm/infracciones`, con las convenciones de arbitrios: registros en snake_case con los nombres del modelo,
+relaciones como id, fechas ISO, dinero como número. Un parámetro de consulta desconocido o mal formado es **422** y lo
+nombra en `errors` (`Filtros.soloConoce`). Cada acto pide permiso de creación sobre su objeto **antes** de leer nada
+(**403** que nombra el objeto), exige `observacion` de 5 a 500 caracteres (**400**) y escribe con la marca de srtm
+(`Registros.create`/`replace`): la API genérica no escribe estos objetos (POST **403**, PUT/DELETE **409**, también un
+ADMIN). `FaltanSanciones` sale como **422** con `faltan: [...]` (`ErroresDeSanciones`, para todos los controladores de
+`srtm.sanciones`).
+
+| Método | Ruta | |
+|---|---|---|
+| GET | `/cuis?vigentes_a&materia&q` | `{vigentes_a, uit: {valor, anio, parametro_id} \| null, faltan, codigos}`: las versiones vigentes ese día (por omisión hoy), por código; `materia` y `q` (código o descripción) buscan una parte. Cada código lleva `multa`, `multa_segunda` y `multa_tercera` a la UIT de `vigentes_a` (`Multas.calcular`); null si el grado no tiene % o si no hay UIT. Sin UIT: `uit: null` y `faltan: ["UIT 2026"]`. Siempre 200. |
+| POST | `/cuis` `{familia?, codigo, descripcion, materia?, porcentaje_uit, porcentaje_uit_segunda?, porcentaje_uit_tercera?, medida_complementaria?, base_legal, vigencia_desde, observacion}` | **201** con el registro plano de la versión nueva y `cerrada` (la que cerró, o null). **409** si esa versión (`familia\|codigo\|vigencia_desde`) ya existe; **422** si no empieza después de la vigente (o pisa una cerrada); **400** por campo. Es lo que llama `import_cuis.py`. |
+| GET | `/notificaciones?numero&contribuyente&desde&hasta&vencidas_a&page&size` | Página (`size` 20 por omisión) de notificaciones, la más reciente primero: el registro plano + `vencimiento` (null sin plazo), `vencida`, `vencidas_a` (por omisión hoy), `subsanada: {fecha} \| null`, `acta: {id, numero} \| null` y `contribuyente_nombre`. `numero` es el número entero; `contribuyente`, su id. |
+| POST | `/notificaciones` `{numero, fecha, contribuyente?, predio?, direccion, motivo, plazo_dias?, observacion}` | **201** con la fila de arriba. **404** si el contribuyente o el predio no existen; **409** si el número ya está; **422** si la fecha es posterior a hoy; **400** por campo (`plazo_dias` de 1 a 32767). |
+| POST | `/notificaciones/{id}/subsanacion` `{fecha?, observacion}` | **201** con la subsanación. `fecha` por omisión hoy. **409** si ya está subsanada; **422** si venció a esa fecha, si ya originó un acta, o si la fecha es posterior a hoy o anterior a la notificación. |
+| GET | `/notificaciones/vencidas?corte&page&size` | Las no subsanadas, sin acta y vencidas a `corte` (por omisión hoy), la de vencimiento más antiguo primero; cada fila con `vencimiento` y `corte`. |
+| GET | `/notificaciones/por-contribuyente?contribuyente&page&size` | Las del contribuyente (obligatorio; **404** si no existe), con los derivados a hoy. |
+
+### CUIS
+
+El cuadro único de infracciones y sanciones se versiona por vigencia: un cambio nunca edita una fila. `CuisService`
+agrega la versión nueva y cierra la vigente (`vigencia_hasta` = el día antes, `clave_vigente` = NULL, con
+`registros.replace`) en **una transacción**, bajo el candado consultivo `Candado.CODIGO_INFRACCION` de
+`familia|codigo` (`srtm.Candados`, `pg_advisory_xact_lock`). Dentro del candado vuelve a leer las versiones del código
+y aplica `Cuis.versionNueva`: dos versiones nuevas a la vez no se pisan (una espera a la otra; la misma versión dos
+veces da 409). La versión cerrada conserva sus cifras, y un acta que la usó sigue apuntándola. El código se recorta y
+se pasa a mayúsculas; `familia` por omisión es `ADMINISTRATIVA` (otra es 400). Los porcentajes llegan como número o
+como texto (`import_cuis.py` manda las celdas del CSV como texto).
+
+### Notificaciones previas
+
+`NotificacionesService` registra la notificación previa (número del formulario, único y en mayúsculas) y su
+subsanación, que es un objeto que se agrega (una por notificación: `clave` = id de la notificación). Lo derivado nunca
+se guarda: `vencimiento` y `vencida` salen de `Notificaciones` (el último día del plazo todavía vale, #411; sin plazo
+no vence), la subsanación de su registro y el acta de la `papeleta` que la nombra (`notificacion_previa`). La
+subsanación toma el candado `Candado.NOTIFICACION` del id de la notificación y aplica
+`Notificaciones.exigirSubsanable`; el alta del acta debe tomar el mismo candado para que no se crucen. El padrón de
+vencidas lee las candidatas (con plazo y fecha anterior al corte), aplica `Notificaciones.vencida` y corta la página
+después: la definición de vencida es una sola.
 
 ### Reglas
 
@@ -1454,7 +1497,10 @@ yarn format:check           # prettier: yaml y json, model.json incluido
   admin de desarrollo y las llamadas. Cada endpoint de `RentasController` y `DocumentosController` tiene un caso feliz
   y uno de error donde aplica, repartidos por tema: `RentasApiTest` (el recorrido completo), `ListasApiTest` (las
   filas de las ocho listas), `DeclaracionJuradaApiTest` (una DJ rechazada no deja nada a medias), `FichasApiTest`,
-  `CatalogosApiTest`, `CatastroApiTest`, `CondominioApiTest`, `AnulacionApiTest`, `MotivoApiTest`…
+  `CatalogosApiTest`, `CatastroApiTest`, `CondominioApiTest`, `AnulacionApiTest`, `MotivoApiTest`… Las de
+  `srtm.sanciones` heredan de `ConSancionesApiTest` (una UIT ficticia de 2041, y el acta escrita con la marca hasta que
+  tenga endpoint): `SancionesCuisApiTest` (catálogo con y sin UIT, versión que cierra la vigente, dos versiones a la
+  vez, el cuerpo de `import_cuis.py`) y `NotificacionesApiTest` (alta, padrón, frontera #411, subsanación, vencidas).
 - **Trabajadores de la emisión masiva en los tests:** `src/test/resources/application.properties` fija
   `srtm.emision.trabajadores=0` para toda la corrida (gana sobre `application.yml`; un `@TestPropertySource` gana sobre
   ambos), así que ningún contexto corre trabajadores salvo el de `EmisionMasivaApiTest` (2), que se cierra al terminar
@@ -1484,8 +1530,9 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - **Fiscalización:** el flujo (rol y pantallas) que determina de oficio una declaración: medio de determinación
   FISCALIZACIÓN o DE OFICIO y su modificación de oficio.
 - **En el modelo:** workflows y plantillas de documentos.
-- **Infracciones administrativas y anuncios:** el modelo, la guardia y la carga ya están, y las reglas puras de las
-  infracciones ([Reglas](#reglas)); faltan las reglas de los anuncios, los servicios y la api de cada uno (`/api/srtm/infracciones/...`, `/api/srtm/anuncios/...`), entre ellos
-  `POST /api/srtm/infracciones/cuis`, que usa `import_cuis.py`.
+- **Infracciones administrativas y anuncios:** el modelo, la guardia y la carga ya están, las reglas puras de las
+  infracciones ([Reglas](#reglas)) y la api del CUIS y de las notificaciones previas
+  ([API de infracciones](#api-de-infracciones)); faltan las actas, los descargos, las resoluciones, el panel y los
+  anuncios (`/api/srtm/anuncios/...`).
 
 El frontend web está en `srtm-ui`.
