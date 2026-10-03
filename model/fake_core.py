@@ -150,7 +150,9 @@ class FakeCore:
                 return 422, {"detail": "vigencia_desde no es posterior a la de la vigente"}
             vigente["attributes"].update(vigencia_hasta=(desde - timedelta(days=1)).isoformat(), clave_vigente=None)
         nueva = self.add_record("codigo_infraccion", {**body, "familia": familia, "clave": clave, "clave_vigente": codigo})
-        return 201, {"codigo": nueva, "cerrada": vigente}
+        # the flat record of the new version, and the one it closed (srtm.sanciones.VersionCuisCreada)
+        cerrada = {"id": vigente["id"], **vigente["attributes"]} if vigente is not None else None
+        return 201, {"id": nueva["id"], **nueva["attributes"], "cerrada": cerrada}
 
     def _script(self, method, full_path, body):
         path, _, query = full_path.partition("?")
