@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import srtm.sanciones.Filtros.entero
 import srtm.sanciones.Filtros.fecha
 import srtm.sanciones.Filtros.id
 import srtm.sanciones.Filtros.page
@@ -19,13 +20,14 @@ import wasichai.core.common.PageResponse
 import java.time.LocalDate
 import java.util.UUID
 
-// the CUIS and the notificaciones previas of the portal (SPEC §7, Multas). a query parameter an endpoint does not know,
-// or cannot read, is a 422 that names it; an act answers 201. «hoy» is the server's day
+// the CUIS, the notificaciones previas and the panel of the portal (SPEC §7, Multas). a query parameter an endpoint
+// does not know, or cannot read, is a 422 that names it; an act answers 201. «hoy» is the server's day
 @RestController
 @RequestMapping("/api/srtm/infracciones")
 class InfraccionesController(
     private val cuis: CuisService,
-    private val notificaciones: NotificacionesService
+    private val notificaciones: NotificacionesService,
+    private val paneles: PanelService
 ) {
     @GetMapping("/cuis")
     suspend fun cuis(
@@ -86,5 +88,20 @@ class InfraccionesController(
         soloConoce(params, "contribuyente", "page", "size")
         val contribuyente = id(params, "contribuyente") ?: throw ParametroInvalido("contribuyente", "es obligatorio: el id del contribuyente")
         return notificaciones.delContribuyente(contribuyente, LocalDate.now(), page(params), size(params))
+    }
+
+    // the year's counts (anio, by default the current one) and the previas that end this week, at today
+    @GetMapping("/panel")
+    suspend fun panel(
+        @RequestParam params: Map<String, String>
+    ): PanelDeInfracciones {
+        soloConoce(params, "anio")
+        val hoy = LocalDate.now()
+        return paneles.panel(entero(params, "anio", hoy.year, ANIOS), hoy)
+    }
+
+    private companion object {
+        // a year as the arbitrios read it
+        val ANIOS = 1900..9999
     }
 }
