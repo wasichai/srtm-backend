@@ -483,9 +483,9 @@ de tasas, y los tests usan valores ficticios escritos dentro del propio test.
 ## Infracciones administrativas
 
 Las multas administrativas (familia `ADMINISTRATIVA`) se portan del contexto `sanciones` de `rentas`. Ya están el
-modelo, la guardia de escritura y la carga del CUIS (ver [Modelo](#modelo)), las reglas puras de `srtm.sanciones`, y la
-api del CUIS y de las notificaciones previas (`InfraccionesController`, `/api/srtm/infracciones/...`); faltan las
-actas, los descargos, las resoluciones y los padrones.
+modelo, la guardia de escritura y la carga del CUIS (ver [Modelo](#modelo)), las reglas puras de `srtm.sanciones`, la
+api del CUIS y de las notificaciones previas (`InfraccionesController`) y la de las actas (`ActasController`), bajo
+`/api/srtm/infracciones/...`; faltan los descargos, las resoluciones y los padrones.
 
 ### API de infracciones
 
@@ -506,6 +506,14 @@ ADMIN). `FaltanSanciones` sale como **422** con `faltan: [...]` (`ErroresDeSanci
 | POST | `/notificaciones/{id}/subsanacion` `{fecha?, observacion}` | **201** con la subsanación. `fecha` por omisión hoy. **409** si ya está subsanada; **422** si venció a esa fecha, si ya originó un acta, o si la fecha es posterior a hoy o anterior a la notificación. |
 | GET | `/notificaciones/vencidas?corte&page&size` | Las no subsanadas, sin acta y vencidas a `corte` (por omisión hoy), la de vencimiento más antiguo primero; cada fila con `vencimiento` y `corte`. |
 | GET | `/notificaciones/por-contribuyente?contribuyente&page&size` | Las del contribuyente (obligatorio; **404** si no existe), con los derivados a hoy. |
+| POST | `/actas` `{numero, fecha_infraccion, hora_infraccion?, lugar, codigo, reincidencia, obligado, contribuyente?, predio?, notificacion_previa?, expediente?, inspector?, descripcion_hecho?, observacion}` | **201** con el registro plano de `papeleta` + `referencia` (`PAPELETA-<id>`) + `desglose {base_imponible, porcentaje_infraccion, importe_infraccion, porcentaje_a_cobrar, importe_a_pagar, importe_con_beneficio, fecha_calculo}`. `codigo` es el texto del CUIS; `hora_infraccion` `HH:mm`. **422** si el código no rige ese día (nombra código y fecha), con `faltan` (`UIT 1991`, `CUIS A-042 porcentaje_uit_segunda`, todos a la vez), si la previa está subsanada o si la fecha es posterior a hoy o anterior a la previa; **404** si el obligado, el contribuyente, el predio o la previa no existen; **409** si el número ya está; **400** por campo (contribuyente o predio, al menos uno). |
+| GET | `/actas?numero&administrado&codigo&fase&desde&hasta&page&size` | Página de filas `{id, numero, fecha_infraccion, administrado, documento, codigo, descripcion_infraccion, porcentaje_infraccion, importe_a_pagar, fecha_calculo, medida_complementaria, fase, fase_al_dia, estado_de_la_deuda}`, la infracción más reciente primero. `administrado` busca una parte del documento o del nombre del obligado; `codigo`, el texto del CUIS (cualquier versión); `fase` ∈ PREVENTIVA, CONSTATADA, SANCIONADA (otra → **422** que las nombra). `fase` es null en un acta anulada o dejada sin efecto. |
+| GET | `/actas/{id}` | `{acta, referencia, codigo_infraccion (la versión usada), notificacion_previa, actos: [{orden, acto, fecha, documento, id, detalle}], descargos, resoluciones (cada una con sus notificaciones), anulacion, fase, fase_al_dia, estado_de_la_deuda, acciones: {descargo, resolucion, anulacion: {permitida, motivo}}}`. |
+| POST | `/actas/{id}/anulacion` `{motivo, fecha?, observacion}` | **201** con el registro plano de `anulacion_papeleta` (`clave` = id del acta). `fecha` por omisión hoy. **409** si ya está anulada; **422** si una resolución la dejó sin efecto, o si la fecha es anterior a la infracción o posterior a hoy. |
+
+Y bajo `/api/srtm`, en las fichas: `GET /contribuyentes/{id}/infracciones` (las actas donde es el obligado o el
+contribuyente) y `GET /predios/{id}/infracciones` (las que nombran el predio) responden `{al_dia, actas: [fila]}`, con
+las filas de `GET /actas` a hoy; **404** si el contribuyente o el predio no existen.
 
 ### CUIS
 
@@ -525,9 +533,40 @@ subsanación, que es un objeto que se agrega (una por notificación: `clave` = i
 se guarda: `vencimiento` y `vencida` salen de `Notificaciones` (el último día del plazo todavía vale, #411; sin plazo
 no vence), la subsanación de su registro y el acta de la `papeleta` que la nombra (`notificacion_previa`). La
 subsanación toma el candado `Candado.NOTIFICACION` del id de la notificación y aplica
-`Notificaciones.exigirSubsanable`; el alta del acta debe tomar el mismo candado para que no se crucen. El padrón de
+`Notificaciones.exigirSubsanable`; el alta del acta toma el mismo candado para que no se crucen ([Actas](#actas)). El padrón de
 vencidas lee las candidatas (con plazo y fecha anterior al corte), aplica `Notificaciones.vencida` y corta la página
 después: la definición de vencida es una sola.
+
+### Actas
+
+`ActasService` registra el acta (papeleta, familia `ADMINISTRATIVA`) con su multa **calculada una vez y congelada**:
+toma la versión del código que rige el día de la infracción (`Cuis.vigenteA` sobre las versiones de ese código, no la
+última), la UIT vigente ese día (`Multas.uit`) y aplica `Multas.calcular` con el grado que declara el inspector. Copia
+en la fila el desglose, la `medida_complementaria` de la versión y las relaciones `codigo_infraccion` (la versión
+usada) y `uit` (la fila leída): corregir la fila de la UIT o agregar una versión nueva del CUIS no cambia un acta ya
+escrita. `fecha_calculo` es el día del registro. El número se recorta y se pasa a mayúsculas, y `clave` =
+`familia|numero` lo hace único. El `obligado` es explícito (no se deduce) y el acta nombra un contribuyente o un predio,
+al menos uno.
+
+Con `notificacion_previa`, el alta toma el candado `Candado.NOTIFICACION` del id de la notificación (el mismo que la
+subsanación), la vuelve a leer y aplica `Notificaciones.exigirQueOrigineActa` y `OrdenDeLosActos` (la infracción no es
+anterior a la previa), todo en la misma transacción que el insert: un acta y una subsanación de la misma previa a la
+vez no se escriben las dos. La anulación es un objeto que se agrega (`clave` = id del acta), bajo el candado
+`Candado.ACTA` del acta, con `Procedimiento.exigirAnulable` (409 si ya está anulada, 422 si una resolución la dejó sin
+efecto).
+
+La **fase** y el **estado de la deuda** nunca se guardan: `ActasService.hechos(actas)` lee, una consulta por tipo, la
+previa y su subsanación, la anulación y las resoluciones de cada acta, y `Procedimiento.fase` / `estadoDeLaDeuda` los
+derivan a hoy (`fase_al_dia`). Por eso el filtro `fase` de la grilla es el único que no va a la base: con `fase`, la
+consulta lee todas las actas que dejan los demás filtros (número, código, administrado, fechas, en la base), deriva la
+fase de cada una con la misma función que pinta la columna y corta la página después; sin `fase`, pagina en la base.
+Así el filtro encuentra exactamente lo que la columna muestra (#397).
+
+La ficha (`GET /actas/{id}`) lista los actos en **orden legal** (`Expedientes.actos`): la notificación previa, el
+acta, los descargos, las resoluciones, las notificaciones de las resoluciones y la anulación; dentro de cada tipo, por
+fecha. `detalle` dice qué es cada uno hoy (la previa «Vence el …» o «Vencida el …», el descargo en plazo o no, la
+resolución notificada o no). `acciones` sale de las reglas: `Procedimiento.impedimento("impugnar" | "resolver")` y
+`impedimentoDeAnular`, con el mismo texto que daría el acto.
 
 ### Reglas
 
@@ -561,6 +600,8 @@ subsanada, ya anulada, segunda RIS) es `ConflictException` (409).
 - **Una notificación subsanada no origina acta** (422), y una con acta no se subsana (422); una vencida tampoco (422,
   donde `rentas` respondía 409).
 - **La multa se calcula y se congela** con el CUIS y la UIT; `rentas` tomaba los seis importes tecleados del acta.
+- **El alta del acta se publica** (`rentas` solo exponía la consulta) y el filtro `administrado` busca una parte del
+  documento o del nombre (en `rentas`, el documento).
 - Sin `PAGADA` ni `COACTIVA` (no hay cobranza), y una versión del CUIS para un código sin vigente es su primera versión.
 
 ## Importar el catastro fiscal
@@ -1485,8 +1526,8 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 
 - **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`,
   `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…; las de
-  `srtm.sanciones`: `MultasTest`, `NotificacionesTest`, `PlazosTest`, `CuisTest`, `ProcedimientoTest`, `RecursosTest`
-  y `OrdenDeLosActosTest`, con cifras ficticias), la guardia
+  `srtm.sanciones`: `MultasTest`, `NotificacionesTest`, `PlazosTest`, `CuisTest`, `ProcedimientoTest`, `RecursosTest`,
+  `OrdenDeLosActosTest` y `ExpedientesTest`, con cifras ficticias), la guardia
   de escritura (`AlmacenGuardadoTest`, `ReglaDeSancionesTest`, `ReglaDeAnunciosTest`, y `AlmacenGuardadoApiTest` en
   integración), `Records`,
   `Registros`, `srtm.pide` (`PideReniecTest`, contra un servidor local) y `srtm.emision` (`PdfRendererTest`,
@@ -1498,9 +1539,13 @@ yarn format:check           # prettier: yaml y json, model.json incluido
   y uno de error donde aplica, repartidos por tema: `RentasApiTest` (el recorrido completo), `ListasApiTest` (las
   filas de las ocho listas), `DeclaracionJuradaApiTest` (una DJ rechazada no deja nada a medias), `FichasApiTest`,
   `CatalogosApiTest`, `CatastroApiTest`, `CondominioApiTest`, `AnulacionApiTest`, `MotivoApiTest`… Las de
-  `srtm.sanciones` heredan de `ConSancionesApiTest` (una UIT ficticia de 2041, y el acta escrita con la marca hasta que
-  tenga endpoint): `SancionesCuisApiTest` (catálogo con y sin UIT, versión que cierra la vigente, dos versiones a la
-  vez, el cuerpo de `import_cuis.py`) y `NotificacionesApiTest` (alta, padrón, frontera #411, subsanación, vencidas).
+  `srtm.sanciones` heredan de `ConSancionesApiTest` (UIT ficticias de 2041 y de 1991, ningún año 2042 ni 1990 con UIT;
+  las actas por su endpoint, fechadas en 1991 porque ningún acto se fecha después de hoy; descargos y resoluciones
+  escritos con la marca hasta que tengan endpoint): `SancionesCuisApiTest` (catálogo con y sin UIT, versión que cierra
+  la vigente, dos versiones a la vez, el cuerpo de `import_cuis.py`), `NotificacionesApiTest` (alta, padrón, frontera
+  #411, subsanación, vencidas) y `ActasApiTest` (alta y desglose, la multa congelada al corregir la UIT y versionar el
+  CUIS, código que no rige, `faltan`, previa subsanada, acta y subsanación a la vez, fases con su corte, filtro de fase
+  igual a la columna, ficha en orden legal, anulación, fichas de contribuyente y predio, API genérica y permisos).
 - **Trabajadores de la emisión masiva en los tests:** `src/test/resources/application.properties` fija
   `srtm.emision.trabajadores=0` para toda la corrida (gana sobre `application.yml`; un `@TestPropertySource` gana sobre
   ambos), así que ningún contexto corre trabajadores salvo el de `EmisionMasivaApiTest` (2), que se cierra al terminar
@@ -1531,8 +1576,8 @@ yarn format:check           # prettier: yaml y json, model.json incluido
   FISCALIZACIÓN o DE OFICIO y su modificación de oficio.
 - **En el modelo:** workflows y plantillas de documentos.
 - **Infracciones administrativas y anuncios:** el modelo, la guardia y la carga ya están, las reglas puras de las
-  infracciones ([Reglas](#reglas)) y la api del CUIS y de las notificaciones previas
-  ([API de infracciones](#api-de-infracciones)); faltan las actas, los descargos, las resoluciones, el panel y los
-  anuncios (`/api/srtm/anuncios/...`).
+  infracciones ([Reglas](#reglas)) y la api del CUIS, de las notificaciones previas y de las actas
+  ([API de infracciones](#api-de-infracciones)); faltan los descargos, las resoluciones, el panel y los anuncios
+  (`/api/srtm/anuncios/...`).
 
 El frontend web está en `srtm-ui`.

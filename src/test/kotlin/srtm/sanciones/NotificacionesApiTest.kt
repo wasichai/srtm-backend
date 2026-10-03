@@ -124,40 +124,48 @@ class NotificacionesApiTest : ConSancionesApiTest() {
     @Test
     fun `a notificación that originated an acta is not subsanada, and the padrón names its acta`() {
         val c = inscribir()
-        val codigo = post(CUIS, version(nuevoCodigo(), "2026-01-01"))["id"].asString()
+        uit(ANIO_PASADO)
+        val codigo = nuevoCodigo()
+        post(CUIS, version(codigo, "$ANIO_PASADO-01-01"))
         val numero = numero()
-        val n = post(NOTIFICACIONES, notificacion(numero, "2026-03-02", c, plazo = 5))["id"].asString()
-        val acta = acta(codigo, uit(ANIO_CON_UIT), c, previa = n)
+        val n = post(NOTIFICACIONES, notificacion(numero, "$ANIO_PASADO-03-02", c, plazo = 5))["id"].asString()
+        val acta = registrarActa(codigo, c, "$ANIO_PASADO-03-04", previa = n)
 
-        val problema = tree(send("POST", subsanacion(n), mapOf("fecha" to "2026-03-04", "observacion" to "Con acta"), HttpStatus.UNPROCESSABLE_CONTENT))
+        val problema =
+            tree(send("POST", subsanacion(n), mapOf("fecha" to "$ANIO_PASADO-03-04", "observacion" to "Con acta"), HttpStatus.UNPROCESSABLE_CONTENT))
         assertTrue(problema["detail"].asString().contains("acta"), problema.toString())
         val fila = fila("numero=$numero")
-        assertEquals(acta, fila["acta"]["id"].asString())
-        assertEquals(registro(PAPELETA, acta)["numero"].asString(), fila["acta"]["numero"].asString())
+        assertEquals(acta["id"].asString(), fila["acta"]["id"].asString())
+        assertEquals(acta["numero"].asString(), fila["acta"]["numero"].asString())
     }
 
     @Test
     fun `the vencidas at a corte are the ones neither subsanadas nor with an acta`() {
         val c = inscribir()
-        val codigo = post(CUIS, version(nuevoCodigo(), "2026-01-01"))["id"].asString()
-        val vencida = post(NOTIFICACIONES, notificacion(numero(), "2026-05-04", c, plazo = 5))["id"].asString()
-        val ultimoDia = post(NOTIFICACIONES, notificacion(numero(), "2026-05-05", c, plazo = 5))["id"].asString()
-        val subsanada = post(NOTIFICACIONES, notificacion(numero(), "2026-05-04", c, plazo = 5))["id"].asString()
-        val conActa = post(NOTIFICACIONES, notificacion(numero(), "2026-05-04", c, plazo = 5))["id"].asString()
-        val sinPlazo = post(NOTIFICACIONES, notificacion(numero(), "2026-05-04", c, plazo = null))["id"].asString()
-        post(subsanacion(subsanada), mapOf("fecha" to "2026-05-06", "observacion" to "Retiró el letrero"))
-        acta(codigo, uit(ANIO_CON_UIT), c, previa = conActa)
+        uit(ANIO_PASADO)
+        val codigo = nuevoCodigo()
+        post(CUIS, version(codigo, "$ANIO_PASADO-01-01"))
+        val vencida = post(NOTIFICACIONES, notificacion(numero(), "$ANIO_PASADO-05-04", c, plazo = 5))["id"].asString()
+        val ultimoDia = post(NOTIFICACIONES, notificacion(numero(), "$ANIO_PASADO-05-05", c, plazo = 5))["id"].asString()
+        val subsanada = post(NOTIFICACIONES, notificacion(numero(), "$ANIO_PASADO-05-04", c, plazo = 5))["id"].asString()
+        val conActa = post(NOTIFICACIONES, notificacion(numero(), "$ANIO_PASADO-05-04", c, plazo = 5))["id"].asString()
+        val sinPlazo = post(NOTIFICACIONES, notificacion(numero(), "$ANIO_PASADO-05-04", c, plazo = null))["id"].asString()
+        post(subsanacion(subsanada), mapOf("fecha" to "$ANIO_PASADO-05-06", "observacion" to "Retiró el letrero"))
+        registrarActa(codigo, c, "$ANIO_PASADO-05-04", previa = conActa)
 
-        // corte 2026-05-10: the one of the 4th ended on the 9th; the one of the 5th has its last day
-        val filas = vencidas("2026-05-10").filter { it["contribuyente"].asString() == c }
+        // corte the 10th: the one of the 4th ended on the 9th; the one of the 5th has its last day
+        val filas = vencidas("$ANIO_PASADO-05-10").filter { it["contribuyente"].asString() == c }
         assertEquals(listOf(vencida), filas.map { it["id"].asString() })
         val f = filas.single()
-        assertEquals("2026-05-09", f["vencimiento"].asString())
-        assertEquals("2026-05-10", f["corte"].asString())
+        assertEquals("$ANIO_PASADO-05-09", f["vencimiento"].asString())
+        assertEquals("$ANIO_PASADO-05-10", f["corte"].asString())
         assertTrue(f["vencida"].asBoolean())
         assertEquals("FLORES OTINIANO JUNIOR", f["contribuyente_nombre"].asString())
-        assertEquals(setOf(vencida, ultimoDia), vencidas("2026-05-11").filter { it["contribuyente"].asString() == c }.map { it["id"].asString() }.toSet())
-        assertFalse(vencidas("2026-12-31").any { it["id"].asString() == sinPlazo })
+        assertEquals(
+            setOf(vencida, ultimoDia),
+            vencidas("$ANIO_PASADO-05-11").filter { it["contribuyente"].asString() == c }.map { it["id"].asString() }.toSet()
+        )
+        assertFalse(vencidas("$ANIO_PASADO-12-31").any { it["id"].asString() == sinPlazo })
 
         assertEquals("corte", tree(send("GET", "$NOTIFICACIONES/vencidas?corte=ayer", null, HttpStatus.UNPROCESSABLE_CONTENT))["errors"][0]["field"].asString())
     }
@@ -224,6 +232,5 @@ class NotificacionesApiTest : ConSancionesApiTest() {
     private companion object {
         const val NOTIFICACIONES = "/api/srtm/infracciones/notificaciones"
         const val CUIS = "/api/srtm/infracciones/cuis"
-        const val ANIO_CON_UIT = 2041
     }
 }

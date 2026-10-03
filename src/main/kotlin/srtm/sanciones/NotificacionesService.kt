@@ -19,7 +19,6 @@ import srtm.rentas.Registros
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import wasichai.core.common.ConflictException
-import wasichai.core.common.FieldViolation
 import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
 import wasichai.core.common.ValidationException
@@ -253,16 +252,6 @@ class NotificacionesService(
         acta = hechos.actas[n.id]?.let { ActaDeLaNotificacion(it.id!!, it.numero!!) },
         contribuyenteNombre = n.contribuyente?.let { hechos.contribuyentes[it]?.nombreCompleto }
     )
-
-    // a relation's id as sent: none when blank, a 400 when it is no id
-    private fun relacion(
-        campo: String,
-        valor: String?
-    ): String? {
-        val texto = valor?.trim()?.ifEmpty { null } ?: return null
-        return runCatching { UUID.fromString(texto).toString() }.getOrNull()
-            ?: throw ValidationException("El $campo no es un id", listOf(FieldViolation(campo, "es el id de un $campo")))
-    }
 
     // a notificación with a plazo, dated before `corte`: every vencida is one (plazo_dias is at least 1)
     private fun conPlazoAntesDe(corte: LocalDate) =

@@ -20,7 +20,10 @@ enum class Candado(
     CODIGO_INFRACCION(0x5352_0002),
 
     // a notificación previa: its subsanación and the acta that names it do not cross (the notificación's id)
-    NOTIFICACION(0x5352_0003)
+    NOTIFICACION(0x5352_0003),
+
+    // an acta: the acts that end it (its anulación, a resolución that leaves it without effect) do not cross (its id)
+    ACTA(0x5352_0004)
 }
 
 // postgres' transaction advisory locks, by kind and key (caja-backend's Candados). wasichai has no row lock nor

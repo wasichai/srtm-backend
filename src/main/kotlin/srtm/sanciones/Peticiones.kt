@@ -10,6 +10,7 @@ import wasichai.core.common.Actions
 import wasichai.core.common.FieldViolation
 import wasichai.core.common.ForbiddenException
 import wasichai.core.common.PageRequest
+import wasichai.core.common.ValidationException
 import wasichai.core.data.RecordCriterion
 import wasichai.core.identity.CurrentUser
 import wasichai.core.metadata.MetadataService
@@ -96,6 +97,16 @@ object Filtros {
             val columna = "\"${definition.fields.first { it.name == campo }.columnName}\""
             "$columna = ANY(${bind(ids.map(UUID::fromString).toTypedArray())})"
         }
+}
+
+// a relation's id as an act's body sends it: none when blank, a 400 that names the field when it is no id
+fun relacion(
+    campo: String,
+    valor: String?
+): String? {
+    val texto = valor?.trim()?.ifEmpty { null } ?: return null
+    return runCatching { UUID.fromString(texto).toString() }.getOrNull()
+        ?: throw ValidationException("El $campo no es un id", listOf(FieldViolation(campo, "es el id de un $campo")))
 }
 
 // the permission an act needs, asked before anything is read: who may not create the act's record gets a 403 that

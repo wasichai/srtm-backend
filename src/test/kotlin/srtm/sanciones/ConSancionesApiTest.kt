@@ -11,9 +11,10 @@ import wasichai.core.data.RecordStore
 import wasichai.core.metadata.MetadataService
 import java.util.UUID
 
-// an api test of the sanciones: a FICTITIOUS UIT for a year no other test uses (decision 14), the CUIS and the
-// notificaciones written through srtm's endpoints, and what B3 has no endpoint for yet (an acta) written as srtm's
-// services write it: through the app's RecordStore, with the mark
+// an api test of the sanciones: a FICTITIOUS UIT for a year no other test uses (decision 14), the CUIS, the
+// notificaciones and the actas written through srtm's endpoints, and what has no endpoint yet (descargos, resoluciones
+// and their notificaciones) written as srtm's services write it: through the app's RecordStore, with the mark. an acta
+// is dated in the past (no act is dated after today), so its UIT is the one of ANIO_PASADO
 abstract class ConSancionesApiTest : SrtmApiTest() {
     @Autowired
     lateinit var recordStore: RecordStore
@@ -83,13 +84,49 @@ abstract class ConSancionesApiTest : SrtmApiTest() {
             "observacion" to "Notificación de prueba"
         )
 
-    // an acta written as srtm's acta service will (B4), naming `previa` when given: its id
+    // the body of POST /infracciones/actas: an acta of `codigo` (the CUIS code's text) on `fecha`, PRIMERA, naming the
+    // obligado as its contribuyente. the optional fields go as explicit nulls, as the portal sends them
+    protected fun pedidoActa(
+        codigo: String,
+        obligado: String,
+        fecha: String = "$ANIO_PASADO-03-04",
+        previa: String? = null,
+        numero: String = "AC-${uniqueDocumento()}",
+        reincidencia: String = "PRIMERA",
+        contribuyente: String? = obligado,
+        predio: String? = null
+    ): Map<String, Any?> =
+        mapOf(
+            "numero" to numero,
+            "fecha_infraccion" to fecha,
+            "hora_infraccion" to "10:30",
+            "lugar" to "JR. LIMA 123",
+            "codigo" to codigo,
+            "reincidencia" to reincidencia,
+            "obligado" to obligado,
+            "contribuyente" to contribuyente,
+            "predio" to predio,
+            "notificacion_previa" to previa,
+            "expediente" to null,
+            "inspector" to null,
+            "descripcion_hecho" to null,
+            "observacion" to "Acta de prueba"
+        )
+
+    // an acta registered through srtm's endpoint (a UIT of its year must be there): the 201
+    protected fun registrarActa(
+        codigo: String,
+        obligado: String,
+        fecha: String = "$ANIO_PASADO-03-04",
+        previa: String? = null
+    ): JsonNode = post(ACTAS, pedidoActa(codigo, obligado, fecha, previa))
+
+    // an acta written raw, as ActasService writes it, for a test whose dates have no UIT (the CUIS' own): its id
     protected fun acta(
         codigo: String,
         uit: String,
-        obligado: String,
-        previa: String? = null
-    ): String = conLaMarca(PAPELETA, Ejemplos.papeleta("AC-${uniqueDocumento()}", codigo, uit, obligado) + ("notificacion_previa" to previa))
+        obligado: String
+    ): String = conLaMarca(PAPELETA, Ejemplos.papeleta("AC-${uniqueDocumento()}", codigo, uit, obligado))
 
     protected fun registro(
         objeto: String,
@@ -102,7 +139,9 @@ abstract class ConSancionesApiTest : SrtmApiTest() {
     // the admin's organization and id
     private val yo: JsonNode by lazy { tree(send("GET", "/api/auth/me", null, HttpStatus.OK)) }
 
-    private fun conLaMarca(
+    // a record written as srtm's services write it (through the app's RecordStore, with the mark), for what no endpoint
+    // of this branch writes yet (a descargo, a resolución, its notificación): its id
+    protected fun conLaMarca(
         objeto: String,
         attrs: Map<String, Any?>
     ): String {
@@ -113,5 +152,13 @@ abstract class ConSancionesApiTest : SrtmApiTest() {
                 recordStore.insert(metadata.loadDefinition(organizacion, objeto), organizacion, usuario, attrs, emptyMap()).id.toString()
             }
         }
+    }
+
+    companion object {
+        const val ACTAS = "/api/srtm/infracciones/actas"
+
+        // past years no other test gives a UIT: the first with Ficticios.UIT (once uit(ANIO_PASADO) runs), the second never
+        const val ANIO_PASADO = 1991
+        const val ANIO_PASADO_SIN_UIT = 1990
     }
 }
