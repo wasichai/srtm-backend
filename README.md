@@ -705,6 +705,55 @@ subsanada, ya anulada, segunda RIS) es `ConflictException` (409).
   documento o del nombre (en `rentas`, el documento).
 - Sin `PAGADA` ni `COACTIVA` (no hay cobranza), y una versión del CUIS para un código sin vigente es su primera versión.
 
+## Anuncios y propaganda
+
+La tasa por anuncios y propaganda se porta del negocio de `rentas` (`RegistrarAnuncio`, `RenovarAnuncio`,
+`CesarAnuncio`, `ConsultaDeAnuncios`) al paquete `srtm.anuncios`, que no importa a ningún otro módulo de negocio. El
+modelo (`anuncio`, `movimiento_anuncio`) y su regla de escritura están en [Modelo](#modelo).
+
+**El anuncio no se edita.** Su estado no es una columna: se deriva de sus movimientos y del día que se pregunta
+(`srtm.anuncios.Anuncios`, funciones puras, sin base ni reloj):
+- `estado(movimientos, fecha)`: RETIRADO si hay retiro, CESADO si hay cese, VENCIDO si la vigencia derivada es anterior
+  a la fecha, si no VIGENTE. Un movimiento posterior a la fecha no cuenta: el padrón de un día pasado dice lo que decía
+  ese día. Sin plazo no vence.
+- `vigencia(movimientos, fecha)`: la `vigencia_hasta` del último acto que devenga hasta esa fecha (a igual fecha, el
+  último escrito). Una renovación prorroga sin tocar el anuncio, cuya `vigencia_hasta` es la del acto fundacional.
+- `ejercicioQueRenueva(vigenciaActual, fechaActo, nuevaVigencia)` (rentas#417): el año de la nueva vigencia, o el del
+  acto si no trae plazo. Una prórroga que abarca varios ejercicios no se cobra como uno: 422.
+- `devengo(...)`, `devengado(movimientos, alDia)`, `tasa(...)`, `exigirOrden(...)` y `acciones(...)`.
+
+**Los actos** (cada uno pide `observacion` de 5 a 500 caracteres, y permiso de creación sobre su objeto antes de leer
+nada: `anuncio` el alta, `movimiento_anuncio` los demás; **403** que lo nombra):
+- **Alta** (`POST /api/srtm/anuncios`): escribe el anuncio y su AUTORIZACION en una transacción. La tasa es la fila
+  `TASA_ANUNCIO <clase>` vigente a la `fecha_autorizacion` (hoy si no viene), copiada en el movimiento con la fila como
+  `parametro`; sin ella, **422** con `faltan: ["TASA_ANUNCIO PANEL 2026"]` y no se escribe nada. Una tasa en el cuerpo
+  se ignora. El número `AN-AAAA-NNNNNN` es el correlativo del año de la autorización, bajo el candado consultivo de la
+  serie y el año (`srtm.Candados`, `pg_advisory_xact_lock`): el máximo más uno, dentro de la transacción. El único de
+  `numero` es la red: si salta, **409** «vuelva a intentarlo».
+- **Idempotencia:** la cabecera `Idempotency-Key` (hasta 64 caracteres) va a `anuncio.clave_idempotencia`, que es única.
+  El reenvío con la misma clave responde **200** con el anuncio y la autorización de la primera vez y `ya_existia:
+  true`, sin devengar otra vez; dos primeras peticiones a la vez se ordenan bajo el candado, y si aun así chocan en el
+  único se relee y se responde 200.
+- **Renovación** (`POST /api/srtm/anuncios/{id}/renovacion`): devenga el ejercicio que renueva, con la tasa de ese
+  ejercicio leída al 1 de enero. **409** si ese ejercicio ya está devengado (lo garantizan los únicos `clave` y
+  `referencia_cargo`, así que de dos renovaciones a la vez se escribe una); **422** si el anuncio está cesado o
+  retirado, si la prórroga abarca varios ejercicios o si la vigencia termina antes de la fecha; **422** con `faltan`.
+- **Cese y retiro** (`/cese`, `/retiro`, con `motivo`): no devengan ni mueven la vigencia, y no deshacen lo devengado.
+  **409** si el acto ya existe; **422** un retiro sin cese.
+- **Orden de los actos:** ninguno se fecha después de hoy ni antes de la autorización o del último movimiento del
+  anuncio (**422** que nombra las dos fechas).
+
+**Las consultas** responden con su fecha: el padrón (`GET /api/srtm/anuncios`) da el estado a `vigentes_a` (hoy por
+omisión) y solo los anuncios autorizados hasta ese día; filtra por `contribuyente` (id), `clase`, `estado` (VIGENTE,
+VENCIDO, CESADO, RETIRADO) y `q` (número, denominación o dirección), y un filtro desconocido o mal formado es **422**
+que lo nombra. La ficha da el estado, la vigencia, lo devengado (`{importe, al_dia}`: la suma de las tasas de los
+actos que devengan hasta ese día, no una deuda) y `acciones` (`{renovacion, cese, retiro}`, cada una
+`{permitida, motivo}`). `GET /api/srtm/anuncios/tasas?anio` da la tasa de cada clase y las que faltan, nunca un 0.
+
+**Ninguna cifra inventada.** La tasa es de ordenanza (D-02b) y el repo no trae ninguna: se carga como `TASA_ANUNCIO`
+con `import_parametros.py`, una por clase y ejercicio completo, sin multiplicar por el área (la fórmula por área está
+pendiente de la ordenanza). Los tests usan tasas ficticias, en un año pasado propio.
+
 ## Importar el catastro fiscal
 
 Los lotes del catastro fiscal (código CPU y polígono) se cargan desde un GeoJSON en EPSG:4326. También se pueden
@@ -1154,6 +1203,12 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET | `/api/srtm/emisiones/{id}` | un job: `{id, anio, formato, estado, total, procesados, errores:[{contribuyente, mensaje}], archivo, tamano, mensaje, iniciado, terminado}` |
 | GET | `/api/srtm/emisiones/{id}/archivo` | el PDF o ZIP, `attachment; filename="emision-<anio>-<id>.pdf\|zip"`, en streaming; 409 si aún no está TERMINADA; 410 si la retención depuró el archivo |
 | DELETE | `/api/srtm/emisiones/{id}` | borra el job, sus lotes y sus archivos (si aún corre, la cancela): 204; 403 sin permiso de borrado sobre `emision_masiva` |
+| GET | `/api/srtm/anuncios?contribuyente&clase&estado&vigentes_a&q&page&size` | el padrón de anuncios: página de `{…anuncio, contribuyente_nombre, estado, vigencia_hasta_vigente, vigentes_a}` ([Anuncios y propaganda](#anuncios-y-propaganda)) |
+| POST | `/api/srtm/anuncios` (cabecera `Idempotency-Key`) | el alta con su autorización: 201 `{anuncio, movimiento, ya_existia:false}`; 200 en el reenvío con la misma clave; 422 con `faltan` |
+| GET | `/api/srtm/anuncios/{id}` | `{anuncio, movimientos, estado, vigencia_hasta_vigente, al_dia, devengado: {importe, al_dia}, acciones}` |
+| POST | `/api/srtm/anuncios/{id}/renovacion`, `/cese`, `/retiro` | los actos: 201 con el movimiento; 409 acto o ejercicio repetido; 422 fuera de orden, cesado, sin cese o `faltan` |
+| GET | `/api/srtm/anuncios/tasas?anio` | `{anio, tasas: [{clase, tasa, parametro_id, vigencia_desde}], faltan}` |
+| GET | `/api/srtm/contribuyentes/{id}/anuncios`, `/api/srtm/predios/{id}/anuncios` | `{al_dia, anuncios: [{…anuncio, estado, vigencia_hasta_vigente}]}` |
 
 Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
 - **Inscripción:** el backend asigna `codigo` (6 dígitos, correlativo), `numero_declaracion` y `fecha_registro`.
@@ -1630,7 +1685,9 @@ yarn format:check           # prettier: yaml y json, model.json incluido
   `srtm.sanciones`: `MultasTest`, `NotificacionesTest`, `PlazosTest`, `CuisTest`, `ProcedimientoTest`, `RecursosTest`,
   `OrdenDeLosActosTest`, `ExpedientesTest`, `HojaResolucionTest` y `PanelTest`, con cifras ficticias), la guardia
   de escritura (`AlmacenGuardadoTest`, `ReglaDeSancionesTest`, `ReglaDeAnunciosTest`, y `AlmacenGuardadoApiTest` en
-  integración), `Records`,
+  integración), los anuncios (`AnunciosTest`, los casos de `AnuncioYSusActosTest` de rentas, y `AnunciosApiTest` en
+  integración: el alta, la idempotencia, diez altas a la vez, dos renovaciones a la vez, los actos, el padrón a un
+  corte, la guardia y los permisos), `Records`,
   `Registros`, `srtm.pide` (`PideReniecTest`, contra un servidor local) y `srtm.emision` (`PdfRendererTest`,
   `PdfMergerTest`, `HojaPuTest`, `HojaHrTest`, `GeneradorEmisionTest`, que leen el PDF de vuelta con PDFBox; `AlmacenLocalTest`, que corre el contrato
   de `AlmacenEmision` sobre un directorio temporal).
@@ -1683,8 +1740,7 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - **Fiscalización:** el flujo (rol y pantallas) que determina de oficio una declaración: medio de determinación
   FISCALIZACIÓN o DE OFICIO y su modificación de oficio.
 - **En el modelo:** workflows y plantillas de documentos.
-- **Infracciones administrativas** ([Infracciones administrativas](#infracciones-administrativas); los anuncios,
-  `/api/srtm/anuncios/...`, van en su propio PR):
+- **Infracciones administrativas** ([Infracciones administrativas](#infracciones-administrativas)):
   - **Cobro:** srtm determina la multa y no la cobra. La orden de cobro y el pago van en `caja-backend`, con la
     referencia estable `PAPELETA-<id>` del acta; con ellos llegan los estados `PAGADA` y `COACTIVA`.
   - **Recaudación y coactiva:** la resolución de multa (RM) y la ejecución coactiva, y el resumen de recaudación de las
@@ -1697,5 +1753,8 @@ yarn format:check           # prettier: yaml y json, model.json incluido
   - **Historia de domicilios:** si se decide, para imprimir y notificar al domicilio fiscal vigente a la fecha de la
     resolución (hoy, el actual).
   - **Tránsito:** la familia `TRANSITO` de `rentas` no se trae (decisión 6); solo `ADMINISTRATIVA`.
+- **Anuncios:** la orden de cobro de cada tasa devengada a caja-backend, con la referencia estable
+  `ANUNCIO-<id>-<anio>` del movimiento (srtm determina, no cobra); la fórmula por área y lados, pendiente de la
+  ordenanza (hoy la tasa es por clase y ejercicio completo); las tasas reales, cuando `normativa` las transcriba.
 
 El frontend web está en `srtm-ui`.
