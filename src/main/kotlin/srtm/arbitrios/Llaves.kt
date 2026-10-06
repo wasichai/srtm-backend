@@ -3,7 +3,10 @@ package srtm.arbitrios
 // the parametro_tributario rows of an ordinance that the arbitrios read, written once. model/import_parametros.py checks
 // their shape under the same names (TIPOS_ARBITRIO); LlavesTest compares both lists
 object Llaves {
-    // servicio:zona:uso -> valor_numerico, the monthly tasa in soles
+    // servicio:zona:uso -> valor_numerico, the monthly tasa in soles. its zona parte (when the servicio's first
+    // Dimension is ZONA) may be empty: it means the tasa applies in every zona of the servicio, same as a
+    // zona-less one (import_tasas_arbitrio.py, #86). Arbitrios.determinar tries the exact key first and tasaSinZona
+    // second; the exact key always wins over this one when both exist
     const val TASA_ARBITRIO = "TASA_ARBITRIO"
 
     // a sector catastral -> texto, its zona
@@ -63,6 +66,15 @@ object Llaves {
         servicio: String,
         valores: List<String>
     ) = (listOf(servicio) + valores).joinToString(":")
+
+    // the fallback key for a servicio whose first Dimension is ZONA: the same valores with the zona (the first
+    // one) emptied - "this tasa applies in every zona". null when the servicio's first Dimension is not ZONA (no
+    // such fallback exists then) or valores is empty
+    fun tasaSinZona(
+        servicio: String,
+        valores: List<String>,
+        primeraEsZona: Boolean
+    ) = if (primeraEsZona && valores.isNotEmpty()) tasa(servicio, listOf("") + valores.drop(1)) else null
 
     // what a cuota keeps as parametro_aplicado: the exact key that was read
     fun aplicado(claveDeTasa: String) = "$TASA_ARBITRIO:$claveDeTasa"

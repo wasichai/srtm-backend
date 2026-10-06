@@ -335,7 +335,7 @@ firma, y se cargan con `import_parametros.py --csv <archivo>`:
 
 | `tipo` | `clave` | Valor |
 |---|---|---|
-| `TASA_ARBITRIO` | `servicio` y una parte por cada Dimension del servicio (`zona:uso` por defecto) | `valor_numerico`: la tasa mensual en soles, no negativa |
+| `TASA_ARBITRIO` | `servicio` y una parte por cada Dimension del servicio (`zona:uso` por defecto); su parte de zona puede ir vacía cuando la primera Dimension del servicio es `ZONA` (`servicio::uso`): significa "esta tasa rige en toda zona del servicio" (una tarifa que no varía por zona, dentro de un servicio cuyas demás tasas sí varían — ver `import_tasas_arbitrio.py`, debajo); `Arbitrios.determinar` prueba primero la llave exacta de la zona del predio y, si no existe, esta; la exacta gana siempre que exista | `valor_numerico`: la tasa mensual en soles, no negativa |
 | `ARBITRIO_ZONA` | el sector catastral | `texto`: su zona según la ordenanza |
 | `ARBITRIO_USO` | un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos (gana el más largo) | `texto`: su uso de arbitrio |
 | `ARBITRIO_VENCIMIENTO` | el mes, de 1 a 12 | `texto`: su vencimiento, `AAAA-MM-DD` |
@@ -352,6 +352,43 @@ personas distintas. Si una no encaja, la nombra y sale con `2`. `BASE_ARBITRIO`,
 `HABITANTES_PROMEDIO`, `HABITANTES_VARIACION`, `REDONDEO_ARBITRIO`, `ARBITRIO_INFLUENCIA` y `ARBITRIO_AFLUENCIA` son
 opcionales: sin estas filas el cálculo es el
 de siempre (base `PREDIO`, dimensiones `ZONA,USO` y sin redondeo adicional).
+
+**Tasas de una ordenanza, de la tabla del informe técnico.** `import_tasas_arbitrio.py` deriva el CSV de arriba
+(el que lee `import_parametros.py --csv`) de la tabla larga de tasas de una ordenanza, una fila por tasa: `servicio,
+zona, uso_codigo, uso, ubicacion, nivel_afluencia, base, tasa_mensual`, con una cabecera `#` que cita la fuente (la
+forma de `arbitrios-miraflores-2026.csv`, #86). No carga nada a Core: solo escribe el archivo, y para eso llama
+`import_parametros.errores` antes de escribir.
+
+```bash
+cd model
+python3 import_tasas_arbitrio.py --tasas tasas.csv --servicios BARRIDO_CALLES=BAR,RECOLECCION_RESIDUOS=RRS \
+    --usos usos.csv --influencias influencias.csv --vigencia-desde 2026-01-01 --norma "Ordenanza N.° 665/MM" \
+    --fuente "El Peruano, 20/12/2025" --transcribio "ANA, 2026-01-05" --verifico "BETO, 2026-01-09" \
+    --redondeo 2:ABAJO --habitantes RECOLECCION_RESIDUOS=2:0.5 \
+    --vencimientos 2026-02-28,2026-05-30,2026-08-29,2026-11-30 --dry-run   # cuenta por tipo, no escribe
+python3 import_tasas_arbitrio.py ... --salida parametros-2026.csv          # sin --dry-run, escribe el archivo
+```
+
+Por cada servicio escribe `BASE_ARBITRIO` (de su columna `base`: «ml» → `FRONTIS_ML`, «m2»/«m²» → `AREA_CONSTRUIDA_M2`,
+«predio» → `PREDIO`) y `DIMENSIONES_ARBITRIO` (`ZONA` si alguna fila del servicio trae zona, `USO` si alguna trae
+`uso_codigo`, `INFLUENCIA`/`AFLUENCIA` igual, en ese orden); una `TASA_ARBITRIO` por fila, siempre (zona y
+`nivel_afluencia` normalizados sin acentos, en mayúsculas y con `_`; `uso_codigo` y `ubicacion` verbatim). Una fila
+sin zona en un servicio cuyas demás filas sí la traen no se descarta ni se rechaza: su parte de zona queda vacía
+(«esta tasa rige en toda zona del servicio», la tarifa de «otros usos» de Miraflores que no varía por zona, a
+diferencia de la de casa habitación del mismo servicio). `--usos` (`prefijo,uso`) y `--influencias` (`enum,etiqueta`)
+pasan verbatim a `ARBITRIO_USO`/`ARBITRIO_INFLUENCIA`; toda tasa cuyo `uso_codigo`/`ubicacion` no esté en esas
+columnas no encaja. `--habitantes SERVICIO=P:V` (repetible) escribe `HABITANTES_PROMEDIO`/`HABITANTES_VARIACION` por
+cada `servicio:zona:uso` de casa habitación presente para ese servicio (su columna `uso` contiene «casa
+habitación», sin acentos). `--redondeo` escribe la fila global; `--vencimientos` escribe las 12 `ARBITRIO_VENCIMIENTO`
+a partir de 12 fechas (una por mes) o 4 (trimestral: cada una cubre sus 3 meses). `--dry-run` imprime la cantidad por
+tipo y no escribe `--salida`; los códigos de salida no cambian con `--dry-run`.
+
+`ARBITRIO_AFLUENCIA` **no se deriva aquí a propósito**: mapea el uso propio de un predio a su nivel de afluencia —
+dato del predio, no de la ordenanza — y esta tabla no lo trae.
+
+Sale con `2` (nada escrito) si un servicio de una fila no está en `--servicios`, una base no se reconoce, una tasa
+se repite, un uso o una ubicación no tienen mapeo, `--vencimientos` no trae 12 ni 4 fechas, o el CSV construido no
+pasa `import_parametros.errores`.
 
 **La ordenanza, los servicios y las inafectaciones** se cargan con `import_arbitrios.py`, desde un JSON:
 

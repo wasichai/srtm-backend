@@ -210,7 +210,12 @@ object Arbitrios {
                         continue
                     }
                     val claveDeTasa = Llaves.tasa(codigoServicio, valoresDimensiones)
-                    val tasa = enVigor(c.parametros, Llaves.TASA_ARBITRIO, dia) { it.clave?.trim() == claveDeTasa && it.valorNumerico != null }
+                    val claveDeTasaSinZona = Llaves.tasaSinZona(codigoServicio, valoresDimensiones, dimensiones.firstOrNull() == Dimension.ZONA)
+
+                    fun tasaDe(clave: String) = enVigor(c.parametros, Llaves.TASA_ARBITRIO, dia) { it.clave?.trim() == clave && it.valorNumerico != null }
+                    // the exact key always wins; the empty-zona one (when the servicio's first dimension is ZONA)
+                    // is tried only when it does not exist (import_tasas_arbitrio.py, #86)
+                    val tasa = tasaDe(claveDeTasa) ?: claveDeTasaSinZona?.let(::tasaDe)
                     if (tasa == null) {
                         falta("${Llaves.TASA_ARBITRIO} $claveDeTasa ${c.anio}")
                         continue
@@ -244,7 +249,15 @@ object Arbitrios {
                             anio = c.anio,
                             periodo = periodo,
                             monto = desglose.monto,
-                            parametroAplicado = aplicado(claveDeTasa, codigoServicio, baseLeida, habitantes, Llaves.tasa(codigoServicio, zona, uso), redondeo),
+                            parametroAplicado =
+                                aplicado(
+                                    tasa.clave!!.trim(),
+                                    codigoServicio,
+                                    baseLeida,
+                                    habitantes,
+                                    Llaves.tasa(codigoServicio, zona, uso),
+                                    redondeo
+                                ),
                             zona = zona,
                             usoArbitrio = uso,
                             secuenciaUso = secuencia,

@@ -715,6 +715,46 @@ class ArbitriosTest {
         assertTrue(d.cuotas.all { invariantes(it).isEmpty() })
     }
 
+    // a TASA_ARBITRIO whose zona parte is empty means "every zona of the servicio" (import_tasas_arbitrio.py,
+    // #86): Arbitrios.determinar tries the exact key first (RRSS:01A:CASA) and the empty-zona one second
+    // (RRSS::CASA), since RRSS's first dimension is ZONA (its default, ZONA then USO)
+    @Test
+    fun `una TASA_ARBITRIO de zona vacia se usa cuando no hay una exacta de esa zona`() {
+        val sinLaExacta =
+            filasMiraflores.filterNot { it.tipo == Llaves.TASA_ARBITRIO && it.clave == "RRSS:01A:CASA" } +
+                tasa("RRSS::CASA", "0.0514")
+        val d = determinar(contexto(servicios = miraflores, parametros = sinLaExacta), del(declaraciones = listOf(djMiraflores)))
+        assertEquals(emptyList<String>(), d.faltan)
+        val rrss = d.cuotas.first()
+        assertEquals(BigDecimal("10.28"), rrss.monto)
+        assertEquals("01A", rrss.zona) // el predio sigue resolviendo su propia zona, como siempre
+        assertEquals(
+            "TASA_ARBITRIO:RRSS::CASA;BASE_ARBITRIO:RRSS;HABITANTES_PROMEDIO:RRSS:01A:CASA;HABITANTES_VARIACION:RRSS:01A:CASA;REDONDEO_ARBITRIO",
+            rrss.parametroAplicado
+        )
+        assertTrue(invariantes(rrss).isEmpty())
+    }
+
+    @Test
+    fun `la TASA_ARBITRIO exacta gana sobre la de zona vacia cuando existen las dos`() {
+        val ambas = filasMiraflores + tasa("RRSS::CASA", "999.9999")
+        val d = determinar(contexto(servicios = miraflores, parametros = ambas), del(declaraciones = listOf(djMiraflores)))
+        assertEquals(emptyList<String>(), d.faltan)
+        assertEquals(BigDecimal("10.28"), d.cuotas.first().monto)
+        assertEquals(
+            "TASA_ARBITRIO:RRSS:01A:CASA;BASE_ARBITRIO:RRSS;HABITANTES_PROMEDIO:RRSS:01A:CASA;HABITANTES_VARIACION:RRSS:01A:CASA;REDONDEO_ARBITRIO",
+            d.cuotas.first().parametroAplicado
+        )
+    }
+
+    @Test
+    fun `sin la tasa exacta ni la de zona vacia, la falta es la misma de siempre`() {
+        val sinNinguna = filasMiraflores.filterNot { it.tipo == Llaves.TASA_ARBITRIO && it.clave == "RRSS:01A:CASA" }
+        val d = determinar(contexto(servicios = miraflores, parametros = sinNinguna), del(declaraciones = listOf(djMiraflores)))
+        assertEquals(listOf("${Llaves.TASA_ARBITRIO} RRSS:01A:CASA 2026"), d.faltan)
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
+    }
+
     @Test
     fun `no habitantes is a factor of 0, a cuota of 0 - a negative factor fails the whole predio`() {
         val cero =

@@ -166,6 +166,56 @@ class GenerarTests(unittest.TestCase):
         self.assertEqual(malas, [])
         self.assertEqual(import_parametros.errores(parametros), [])
 
+    def test_una_fila_sin_zona_en_un_servicio_con_zona_genera_la_clave_con_esa_parte_vacia(self):
+        # RECOLECCION_RESIDUOS,Zona 1,9,Otro uso ficticio,...: esta tasa no varía por zona (como los "otros usos"
+        # de Miraflores), pero el servicio sí trae zona en sus demás filas (DIMENSIONES sigue en ZONA,USO)
+        filas = [dict(f) for f in self.filas]
+        filas[4] = dict(filas[4], zona="")
+        parametros, malas = it.generar(filas, self.servicios, self.usos, self.influencias, {}, **comunes())
+        self.assertEqual(malas, [])
+        claves = {p["clave"] for p in parametros if p["tipo"] == "TASA_ARBITRIO"}
+        self.assertIn("RRS::9", claves)
+        self.assertEqual(import_parametros.errores(parametros), [])
+
+    def test_vencimientos_se_emiten_para_los_12_meses(self):
+        vencimientos = it._parse_vencimientos("2041-02-28,2041-05-30,2041-08-29,2041-11-30")
+        c = comunes()
+        redondeo = c.pop("redondeo")
+        parametros, malas = it.generar(self.filas, self.servicios, self.usos, self.influencias, {}, **c,
+                                        redondeo=redondeo, vencimientos=vencimientos)
+        self.assertEqual(malas, [])
+        meses = {p["clave"]: p["texto"] for p in parametros if p["tipo"] == "ARBITRIO_VENCIMIENTO"}
+        self.assertEqual(meses, {
+            "1": "2041-02-28", "2": "2041-02-28", "3": "2041-02-28",
+            "4": "2041-05-30", "5": "2041-05-30", "6": "2041-05-30",
+            "7": "2041-08-29", "8": "2041-08-29", "9": "2041-08-29",
+            "10": "2041-11-30", "11": "2041-11-30", "12": "2041-11-30",
+        })
+        self.assertEqual(import_parametros.errores(parametros), [])
+
+    def test_sin_vencimientos_no_hay_filas(self):
+        parametros, malas = self.generar()
+        self.assertEqual(malas, [])
+        self.assertEqual(self.por_tipo(parametros, "ARBITRIO_VENCIMIENTO"), [])
+
+
+class VencimientosTests(unittest.TestCase):
+    def test_doce_fechas_una_por_mes(self):
+        fechas = ",".join(f"2041-{m:02d}-01" for m in range(1, 13))
+        self.assertEqual(it._parse_vencimientos(fechas), {str(m): f"2041-{m:02d}-01" for m in range(1, 13)})
+
+    def test_cuatro_fechas_trimestral(self):
+        self.assertEqual(it._parse_vencimientos("A,B,C,D"), {
+            "1": "A", "2": "A", "3": "A", "4": "B", "5": "B", "6": "B",
+            "7": "C", "8": "C", "9": "C", "10": "D", "11": "D", "12": "D",
+        })
+
+    def test_una_cantidad_distinta_de_12_o_4_es_un_error(self):
+        for fechas in ("A,B,C", "A,B,C,D,E", ""):
+            with self.subTest(fechas=fechas):
+                with self.assertRaises(ValueError):
+                    it._parse_vencimientos(fechas)
+
 
 class MainTests(unittest.TestCase):
     def run_main(self, *extra):
@@ -232,6 +282,30 @@ class MainTests(unittest.TestCase):
                                  "--salida", salida])
             self.assertEqual(code, 2)
             self.assertIn("NOMBRE=CODIGO", err.getvalue())
+
+    def test_dry_run_imprime_la_cantidad_por_tipo_y_no_escribe(self):
+        code, out, err, contenido = self.run_main("--dry-run", "--vencimientos", "2041-02-28,2041-05-30,2041-08-29,2041-11-30")
+        self.assertEqual(code, 0, err)
+        self.assertIsNone(contenido)
+        self.assertIn("TASA_ARBITRIO: 14", out)
+        self.assertIn("BASE_ARBITRIO: 4", out)
+        self.assertIn("DIMENSIONES_ARBITRIO: 4", out)
+        self.assertIn("ARBITRIO_VENCIMIENTO: 12", out)
+        self.assertIn("nada escrito", out)
+
+    def test_vencimientos_malformado_sale_con_2_y_no_escribe(self):
+        with tempfile.TemporaryDirectory() as d:
+            salida = os.path.join(d, "parametros.csv")
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                code = it.main(["--tasas", FICTICIO_TASAS, "--servicios", SERVICIOS, "--usos", FICTICIO_USOS,
+                                 "--influencias", FICTICIO_INFLUENCIAS, "--vigencia-desde", "2041-01-01",
+                                 "--norma", "x", "--fuente", "x", "--transcribio", "ANA, 2041-01-05",
+                                 "--verifico", "BETO, 2041-01-09", "--vencimientos", "A,B,C",
+                                 "--salida", salida])
+            self.assertEqual(code, 2)
+            self.assertIn("12", err.getvalue())
+            self.assertFalse(os.path.exists(salida))
 
 
 # el final de punta a punta (#86, Step 2): generar -> import_parametros.py --csv -> import_arbitrios.py, sobre una
@@ -316,22 +390,31 @@ MIRAFLORES_CSV = os.environ.get("SRTM_MIRAFLORES_CSV")
 
 @unittest.skipUnless(MIRAFLORES_CSV, "SRTM_MIRAFLORES_CSV no está configurado")
 class MirafloresRealTests(unittest.TestCase):
-    """Cuenta las TASA_ARBITRIO que generar() construye del CSV real de Miraflores 2026, una por fila (sin
-    importar si el resultado pasa las demás validaciones: eso se deja para la carga real de #86)."""
+    """Todos los criterios de aceptación de #86 sobre el CSV real de Miraflores 2026: las cantidades por tipo, los
+    valores de habitantes y redondeo, los 12 vencimientos, y que el CSV generado pasa import_parametros.py
+    --dry-run contra fake_core.py sin errores, con una segunda corrida idempotente."""
 
-    def test_246_tasas_3_68_64_111(self):
-        filas = it.leer_tasas(MIRAFLORES_CSV)
-        servicios = it._parse_pares("BARRIDO_CALLES=BAR,RECOLECCION_RESIDUOS=RRS,PARQUES_JARDINES=PYJ,SERENAZGO=SER")
+    def setUp(self):
+        self.filas = it.leer_tasas(MIRAFLORES_CSV)
+        self.servicios = it._parse_pares("BARRIDO_CALLES=BAR,RECOLECCION_RESIDUOS=RRS,PARQUES_JARDINES=PYJ,SERENAZGO=SER")
         # mapeos sintéticos que cubren cada uso_codigo y cada ubicación distintos del archivo real, solo para que
         # generar() no se detenga antes de construir las TASA_ARBITRIO; no son del padrón real
-        usos_distintos = sorted({f["uso_codigo"] for f in filas if f["uso_codigo"]})
-        usos = [{"prefijo": f"{i:06d}", "uso": u} for i, u in enumerate(usos_distintos, start=1)]
-        ubicaciones_distintas = sorted({f["ubicacion"] for f in filas if f["ubicacion"]})
+        usos_distintos = sorted({f["uso_codigo"] for f in self.filas if f["uso_codigo"]})
+        self.usos = [{"prefijo": f"{i:06d}", "uso": u} for i, u in enumerate(usos_distintos, start=1)]
+        ubicaciones_distintas = sorted({f["ubicacion"] for f in self.filas if f["ubicacion"]})
         enums = ["FRENTE A PARQUE", "MEDIANAMENTE CERCANO A AREAS VERDES", "FRENTE A BERMA", "OTRAS UBICACIONES"]
-        influencias = [{"enum": enums[i % len(enums)], "etiqueta": u} for i, u in enumerate(ubicaciones_distintas)]
-        parametros, malas = it.generar(filas, servicios, usos, influencias, {}, vigencia_desde="2026-01-01",
-                                        norma="x", fuente="x", transcribio="ANA, 2026-01-01",
-                                        verifico="BETO, 2026-01-01")
+        self.influencias = [{"enum": enums[i % len(enums)], "etiqueta": u} for i, u in enumerate(ubicaciones_distintas)]
+        self.vencimientos = it._parse_vencimientos("2026-02-28,2026-05-30,2026-08-29,2026-11-30")
+
+    def generar(self):
+        return it.generar(self.filas, self.servicios, self.usos, self.influencias,
+                           {"RECOLECCION_RESIDUOS": ("2", "0.5")}, vigencia_desde="2026-01-01", norma="x", fuente="x",
+                           transcribio="ANA, 2026-01-01", verifico="BETO, 2026-01-01", redondeo="2:ABAJO",
+                           vencimientos=self.vencimientos)
+
+    def test_los_criterios_de_aceptacion_de_la_246_a_los_vencimientos(self):
+        parametros, malas = self.generar()
+        self.assertEqual(malas, [])
         tasas = [p for p in parametros if p["tipo"] == "TASA_ARBITRIO"]
         self.assertEqual(len(tasas), 246)
         por_servicio = {}
@@ -339,8 +422,71 @@ class MirafloresRealTests(unittest.TestCase):
             codigo = p["clave"].split(":")[0]
             por_servicio[codigo] = por_servicio.get(codigo, 0) + 1
         self.assertEqual(por_servicio, {"BAR": 3, "RRS": 68, "PYJ": 64, "SER": 111})
-        print(f"Miraflores real: 246 TASA_ARBITRIO generadas (3/68/64/111); malas en el resto del pipeline: "
-              f"{len(malas)}")
+        self.assertEqual(len([p for p in parametros if p["tipo"] == "BASE_ARBITRIO"]), 4)
+        self.assertEqual(len([p for p in parametros if p["tipo"] == "DIMENSIONES_ARBITRIO"]), 4)
+        habitantes_promedio = [p for p in parametros if p["tipo"] == "HABITANTES_PROMEDIO"]
+        habitantes_variacion = [p for p in parametros if p["tipo"] == "HABITANTES_VARIACION"]
+        self.assertTrue(habitantes_promedio and all(p["valor_numerico"] == "2" for p in habitantes_promedio))
+        self.assertTrue(habitantes_variacion and all(p["valor_numerico"] == "0.5" for p in habitantes_variacion))
+        self.assertEqual({p["clave"] for p in habitantes_promedio}, {p["clave"] for p in habitantes_variacion})
+        redondeo = [p for p in parametros if p["tipo"] == "REDONDEO_ARBITRIO"]
+        self.assertEqual([p["texto"] for p in redondeo], ["2:ABAJO"])
+        vencimientos = {p["clave"]: p["texto"] for p in parametros if p["tipo"] == "ARBITRIO_VENCIMIENTO"}
+        self.assertEqual(vencimientos, {
+            "1": "2026-02-28", "2": "2026-02-28", "3": "2026-02-28",
+            "4": "2026-05-30", "5": "2026-05-30", "6": "2026-05-30",
+            "7": "2026-08-29", "8": "2026-08-29", "9": "2026-08-29",
+            "10": "2026-11-30", "11": "2026-11-30", "12": "2026-11-30",
+        })
+        self.assertEqual(import_parametros.errores(parametros), [])
+        print(f"Miraflores real: {len(parametros)} parámetros generados, de ellos {len(tasas)} TASA_ARBITRIO "
+              f"(3/68/64/111); 0 errores propios, 0 de import_parametros.errores")
+
+    def test_el_csv_generado_pasa_import_parametros_dry_run_sin_errores_y_una_segunda_corrida_es_idempotente(self):
+        core = FakeCore()
+        self.addCleanup(core.stop)
+        with tempfile.TemporaryDirectory() as d:
+            tasas_path = os.path.join(d, "miraflores.csv")
+            with open(MIRAFLORES_CSV, encoding="utf-8") as origen, open(tasas_path, "w", encoding="utf-8") as copia:
+                copia.write(origen.read())
+            usos_path, inf_path = os.path.join(d, "usos.csv"), os.path.join(d, "influencias.csv")
+            with open(usos_path, "w", encoding="utf-8") as f:
+                f.write("prefijo,uso\n" + "\n".join(f"{u['prefijo']},{u['uso']}" for u in self.usos) + "\n")
+            with open(inf_path, "w", encoding="utf-8") as f:
+                f.write("enum,etiqueta\n" + "\n".join(f"{i['enum']},{i['etiqueta']}" for i in self.influencias) + "\n")
+            salida = os.path.join(d, "parametros.csv")
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                code = it.main(["--tasas", tasas_path, "--servicios",
+                                 "BARRIDO_CALLES=BAR,RECOLECCION_RESIDUOS=RRS,PARQUES_JARDINES=PYJ,SERENAZGO=SER",
+                                 "--usos", usos_path, "--influencias", inf_path, "--vigencia-desde", "2026-01-01",
+                                 "--norma", "Ordenanza N.° 665/MM", "--fuente", "El Peruano, 20/12/2025",
+                                 "--transcribio", "ANA, 2026-01-05", "--verifico", "BETO, 2026-01-09",
+                                 "--habitantes", "RECOLECCION_RESIDUOS=2:0.5", "--redondeo", "2:ABAJO",
+                                 "--vencimientos", "2026-02-28,2026-05-30,2026-08-29,2026-11-30",
+                                 "--salida", salida])
+            self.assertEqual(code, 0, err.getvalue())
+
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                code = import_parametros.main(["--core", core.base_url, "--csv", salida, "--dry-run"])
+            self.assertEqual(code, 0, err.getvalue())
+            self.assertEqual(err.getvalue(), "")
+            self.assertIn("parametro_tributario: 382 to create, 0 to update, 0 skipped", out.getvalue())
+
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                code = import_parametros.main(["--core", core.base_url, "--csv", salida])
+            self.assertEqual(code, 0, err.getvalue())
+            self.assertIn("parametro_tributario: 382 created, 0 updated, 0 skipped", out.getvalue())
+
+            core.requests.clear()
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                code = import_parametros.main(["--core", core.base_url, "--csv", salida])
+            self.assertEqual(code, 0, err.getvalue())
+            self.assertIn("parametro_tributario: 0 created, 0 updated, 382 skipped", out.getvalue())
+            self.assertEqual([r for r in core.requests if r[0] in ("POST", "PUT") and r[1] != "/api/auth/login"], [])
 
 
 if __name__ == "__main__":

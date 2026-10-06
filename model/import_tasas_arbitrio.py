@@ -13,26 +13,34 @@ checks their shape):
 - TASA_ARBITRIO, one per row: --servicios' short código, plus one parte per dimension of that servicio, in order.
   zona and nivel_afluencia are normalized (sin acentos, mayúsculas, separadores por _: «Zona 1» -> ZONA_1, «Muy
   alta» -> MUY_ALTA); uso_codigo and ubicación go verbatim, the latter already fixed by --influencias' etiqueta.
+  A row whose zona is blank in a servicio whose other rows do have zona keeps its empty parte (the servicio's
+  tarifa that does not vary by zona, Zona 1-3 «otros usos» de Miraflores): srtm.arbitrios.Llaves.TASA_ARBITRIO and
+  import_parametros.py both read it as "esta tasa rige en toda zona del servicio" when the servicio's first
+  Dimension is ZONA; an exact key always wins over it when both exist.
 - ARBITRIO_USO, straight from --usos (prefijo,uso); a tasa's uso_codigo must be one of its uso column, or the file
   does not fit (sin mapeo).
 - ARBITRIO_INFLUENCIA, straight from --influencias (enum,etiqueta); a tasa's ubicación must be one of its etiqueta
-  column, or the file does not fit (sin mapeo). ARBITRIO_AFLUENCIA (the mapping of a predio's propio uso a su nivel
-  de afluencia) is not derived here: out of this task's scope (#86).
+  column, or the file does not fit (sin mapeo). ARBITRIO_AFLUENCIA is NOT derived here on purpose: it maps a
+  predio's own uso a su nivel de afluencia, dato del predio, no de la ordenanza (fuera de lo que esta tabla trae).
 - HABITANTES_PROMEDIO/HABITANTES_VARIACION, from --habitantes SERVICIO=P:V, one pair per servicio:zona:uso of casa
   habitación present in --tasas for that servicio (its uso column contains «casa habitación», sin acentos).
 - REDONDEO_ARBITRIO, one row (clave vacía) from --redondeo, when given.
+- ARBITRIO_VENCIMIENTO, 12 rows (one per month) from --vencimientos: 12 fechas (una por mes) o 4 (trimestral: cada
+  una cubre sus 3 meses, 1-3/4-6/7-9/10-12), AAAA-MM-DD separadas por comas.
 
---servicios maps the long table's own servicio column (a descriptive name) to the short código of
+--servicios maps the long table's own servicio column (a descriptive name) to the short código de
 servicio_arbitrio (<=20 characters) that import_arbitrios.py loads separately and that TASA_ARBITRIO's clave
 actually uses: NOMBRE=codigo, repeated with commas.
 
 Nothing is sent anywhere: generar() always returns what it could build, even malformed; a problem (a servicio
-outside --servicios, a base desconocida, a tasa repetida, a uso or una ubicación sin mapeo, or anything
-import_parametros.errores rejects — called here, before writing) only stops main() from writing --salida.
+outside --servicios, a base desconocida, a tasa repetida, a uso or una ubicación sin mapeo, --vencimientos with
+neither 12 nor 4 fechas, or anything import_parametros.errores rejects — called here, before writing) only stops
+main() from writing --salida. --dry-run prints the count per tipo instead of writing it; exit codes do not change.
 
 Run: python3 import_tasas_arbitrio.py --tasas tasas.csv --servicios NOMBRE=codigo,... --usos usos.csv
      [--influencias influencias.csv] --vigencia-desde AAAA-MM-DD --norma "..." --fuente "..." --transcribio "X, fecha"
-     --verifico "Y, fecha" [--redondeo 2:ABAJO] [--habitantes SERVICIO=P:V ...] --salida parametros.csv
+     --verifico "Y, fecha" [--redondeo 2:ABAJO] [--habitantes SERVICIO=P:V ...] [--vencimientos f1,f2,...] [--dry-run]
+     --salida parametros.csv
 Exit: 0 ok, 2 the file (or a CLI mapping) is malformed (nothing written).
 """
 import argparse
@@ -41,6 +49,7 @@ import os
 import re
 import sys
 import unicodedata
+from collections import Counter
 from decimal import Decimal, InvalidOperation
 
 import import_parametros
@@ -112,7 +121,7 @@ def _fila(tipo, clave, valor_numerico=None, texto=None, **comunes):
 
 
 def generar(filas, servicios, usos, influencias, habitantes, vigencia_desde, norma, fuente, transcribio, verifico,
-            redondeo=None):
+            redondeo=None, vencimientos=None):
     """(parametros, errores): parametros is always the full attempt, even next to errores (the caller decides
     whether to write it; una TASA_ARBITRIO is always built per fila, whatever its clave turns out to be)."""
     comun = dict(vigencia_desde=vigencia_desde, norma=norma, fuente=fuente, transcribio=transcribio, verifico=verifico)
@@ -156,7 +165,9 @@ def generar(filas, servicios, usos, influencias, habitantes, vigencia_desde, nor
         if codigo is None:
             continue  # ya se reportó arriba: sin servicio no hay clave que construir
         dims = dimensiones_por_codigo.get(codigo, [])
-        segmentos = [s for s in (_segmento(d, f) for d in dims) if s]
+        # positional: a blank ZONA (always dims[0], when present) keeps its empty parte ("toda zona del servicio");
+        # a blank non-zona parte stays empty too, and import_parametros.errores rejects it (it is not dims[0])
+        segmentos = [_segmento(d, f) for d in dims]
         clave = ":".join([codigo] + segmentos)
         if clave in claves_vistas:
             errores.append(f"fila {i} y fila {claves_vistas[clave]}: tasa repetida {clave}")
@@ -190,6 +201,9 @@ def generar(filas, servicios, usos, influencias, habitantes, vigencia_desde, nor
 
     if redondeo:
         parametros.append(_fila("REDONDEO_ARBITRIO", "", texto=redondeo, **comun))
+
+    for mes in sorted(vencimientos or {}, key=int):
+        parametros.append(_fila("ARBITRIO_VENCIMIENTO", mes, texto=vencimientos[mes], **comun))
 
     return parametros, errores
 
@@ -236,6 +250,17 @@ def _parse_habitantes(lista):
     return resultado
 
 
+def _parse_vencimientos(valor):
+    """«f1,f2,...,f12» (one per month) or «f1,f2,f3,f4» (trimestral: each covers its 3 months, 1-3/4-6/7-9/10-12)
+    -> {"1": f1, ..., "12": f12} (--vencimientos)."""
+    fechas = [f.strip() for f in valor.split(",") if f.strip()]
+    if len(fechas) == 12:
+        return {str(mes): fechas[mes - 1] for mes in range(1, 13)}
+    if len(fechas) == 4:
+        return {str(mes): fechas[(mes - 1) // 3] for mes in range(1, 13)}
+    raise ValueError(f"--vencimientos trae {len(fechas)} fechas; van 12 (una por mes) o 4 (trimestral)")
+
+
 def _parse_args(argv):
     p = argparse.ArgumentParser(description="Deriva el CSV que import_parametros.py --csv lee, de la tabla de tasas "
                                              "de arbitrios de una ordenanza.")
@@ -252,6 +277,8 @@ def _parse_args(argv):
     p.add_argument("--verifico", required=True)
     p.add_argument("--redondeo", help="decimales:modo, p. ej. 2:ABAJO")
     p.add_argument("--habitantes", action="append", default=[], help="SERVICIO=P:V, repetible")
+    p.add_argument("--vencimientos", help="12 fechas (una por mes) o 4 (trimestral), AAAA-MM-DD separadas por comas")
+    p.add_argument("--dry-run", action="store_true", help="imprime la cantidad por tipo; no escribe --salida")
     p.add_argument("--salida", required=True)
     return p.parse_args(argv)
 
@@ -261,6 +288,7 @@ def main(argv=None):
     try:
         servicios = _parse_pares(args.servicios)
         habitantes = _parse_habitantes(args.habitantes)
+        vencimientos = _parse_vencimientos(args.vencimientos) if args.vencimientos else {}
     except ValueError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -268,13 +296,20 @@ def main(argv=None):
     usos = leer_mapeo(args.usos, ("prefijo", "uso"))
     influencias = leer_mapeo(args.influencias, ("enum", "etiqueta")) if args.influencias else []
     parametros, malas = generar(filas, servicios, usos, influencias, habitantes, args.vigencia_desde, args.norma,
-                                 args.fuente, args.transcribio, args.verifico, args.redondeo)
+                                 args.fuente, args.transcribio, args.verifico, args.redondeo, vencimientos)
     if not malas:
         malas = import_parametros.errores(parametros)
     if malas:
         for e in malas:
             print(f"error: {e}", file=sys.stderr)
         return 2
+    if args.dry_run:
+        conteos = Counter(p["tipo"] for p in parametros)
+        for tipo in import_parametros.TIPOS_ARBITRIO:
+            if conteos.get(tipo):
+                print(f"  {tipo}: {conteos[tipo]}")
+        print(f"parámetros: {len(parametros)} (tasas: {len(filas)}); nada escrito")
+        return 0
     escribir(args.salida, parametros, [f"# Derivado de {os.path.basename(args.tasas)} con import_tasas_arbitrio.py"])
     print(f"parámetros: {len(parametros)} (tasas: {len(filas)})")
     return 0

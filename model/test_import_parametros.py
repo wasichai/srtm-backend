@@ -153,8 +153,10 @@ class ArbitriosRowsTests(unittest.TestCase):
         self.assertEqual(ip.errores(ip.read_parametros(SHIPPED)), [])
 
     def test_a_tasa_is_a_non_negative_figure_of_servicio_zona_uso(self):
-        for clave, valor in [("BARRIDO:Z1", "8.50"), ("BARRIDO::CASA", "8.50"), ("BARRIDO:Z1:CASA", None), ("BARRIDO:Z1:CASA", "-1"),
-                             ("BARRIDO:Z1:CASA", "ocho")]:
+        # BARRIDO::CASA (zona vacía) encaja: BARRIDO no trae DIMENSIONES_ARBITRIO, su default (ZONA, USO) empieza
+        # en ZONA, y esa parte puede ir vacía ("en toda zona del servicio") - test_una_tasa_... lo prueba aparte
+        for clave, valor in [("BARRIDO:Z1", "8.50"), ("BARRIDO:Z1:", "8.50"), ("BARRIDO:Z1:CASA", None),
+                             ("BARRIDO:Z1:CASA", "-1"), ("BARRIDO:Z1:CASA", "ocho")]:
             with self.subTest(clave=clave, valor=valor):
                 self.assertEqual(len(ip.errores([fila("TASA_ARBITRIO", clave, valor_numerico=valor)])), 1)
 
@@ -216,6 +218,33 @@ class ArbitriosRowsTests(unittest.TestCase):
         malas = ip.errores([fila("TASA_ARBITRIO", "PARQUES:A:Frente:Baja", valor_numerico="8.50")])
         self.assertEqual(malas, ["TASA_ARBITRIO PARQUES:A:Frente:Baja: la clave de una tasa de PARQUES tiene 3 "
                                  "partes después del servicio"])
+
+    def test_una_tasa_puede_tener_la_zona_vacia_cuando_el_servicio_empieza_en_zona(self):
+        # BASURA no trae DIMENSIONES_ARBITRIO: su default (ZONA, USO) empieza en ZONA, así que "BASURA::9" (zona
+        # vacía) encaja - "esta tasa rige en toda zona del servicio" (import_tasas_arbitrio.py, #86)
+        self.assertEqual(ip.errores([fila("TASA_ARBITRIO", "BASURA::9", valor_numerico="8.50")]), [])
+        # con DIMENSIONES_ARBITRIO explícito que también empieza en ZONA, igual
+        self.assertEqual(ip.errores([
+            fila("DIMENSIONES_ARBITRIO", "PARQUES", texto="ZONA,INFLUENCIA,AFLUENCIA"),
+            fila("TASA_ARBITRIO", "PARQUES::Frente:Baja", valor_numerico="8.50"),
+        ]), [])
+        # pero no en la parte de uso (ni ninguna otra que no sea la primera, zona)
+        self.assertEqual(len(ip.errores([fila("TASA_ARBITRIO", "BASURA:Z1:", valor_numerico="8.50")])), 1)
+        self.assertEqual(len(ip.errores([
+            fila("DIMENSIONES_ARBITRIO", "PARQUES", texto="ZONA,INFLUENCIA,AFLUENCIA"),
+            fila("TASA_ARBITRIO", "PARQUES:A::Baja", valor_numerico="8.50"),
+        ])), 1)
+
+    def test_una_tasa_con_la_zona_vacia_rechazada_cuando_el_servicio_no_empieza_en_zona(self):
+        # un servicio cuyas DIMENSIONES_ARBITRIO no empiezan en ZONA (aquí, solo USO) no admite una parte vacía
+        self.assertEqual(len(ip.errores([
+            fila("DIMENSIONES_ARBITRIO", "RRS", texto="USO"),
+            fila("TASA_ARBITRIO", "RRS:", valor_numerico="8.50"),
+        ])), 1)
+        self.assertEqual(ip.errores([
+            fila("DIMENSIONES_ARBITRIO", "RRS", texto="USO"),
+            fila("TASA_ARBITRIO", "RRS:9", valor_numerico="8.50"),
+        ]), [])
 
     def test_habitantes_are_a_positive_figure_of_servicio_zona_uso(self):
         # the shape/valor motivo returns before the pair check runs, so a lone row is still exactly one error

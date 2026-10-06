@@ -31,4 +31,12 @@ class LlavesTest {
     fun `a tasa's key can take any number of valores, in order`() {
         assertEquals("P:A:Frente:Baja", Llaves.tasa("P", listOf("A", "Frente", "Baja")))
     }
+
+    @Test
+    fun `tasaSinZona empties only the first valor, and only when it is a zona`() {
+        assertEquals("P:A:Frente:Baja", Llaves.tasa("P", listOf("A", "Frente", "Baja")))
+        assertEquals("P::Frente:Baja", Llaves.tasaSinZona("P", listOf("A", "Frente", "Baja"), primeraEsZona = true))
+        assertEquals(null, Llaves.tasaSinZona("P", listOf("A", "Frente", "Baja"), primeraEsZona = false))
+        assertEquals(null, Llaves.tasaSinZona("P", emptyList(), primeraEsZona = true))
+    }
 }
