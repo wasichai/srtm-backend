@@ -29,8 +29,9 @@ data class ContextoArbitrios(
 // one predio's: its declarations of the year (every titular's), its contribuyentes' codes by id, its inafectaciones,
 // the cuotas of the year it already has and the ids of the ones annulled (which count for nothing). anteriores are
 // its vigente cuotas of the year before (Arbitrios.vigentes), every servicio's: what TOPE_ARBITRIO measures the year
-// against. registrado is when the predio entered the registry: the earliest fecha_presentacion of its declaraciones
-// of any year (TOPE_ARBITRIO's cut date is measured against it). ArbitriosService reads both only when the year has a
+// against. registrado is when the predio entered the registry: the earliest of its declaraciones of any year, each
+// by its fecha_presentacion or, for a migrated one without it, 1 January of its anio (Arbitrios.registrado;
+// TOPE_ARBITRIO's cut date is measured against it). ArbitriosService reads both only when the year has a
 // TOPE_ARBITRIO row; without anteriores there is no tope
 data class PredioArbitrios(
     val predio: Predio,
@@ -334,8 +335,9 @@ object Arbitrios {
     // TOPE_ARBITRIO (#87): what a predio's year may rise over what it paid the year before (anteriores, every
     // servicio's). its row is its group's: the uso código of its lowest secuencia (Servicios.tope, the longest prefix
     // or "*"). no tope without that row, without anteriores (or with ones that add up to 0), or when the predio was
-    // registered after the row's cut date (the earliest fecha_presentacion of its declaraciones of any year:
-    // registrado, or this year's when it is earlier or absent). otherwise
+    // registered after the row's cut date (the earliest of its declaraciones of any year, each by its
+    // fecha_presentacion or, without one, 1 January of its anio: registrado, or this year's when it is earlier or
+    // absent). otherwise
     // límite = anteriores × (1 + tope/100); when the cuotas of the year already written plus the new ones pass it,
     // only the new ones go down, in proportion, to límite − written (never below 0): each one rounded with its own
     // redondeo (2:ABAJO when it has none), what the rounding leaves goes to the last ones (in the order they were
@@ -349,7 +351,8 @@ object Arbitrios {
     ): List<CuotaArbitrio> {
         if (nuevas.isEmpty() || p.anteriores.isEmpty() || grupo == null) return nuevas
         val tope = Servicios.tope(c.parametros, grupo.first, grupo.second) ?: return nuevas
-        val registrado = listOfNotNull(p.registrado, p.declaraciones.mapNotNull { it.fechaPresentacion }.minOrNull()).minOrNull()
+        val deEsteAnio = p.declaraciones.mapNotNull { it.fechaPresentacion ?: it.anio?.let { anio -> LocalDate.of(anio, 1, 1) } }
+        val registrado = listOfNotNull(p.registrado, deEsteAnio.minOrNull()).minOrNull()
         if (tope.corte != null && registrado != null && tope.corte.isBefore(registrado)) return nuevas
         val pagado = suma(p.anteriores)
         if (pagado.signum() <= 0) return nuevas
@@ -379,6 +382,15 @@ object Arbitrios {
             )
         }
     }
+
+    // when a predio entered the registry, for TOPE_ARBITRIO's cut date (#87): the earliest, over its declaraciones of
+    // any year, of each one's fecha_presentacion or, for one without it (migrated), 1 January of its anio. that is
+    // the earlier of the first fecha_presentacion and 1 January of the lowest anio among those without one: the two
+    // rows ArbitriosService reads. null when there is neither
+    fun registrado(
+        primeraPresentacion: LocalDate?,
+        primerAnioSinFecha: Int?
+    ) = listOfNotNull(primeraPresentacion, primerAnioSinFecha?.let { LocalDate.of(it, 1, 1) }).minOrNull()
 
     // whether the year has a TOPE_ARBITRIO row in force on some month's day: only then does ArbitriosService read a
     // predio's cuotas of the year before. without one, nothing more is read and nothing changes

@@ -130,6 +130,34 @@ class TopeTest {
         assertTrue(sinTope.cuotas.all { it.montoSinTope == null && it.topeAplicado == null })
     }
 
+    // a migrated DJ has no fecha_presentacion: it counts from 1 January of its year. ArbitriosService reads the
+    // earliest fecha_presentacion and the lowest anio among the DJs without one, of any year (Arbitrios.registrado)
+    @Test
+    fun `DJs of 2020 to 2025 without a date and the 2026 one presented on 1 february - registered in 2020, the tope applies`() {
+        val registrado = Arbitrios.registrado(primeraPresentacion = LocalDate.of(2026, 2, 1), primerAnioSinFecha = 2020)
+        assertEquals(LocalDate.of(2020, 1, 1), registrado)
+        val de2026 = listOf(dj.copy(fechaPresentacion = LocalDate.of(2026, 2, 1)))
+        val d = determinar(p = del(declaraciones = de2026).copy(registrado = registrado))
+        assertEquals(BigDecimal("1080.00"), suma(d.cuotas))
+        assertTrue(d.cuotas.all { it.topeAplicado!!.compareTo(BigDecimal("8")) == 0 })
+
+        // the 2026 DJ alone: registered on 1 february, after the cut
+        val soloLaDe2026 = Arbitrios.registrado(primeraPresentacion = LocalDate.of(2026, 2, 1), primerAnioSinFecha = null)
+        assertEquals(BigDecimal("1200.00"), suma(determinar(p = del(declaraciones = de2026).copy(registrado = soloLaDe2026)).cuotas))
+        // a dated DJ earlier than 1 January of the lowest undated year wins; nothing at all is no date
+        assertEquals(LocalDate.of(2019, 6, 1), Arbitrios.registrado(LocalDate.of(2019, 6, 1), 2020))
+        assertNull(Arbitrios.registrado(null, null))
+    }
+
+    @Test
+    fun `this year's DJ without a date counts from 1 January of the year, like a migrated one`() {
+        val sinFecha = listOf(dj.copy(fechaPresentacion = null))
+        // 2026-01-01 is after the 2025-12-31 cut: no tope
+        assertEquals(BigDecimal("1200.00"), suma(determinar(p = del(declaraciones = sinFecha)).cuotas))
+        // an older DJ (registrado) keeps it
+        assertEquals(BigDecimal("1080.00"), suma(determinar(p = del(declaraciones = sinFecha).copy(registrado = LocalDate.of(2023, 1, 1))).cuotas))
+    }
+
     @Test
     fun `under the limit nothing changes`() {
         val d = determinar(p = del(anteriores = pagado(List(12) { "100.00" }))) // 1 200.00 x 1.08 = 1 296.00
