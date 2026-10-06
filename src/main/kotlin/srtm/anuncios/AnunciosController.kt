@@ -11,19 +11,11 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
-import wasichai.core.common.FieldViolation
+import srtm.ParametroInvalido
 import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
-import wasichai.core.common.WasichaiException
 import java.time.LocalDate
 import java.util.UUID
-
-// a query parameter the endpoint cannot serve, or one it cannot read: a 422 that names it, never a filter silently
-// dropped
-class FiltroInvalido(
-    nombre: String,
-    razon: String
-) : WasichaiException(HttpStatus.UNPROCESSABLE_CONTENT, "El parámetro '$nombre' $razon", listOf(FieldViolation(nombre, razon)))
 
 // the tasa de anuncios y propaganda, under /api/srtm like the rest of the portal's api (SPEC §7, Anuncios)
 @RestController
@@ -62,7 +54,7 @@ class AnunciosController(
         @RequestParam params: Map<String, String>
     ): TasasAnuncios {
         soloConoce(params, "anio")
-        val anio = params["anio"]?.let { valor -> valor.toIntOrNull()?.takeIf { it in ANIOS } ?: throw FiltroInvalido("anio", "no es un año: '$valor'") }
+        val anio = params["anio"]?.let { valor -> valor.toIntOrNull()?.takeIf { it in ANIOS } ?: throw ParametroInvalido("anio", "no es un año: '$valor'") }
         return anuncios.tasas(anio ?: LocalDate.now().year)
     }
 
@@ -119,7 +111,7 @@ class AnunciosController(
         vararg conocidos: String
     ) {
         params.keys.firstOrNull { it !in conocidos }?.let {
-            throw FiltroInvalido(
+            throw ParametroInvalido(
                 it,
                 if (conocidos.isEmpty()) "no es un filtro: esta consulta no tiene" else "no es un filtro de esta consulta: ${conocidos.joinToString(", ")}"
             )
@@ -130,19 +122,19 @@ class AnunciosController(
         nombre: String,
         valor: String,
         admitidos: List<String>
-    ) = valor.takeIf { it in admitidos } ?: throw FiltroInvalido(nombre, "es uno de ${admitidos.joinToString(", ")}: no '$valor'")
+    ) = valor.takeIf { it in admitidos } ?: throw ParametroInvalido(nombre, "es uno de ${admitidos.joinToString(", ")}: no '$valor'")
 
     private fun id(
         nombre: String,
         valor: String
-    ): UUID = runCatching { UUID.fromString(valor) }.getOrNull() ?: throw FiltroInvalido(nombre, "no es un id: '$valor'")
+    ): UUID = runCatching { UUID.fromString(valor) }.getOrNull() ?: throw ParametroInvalido(nombre, "no es un id: '$valor'")
 
     private fun fecha(
         params: Map<String, String>,
         nombre: String
     ): LocalDate? {
         val valor = params[nombre] ?: return null
-        return runCatching { LocalDate.parse(valor) }.getOrNull() ?: throw FiltroInvalido(nombre, "no es una fecha AAAA-MM-DD: '$valor'")
+        return runCatching { LocalDate.parse(valor) }.getOrNull() ?: throw ParametroInvalido(nombre, "no es una fecha AAAA-MM-DD: '$valor'")
     }
 
     private fun entero(
@@ -152,7 +144,7 @@ class AnunciosController(
         rango: IntRange
     ): Int {
         val valor = params[nombre] ?: return omision
-        return valor.toIntOrNull()?.takeIf { it in rango } ?: throw FiltroInvalido(nombre, "no es un número de ${rango.first} a ${rango.last}: '$valor'")
+        return valor.toIntOrNull()?.takeIf { it in rango } ?: throw ParametroInvalido(nombre, "no es un número de ${rango.first} a ${rango.last}: '$valor'")
     }
 
     private companion object {

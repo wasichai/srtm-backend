@@ -9,6 +9,7 @@ import org.springframework.transaction.reactive.executeAndAwait
 import srtm.Candado
 import srtm.Candados
 import srtm.Observacion
+import srtm.Permisos
 import srtm.Violaciones
 import srtm.impuesto.PARAMETRO_TRIBUTARIO
 import srtm.impuesto.ParametroTributario
@@ -21,16 +22,12 @@ import srtm.rentas.Records
 import srtm.rentas.Registros
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
-import wasichai.core.common.Actions
 import wasichai.core.common.ConflictException
-import wasichai.core.common.ForbiddenException
 import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
 import wasichai.core.common.ValidationException
 import wasichai.core.data.RecordCriterion
 import wasichai.core.data.RecordQuery
-import wasichai.core.identity.CurrentUser
-import wasichai.core.metadata.MetadataService
 import wasichai.core.metadata.ObjectDefinition
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -155,8 +152,7 @@ data class FiltrosPadron(
 @Service
 class AnunciosService(
     private val registros: Registros,
-    private val metadata: MetadataService,
-    private val currentUser: CurrentUser,
+    private val permisos: Permisos,
     private val candados: Candados,
     transacciones: ReactiveTransactionManager
 ) {
@@ -169,8 +165,8 @@ class AnunciosService(
         pedido: PedidoAnuncio,
         idempotencia: String?
     ): AnuncioRegistrado {
-        exigirCrear(ANUNCIO, "Registrar un anuncio")
-        exigirCrear(MOVIMIENTO_ANUNCIO, "Registrar un anuncio")
+        permisos.exigirCrear(ANUNCIO, "registrar un anuncio")
+        permisos.exigirCrear(MOVIMIENTO_ANUNCIO, "registrar un anuncio")
         val clave = idempotencia?.trim()?.ifEmpty { null }
         if (clave != null && clave.length > Largos.IDEMPOTENCIA) {
             throw ValidationException("La clave de idempotencia es demasiado larga", "Idempotency-Key", "de 1 a ${Largos.IDEMPOTENCIA} caracteres")
@@ -216,7 +212,7 @@ class AnunciosService(
         id: UUID,
         pedido: PedidoRenovacion
     ): MovimientoAnuncio {
-        exigirCrear(MOVIMIENTO_ANUNCIO, "Renovar un anuncio")
+        permisos.exigirCrear(MOVIMIENTO_ANUNCIO, "renovar un anuncio")
         val v = Violaciones()
         val fecha = fecha(v, "fecha", pedido.fecha)
         val vigencia = fecha(v, "vigencia_hasta", pedido.vigenciaHasta)
@@ -257,7 +253,7 @@ class AnunciosService(
         pedido: PedidoBaja
     ): MovimientoAnuncio {
         val nombre = if (tipo == CESE) "el cese" else "el retiro"
-        exigirCrear(MOVIMIENTO_ANUNCIO, if (tipo == CESE) "Cesar un anuncio" else "Retirar un anuncio")
+        permisos.exigirCrear(MOVIMIENTO_ANUNCIO, if (tipo == CESE) "cesar un anuncio" else "retirar un anuncio")
         val v = Violaciones()
         val fecha = fecha(v, "fecha", pedido.fecha)
         val motivo = pedido.motivo?.trim()?.ifEmpty { null }
@@ -536,19 +532,6 @@ class AnunciosService(
         } catch (_: DateTimeParseException) {
             v.mal(campo, "no es una fecha AAAA-MM-DD: '$limpio'")
             null
-        }
-    }
-
-    // before anything is read: who may not create the act's object gets a 403 that names it
-    private suspend fun exigirCrear(
-        objeto: String,
-        acto: String
-    ) {
-        val usuario = currentUser.require()
-        try {
-            currentUser.requirePermission(usuario, Actions.CREATE, metadata.definitionOf(objeto).obj.id)
-        } catch (_: ForbiddenException) {
-            throw ForbiddenException("$acto exige permiso de creación sobre $objeto")
         }
     }
 

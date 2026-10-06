@@ -10,6 +10,7 @@ import org.springframework.transaction.reactive.executeAndAwait
 import srtm.Candado
 import srtm.Candados
 import srtm.Observacion
+import srtm.Permisos
 import srtm.impuesto.ParametrosTributarios
 import srtm.legible
 import srtm.rentas.CONTRIBUYENTE
