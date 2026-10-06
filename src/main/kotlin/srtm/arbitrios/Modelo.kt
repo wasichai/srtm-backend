@@ -12,6 +12,7 @@ const val SERVICIO_ARBITRIO = "servicio_arbitrio"
 const val INAFECTACION_ARBITRIO = "inafectacion_arbitrio"
 const val CUOTA_ARBITRIO = "cuota_arbitrio"
 const val ANULACION_CUOTA_ARBITRIO = "anulacion_cuota_arbitrio"
+const val ZONA_ARBITRIO_UBICACION = "zona_arbitrio_ubicacion"
 
 // the records of the arbitrios (model/model.json). a relation is its target's id
 
@@ -90,6 +91,40 @@ data class AnulacionCuotaArbitrio(
     val fecha: LocalDate? = null,
     val clave: String? = null
 )
+
+// a zona by ubicación: via, tramo (numero range and paridad) and manzana, optionally narrowed to one servicio.
+// more precise than ARBITRIO_ZONA's sector catastral, and tried first (Zonas.de)
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class ZonaUbicacion(
+    val id: String? = null,
+    val servicio: String? = null,
+    val tipoVia: String? = null,
+    val via: String? = null,
+    val manzana: String? = null,
+    val numeroInicial: Int? = null,
+    val numeroFinal: Int? = null,
+    val paridad: String? = null,
+    val zona: String? = null,
+    val vigenciaDesde: LocalDate? = null,
+    val vigenciaHasta: LocalDate? = null,
+    val norma: String? = null,
+    val observacion: String? = null,
+    val clave: String? = null
+)
+
+// a zona_arbitrio_ubicacion row's unique key: servicio, tipo_via, via, manzana, numero_inicial, numero_final,
+// paridad and vigencia_desde joined by "|", empty ends as ""
+fun claveDeZonaUbicacion(z: ZonaUbicacion) =
+    listOf(
+        z.servicio?.trim().orEmpty(),
+        z.tipoVia?.trim().orEmpty(),
+        z.via?.trim().orEmpty(),
+        z.manzana?.trim().orEmpty(),
+        z.numeroInicial?.toString().orEmpty(),
+        z.numeroFinal?.toString().orEmpty(),
+        z.paridad?.trim().orEmpty(),
+        z.vigenciaDesde?.toString().orEmpty()
+    ).joinToString("|")
 
 // the version a cuota's clave carries: 1 for the first one, one more for each redetermination after an annulment
 fun versionDe(clave: String?): Int? = clave?.substringAfterLast('|', "")?.toIntOrNull()

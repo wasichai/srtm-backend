@@ -242,6 +242,54 @@ class ArbitriosTest {
     }
 
     @Test
+    fun `each servicio's zona can come from its own ubicación, the other falling back to the sector`() {
+        val conVia = predio.copy(via = "AV. X", numero = "100")
+        val ubicaciones =
+            listOf(
+                ubicacion(servicio = "LIMPIEZA", zona = "Z9"),
+                ubicacion(servicio = "PARQUES", zona = "Z8")
+            )
+        val tasasPorZona = listOf(tasa("LIMPIEZA:Z9:CASA", "8.50"), tasa("PARQUES:Z8:CASA", "8.50"), tasa("SERENAZGO:Z1:CASA", "8.50"))
+        val c = contexto(parametros = tasasPorZona + mapeos).copy(ubicaciones = ubicaciones)
+        val d = determinar(c, p = del(predio = conVia))
+        assertEquals(emptyList<String>(), d.faltan)
+        assertEquals(
+            setOf("Z9"),
+            d.cuotas
+                .filter { it.servicio == "srv-LIMPIEZA" }
+                .map { it.zona }
+                .toSet()
+        )
+        assertEquals(
+            setOf("Z8"),
+            d.cuotas
+                .filter { it.servicio == "srv-PARQUES" }
+                .map { it.zona }
+                .toSet()
+        )
+        assertEquals(
+            setOf("Z1"),
+            d.cuotas
+                .filter { it.servicio == "srv-SERENAZGO" }
+                .map { it.zona }
+                .toSet()
+        )
+    }
+
+    @Test
+    fun `an ambiguous zona is named, and does not block the other servicios`() {
+        val conVia = predio.copy(via = "AV. X", numero = "100")
+        val ubicaciones =
+            listOf(
+                ubicacion(servicio = "LIMPIEZA", zona = "Z9"),
+                ubicacion(servicio = "LIMPIEZA", zona = "Z10")
+            )
+        val c = contexto(parametros = tasas + mapeos).copy(ubicaciones = ubicaciones)
+        val d = determinar(c, p = del(predio = conVia))
+        assertEquals(listOf("Zona ambigua de LIMPIEZA para AV. X 100: Z9, Z10"), d.faltan)
+    }
+
+    @Test
     fun `a negative tasa is not a cuota`() {
         val negativa = listOf(tasa("LIMPIEZA:Z1:CASA", "-1")) + tasas.drop(1)
         val d = determinar(contexto(parametros = negativa + mapeos))
@@ -284,6 +332,13 @@ class ArbitriosTest {
         valor: String,
         desde: LocalDate = LocalDate.of(2026, 1, 1)
     ) = param(Llaves.TASA_ARBITRIO, clave, valor = valor, desde = desde)
+
+    private fun ubicacion(
+        servicio: String? = null,
+        via: String = "AV. X",
+        zona: String,
+        desde: LocalDate = LocalDate.of(2026, 1, 1)
+    ) = ZonaUbicacion(id = "u-$servicio-$zona", servicio = servicio, via = via, zona = zona, vigenciaDesde = desde, norma = "Ordenanza ficticia de prueba")
 
     private fun declaracion(
         id: String,

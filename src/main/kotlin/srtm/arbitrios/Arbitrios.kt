@@ -13,7 +13,8 @@ data class ContextoArbitrios(
     val ordenanza: OrdenanzaArbitrio?,
     val servicios: List<ServicioArbitrio>,
     val parametros: List<ParametroTributario>,
-    val usos: List<UsoPredio>
+    val usos: List<UsoPredio>,
+    val ubicaciones: List<ZonaUbicacion> = emptyList()
 )
 
 // one predio's: its declarations of the year (every titular's), its contribuyentes' codes by id, its inafectaciones,
@@ -38,8 +39,9 @@ data class Determinacion(
 
 // rentas' DeterminarArbitrios, without the writing (rentas#31). each month of the year is decided on its day of
 // atribución (Periodo): its titular (the titular principal of the declarations that cover that day, charged whole)
-// and the predio's rasgos, its zona (ARBITRIO_ZONA of the sector catastral) and its uso de arbitrio (ARBITRIO_USO of
-// the declaration's uso). each servicio in force that day not covered by an inafectación and not yet determined gets
+// and the predio's rasgos, its uso de arbitrio (ARBITRIO_USO of the declaration's uso) and, per servicio, its zona
+// (Zonas.de: zona_arbitrio_ubicacion by via and tramo, ARBITRIO_ZONA of the sector catastral as a fallback). each
+// servicio in force that day not covered by an inafectación and not yet determined gets
 // a cuota of its tasa (TASA_ARBITRIO servicio:zona:uso) as is: no area, no proration, no rounding.
 // a month without a titular or without rasgos is not charged: a predio that appears in july owes nothing before. a
 // predio without a titular in any month, or without rasgos in any month with one, cannot be determined. a missing
@@ -88,21 +90,43 @@ object Arbitrios {
             val titular = titularPrincipal(p.declaraciones.filter { cubre(it, dia) }, p.codigos) ?: continue
             algunMesConTitular = true
             val codigoUso = codigoDeUso(titular, c.usos)
-            if (sector == null) sinRasgos += "Sector catastral del predio $nombre"
-            if (codigoUso == null) sinRasgos += "Uso del catálogo en la declaración ${c.anio} del predio $nombre"
-            if (sector == null || codigoUso == null) continue
-            algunMesConRasgos = true
+            if (codigoUso == null) {
+                sinRasgos += "Uso del catálogo en la declaración ${c.anio} del predio $nombre"
+                continue
+            }
+            // sector present: the old "rasgos" (sector + uso) are complete, regardless of whether they map to a
+            // zona and uso de arbitrio below. sector absent: rasgos are complete only if some servicio's zona
+            // resolves by ubicación (set further down), since the sector stops being a requirement then
+            if (sector != null) algunMesConRasgos = true
 
-            val zona = zonaDe(c.parametros, sector, dia)
             val uso = usoDe(c.parametros, codigoUso, dia)
-            if (zona == null) faltan += "${Llaves.ARBITRIO_ZONA} $sector ${c.anio}"
-            if (uso == null) faltan += "${Llaves.ARBITRIO_USO} $codigoUso ${c.anio}"
-            if (zona == null || uso == null) continue
+            if (uso == null) {
+                faltan += "${Llaves.ARBITRIO_USO} $codigoUso ${c.anio}"
+                continue
+            }
 
             for (servicio in serviciosDelDia(c.servicios, dia)) {
                 val servicioId = requireNotNull(servicio.id) { "El servicio no tiene id" }
                 if (p.inafectaciones.any { it.servicio == servicioId && vigente(it.vigenciaDesde, it.vigenciaHasta, dia) }) continue
                 if (p.vigentes.any { it.servicio == servicioId && it.anio == c.anio && it.periodo == periodo }) continue
+                val codigoServicio = servicio.codigo!!.trim()
+                val zona =
+                    when (val resuelta = Zonas.de(c.ubicaciones, c.parametros, codigoServicio, p.predio, dia)) {
+                        is ZonaResuelta.Es -> {
+                            if (sector == null) algunMesConRasgos = true
+                            resuelta.zona
+                        }
+                        is ZonaResuelta.Ambigua -> {
+                            if (sector == null) algunMesConRasgos = true
+                            faltan += "Zona ambigua de $codigoServicio para ${p.predio.via} ${p.predio.numero}: ${resuelta.zonas.joinToString()}"
+                            null
+                        }
+                        ZonaResuelta.Ninguna -> {
+                            if (sector != null) faltan += "${Llaves.ARBITRIO_ZONA} $sector ${c.anio}" else sinRasgos += "Sector catastral del predio $nombre"
+                            null
+                        }
+                    }
+                if (zona == null) continue
                 val version =
                     1 +
                         (
@@ -115,7 +139,7 @@ object Arbitrios {
                                 }.maxOrNull()
                                 ?: 0
                         )
-                val claveDeTasa = Llaves.tasa(servicio.codigo!!.trim(), zona, uso)
+                val claveDeTasa = Llaves.tasa(codigoServicio, zona, uso)
                 val tasa = enVigor(c.parametros, Llaves.TASA_ARBITRIO, dia) { it.clave?.trim() == claveDeTasa && it.valorNumerico != null }
                 if (tasa == null) {
                     faltan += "${Llaves.TASA_ARBITRIO} $claveDeTasa ${c.anio}"
