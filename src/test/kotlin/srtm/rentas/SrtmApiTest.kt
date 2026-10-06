@@ -150,7 +150,8 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
 
         // the object's rules, after the relationships (an index can name a relation field): indexes and appendOnly as
         // model.json declares them, compared as core stores them (trimmed, lower case, in order; appendOnly left out is
-        // false). only what differs is sent, with the label core requires
+        // false). only what differs is sent, with label, pluralLabel, description and enabled as core has them: its
+        // object PUT resets them when left out (description null, plural the label, enabled true)
         fun sets(node: JsonNode?) =
             node
                 ?.iterator()
@@ -172,7 +173,15 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
             if (indexes != sets(current["indexes"])) change["indexes"] = indexes
             val appendOnly = obj["appendOnly"]?.asBoolean() ?: false
             if (appendOnly != (current["appendOnly"]?.asBoolean() ?: false)) change["appendOnly"] = appendOnly
-            if (change.isNotEmpty()) send("PUT", "/api/objects/$name", change + ("label" to obj["label"].asString()), HttpStatus.OK, token)
+            if (change.isEmpty()) continue
+            val kept =
+                mapOf(
+                    "label" to current["label"].asString(),
+                    "pluralLabel" to current["pluralLabel"]?.takeUnless { it.isNull }?.asString(),
+                    "description" to current["description"]?.takeUnless { it.isNull }?.asString(),
+                    "enabled" to (current["enabled"]?.asBoolean() ?: true)
+                )
+            send("PUT", "/api/objects/$name", kept + change, HttpStatus.OK, token)
         }
     }
 

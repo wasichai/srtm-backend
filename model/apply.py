@@ -84,6 +84,11 @@ FIELD_TYPES = frozenset({
 RULE_KEYS = ("indexes", "appendOnly")
 RULES_OFF = {"indexes": [], "appendOnly": False}
 
+# what Core's object PUT overwrites, not leaves alone, when missing (MetadataService.updateObject: description goes
+# null, pluralLabel becomes the label, enabled true). a rule PUT sends them back as Core has them, so it touches only
+# the rules: an admin's description, plural or disabled object survives
+OBJECT_KEYS = ("label", "pluralLabel", "description", "enabled")
+
 # what Core does not index (FieldSets.requireIndexable): long text, and a geometry (wasichai-gis refuses to sort by one)
 UNINDEXABLE_TYPES = frozenset({"LONG_TEXT", "GEOMETRY"})
 
@@ -397,12 +402,15 @@ def _objects_by_name(data):
     return {o["name"]: o for o in (data or [])}
 
 
-def _put_rules(client, obj, changes):
-    """PUT an object's rules: label (Core requires it) and only the keys that change, the rest left as they are.
-    Returns False if Core refused (already reported)."""
+def _put_rules(client, obj, current, changes):
+    """PUT an object's rules: only the keys that change, with label, pluralLabel, description and enabled as Core has
+    them (`current`, its GET /api/objects entry), which the PUT would otherwise reset. Returns False if Core refused
+    (already reported)."""
     path = f"/api/objects/{obj['name']}"
+    kept = {k: current[k] for k in OBJECT_KEYS if k in current}
+    kept.setdefault("label", obj["label"])  # Core requires it
     try:
-        client.put(path, {"label": obj["label"], **changes})
+        client.put(path, {**kept, **changes})
     except CoreError as e:
         _fatal("PUT", path, e)
         return False
@@ -420,9 +428,10 @@ def sync_object_rules(client, model):
         return None
     updated = 0
     for obj in model["objects"]:
-        changes = rule_changes(obj, current_by_name.get(obj["name"], {}))
+        current = current_by_name.get(obj["name"], {})
+        changes = rule_changes(obj, current)
         if changes:
-            if not _put_rules(client, obj, changes):
+            if not _put_rules(client, obj, current, changes):
                 return None
             updated += 1
     return updated
@@ -592,7 +601,7 @@ def do_drop(client, model):
     for obj in reversed(model["objects"]):
         current = current_by_name.get(obj["name"])
         changes = {k: v for k, v in RULES_OFF.items() if current and current.get(k)}
-        if changes and not _put_rules(client, obj, changes):
+        if changes and not _put_rules(client, obj, current, changes):
             return 1
 
     to_delete = [
@@ -613,6 +622,9 @@ def do_drop(client, model):
     return 0
 
 
+DRY_RUN_KEPT = "(plus label, pluralLabel, description and enabled as Core has them)"
+
+
 def _print_dry_run(model):
     for obj in model["objects"]:
         print("# POST /api/objects")
@@ -620,12 +632,12 @@ def _print_dry_run(model):
     for rel in model["relationships"]:
         print("# POST /api/relationships")
         print(json.dumps(relationship_payload(rel), indent=2, ensure_ascii=False))
-    # what an empty Core gets; on one that has the model, only what differs
+    # what model.json declares (an empty Core gets it); on one that has the model, only what differs is sent
     for obj in model["objects"]:
         rules = declared_rules(obj)
         if rules:
-            print(f"# PUT /api/objects/{obj['name']}")
-            print(json.dumps({"label": obj["label"], **rules}, indent=2, ensure_ascii=False))
+            print(f"# PUT /api/objects/{obj['name']} {DRY_RUN_KEPT}")
+            print(json.dumps(rules, indent=2, ensure_ascii=False))
 
 
 def _print_drop_dry_run(model):
@@ -633,8 +645,8 @@ def _print_drop_dry_run(model):
     for obj in reversed(model["objects"]):
         rules = {k: RULES_OFF[k] for k in declared_rules(obj)}
         if rules:
-            print(f"# PUT /api/objects/{obj['name']}")
-            print(json.dumps({"label": obj["label"], **rules}, indent=2, ensure_ascii=False))
+            print(f"# PUT /api/objects/{obj['name']} {DRY_RUN_KEPT}")
+            print(json.dumps(rules, indent=2, ensure_ascii=False))
     for rel in reversed(model["relationships"]):
         print(f"# DELETE /api/relationships/{rel['name']}")
     for obj in reversed(model["objects"]):

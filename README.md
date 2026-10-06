@@ -92,7 +92,9 @@ Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
 - **Reglas del objeto:** después de las relaciones (un índice puede nombrar un campo de relación), deja `indexes`
   (ADR-036) y `appendOnly` (ADR-040) como los declara `model.json`, con un `PUT /api/objects/{objeto}` que
   lleva la etiqueta y solo lo que cambia (`update object cuota_arbitrio (appendOnly)`). `model.json` manda: un índice
-  que solo tiene Core se quita, y un objeto sin `appendOnly` queda sin él.
+  que solo tiene Core se quita, y un objeto sin `appendOnly` queda sin él. El PUT devuelve la etiqueta, el plural, la
+  descripción y `enabled` tal como los tiene Core (si faltan, Core los pisa), así que solo cambia las reglas.
+  `--dry-run` no consulta a Core: muestra lo que declara `model.json`, no la diferencia con la base.
 
 Solo añade, relaja, reetiqueta o quita opciones sin uso: no renombra, no cambia tipos y no borra campos, así los
 registros importados siguen siendo válidos. Por ejemplo, sobre la base del padrón:

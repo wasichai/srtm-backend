@@ -18,6 +18,12 @@ OBJECT = re.compile(r"^/api/objects/([a-z0-9_]+)$")
 CUIS = "/api/srtm/infracciones/cuis"
 
 
+def _meta(label, plural_label=None, description=None, enabled=True):
+    """An object's own metadata as Core stores it: a blank plural is the label."""
+    return {"label": label, "pluralLabel": (plural_label or "").strip() or label, "description": description,
+            "enabled": enabled}
+
+
 class FakeCoreHandler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass  # keep test output quiet
@@ -57,10 +63,12 @@ class FakeCore:
 
     def __init__(self, existing_objects=(), existing_relationships=(), fail_on_post_object=None,
                  fail_put=False, fail_put_status=500, login_response=None, fail_on_record=None, existing_fields=None,
-                 fail_on_update=None, fail_on_delete=None, object_rules=None, fail_object_put=None):
+                 fail_on_update=None, fail_on_delete=None, object_rules=None, fail_object_put=None, object_meta=None):
         self.existing_objects = set(existing_objects)
         # object name -> its object-level rules ({"indexes", "appendOnly"}), as Core stores them; none by default
         self.object_rules = {n: dict((object_rules or {}).get(n, {})) for n in self.existing_objects}
+        # object name -> {"label", "pluralLabel", "description", "enabled"}; the name as label by default
+        self.object_meta = {n: {**_meta(n, n), **(object_meta or {}).get(n, {})} for n in self.existing_objects}
         self.fail_object_put = fail_object_put  # PUT /api/objects/{name} -> this status
         self.existing_fields = existing_fields or {}  # object name -> list of {"name", "enumOptions"?}
         self.existing_relationships = set(existing_relationships)
@@ -139,13 +147,15 @@ class FakeCore:
     def _object(self, name):
         """An object as GET /api/objects lists it: indexes only when some are declared, appendOnly always."""
         rules = self.object_rules.get(name, {})
-        obj = {"name": name, "appendOnly": bool(rules.get("appendOnly"))}
+        obj = {"name": name, **self.object_meta.get(name, _meta(name)), "appendOnly": bool(rules.get("appendOnly"))}
         if rules.get("indexes"):
             obj["indexes"] = rules["indexes"]
         return obj
 
     def _update_object(self, path, body):
-        """An object's PUT: label required, a rule left out (or null) stays as it is."""
+        """An object's PUT, as MetadataService.updateObject: label required and overwritten; pluralLabel left out or
+        blank becomes the label, description left out goes null, enabled left out is true; a rule left out (or null)
+        stays as it is."""
         name = OBJECT.match(path).group(1)
         if self.fail_object_put:
             return self.fail_object_put, {"message": "boom-object-put"}
@@ -153,6 +163,9 @@ class FakeCore:
             return 404, {"detail": "not found"}
         if not (body or {}).get("label"):
             return 400, {"detail": "label is required"}
+        enabled = body.get("enabled")
+        self.object_meta[name] = _meta(body["label"], body.get("pluralLabel"), body.get("description"),
+                                       True if enabled is None else enabled)
         for key in ("indexes", "appendOnly"):
             if body.get(key) is not None:
                 self.object_rules[name][key] = body[key]
@@ -222,6 +235,7 @@ class FakeCore:
                 return 409, {"message": "exists"}
             self.existing_objects.add(name)
             self.object_rules[name] = {k: body[k] for k in ("indexes", "appendOnly") if k in body}
+            self.object_meta[name] = _meta(body["label"], body.get("pluralLabel"), body.get("description"))
             return 201, {"name": name}
         if OBJECT.match(path) and method == "PUT":
             return self._update_object(path, body)

@@ -107,7 +107,8 @@ class GuardiaDeEscrituraTest {
     }
 
     // a cuota and its anulación are appendOnly in the model: core refuses their change, delete or transition before
-    // the guard is asked (ArbitriosApiTest). the rule only checks a new cuota, which needs no mark
+    // the guard is asked (ArbitriosApiTest). the rule checks a new cuota, which needs no mark, and keeps
+    // ReglaDeEscritura's 409 for a change or delete of a cuota, should an organization's model lack appendOnly
     @Test
     fun `a cuota is added without the mark if it holds its invariantes, and the anulación has no rule`() {
         val malas = falla<ValidationException> { guardia.beforeWrite(escritura(CUOTA_ARBITRIO, RecordChangeKind.CREATED, mapOf("periodo" to 13))) }
@@ -119,6 +120,10 @@ class GuardiaDeEscrituraTest {
             guardia.beforeWrite(escritura(CUOTA_ARBITRIO, RecordChangeKind.CREATED, CUOTA))
             guardia.beforeWrite(escritura(ANULACION_CUOTA_ARBITRIO, RecordChangeKind.CREATED, emptyMap()))
             guardia.beforeWrite(escritura(ANULACION_CUOTA_ARBITRIO, RecordChangeKind.DELETED))
+        }
+        listOf(false, true).forEach { marca ->
+            falla<ConflictException>(marca) { guardia.beforeWrite(escritura(CUOTA_ARBITRIO, RecordChangeKind.UPDATED, CUOTA, CUOTA)) }
+            falla<ConflictException>(marca) { guardia.beforeWrite(escritura(CUOTA_ARBITRIO, RecordChangeKind.DELETED, before = CUOTA)) }
         }
     }
 
