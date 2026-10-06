@@ -15,13 +15,45 @@ object Llaves {
     // a month -> texto, its due date (the HLA prints it)
     const val ARBITRIO_VENCIMIENTO = "ARBITRIO_VENCIMIENTO"
 
-    val TIPOS = listOf(TASA_ARBITRIO, ARBITRIO_ZONA, ARBITRIO_USO, ARBITRIO_VENCIMIENTO)
+    // a servicio's codigo -> texto, its Base's name; PREDIO when there's no row in force or its texto is unknown
+    const val BASE_ARBITRIO = "BASE_ARBITRIO"
+
+    // a servicio's codigo -> texto, its Dimension names separated by commas; [ZONA, USO] when there's no row in
+    // force or any of its names is unknown
+    const val DIMENSIONES_ARBITRIO = "DIMENSIONES_ARBITRIO"
+
+    // servicio:zona:uso -> valor_numerico, its average habitantes (used together with HABITANTES_VARIACION)
+    const val HABITANTES_PROMEDIO = "HABITANTES_PROMEDIO"
+
+    // servicio:zona:uso -> valor_numerico, its habitantes' variación; one without the other counts as absent
+    const val HABITANTES_VARIACION = "HABITANTES_VARIACION"
+
+    // the global key (clave "") -> texto, "decimales:modo" of the rounding to apply (Redondeo.de)
+    const val REDONDEO_ARBITRIO = "REDONDEO_ARBITRIO"
+
+    val TIPOS =
+        listOf(
+            TASA_ARBITRIO,
+            ARBITRIO_ZONA,
+            ARBITRIO_USO,
+            ARBITRIO_VENCIMIENTO,
+            BASE_ARBITRIO,
+            DIMENSIONES_ARBITRIO,
+            HABITANTES_PROMEDIO,
+            HABITANTES_VARIACION,
+            REDONDEO_ARBITRIO
+        )
 
     fun tasa(
         servicio: String,
         zona: String,
         uso: String
-    ) = "$servicio:$zona:$uso"
+    ) = tasa(servicio, listOf(zona, uso))
+
+    fun tasa(
+        servicio: String,
+        valores: List<String>
+    ) = (listOf(servicio) + valores).joinToString(":")
 
     // what a cuota keeps as parametro_aplicado: the exact key that was read
     fun aplicado(claveDeTasa: String) = "$TASA_ARBITRIO:$claveDeTasa"
