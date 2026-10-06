@@ -41,8 +41,10 @@ class AnulacionApiTest : ConArbitriosApiTest() {
         send("POST", "/api/srtm/arbitrios/cuotas/$id/anulacion", anulacion(), HttpStatus.CONFLICT)
 
         val registro = "/api/objects/$ANULACION_CUOTA_ARBITRIO/records/${a["id"].asString()}"
-        send("PUT", registro, mapOf("attributes" to (fields(a) - "id") + ("motivo" to "otro")), HttpStatus.CONFLICT)
-        send("DELETE", registro, null, HttpStatus.CONFLICT)
+        // appendOnly in the model (ADR-040): core's 409, for everyone, and the anulación stays as it was
+        assertAppendOnly(send("PUT", registro, mapOf("attributes" to (fields(a) - "id") + ("motivo" to "otro")), HttpStatus.CONFLICT))
+        assertAppendOnly(send("DELETE", registro, null, HttpStatus.CONFLICT))
+        assertEquals("Uso mal declarado", tree(send("GET", registro, null, HttpStatus.OK))["attributes"]["motivo"].asString())
     }
 
     @Test

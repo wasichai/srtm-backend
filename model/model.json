@@ -924,6 +924,7 @@
       "label": "Cuota de arbitrio",
       "pluralLabel": "Cuotas de arbitrio",
       "description": "Lo determinado de un servicio, un predio y un mes. Inmutable: nunca se edita ni se borra (una corrección es una anulación que se agrega). No es deuda: es lo determinado a su fecha_calculo.",
+      "appendOnly": true,
       "fields": [
         {"name": "anio", "label": "Año", "type": "INTEGER", "required": true},
         {"name": "periodo", "label": "Periodo", "type": "INTEGER", "required": true, "description": "El mes, de 1 a 12."},
@@ -944,6 +945,7 @@
       "label": "Anulación de cuota de arbitrio",
       "pluralLabel": "Anulaciones de cuotas de arbitrio",
       "description": "La corrección de una cuota de arbitrio: se agrega, nunca se edita ni se borra. La cuota anulada deja de contar, y la redeterminación del predio escribe la versión siguiente de su clave.",
+      "appendOnly": true,
       "fields": [
         {"name": "anio", "label": "Año", "type": "INTEGER", "required": true, "description": "El de la cuota: con el predio, lo que se consulta."},
         {"name": "motivo", "label": "Motivo", "type": "TEXT", "required": true},

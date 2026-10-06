@@ -10,7 +10,7 @@ import unittest
 from contextlib import redirect_stdout, redirect_stderr
 
 import apply
-from fake_core import FakeCore
+from fake_core import OBJECT, FakeCore
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.json")
 
@@ -58,6 +58,24 @@ def core_fields(model, obj_name, drop=(), options=None):
     return fields
 
 
+def core_rules(model):
+    """What Core answers for objects that already have model.json's object-level rules (indexes, appendOnly)."""
+    return {o["name"]: {k: o[k] for k in apply.RULE_KEYS if k in o} for o in model["objects"]}
+
+
+def object_puts(core):
+    """The object-level PUTs (rules) Core got, in order: path and body."""
+    return [(r[1], r[3]) for r in core.requests if r[0] == "PUT" and OBJECT.match(r[1])]
+
+
+# the objects model.json makes append-only, and what apply sends Core for each (label included, as Core requires)
+APPEND_ONLY = ["cuota_arbitrio", "anulacion_cuota_arbitrio"]
+APPEND_ONLY_PUTS = [
+    ("/api/objects/cuota_arbitrio", {"label": "Cuota de arbitrio", "appendOnly": True}),
+    ("/api/objects/anulacion_cuota_arbitrio", {"label": "Anulación de cuota de arbitrio", "appendOnly": True}),
+]
+
+
 class ApplyCliTestCase(unittest.TestCase):
     def setUp(self):
         self.core = FakeCore()
@@ -84,6 +102,7 @@ class DryRunTests(ApplyCliTestCase):
         self.assertEqual(self.core.requests, [])
         self.assertEqual(out.count("# POST /api/objects"), OBJECTS)
         self.assertEqual(out.count("# POST /api/relationships"), RELATIONSHIPS)
+        self.assertEqual(out.count("# PUT /api/objects/"), len(APPEND_ONLY))
 
 
 class HappyPathTests(ApplyCliTestCase):
@@ -133,7 +152,11 @@ class HappyPathTests(ApplyCliTestCase):
             ("/api/metadata/objects/notificacion_resolucion/fields/resolucion", {"required": True}),
             ("/api/metadata/objects/anuncio/fields/contribuyente", {"required": True}),
             ("/api/metadata/objects/movimiento_anuncio/fields/anuncio", {"required": True}),
-        ])
+        ] + APPEND_ONLY_PUTS)
+        # the rules go after the last relationship: an index can name a relation field
+        last_relationship = max(i for i, r in enumerate(self.core.requests) if r[1] == "/api/relationships")
+        first_rule = min(i for i, r in enumerate(self.core.requests) if (r[1], r[3]) in APPEND_ONLY_PUTS)
+        self.assertLess(last_relationship, first_rule)
 
         for method, path, auth, body in self.core.requests:
             if path == "/api/auth/login":
@@ -141,7 +164,8 @@ class HappyPathTests(ApplyCliTestCase):
             else:
                 self.assertEqual(auth, "Bearer t")
 
-        self.assertIn("done: 81 created, 0 updated, 0 skipped", out)
+        self.assertIn("update object cuota_arbitrio (appendOnly)", out)
+        self.assertIn("done: 81 created, 2 updated, 0 skipped", out)
 
 
 class IdempotencyTests(ApplyCliTestCase):
@@ -150,6 +174,7 @@ class IdempotencyTests(ApplyCliTestCase):
         self.core = FakeCore(
             existing_objects=[o["name"] for o in model["objects"]],
             existing_relationships=[r["name"] for r in model["relationships"]],
+            object_rules=core_rules(model),
             existing_fields={o["name"]: core_fields(model, o["name"]) for o in model["objects"]},
         )
         self.addCleanup(self.core.stop)
@@ -160,7 +185,89 @@ class IdempotencyTests(ApplyCliTestCase):
         object_posts = [r for r in self.core.requests if r[1] == "/api/objects" and r[0] == "POST"]
         self.assertEqual(object_posts, [])
         self.assertEqual([r for r in self.core.requests if r[0] == "POST" and "/fields" in r[1]], [])
+        self.assertEqual(object_puts(self.core), [])
         self.assertIn("done: 0 created, 0 updated, 81 skipped", out)
+
+
+class ObjectRulesTests(ApplyCliTestCase):
+    """Core with the model but not its object-level rules (the dev db, created before 0.3.2): apply adds them with a
+    PUT of the object, and only what differs. a second run sends none."""
+
+    def setUp(self):
+        model = load_model()
+        self.rules = {}
+        self.core_with(model)
+
+    def core_with(self, model, **kwargs):
+        self.core = FakeCore(
+            existing_objects=[o["name"] for o in model["objects"]],
+            existing_relationships=[r["name"] for r in model["relationships"]],
+            existing_fields={o["name"]: core_fields(model, o["name"]) for o in model["objects"]},
+            object_rules=self.rules,
+            **kwargs,
+        )
+        self.addCleanup(self.core.stop)
+
+    def test_adds_append_only_and_a_second_run_sends_nothing(self):
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(object_puts(self.core), APPEND_ONLY_PUTS)
+        self.assertIn("update object cuota_arbitrio (appendOnly)", out)
+        self.assertIn("update object anulacion_cuota_arbitrio (appendOnly)", out)
+        self.assertIn("done: 0 created, 2 updated, 81 skipped", out)
+        self.assertEqual({n: r for n, r in self.core.object_rules.items() if r.get("appendOnly")},
+                         {n: {"appendOnly": True} for n in APPEND_ONLY})
+
+        self.core.requests.clear()
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(object_puts(self.core), [])
+        self.assertIn("done: 0 created, 0 updated, 81 skipped", out)
+
+    def test_indexes_core_has_and_the_model_lacks_are_dropped(self):
+        # model.json is the source of the indexes: one only Core has goes
+        self.core.object_rules["predio"]["indexes"] = [["codigo"]]
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0, msg=err)
+        self.assertIn(("/api/objects/predio", {"label": "Predio", "indexes": []}), object_puts(self.core))
+        self.assertIn("update object predio (indexes)", out)
+
+    def test_append_only_core_has_and_the_model_lacks_is_switched_off(self):
+        self.core.object_rules["predio"]["appendOnly"] = True
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0, msg=err)
+        self.assertIn(("/api/objects/predio", {"label": "Predio", "appendOnly": False}), object_puts(self.core))
+
+    def test_a_refused_put_is_fatal(self):
+        self.core_with(load_model(), fail_object_put=409)
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 1)
+        self.assertIn("error PUT /api/objects/cuota_arbitrio -> 409", err)
+        self.assertEqual(len(object_puts(self.core)), 1)
+        self.assertNotIn("done:", out)
+
+    def test_dry_run_writes_nothing(self):
+        code, out, err = self.run_cli(["--dry-run"])
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(self.core.requests, [])
+        self.assertIn('# PUT /api/objects/cuota_arbitrio\n{\n  "label": "Cuota de arbitrio",\n  "appendOnly": true\n}', out)
+
+
+class RuleChangesTests(unittest.TestCase):
+    """rule_changes compares as Core stores: names trimmed and lower-cased in their order, appendOnly left out is false."""
+
+    def test_the_same_rules_written_otherwise_are_no_change(self):
+        self.assertEqual(apply.rule_changes({"indexes": [[" Anio", "PREDIO "]]}, {"indexes": [["anio", "predio"]]}), {})
+        self.assertEqual(apply.rule_changes({}, {"appendOnly": False}), {})
+        self.assertEqual(apply.rule_changes({"appendOnly": False}, {}), {})
+        self.assertEqual(apply.rule_changes({"indexes": []}, {}), {})
+
+    def test_only_what_differs_is_sent(self):
+        self.assertEqual(apply.rule_changes({"appendOnly": True}, {}), {"appendOnly": True})
+        self.assertEqual(apply.rule_changes({"indexes": [["predio", "anio"]], "appendOnly": True},
+                                            {"indexes": [["anio", "predio"]], "appendOnly": True}),
+                         {"indexes": [["predio", "anio"]]})
+        self.assertEqual(apply.rule_changes({}, {"indexes": [["anio"]]}), {"indexes": []})
 
 
 class SyncTests(ApplyCliTestCase):
@@ -180,6 +287,7 @@ class SyncTests(ApplyCliTestCase):
         self.core = FakeCore(
             existing_objects=[o["name"] for o in model["objects"]],
             existing_relationships=[r["name"] for r in model["relationships"]],
+            object_rules=core_rules(model),
             existing_fields=fields,
         )
         self.addCleanup(self.core.stop)
@@ -216,6 +324,7 @@ class DropOptionsTests(ApplyCliTestCase):
         self.core = FakeCore(
             existing_objects=[o["name"] for o in model["objects"]],
             existing_relationships=[r["name"] for r in model["relationships"]],
+            object_rules=core_rules(model),
             existing_fields=fields,
         )
         self.addCleanup(self.core.stop)
@@ -274,6 +383,7 @@ class RelaxRequiredTests(ApplyCliTestCase):
         self.core = FakeCore(
             existing_objects=[o["name"] for o in model["objects"]],
             existing_relationships=[r["name"] for r in model["relationships"]],
+            object_rules=core_rules(model),
             existing_fields=fields,
         )
         self.addCleanup(self.core.stop)
@@ -303,6 +413,7 @@ class RelacionadoTransferenteSyncTests(ApplyCliTestCase):
         self.core = FakeCore(
             existing_objects=[o["name"] for o in model["objects"]],
             existing_relationships=[r["name"] for r in model["relationships"]],
+            object_rules=core_rules(model),
             existing_fields=fields,
         )
         self.addCleanup(self.core.stop)
@@ -335,6 +446,7 @@ class RelabelTests(ApplyCliTestCase):
         self.core = FakeCore(
             existing_objects=[o["name"] for o in model["objects"]],
             existing_relationships=[r["name"] for r in model["relationships"]],
+            object_rules=core_rules(model),
             existing_fields=fields,
         )
         self.addCleanup(self.core.stop)
@@ -414,11 +526,29 @@ class DropTests(ApplyCliTestCase):
                          + [f"/api/objects/{n}" for n in reversed(OBJECT_ORDER)])
         self.assertIn("done: 81 deleted, 0 skipped", out)
 
+    def test_drop_switches_append_only_off_before_deleting(self):
+        # Core refuses to drop an append-only object, or a relationship that holds one's values, until the rule is off
+        model = load_model()
+        self.core = FakeCore(existing_objects=[o["name"] for o in model["objects"]], object_rules=core_rules(model))
+        self.addCleanup(self.core.stop)
+        code, out, err = self.run_cli(["--drop"])
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(object_puts(self.core), [
+            ("/api/objects/anulacion_cuota_arbitrio", {"label": "Anulación de cuota de arbitrio", "appendOnly": False}),
+            ("/api/objects/cuota_arbitrio", {"label": "Cuota de arbitrio", "appendOnly": False}),
+        ])
+        first_delete = min(i for i, r in enumerate(self.core.requests) if r[0] == "DELETE")
+        last_put = max(i for i, r in enumerate(self.core.requests) if r[0] == "PUT")
+        self.assertLess(last_put, first_delete)
+        self.assertIn("update object cuota_arbitrio (appendOnly)", out)
+        self.assertIn("done: 81 deleted, 0 skipped", out)
+
     def test_drop_dry_run_makes_no_requests(self):
         code, out, err = self.run_cli(["--drop", "--dry-run"])
         self.assertEqual(code, 0, msg=err)
         self.assertEqual(self.core.requests, [])
         self.assertEqual(out.count("# DELETE "), OBJECTS + RELATIONSHIPS)
+        self.assertEqual(out.count("# PUT /api/objects/"), len(APPEND_ONLY))
 
 
 class ValidateOnlyTests(ApplyCliTestCase):

@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 RECORDS = re.compile(r"^/api/objects/([a-z0-9_]+)/records$")
 RECORD = re.compile(r"^/api/objects/([a-z0-9_]+)/records/([0-9a-f-]+)$")
 FIELDS = re.compile(r"^/api/metadata/objects/([a-z0-9_]+)/fields$")
+OBJECT = re.compile(r"^/api/objects/([a-z0-9_]+)$")
 CUIS = "/api/srtm/infracciones/cuis"
 
 
@@ -56,8 +57,11 @@ class FakeCore:
 
     def __init__(self, existing_objects=(), existing_relationships=(), fail_on_post_object=None,
                  fail_put=False, fail_put_status=500, login_response=None, fail_on_record=None, existing_fields=None,
-                 fail_on_update=None, fail_on_delete=None):
+                 fail_on_update=None, fail_on_delete=None, object_rules=None, fail_object_put=None):
         self.existing_objects = set(existing_objects)
+        # object name -> its object-level rules ({"indexes", "appendOnly"}), as Core stores them; none by default
+        self.object_rules = {n: dict((object_rules or {}).get(n, {})) for n in self.existing_objects}
+        self.fail_object_put = fail_object_put  # PUT /api/objects/{name} -> this status
         self.existing_fields = existing_fields or {}  # object name -> list of {"name", "enumOptions"?}
         self.existing_relationships = set(existing_relationships)
         self.fail_on_post_object = fail_on_post_object  # object name -> triggers 500
@@ -132,6 +136,28 @@ class FakeCore:
         self.records[name] = [r for r in records if r["id"] != record_id]
         return 204, None
 
+    def _object(self, name):
+        """An object as GET /api/objects lists it: indexes only when some are declared, appendOnly always."""
+        rules = self.object_rules.get(name, {})
+        obj = {"name": name, "appendOnly": bool(rules.get("appendOnly"))}
+        if rules.get("indexes"):
+            obj["indexes"] = rules["indexes"]
+        return obj
+
+    def _update_object(self, path, body):
+        """An object's PUT: label required, a rule left out (or null) stays as it is."""
+        name = OBJECT.match(path).group(1)
+        if self.fail_object_put:
+            return self.fail_object_put, {"message": "boom-object-put"}
+        if name not in self.existing_objects:
+            return 404, {"detail": "not found"}
+        if not (body or {}).get("label"):
+            return 400, {"detail": "label is required"}
+        for key in ("indexes", "appendOnly"):
+            if body.get(key) is not None:
+                self.object_rules[name][key] = body[key]
+        return 200, self._object(name)
+
     def _cuis(self, body):
         """srtm's new version of a codigo_infraccion: it closes the one in force (vigencia_hasta the day before,
         clave_vigente emptied) and adds this one. A repeated clave is a 409, one not after the vigente a 422."""
@@ -187,14 +213,18 @@ class FakeCore:
         if RECORD.match(path) and method == "DELETE":
             return self._delete(path)
         if path == "/api/objects" and method == "GET":
-            return 200, [{"name": n} for n in self.existing_objects]
+            return 200, [self._object(n) for n in self.existing_objects]
         if path == "/api/objects" and method == "POST":
             name = body["name"]
             if self.fail_on_post_object and name == self.fail_on_post_object:
                 return 500, {"message": "boom"}
             if name in self.existing_objects:
                 return 409, {"message": "exists"}
+            self.existing_objects.add(name)
+            self.object_rules[name] = {k: body[k] for k in ("indexes", "appendOnly") if k in body}
             return 201, {"name": name}
+        if OBJECT.match(path) and method == "PUT":
+            return self._update_object(path, body)
         if path == "/api/relationships" and method == "POST":
             name = body["name"]
             if name in self.existing_relationships:
@@ -214,5 +244,8 @@ class FakeCore:
         if path.startswith("/api/relationships/") and method == "DELETE":
             return 204, None
         if path.startswith("/api/objects/") and method == "DELETE":
+            # Core keeps an append-only object's table until its rule is switched off (ADR-040)
+            if self.object_rules.get(path.rsplit("/", 1)[1], {}).get("appendOnly"):
+                return 409, {"detail": "append-only: switch appendOnly off before deleting it"}
             return 204, None
         return 500, {"message": "boom"}

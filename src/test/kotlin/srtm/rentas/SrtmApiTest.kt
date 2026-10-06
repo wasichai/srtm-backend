@@ -52,8 +52,9 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
     protected fun modelo(): JsonNode = json.readTree(File("model/model.json"))
 
     // model/apply.py in kotlin: what is missing gets created (objects, fields with their geometry, enum options,
-    // relationships, required when model.json says so), a field model.json no longer requires is relaxed, the rest is
-    // left alone. in the organization of `token`'s user: the seeded admin's by default
+    // relationships, required when model.json says so), a field model.json no longer requires is relaxed, an object's
+    // indexes and appendOnly follow model.json, the rest is left alone. in the organization of `token`'s user: the
+    // seeded admin's by default
     protected fun aplicarModelo(token: String = this.token) {
         val model = modelo()
         val enums = model["enums"]
@@ -145,6 +146,33 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                 HttpStatus.OK,
                 token
             )
+        }
+
+        // the object's rules, after the relationships (an index can name a relation field): indexes and appendOnly as
+        // model.json declares them, compared as core stores them (trimmed, lower case, in order; appendOnly left out is
+        // false). only what differs is sent, with the label core requires
+        fun sets(node: JsonNode?) =
+            node
+                ?.iterator()
+                ?.asSequence()
+                ?.map { set ->
+                    set
+                        .iterator()
+                        .asSequence()
+                        .map { it.asString().trim().lowercase() }
+                        .toList()
+                }?.toList()
+                .orEmpty()
+        val stored = tree(send("GET", "/api/objects", null, HttpStatus.OK, token)).iterator().asSequence().associateBy { it["name"].asString() }
+        for (obj in model["objects"]) {
+            val name = obj["name"].asString()
+            val current = stored.getValue(name)
+            val change = mutableMapOf<String, Any>()
+            val indexes = sets(obj["indexes"])
+            if (indexes != sets(current["indexes"])) change["indexes"] = indexes
+            val appendOnly = obj["appendOnly"]?.asBoolean() ?: false
+            if (appendOnly != (current["appendOnly"]?.asBoolean() ?: false)) change["appendOnly"] = appendOnly
+            if (change.isNotEmpty()) send("PUT", "/api/objects/$name", change + ("label" to obj["label"].asString()), HttpStatus.OK, token)
         }
     }
 

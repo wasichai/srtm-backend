@@ -12,6 +12,9 @@ import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.r2dbc.core.awaitSingle
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import srtm.emision.IdentidadEmision
+import srtm.impuesto.PARAMETRO_TRIBUTARIO
+import srtm.rentas.CONTRIBUYENTE
+import srtm.rentas.PREDIO
 import srtm.rentas.SrtmApiTest
 import tools.jackson.databind.JsonNode
 import wasichai.core.common.ValidationException
@@ -99,16 +102,39 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         assertEquals(24, tree(send("GET", "/api/srtm/predios/${e.predio}/arbitrios?anio=${e.anio}", null, HttpStatus.OK, lector))["pendientes"].asInt())
     }
 
+    // appendOnly in the model (ADR-040): core refuses it for everyone, before srtm's guard is asked
     @Test
     fun `a cuota is never edited nor deleted, not even by an ADMIN through core's api`() {
         val e = Escenario()
         val cuota = tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))[0]
         val id = cuota["id"].asString()
         val cambio = mapOf("attributes" to atributos(cuota) + ("monto" to 0))
-        send("PUT", "/api/objects/$CUOTA_ARBITRIO/records/$id", cambio, HttpStatus.CONFLICT)
-        send("DELETE", "/api/objects/$CUOTA_ARBITRIO/records/$id", null, HttpStatus.CONFLICT)
+        assertAppendOnly(send("PUT", "/api/objects/$CUOTA_ARBITRIO/records/$id", cambio, HttpStatus.CONFLICT))
+        assertAppendOnly(send("DELETE", "/api/objects/$CUOTA_ARBITRIO/records/$id", null, HttpStatus.CONFLICT))
         val guardada = tree(send("GET", "/api/objects/$CUOTA_ARBITRIO/records/$id", null, HttpStatus.OK))
         assertEquals(8.5, guardada["attributes"]["monto"].asDouble())
+    }
+
+    // a delete would null the cuota's relation (ON DELETE SET NULL), a change postgres makes with no guard: core
+    // refuses it while a cuota points at the record (ADR-040). before 0.3.2 it went through
+    @Test
+    fun `what a cuota points at is not deleted, not even by an ADMIN`() {
+        val e = Escenario()
+        val cuota = tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))[0]
+        val apuntados =
+            listOf(
+                PREDIO to e.predio,
+                CONTRIBUYENTE to e.contribuyente,
+                SERVICIO_ARBITRIO to e.servicios[0],
+                PARAMETRO_TRIBUTARIO to cuota["parametro"].asString()
+            )
+        for ((objeto, id) in apuntados) {
+            val problema = tree(send("DELETE", "/api/objects/$objeto/records/$id", null, HttpStatus.CONFLICT))
+            assertTrue(problema["detail"].asString().contains("append-only '$CUOTA_ARBITRIO'"), problema.toString())
+            send("GET", "/api/objects/$objeto/records/$id", null, HttpStatus.OK)
+        }
+        val guardada = tree(send("GET", "/api/objects/$CUOTA_ARBITRIO/records/${cuota["id"].asString()}", null, HttpStatus.OK))
+        assertEquals(e.predio, guardada["attributes"]["predio"].asString())
     }
 
     @Test

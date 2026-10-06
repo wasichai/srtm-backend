@@ -1,5 +1,6 @@
 package srtm.arbitrios
 
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.r2dbc.core.DatabaseClient
@@ -133,6 +134,12 @@ abstract class ConArbitriosApiTest : SrtmApiTest() {
 
     // a cuota of the portal's api as core's attributes
     protected fun atributos(cuota: JsonNode): Map<String, Any?> = fields(cuota) - "id"
+
+    // core's 409 for a record of an appendOnly object (ADR-040): never changed nor deleted, by anyone
+    protected fun assertAppendOnly(respuesta: String) {
+        val detalle = tree(respuesta)["detail"].asString()
+        assertTrue(detalle.contains("is append-only"), detalle)
+    }
 
     // a year no ordinance of the shared db has
     protected fun anioLibre(): Int {

@@ -10,7 +10,7 @@ import srtm.anuncios.ANUNCIO
 import srtm.anuncios.ReglaDeAnuncios
 import srtm.arbitrios.ANULACION_CUOTA_ARBITRIO
 import srtm.arbitrios.CUOTA_ARBITRIO
-import srtm.arbitrios.CuotasInmutables
+import srtm.arbitrios.ReglaDeArbitrios
 import srtm.sanciones.CODIGO_INFRACCION
 import srtm.sanciones.PAPELETA
 import srtm.sanciones.ReglaDeSanciones
@@ -29,7 +29,7 @@ import srtm.sanciones.Ejemplos as EjemplosSanciones
 // lets through and which it refuses, with the mark EscrituraDeSrtm and without it. a write that passes returns, one
 // that does not throws, and nothing would reach the store
 class GuardiaDeEscrituraTest {
-    private val guardia = GuardiaDeEscritura(listOf(CuotasInmutables(), ReglaDeSanciones(), ReglaDeAnuncios()))
+    private val guardia = GuardiaDeEscritura(listOf(ReglaDeArbitrios(), ReglaDeSanciones(), ReglaDeAnuncios()))
 
     private val sanciones = ReglaDeSanciones().objetos
     private val anuncios = ReglaDeAnuncios().objetos
@@ -106,19 +106,19 @@ class GuardiaDeEscrituraTest {
         falla<ConflictException>(true) { guardia.beforeWrite(cambio(cierre, cierre + ("vigencia_hasta" to "2026-07-31"))) }
     }
 
+    // a cuota and its anulación are appendOnly in the model: core refuses their change, delete or transition before
+    // the guard is asked (ArbitriosApiTest). the rule only checks a new cuota, which needs no mark
     @Test
-    fun `the arbitrios keep their behavior - added without the mark, never edited nor deleted`() {
+    fun `a cuota is added without the mark if it holds its invariantes, and the anulación has no rule`() {
         val malas = falla<ValidationException> { guardia.beforeWrite(escritura(CUOTA_ARBITRIO, RecordChangeKind.CREATED, mapOf("periodo" to 13))) }
         assertTrue("periodo" in malas.violations.map { it.field })
+        // a value not of its field's type is a 400 that names the field, not a 500
+        val tipo = falla<ValidationException> { guardia.beforeWrite(escritura(CUOTA_ARBITRIO, RecordChangeKind.CREATED, CUOTA + ("anio" to "dos"))) }
+        assertEquals(listOf("anio"), tipo.violations.map { it.field })
         runBlocking {
             guardia.beforeWrite(escritura(CUOTA_ARBITRIO, RecordChangeKind.CREATED, CUOTA))
             guardia.beforeWrite(escritura(ANULACION_CUOTA_ARBITRIO, RecordChangeKind.CREATED, emptyMap()))
-        }
-        listOf(CUOTA_ARBITRIO, ANULACION_CUOTA_ARBITRIO).forEach { objeto ->
-            val e = falla<ConflictException> { guardia.beforeWrite(escritura(objeto, RecordChangeKind.UPDATED, emptyMap())) }
-            assertTrue(e.message.startsWith("Una cuota de arbitrio y su anulación no se editan ni se borran"), e.message)
-            falla<ConflictException> { guardia.beforeWrite(escritura(objeto, RecordChangeKind.DELETED)) }
-            falla<ConflictException> { guardia.beforeWrite(escritura(objeto, RecordChangeKind.TRANSITIONED)) }
+            guardia.beforeWrite(escritura(ANULACION_CUOTA_ARBITRIO, RecordChangeKind.DELETED))
         }
     }
 
@@ -134,7 +134,7 @@ class GuardiaDeEscrituraTest {
 
     @Test
     fun `an object has one rule at most`() {
-        val e = assertThrows(IllegalStateException::class.java) { GuardiaDeEscritura(listOf(CuotasInmutables(), CuotasInmutables())) }
+        val e = assertThrows(IllegalStateException::class.java) { GuardiaDeEscritura(listOf(ReglaDeArbitrios(), ReglaDeArbitrios())) }
         assertTrue(e.message!!.contains(CUOTA_ARBITRIO), e.message)
     }
 

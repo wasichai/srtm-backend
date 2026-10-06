@@ -75,9 +75,9 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 81 created, 0 updated, 0 skipped  (39 objetos + 42 relaciones)
+python3 apply.py                   # done: 81 created, 2 updated, 0 skipped  (39 objetos + 42 relaciones; 2 appendOnly)
 python3 apply.py                   # idempotente: done: 0 created, 0 updated, 81 skipped
-python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
+python3 apply.py --drop            # apaga appendOnly y lo borra, en orden inverso (¡borra también los datos!)
 ```
 
 Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
@@ -89,6 +89,10 @@ Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
   SIN DOCUMENTO); nunca vuelve obligatorio uno existente.
 - **Etiquetas:** pone la etiqueta de `model.json` al campo que Core etiqueta distinto (`predio.tipo_predio`:
   "Tipo de predio"). Es solo lo que muestra el admin.
+- **Reglas del objeto:** después de las relaciones (un índice puede nombrar un campo de relación), deja `indexes`
+  (ADR-036) y `appendOnly` (ADR-040) como los declara `model.json`, con un `PUT /api/objects/{objeto}` que
+  lleva la etiqueta y solo lo que cambia (`update object cuota_arbitrio (appendOnly)`). `model.json` manda: un índice
+  que solo tiene Core se quita, y un objeto sin `appendOnly` queda sin él.
 
 Solo añade, relaja, reetiqueta o quita opciones sin uso: no renombra, no cambia tipos y no borra campos, así los
 registros importados siguen siendo válidos. Por ejemplo, sobre la base del padrón:
@@ -318,12 +322,14 @@ Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
 - **Una cuota por predio, servicio, año y mes:** `cuota_arbitrio.clave` es única y vale `predio|servicio|anio|periodo|version`.
   Core no tiene unicidad compuesta; como cada organización tiene su tabla física, la unicidad es por organización.
 - **Inmutable:** una cuota no se edita ni se borra, ni siquiera un ADMIN; una corrección es una anulación que se
-  agrega y una versión nueva de la `clave` (ver **Anulación**). Los permisos de Core no pueden decirlo (ADMIN se los salta, y `/admin` usa
-  la misma API), así que lo hace cumplir la regla `CuotasInmutables` de la guardia de escritura (`srtm.GuardiaDeEscritura`,
-  ver [Modelo](#modelo)): un PUT o DELETE de una cuota, por cualquier vía, responde **409**. Las cuotas no exigen la
-  marca de escritura: la API genérica todavía puede agregarlas, si cumplen sus invariantes.
+  agrega y una versión nueva de la `clave` (ver **Anulación**). `cuota_arbitrio` y `anulacion_cuota_arbitrio` son
+  `appendOnly` en el modelo (ADR-040): Core responde **409** a un PUT o DELETE de una, por cualquier vía y para
+  cualquiera, antes de la guardia de escritura. También responde **409** al borrar un predio, contribuyente, servicio o
+  parámetro al que apunta una cuota. Las cuotas no exigen la marca de escritura: la API genérica todavía puede
+  agregarlas, si cumplen sus invariantes.
 - **`periodo` de 1 a 12, `monto` no negativo, `parametro_aplicado` de hasta 120 caracteres, relaciones obligatorias y
-  `clave` coherente:** los revisa la misma guardia al insertar, venga la cuota de donde venga; si no, **400**.
+  `clave` coherente:** los revisa la regla `ReglaDeArbitrios` de la guardia de escritura (`srtm.GuardiaDeEscritura`, ver
+  [Modelo](#modelo)) al insertar, venga la cuota de donde venga; si no, **400**.
 - **Un valor único repetido** (dos cuotas con la misma `clave`, o cualquier otro campo único del modelo) responde
   **409** y no 500 (`srtm.Duplicados`; Core 0.2.0 lo deja caer como error interno).
 - **Observación de 5 a 500 caracteres:** va en la propia cuota, porque la auditoría de Core no guarda observación.
@@ -1040,7 +1046,7 @@ antes de cada escritura de un registro, por cualquier camino (la API genérica `
 un servicio de srtm, un enlace entre registros, una transición, una automatización o la plataforma), en la corrutina de
 quien escribe y después de sus permisos, de `appendOnly` y de revisar que existan los registros a los que apunta (una
 relación a un id que no existe responde **400** antes de llegar a la guardia). La guardia consulta la
-`ReglaDeEscritura` del objeto. Cada módulo tiene la suya, como bean de su paquete (`CuotasInmutables` en
+`ReglaDeEscritura` del objeto. Cada módulo tiene la suya, como bean de su paquete (`ReglaDeArbitrios` en
 `srtm.arbitrios`, `ReglaDeSanciones` en `srtm.sanciones`, `ReglaDeAnuncios` en `srtm.anuncios`), y ninguno importa a
 otro:
 - **Alta:** los invariantes del registro (los `CHECK` de rentas, los largos y las claves), venga de donde venga; si no,
