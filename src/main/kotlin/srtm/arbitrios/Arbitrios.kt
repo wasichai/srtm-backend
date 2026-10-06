@@ -457,13 +457,6 @@ object Arbitrios {
         .filter { it.id != null && !it.codigo.isNullOrBlank() && vigente(it.vigenciaDesde, it.vigenciaHasta, dia) }
         .sortedWith(compareBy(nullsLast()) { it: ServicioArbitrio -> it.orden }.thenBy { it.codigo })
 
-    // the zona of a sector catastral that day
-    fun zonaDe(
-        parametros: List<ParametroTributario>,
-        sector: String,
-        dia: LocalDate
-    ) = enVigor(parametros, Llaves.ARBITRIO_ZONA, dia) { it.clave?.trim() == sector && !it.texto.isNullOrBlank() }?.texto?.trim()
-
     // the uso de arbitrio of a uso_predio code that day: the mapping of its longest prefix
     fun usoDe(
         parametros: List<ParametroTributario>,

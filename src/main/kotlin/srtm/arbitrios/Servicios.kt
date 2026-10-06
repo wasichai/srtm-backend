@@ -152,7 +152,7 @@ object Servicios {
     private fun corte(texto: String?): LocalDate? = texto?.trim()?.takeIf { it.isNotEmpty() }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
 }
 
-// the row of a tipo in force that day that matches; the latest one when several do (Arbitrios' zonaDe, usoDe and
+// the row of a tipo in force that day that matches; the latest one when several do (Zonas' ARBITRIO_ZONA, usoDe and
 // the tasa itself use this same rule)
 internal fun enVigor(
     parametros: List<ParametroTributario>,
