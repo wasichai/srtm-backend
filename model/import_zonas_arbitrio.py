@@ -13,8 +13,11 @@ What Core lacks is created, a row whose non-key fields changed (zona, vigencia_h
 in place, and one that is the same is skipped; nothing is deleted, so a tramo whose key fields changed is a new row
 and the old one stays. Everything is checked before the first write: the required fields, numero_inicial and
 numero_final as integers with numero_inicial <= numero_final, paridad in model.json's paridad_numeracion, every
-date in ISO, and two rows of the same servicio, vía, manzana and paridad whose tramos overlap, with different zona
-and vigencias that cross (an ambiguity that Zonas.de would otherwise hit at calculation time).
+date in ISO, and two rows that a predio could match at the same level of Zonas.de, with different zona and
+vigencias that cross (an ambiguity that Zonas.de would otherwise hit at calculation time): the same servicio (or
+both of every servicio) and manzana (or both without one), the same vía and a tipo_via the same or empty in either
+(both compared as Zonas does: trimmed, case and accent insensitive), paridades the same or either AMBOS, and
+tramos that overlap.
 
 Run: python3 import_zonas_arbitrio.py --csv zonas.csv [--dry-run]
 Exit: 0 ok, 1 Core refused something, 2 the file is malformed (nothing is sent).
@@ -24,6 +27,7 @@ import csv
 import json
 import os
 import sys
+import unicodedata
 from datetime import date
 
 from core_client import Client, CoreError
@@ -111,9 +115,35 @@ def _se_cruzan_vigencias(a, b):
     return True
 
 
+def normaliza(texto):
+    """Mirrors srtm.arbitrios.Zonas.normaliza: trimmed, without diacritics, uppercased ("Avenida Perú" and
+    "AVENIDA PERU" compare equal)."""
+    descompuesto = unicodedata.normalize("NFD", (texto or "").strip())
+    return "".join(c for c in descompuesto if not unicodedata.category(c).startswith("M")).upper()
+
+
+def _mismo_nivel(a, b):
+    """The same level of Zonas.de: the same servicio (or both of every servicio) and the same manzana (or both
+    without one)."""
+    return (a.get("servicio", ""), a.get("manzana", "")) == (b.get("servicio", ""), b.get("manzana", ""))
+
+
+def _misma_via(a, b):
+    """A predio could match both: the same vía, and tipo_via the same or empty in either (an empty one matches any),
+    both compared as Zonas compares them."""
+    tipo_a, tipo_b = normaliza(a.get("tipo_via")), normaliza(b.get("tipo_via"))
+    return normaliza(a.get("via")) == normaliza(b.get("via")) and (not tipo_a or not tipo_b or tipo_a == tipo_b)
+
+
+def _se_cruzan_paridades(a, b):
+    """AMBOS takes either paridad; otherwise only the same one."""
+    return "AMBOS" in (a.get("paridad"), b.get("paridad")) or a.get("paridad") == b.get("paridad")
+
+
 def _mismo_tramo(a, b):
-    return (a.get("servicio", ""), a.get("via"), a.get("manzana", ""), a.get("paridad")) == \
-           (b.get("servicio", ""), b.get("via"), b.get("manzana", ""), b.get("paridad"))
+    """Two rows a predio could match at the same level of Zonas.de: what makes it ambiguous when the zonas
+    differ."""
+    return _mismo_nivel(a, b) and _misma_via(a, b) and _se_cruzan_paridades(a, b)
 
 
 def errores(filas):

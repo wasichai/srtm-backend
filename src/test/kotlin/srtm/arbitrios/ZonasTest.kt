@@ -172,4 +172,16 @@ class ZonasTest {
         val mismoTipo = listOf(ubicacion(tipoVia = "AV", zona = "Z4"))
         assertEquals("Z4", (Zonas.de(mismoTipo, emptyList(), servicio, conTipo, dia) as ZonaResuelta.Es).zona)
     }
+
+    // the same normalization as the via's (import_zonas_arbitrio.py checks overlaps with it too)
+    @Test
+    fun `tipoVia is compared trimmed, case and accent insensitive, like the via`() {
+        val jiron = predio.copy(tipoVia = "JIRON")
+        val conTilde = listOf(ubicacion(tipoVia = " Jirón ", zona = "Z4"))
+        assertEquals("Z4", (Zonas.de(conTilde, emptyList(), servicio, jiron, dia) as ZonaResuelta.Es).zona)
+
+        val av = predio.copy(tipoVia = "Av")
+        val mayusculas = listOf(ubicacion(tipoVia = "AV", zona = "Z4"))
+        assertEquals("Z4", (Zonas.de(mayusculas, emptyList(), servicio, av, dia) as ZonaResuelta.Es).zona)
+    }
 }

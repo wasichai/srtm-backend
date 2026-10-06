@@ -486,7 +486,7 @@ coincidan en la zona la ganan igual; si no coinciden, la zona es ambigua y el pr
 6. `ARBITRIO_ZONA sector_catastral`.
 
 Una fila de `zona_arbitrio_ubicacion` coincide cuando está vigente ese día, su `via` es la del predio (sin distinguir
-mayúsculas ni tildes), su `tipo_via` está vacío o es el del predio, el número del predio cae en su tramo
+mayúsculas ni tildes), su `tipo_via` está vacío o es el del predio (comparado igual que la vía), el número del predio cae en su tramo
 (`numero_inicial`/`numero_final`, extremos vacíos abiertos) y su `paridad` es `AMBOS`, vacía o la del número. Sin
 ninguna fila que coincida en los cuatro niveles de ubicación, cae al sector catastral (niveles 5 y 6); sin sector
 catastral tampoco, la zona de ese servicio no se resuelve — a menos que algún otro servicio del predio sí resuelva
@@ -511,9 +511,12 @@ python3 import_zonas_arbitrio.py --csv zonas-2026.csv
   fórmula de `claveDeZonaUbicacion`, trasladada a Python); cambiar cualquiera de esos campos es un tramo nuevo, no
   una fila reemplazada;
 - antes de la primera escritura revisa el archivo: campos obligatorios, `numero_inicial` y `numero_final` enteros
-  con `numero_inicial <= numero_final`, `paridad` del enum, fechas ISO, y que dos filas del mismo servicio, vía,
-  manzana y paridad no tengan tramos que se solapen con distinta zona y vigencias que se cruzan (la ambigüedad que
-  `Zonas.de` encontraría al calcular);
+  con `numero_inicial <= numero_final`, `paridad` del enum, fechas ISO, y que dos filas que un mismo predio podría
+  encontrar en el mismo nivel no tengan distinta zona con vigencias que se cruzan (la ambigüedad que `Zonas.de`
+  encontraría al calcular): mismo servicio (o ambas de todos), misma manzana (o ambas sin manzana), la misma vía y
+  un `tipo_via` igual o vacío en alguna (las dos comparadas como `Zonas`: sin espacios en los extremos, sin
+  distinguir mayúsculas ni tildes), paridades iguales o alguna `AMBOS`, y tramos que se solapan. `AV LIMA` y
+  `JR LIMA` no chocan; `PAR 200-298` y `AMBOS 200-298`, o `AV X` y `Av x`, sí;
 - es idempotente: crea lo que falta, actualiza en su lugar `zona`, `vigencia_hasta`, `norma` y `observacion` (lo que
   no es parte de la clave) y no borra nada;
 - sale con `0` si todo va bien, `1` si Core rechaza algo y `2` si el archivo no encaja (sin escribir nada).

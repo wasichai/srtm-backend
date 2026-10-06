@@ -77,8 +77,8 @@ object Zonas {
     }
 
     // a zona_arbitrio_ubicacion row matches the predio that day when: it's in force, its via is the predio's
-    // (trimmed, case and accent insensitive), its tipo_via is unset or the predio's, the predio's numero falls in
-    // its tramo (unset ends are open) and its paridad is AMBOS, unset or the number's
+    // (trimmed, case and accent insensitive), its tipo_via is unset or the predio's (compared the same way), the
+    // predio's numero falls in its tramo (unset ends are open) and its paridad is AMBOS, unset or the number's
     private fun coincide(
         fila: ZonaUbicacion,
         predio: Predio,
@@ -87,7 +87,7 @@ object Zonas {
     ): Boolean {
         if (!vigente(fila.vigenciaDesde, fila.vigenciaHasta, dia)) return false
         if (normaliza(fila.via) != normaliza(predio.via)) return false
-        if (!fila.tipoVia.isNullOrBlank() && fila.tipoVia.trim() != predio.tipoVia?.trim()) return false
+        if (!fila.tipoVia.isNullOrBlank() && normaliza(fila.tipoVia) != normaliza(predio.tipoVia)) return false
         if (!enRango(numero, fila.numeroInicial, fila.numeroFinal)) return false
         if (!paridadCoincide(fila.paridad, numero)) return false
         return true

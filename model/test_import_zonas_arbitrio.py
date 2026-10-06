@@ -126,6 +126,41 @@ class ValidarTests(unittest.TestCase):
         for b in (distinto_servicio, distinta_via, distinta_manzana, distinta_paridad):
             self.assertEqual(self.errores([a, b]), [], b)
 
+    # the overlap is what srtm.arbitrios.Zonas.de would find ambiguous: same servicio and manzana, the vía and the
+    # tipo_via compared as Zonas compares them (trimmed, case and accent insensitive; an empty tipo_via matches any)
+    def tramo(self, **cambios):
+        base = {"tipo_via": "AV", "via": "LIMA", "numero_inicial": "1", "numero_final": "99", "paridad": "AMBOS",
+                "zona": "Z1", "vigencia_desde": "2026-01-01"}
+        return {**base, **cambios}
+
+    def test_a_different_tipo_via_is_not_an_overlap(self):
+        av = self.tramo(tipo_via="AV", zona="Z1")
+        jr = self.tramo(tipo_via="JR", zona="Z2")
+        self.assertEqual(self.errores([av, jr]), [])
+
+    def test_an_empty_tipo_via_overlaps_any(self):
+        sin_tipo = self.tramo(tipo_via="", zona="Z1")
+        jr = self.tramo(tipo_via="JR", zona="Z2")
+        self.assertTrue(any("solapa" in e for e in self.errores([sin_tipo, jr])))
+
+    def test_ambos_overlaps_par(self):
+        par = self.tramo(numero_inicial="200", numero_final="298", paridad="PAR", zona="Z2")
+        ambos = self.tramo(numero_inicial="200", numero_final="298", paridad="AMBOS", zona="Z3")
+        self.assertTrue(any("solapa" in e for e in self.errores([par, ambos])))
+
+    def test_the_via_is_compared_without_case_or_accents(self):
+        mayusculas = self.tramo(tipo_via="AV", via="X", zona="Z1")
+        minusculas = self.tramo(tipo_via="Av", via=" x ", zona="Z2")
+        self.assertTrue(any("solapa" in e for e in self.errores([mayusculas, minusculas])))
+        con_tilde = self.tramo(via="Perú", zona="Z1")
+        sin_tilde = self.tramo(via="PERU", zona="Z2")
+        self.assertTrue(any("solapa" in e for e in self.errores([con_tilde, sin_tilde])))
+
+    def test_a_row_of_all_servicios_and_one_of_a_servicio_are_different_levels(self):
+        todos = self.tramo(servicio="", zona="Z1")
+        barrido = self.tramo(servicio="BARRIDO", zona="Z2")
+        self.assertEqual(self.errores([todos, barrido]), [])
+
 
 class CargaTests(unittest.TestCase):
     def setUp(self):
@@ -193,6 +228,27 @@ class CargaTests(unittest.TestCase):
 
     def test_a_malformed_file_exits_2_without_calling_core(self):
         code, out, err = self.run_main([dict(FILA, via="")])
+        self.assertEqual(code, 2)
+        self.assertEqual(self.core.requests, [])
+
+    def test_av_lima_and_jr_lima_with_different_zonas_load(self):
+        av = dict(FILA, tipo_via="AV", via="LIMA", manzana="", numero_inicial="1", numero_final="99", paridad="AMBOS",
+                  zona="Z1")
+        jr = dict(av, tipo_via="JR", zona="Z2")
+        code, out, err = self.run_main([av, jr], "--dry-run")
+        self.assertEqual(code, 0, err)
+
+    def test_par_and_ambos_of_the_same_tramo_exit_2(self):
+        par = dict(FILA, numero_inicial="200", numero_final="298", paridad="PAR", zona="Z2")
+        ambos = dict(par, paridad="AMBOS", zona="Z3")
+        code, out, err = self.run_main([par, ambos])
+        self.assertEqual(code, 2)
+        self.assertEqual(self.core.requests, [])
+
+    def test_av_x_and_av_x_in_lowercase_with_different_zonas_exit_2(self):
+        mayusculas = dict(FILA, tipo_via="AV", via="X", zona="Z1")
+        minusculas = dict(mayusculas, tipo_via="Av", via="x", zona="Z2")
+        code, out, err = self.run_main([mayusculas, minusculas])
         self.assertEqual(code, 2)
         self.assertEqual(self.core.requests, [])
 
