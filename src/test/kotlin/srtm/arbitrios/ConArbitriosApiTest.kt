@@ -107,7 +107,8 @@ abstract class ConArbitriosApiTest : SrtmApiTest() {
             return predio
         }
 
-        private fun parametro(
+        // a row of parametro_tributario in force the whole year, as the ordinance's transcription
+        fun parametro(
             tipo: String,
             clave: String,
             valor: String? = null,
