@@ -310,21 +310,22 @@ la anulación de una cuota.
 | `ordenanza_arbitrio` | La ordenanza de un año (`anio` único) y su ratificación por la provincial (`acuerdo_ratificacion`, `fecha_ratificacion`, `municipalidad_ratificante`). Sin ordenanza ratificada no se determina ni se emite (D-02b). |
 | `servicio_arbitrio` | Un servicio que la ordenanza cobra (barrido, residuos, serenazgo…), con `codigo` único de hasta 20 caracteres y su vigencia. Ningún servicio está escrito en el código. |
 | `inafectacion_arbitrio` | Un predio que no paga un servicio en una vigencia (ambos extremos cuentan), con su motivo, documento y observación. |
-| `cuota_arbitrio` | Lo determinado de un predio, un servicio y un mes: `monto`, `parametro_aplicado` (la llave leída), `zona` y `uso_arbitrio` usados, `fecha_calculo` y `observacion`, más relaciones obligatorias a `predio`, `contribuyente` (el titular principal ese mes), `servicio` y `parametro` (la fila de `parametro_tributario`). |
+| `cuota_arbitrio` | Lo determinado de un predio, un servicio, un uso (`secuencia_uso`) y un mes: `monto`, `parametro_aplicado` (las llaves leídas, separadas por `;`), `zona` y `uso_arbitrio` usados, su desglose (`base`, `cantidad_base`, `tasa_unitaria`, `habitantes`, `habitantes_presuntos`, `promedio_habitantes`, `variacion_habitante`, `influencia`, `afluencia`, `redondeo`), `fecha_calculo` y `observacion`, más relaciones obligatorias a `predio`, `contribuyente` (el titular principal ese mes), `servicio` y `parametro` (la fila de `parametro_tributario`). |
 | `anulacion_cuota_arbitrio` | La corrección de una cuota: `motivo`, `observacion`, `fecha`, y su `cuota` y `predio`. `clave` única (el id de la cuota): una sola anulación por cuota. |
 | `determinacion_arbitrio_masiva`, `determinacion_arbitrio_lote` | El job de la determinación de un año en segundo plano y sus lotes de predios, gemelos de `emision_masiva` y `emision_lote`. No generan archivo. |
 | `zona_arbitrio_ubicacion` | Una zona por vía, tramo (`numero_inicial`/`numero_final` y `paridad`) y manzana, opcionalmente de un solo `servicio`; más precisa que el sector catastral de `ARBITRIO_ZONA`, y se intenta primero (`Zonas.de`, ver **Zona por servicio y por ubicación**). `clave` única por vía, tramo, manzana, paridad, servicio y vigencia. |
 
 Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
-- **Una cuota por predio, servicio, año y mes:** `cuota_arbitrio.clave` es única y vale `predio|servicio|anio|periodo|version`.
+- **Una cuota por predio, servicio, año, mes y secuencia de uso:** `cuota_arbitrio.clave` es única y vale
+  `predio|servicio|anio|periodo|secuencia|version` (las cuotas anteriores al PU por uso, `predio|servicio|anio|periodo|version`).
   Core no tiene unicidad compuesta; como cada organización tiene su tabla física, la unicidad es por organización.
 - **Inmutable:** una cuota no se edita ni se borra, ni siquiera un ADMIN; una corrección es una anulación que se
   agrega y una versión nueva de la `clave` (ver **Anulación**). Los permisos de Core no pueden decirlo (ADMIN se los salta, y `/admin` usa
   la misma API), así que lo hace cumplir la regla `CuotasInmutables` de la guardia de escritura (`srtm.AlmacenGuardado`,
   ver [Modelo](#modelo)): un PUT o DELETE de una cuota, por cualquier vía, responde **409**. Las cuotas no exigen la
   marca de escritura: la API genérica todavía puede agregarlas, si cumplen sus invariantes.
-- **`periodo` de 1 a 12, `monto` no negativo, `parametro_aplicado` de hasta 120 caracteres, relaciones obligatorias y
-  `clave` coherente:** los revisa el mismo `RecordStore` al insertar, venga la cuota de donde venga; si no, **400**.
+- **`periodo` de 1 a 12, `monto` no negativo y cuadrado con su desglose, `parametro_aplicado` de hasta 500 caracteres,
+  relaciones obligatorias y `clave` coherente:** los revisa el mismo `RecordStore` al insertar, venga la cuota de donde venga; si no, **400**.
 - **Un valor único repetido** (dos cuotas con la misma `clave`, o cualquier otro campo único del modelo) responde
   **409** y no 500 (`srtm.Duplicados`; Core 0.2.0 lo deja caer como error interno).
 - **Observación de 5 a 500 caracteres:** va en la propia cuota, porque la auditoría de Core no guarda observación.

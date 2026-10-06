@@ -117,7 +117,7 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         val cuota = tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))[0]
         send("POST", "/api/objects/$CUOTA_ARBITRIO/records", mapOf("attributes" to atributos(cuota)), HttpStatus.CONFLICT)
 
-        val clave = "${e.predio}|${e.servicios[0]}|${e.anio}|13|1"
+        val clave = claveDeCuota(e.predio, e.servicios[0], e.anio, 13, "001")
         rejected("POST", "/api/objects/$CUOTA_ARBITRIO/records", mapOf("attributes" to atributos(cuota) + mapOf("periodo" to 13, "clave" to clave)), "periodo")
     }
 

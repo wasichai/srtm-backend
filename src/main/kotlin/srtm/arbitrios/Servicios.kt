@@ -53,9 +53,16 @@ object Servicios {
         parametros: List<ParametroTributario>,
         servicio: String,
         dia: LocalDate
-    ): Base {
+    ): Base = baseLeida(parametros, servicio, dia) ?: Base.PREDIO
+
+    // the base its row in force says, null without one (or with an unknown texto): whether BASE_ARBITRIO was read
+    fun baseLeida(
+        parametros: List<ParametroTributario>,
+        servicio: String,
+        dia: LocalDate
+    ): Base? {
         val fila = enVigor(parametros, Llaves.BASE_ARBITRIO, dia) { it.clave?.trim() == servicio && !it.texto.isNullOrBlank() }
-        return fila?.texto?.trim()?.let { runCatching { Base.valueOf(it) }.getOrNull() } ?: Base.PREDIO
+        return fila?.texto?.trim()?.let { runCatching { Base.valueOf(it) }.getOrNull() }
     }
 
     // a servicio's dimensiones, comma-separated in the row's texto; [ZONA, USO] when there's no row in force for

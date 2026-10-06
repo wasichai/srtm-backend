@@ -73,6 +73,17 @@ data class CuotaArbitrio(
     val parametroAplicado: String? = null,
     val zona: String? = null,
     val usoArbitrio: String? = null,
+    val secuenciaUso: String? = null,
+    val base: String? = null,
+    val cantidadBase: BigDecimal? = null,
+    val tasaUnitaria: BigDecimal? = null,
+    val habitantes: Int? = null,
+    val habitantesPresuntos: Boolean? = null,
+    val promedioHabitantes: BigDecimal? = null,
+    val variacionHabitante: BigDecimal? = null,
+    val influencia: String? = null,
+    val afluencia: String? = null,
+    val redondeo: String? = null,
     val fechaCalculo: LocalDate? = null,
     val observacion: String? = null,
     val clave: String? = null
@@ -129,17 +140,21 @@ fun claveDeZonaUbicacion(z: ZonaUbicacion) =
 // the version a cuota's clave carries: 1 for the first one, one more for each redetermination after an annulment
 fun versionDe(clave: String?): Int? = clave?.substringAfterLast('|', "")?.toIntOrNull()
 
-// rentas' det_arbitrio_uq: one cuota per predio, servicio, year and month. core has no composite unique, so the
-// unique field holds them joined; the version goes up with each annulment
+// rentas' det_arbitrio_uq, one PU per uso: one cuota per predio, servicio, year, month and secuencia de uso. core
+// has no composite unique, so the unique field holds them joined; the version goes up with each annulment. the
+// cuotas written before the secuencia (one PU per predio) keep their predio|servicio|anio|periodo|version
 fun claveDeCuota(
     predio: String,
     servicio: String,
     anio: Int,
     periodo: Int,
+    secuencia: String,
     version: Int = 1
-) = "$predio|$servicio|$anio|$periodo|$version"
+) = "$predio|$servicio|$anio|$periodo|$secuencia|$version"
 
-const val PARAMETRO_APLICADO_MAXIMO = 120
+// several keys read, separated by ";" (TASA_ARBITRIO always; BASE_ARBITRIO, HABITANTES_* and REDONDEO_ARBITRIO when
+// there were rows)
+const val PARAMETRO_APLICADO_MAXIMO = 500
 
 // rentas' CuotaDeArbitrio and the CHECKs of determinacion_arbitrio: what a cuota must be to be written. empty when it
 // is. the determination never builds one that breaks them; the store refuses the ones that come from anywhere else
@@ -163,17 +178,55 @@ fun invariantes(c: CuotaArbitrio): List<FieldViolation> {
     }
     if (c.monto == null || c.monto.signum() < 0) malas += FieldViolation("monto", "no es negativo")
     if (c.parametroAplicado.isNullOrBlank() || c.parametroAplicado.trim().length > PARAMETRO_APLICADO_MAXIMO) {
-        malas += FieldViolation("parametro_aplicado", "la llave que se leyó, de 1 a $PARAMETRO_APLICADO_MAXIMO caracteres")
+        malas += FieldViolation("parametro_aplicado", "las llaves que se leyeron, separadas por ;, de 1 a $PARAMETRO_APLICADO_MAXIMO caracteres")
     }
     if (!Observacion.valida(c.observacion)) malas += FieldViolation("observacion", Observacion.REGLA)
     if (c.predio != null && c.servicio != null && c.anio != null && c.periodo != null) {
-        val base = claveDeCuota(c.predio, c.servicio, c.anio, c.periodo, 1).removeSuffix("|1")
-        val version = c.clave?.removePrefix("$base|")?.toIntOrNull()
-        if (c.clave?.startsWith("$base|") != true || version == null || version < 1) {
-            malas += FieldViolation("clave", "es predio|servicio|anio|periodo|version")
+        val version = versionDe(c.clave)
+        val secuencia = c.secuenciaUso
+        if (secuencia.isNullOrBlank() || version == null || version < 1 ||
+            c.clave != claveDeCuota(c.predio, c.servicio, c.anio, c.periodo, secuencia, version)
+        ) {
+            malas += FieldViolation("clave", "es predio|servicio|anio|periodo|secuencia|version")
         }
     }
+    if (c.base != null) malas += desgloseMalo(c)
     return malas
+}
+
+// a cuota with its desglose (base not null): a known base, a positive cantidad, a tasa not negative, P and V
+// together, a known redondeo, and a monto that squares with them (montoDelDesglose)
+private fun desgloseMalo(c: CuotaArbitrio): List<FieldViolation> {
+    val malas = mutableListOf<FieldViolation>()
+    if (Base.entries.none { it.name == c.base }) malas += FieldViolation("base", "es ${Base.entries.joinToString()}")
+    if (c.cantidadBase == null || c.cantidadBase.signum() <= 0) malas += FieldViolation("cantidad_base", "es mayor que 0")
+    if (c.tasaUnitaria == null || c.tasaUnitaria.signum() < 0) malas += FieldViolation("tasa_unitaria", "no es negativa")
+    if ((c.promedioHabitantes == null) != (c.variacionHabitante == null)) {
+        malas += FieldViolation("variacion_habitante", "va con promedio_habitantes: las dos o ninguna")
+    }
+    if (!c.redondeo.isNullOrBlank() && Redondeo.de(c.redondeo) == null) {
+        malas += FieldViolation("redondeo", "es decimales:modo, con modo ${Redondeo.MODOS.keys.joinToString()}")
+    }
+    val esperado = if (malas.isEmpty()) montoDelDesglose(c) else null
+    if (esperado != null && c.monto != null && c.monto.compareTo(esperado) != 0) {
+        malas += FieldViolation("monto", "es tasa_unitaria × cantidad_base × (1 + (H − P) × V), redondeado: $esperado")
+    }
+    return malas
+}
+
+// what a well formed desglose gives, as Calculo.calcular computes it: tasa × cantidad × factor de habitantes (H the
+// declared ones, or P when presumed), rounded at the end
+private fun montoDelDesglose(c: CuotaArbitrio): BigDecimal {
+    val promedio = c.promedioHabitantes
+    val variacion = c.variacionHabitante
+    val factor =
+        if (promedio == null || variacion == null) {
+            BigDecimal.ONE
+        } else {
+            BigDecimal.ONE.add(((c.habitantes?.let(::BigDecimal) ?: promedio) - promedio).multiply(variacion))
+        }
+    val bruto = c.tasaUnitaria!!.multiply(c.cantidadBase!!).multiply(factor)
+    return Redondeo.de(c.redondeo)?.aplicar(bruto) ?: bruto
 }
 
 // in force on dia: from desde (required) to hasta (open when empty), both ends included
