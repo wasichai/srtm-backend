@@ -198,6 +198,18 @@ class ArbitriosTest {
     }
 
     @Test
+    fun `a buyer without uso info is silently skipped, same as today, while the seller's months still count`() {
+        val venta = LocalDate.of(2026, 5, 20)
+        val vendedor = dj.copy(estado = ANULADA, fechaAnulacion = venta)
+        val comprador = declaracion("dj-2", "c-201").copy(fechaAdquisicion = venta, claseUso = null, subClaseUso = null, uso = null)
+        val d = determinar(p = del(declaraciones = listOf(vendedor, comprador)))
+        assertEquals(emptyList<String>(), d.faltan)
+        assertEquals((1..5).toSet(), d.cuotas.map { it.periodo }.toSet())
+        assertEquals(15, d.cuotas.size) // enero a mayo, tres servicios
+        assertTrue(d.cuotas.all { it.contribuyente == "c-200" })
+    }
+
+    @Test
     fun `the largest share is charged whole`() {
         val d =
             determinar(
