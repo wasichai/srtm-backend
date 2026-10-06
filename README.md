@@ -1075,6 +1075,8 @@ otro:
 - **Cambio, borrado o transición:** **409**. La única excepción: cerrar una versión del CUIS, una vez (su
   `vigencia_hasta` pasa de vacía a una fecha no anterior a `vigencia_desde`, su `clave_vigente` a NULL, y nada más
   cambia). La regla compara la fila entera, normalizada, porque el update de Core reemplaza todos los campos.
+  wasichai le presenta a la guardia un enlace o desenlace entre registros como un cambio (UPDATED): enlazar o
+  desenlazar un registro de un objeto con regla (sanciones y anuncios, el CUIS incluido) también es **409**.
 - **Marca de escritura:** los objetos de sanciones y de anuncios son `soloDesdeElServicio`: solo los escribe la api de
   srtm, que corre sus reglas. `Registros` pone la marca `EscrituraDeSrtm` (un elemento del contexto de la corrutina, el
   patrón `EscrituraDeCaja` de caja-backend) alrededor de cada `create` y `replace`; un cliente HTTP no puede ponerla.
@@ -1824,6 +1826,9 @@ escribir como la plataforma. srtm no pasó nada a ellos (#76), y esto queda anot
   haría falta leer, reemplazar la fila entera y tomar un `ClusterLock`, sin ganar nada. Queda como mejora posible.
 - **`IdentidadEmision`:** la emisión y la determinación corren a propósito como el usuario que las lanzó, para que
   core revise sus permisos; `asPlatform` los saltaría. Es una elección, no una carencia.
+- **La marca `EscrituraDeSrtm`, no `apiOnly`:** el `apiOnly` de wasichai solo cierra la API REST genérica; la marca
+  rechaza además las escrituras de la plataforma y de las automatizaciones, que no pasan por la api de srtm ni corren
+  sus reglas.
 - **`Duplicados`:** desde 0.3.0 core responde 409 con `errors[].field` (D23), pero en inglés. srtm lo sigue
   sobrescribiendo para dar al portal el mensaje en castellano, y pierde el campo. Seguimiento: traducir el `detail` de
   core o pasar el campo.
