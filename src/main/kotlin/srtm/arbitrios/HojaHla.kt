@@ -42,7 +42,10 @@ data class PredioHla(
     val meses: List<MesHla>,
     // by servicio, in the columns' order
     val totales: List<String>,
-    val total: String
+    val total: String,
+    // one line per (secuencia, servicio, fórmula) distinct of the year, with its month range (calculosDe); empty
+    // for a predio whose cuotas were written before the desglose (base null) - the HLA looks as before this PR
+    val calculos: List<String>
 )
 
 data class MesHla(
@@ -62,6 +65,54 @@ private val MESES =
     listOf("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre")
 
 fun nombreDelMes(periodo: Int) = MESES[periodo - 1]
+
+private val MESES_ABREVIADOS = listOf("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+
+// a predio's calculo lines: one per (secuencia, servicio, fórmula) distinct, with the month range it ruled in
+// («ene–dic», or a single month alone, e.g. «mar»). per servicio (its filas' own order), the months are walked in
+// order and grouped by (secuencia, fórmula); when the same group's months are not contiguous (the tasa changed and
+// came back, say), each contiguous run gets its own line. a cuota written before the desglose (base null) has
+// nothing to show and is skipped: a predio with none of those has no calculos, same as today
+private fun calculosDe(m: MatrizArbitrios): List<String> {
+    val lineas = mutableListOf<String>()
+    for (f in m.filas) {
+        val mesesPorGrupo = linkedMapOf<Pair<String, String>, MutableList<Int>>()
+        for (periodo in Periodo.MESES) {
+            val cuota = f.meses[periodo - 1] ?: continue
+            for (d in cuota.desglose) {
+                if (d.base == null) continue
+                val grupo = (d.secuenciaUso ?: "") to d.formula
+                mesesPorGrupo.getOrPut(grupo) { mutableListOf() }.add(periodo)
+            }
+        }
+        val nombreServicio = f.servicio.nombre ?: f.servicio.codigo.orEmpty()
+        for ((grupo, meses) in mesesPorGrupo) {
+            val (secuencia, formula) = grupo
+            for (rango in rangosContiguos(meses)) {
+                lineas += "$nombreServicio (uso $secuencia), ${rangoDeMeses(rango)}: $formula"
+            }
+        }
+    }
+    return lineas
+}
+
+// periodos (ascending, distinct) cut into its contiguous runs: [1,2,3,7,8] -> [[1,2,3],[7,8]]
+private fun rangosContiguos(periodos: List<Int>): List<List<Int>> {
+    val rangos = mutableListOf<MutableList<Int>>()
+    for (p in periodos) {
+        val ultimo = rangos.lastOrNull()
+        if (ultimo != null && ultimo.last() == p - 1) ultimo.add(p) else rangos.add(mutableListOf(p))
+    }
+    return rangos
+}
+
+// a contiguous run of months, as the HLA prints it: the abbreviation alone when it is one month, both ends joined
+// by an en dash otherwise («ene–dic»)
+private fun rangoDeMeses(periodos: List<Int>): String {
+    val desde = MESES_ABREVIADOS[periodos.first() - 1]
+    val hasta = MESES_ABREVIADOS[periodos.last() - 1]
+    return if (periodos.first() == periodos.last()) desde else "$desde–$hasta"
+}
 
 // `arbitrios` with every month's due date in `vencimientos` (month -> date): the caller answers 422 before when one
 // is missing. only the months with a cuota are printed
@@ -96,7 +147,8 @@ fun hojaHla(
                     uso = usos.joinToString(" / "),
                     meses = meses,
                     totales = columnas.map { s -> soles(porServicio[s.id]?.total ?: BigDecimal.ZERO) },
-                    total = soles(m.total)
+                    total = soles(m.total),
+                    calculos = calculosDe(m)
                 )
             }
     val porMes = Periodo.MESES.associateWith { p -> arbitrios.predios.fold(BigDecimal.ZERO) { a, m -> a + m.totalesPorMes[p - 1] } }
