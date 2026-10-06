@@ -116,6 +116,38 @@ class ArbitriosTest {
     }
 
     @Test
+    fun `sector and uso código both missing are both named, before any mapping is even checked`() {
+        val d =
+            determinar(
+                p =
+                    del(
+                        predio = predio.copy(sectorCatastral = " "),
+                        declaraciones = listOf(dj.copy(claseUso = null, subClaseUso = null, uso = null))
+                    )
+            )
+        assertEquals(
+            listOf("Sector catastral del predio 01-01-0001", "Uso del catálogo en la declaración 2026 del predio 01-01-0001"),
+            d.faltan
+        )
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
+    }
+
+    @Test
+    fun `a missing sector alone stops the uso mapping from being checked at all that month`() {
+        val sinMapeoUso = mapeos.filterNot { it.tipo == Llaves.ARBITRIO_USO } // the uso código resolves, its mapping doesn't exist
+        val d = determinar(contexto(parametros = tasas + sinMapeoUso), p = del(predio = predio.copy(sectorCatastral = " ")))
+        assertEquals(listOf("Sector catastral del predio 01-01-0001"), d.faltan) // not ARBITRIO_USO too: never reached
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
+    }
+
+    @Test
+    fun `a sector present, a missing zona and a missing uso mapping are both named`() {
+        val d = determinar(contexto(parametros = tasas))
+        assertEquals(listOf("${Llaves.ARBITRIO_ZONA} S-01 2026", "${Llaves.ARBITRIO_USO} 010101 2026"), d.faltan)
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
+    }
+
+    @Test
     fun `without a tasa it fails naming it, and determines nothing`() {
         val d = determinar(contexto(parametros = tasas.drop(1) + mapeos))
         assertEquals(listOf("TASA_ARBITRIO LIMPIEZA:Z1:CASA 2026"), d.faltan)
@@ -287,6 +319,38 @@ class ArbitriosTest {
         val c = contexto(parametros = tasas + mapeos).copy(ubicaciones = ubicaciones)
         val d = determinar(c, p = del(predio = conVia))
         assertEquals(listOf("Zona ambigua de LIMPIEZA para AV. X 100: Z9, Z10"), d.faltan)
+    }
+
+    @Test
+    fun `without a sector, ubicación resolving every servicio still produces every cuota`() {
+        val conVia = predio.copy(sectorCatastral = null, via = "AV. X", numero = "100")
+        val ubicaciones = servicios.map { ubicacion(servicio = it.codigo, zona = "Z9") }
+        val tasasPorZona = servicios.map { tasa("${it.codigo}:Z9:CASA", "8.50") }
+        val c = contexto(parametros = tasasPorZona + mapeos).copy(ubicaciones = ubicaciones)
+        val d = determinar(c, p = del(predio = conVia))
+        assertEquals(emptyList<String>(), d.faltan)
+        assertEquals(36, d.cuotas.size)
+        assertTrue(d.cuotas.all { it.zona == "Z9" })
+    }
+
+    @Test
+    fun `without a sector, a servicio ubicación does not resolve fails the whole predio (todo o nada)`() {
+        val conVia = predio.copy(sectorCatastral = null, via = "AV. X", numero = "100")
+        val ubicaciones = listOf(ubicacion(servicio = "LIMPIEZA", zona = "Z9"))
+        val c = contexto(parametros = tasas + mapeos + listOf(tasa("LIMPIEZA:Z9:CASA", "8.50"))).copy(ubicaciones = ubicaciones)
+        val d = determinar(c, p = del(predio = conVia))
+        assertEquals(listOf("Sector catastral del predio 01-01-0001"), d.faltan)
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
+    }
+
+    @Test
+    fun `without a sector, an ubicación starting mid-year does not rescue the earlier months (todo o nada)`() {
+        val conVia = predio.copy(sectorCatastral = null, via = "AV. X", numero = "100")
+        val ubicaciones = listOf(ubicacion(servicio = "LIMPIEZA", zona = "Z9", desde = LocalDate.of(2026, 7, 1)))
+        val c = contexto(parametros = tasas + mapeos + listOf(tasa("LIMPIEZA:Z9:CASA", "8.50"))).copy(ubicaciones = ubicaciones)
+        val d = determinar(c, p = del(predio = conVia))
+        assertEquals(listOf("Sector catastral del predio 01-01-0001"), d.faltan)
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
     }
 
     @Test
