@@ -545,8 +545,11 @@ asume la municipalidad). Al final de `Arbitrios.determinar`, con todas las cuota
 - **El grupo** es el código de uso de la secuencia menor del predio (el primer mes que lo tiene): su `TOPE_ARBITRIO`
   es la fila del prefijo más largo, o la de `*` si ninguno coincide. Sin fila, no hay tope.
 - **Sin tope** también si el predio no tiene cuotas vigentes del año anterior (no anuladas, la última versión de
-  cada una, de todos los servicios), si suman 0, o si la fecha de corte (`texto`) es anterior a la primera
-  `fecha_presentacion` de sus declaraciones del año (se registró después del corte).
+  cada una, de todos los servicios), o si esas cuotas suman 0 (no pagó nada: un límite de 0 dejaría todo el año en
+  0), o si se registró después de la fecha de corte (`texto`). **Registrado** es cuando el predio entró al padrón: la
+  `fecha_presentacion` más antigua de sus declaraciones **de cualquier año**, no la de la DJ de este año. Un predio
+  cuya primera DJ es de 2024, que pagó en 2025 y presentó su DJ de 2026 en febrero de 2026, con corte 2025-12-31,
+  tiene tope; uno cuya primera DJ es de enero de 2026, no.
 - **Si no**, `límite = suma del año anterior × (1 + tope / 100)`. Si las cuotas vigentes de este año ya escritas más
   las nuevas lo superan, **solo las nuevas** bajan en proporción, hasta `límite − ya escritas` (nunca por debajo de
   0): cada una se redondea con su propio redondeo (`2:ABAJO` si no tiene), la diferencia del redondeo va a la última
@@ -559,8 +562,12 @@ asume la municipalidad). Al final de `Arbitrios.determinar`, con todas las cuota
   1 080.00: cada cuota × 1 080 / 1 200, redondeada hacia abajo (29.99, 29.99 y 30.00 al mes, 1 079.76 en el año), y
   los 0.24 que faltan van a la última de diciembre (30.24). Si los primeros 6 meses ya estaban escritos (600.00),
   las 18 nuevas suman 480.00.
-- `ArbitriosService` lee las cuotas del año anterior solo cuando el año tiene alguna fila `TOPE_ARBITRIO` vigente: sin
-  ella no hay lecturas nuevas y las cuotas son las de siempre (`monto_sin_tope` y `tope_aplicado` vacíos).
+- **La última** es la última en el orden en que se determinan las cuotas: por mes, luego por secuencia y luego por
+  servicio (su `orden`); no el orden alfabético de la `clave`, que pondría el mes 9 después del 12.
+- `ArbitriosService` lee las cuotas del año anterior (con sus anulaciones) y la fecha de registro (una sola fila: la
+  `fecha_presentacion` más baja de las declaraciones del predio, `Registros.lowest`) solo cuando el año tiene alguna
+  fila `TOPE_ARBITRIO` vigente: sin ella no hay lecturas nuevas y las cuotas son las de siempre (`monto_sin_tope` y
+  `tope_aplicado` vacíos).
 
 **Escritura.** Las cuotas de un predio se escriben en una transacción: todas o ninguna. Si otra determinación del mismo
 predio escribe alguna entre la lectura y la escritura (la `clave` es única), no queda nada de esta: se lee y se calcula

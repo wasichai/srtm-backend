@@ -88,7 +88,8 @@ class ArbitriosService(
         )
 
     // a predio's declarations of the year, its contribuyentes' codes, its inafectaciones and its cuotas of the year;
-    // with conAnteriores (Arbitrios.conTope: the year has a TOPE_ARBITRIO), its vigente cuotas of the year before too
+    // with conAnteriores (Arbitrios.conTope: the year has a TOPE_ARBITRIO), its vigente cuotas of the year before and
+    // the date it was registered (its first declaración's fecha_presentacion, of any year: one row) too
     suspend fun delPredio(
         predio: Predio,
         anio: Int,
@@ -99,8 +100,10 @@ class ArbitriosService(
         val codigos = personas(declaraciones.mapNotNull { it.contribuyente }).mapValues { it.value.codigo }
         val inafectaciones = registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java, filters = mapOf("predio" to id))
         val (existentes, anuladas) = delAnio(id, anio)
-        val anteriores = if (conAnteriores) delAnio(id, anio - 1).let { (cs, anuladasAntes) -> Arbitrios.vigentes(cs, anuladasAntes) } else emptyList()
-        return PredioArbitrios(predio, declaraciones, codigos, inafectaciones, existentes, anuladas, anteriores)
+        if (!conAnteriores) return PredioArbitrios(predio, declaraciones, codigos, inafectaciones, existentes, anuladas)
+        val anteriores = delAnio(id, anio - 1).let { (cs, anuladasAntes) -> Arbitrios.vigentes(cs, anuladasAntes) }
+        val registrado = registros.lowest(DECLARACION, "fecha_presentacion", mapOf("predio" to id))?.let { LocalDate.parse(it.take(10)) }
+        return PredioArbitrios(predio, declaraciones, codigos, inafectaciones, existentes, anuladas, anteriores, registrado)
     }
 
     // a predio's cuotas of a year and the ids of the annulled ones

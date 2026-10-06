@@ -111,6 +111,26 @@ class TopeTest {
     }
 
     @Test
+    fun `registered is the first DJ of any year - one of 2024 keeps the tope though its 2026 DJ was presented in 2026`() {
+        val de2026 = listOf(dj.copy(fechaPresentacion = LocalDate.of(2026, 2, 1)))
+        val d = determinar(p = del(declaraciones = de2026).copy(registrado = LocalDate.of(2024, 5, 10)))
+        assertEquals(BigDecimal("1080.00"), suma(d.cuotas))
+        assertTrue(d.cuotas.all { it.topeAplicado!!.compareTo(BigDecimal("8")) == 0 })
+    }
+
+    @Test
+    fun `a predio first registered after the cut date has no tope, whatever its DJ of this year says`() {
+        val d = determinar(p = del().copy(registrado = LocalDate.of(2026, 1, 20)))
+        // this year's DJ (2025-03-10) is earlier: it counts too, so the predio was in the registry before the cut
+        assertEquals(BigDecimal("1080.00"), suma(d.cuotas))
+
+        val primeraDespues = del(declaraciones = listOf(dj.copy(fechaPresentacion = LocalDate.of(2026, 1, 20)))).copy(registrado = LocalDate.of(2026, 1, 20))
+        val sinTope = determinar(p = primeraDespues)
+        assertEquals(BigDecimal("1200.00"), suma(sinTope.cuotas))
+        assertTrue(sinTope.cuotas.all { it.montoSinTope == null && it.topeAplicado == null })
+    }
+
+    @Test
     fun `under the limit nothing changes`() {
         val d = determinar(p = del(anteriores = pagado(List(12) { "100.00" }))) // 1 200.00 x 1.08 = 1 296.00
         assertEquals(BigDecimal("1200.00"), suma(d.cuotas))
