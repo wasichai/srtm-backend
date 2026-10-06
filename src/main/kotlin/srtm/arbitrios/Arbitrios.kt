@@ -13,7 +13,8 @@ import java.math.RoundingMode
 import java.time.LocalDate
 
 // what a determination needs that is the same for every predio of the year: read once per determination, and once
-// per lote in the masiva. ordenanza is the year's (null when there is none)
+// per lote in the masiva. ordenanza is the year's (null when there is none). porVia is ubicaciones grouped by their
+// normalized via, built the first time a predio needs it and kept for every other predio of the contexto (#82)
 data class ContextoArbitrios(
     val anio: Int,
     val ordenanza: OrdenanzaArbitrio?,
@@ -21,7 +22,9 @@ data class ContextoArbitrios(
     val parametros: List<ParametroTributario>,
     val usos: List<UsoPredio>,
     val ubicaciones: List<ZonaUbicacion> = emptyList()
-)
+) {
+    val porVia: UbicacionesPorVia by lazy { UbicacionesPorVia(ubicaciones) }
+}
 
 // one predio's: its declarations of the year (every titular's), its contribuyentes' codes by id, its inafectaciones,
 // the cuotas of the year it already has and the ids of the ones annulled (which count for nothing). anteriores are
@@ -130,6 +133,9 @@ object Arbitrios {
         val vigentes = p.vigentes // filtered once, not per month, secuencia and servicio
         var algunMesConTitular = false
         var algunMesConRasgos = false
+        // the predio's zona_arbitrio_ubicacion rows (its via's, tramo's and paridad's), narrowed once, not per servicio
+        // and month
+        val ubicaciones = c.porVia.delPredio(p.predio)
         // TOPE_ARBITRIO's group: the uso código of the predio's lowest secuencia, the first month it has one
         var grupo: Pair<String, LocalDate>? = null
 
@@ -172,7 +178,7 @@ object Arbitrios {
             val zonas = mutableMapOf<String, String>()
             for (servicio in servicios) {
                 val codigoServicio = servicio.codigo!!.trim()
-                when (val resuelta = Zonas.de(c.ubicaciones, c.parametros, codigoServicio, p.predio, dia)) {
+                when (val resuelta = Zonas.de(ubicaciones, c.parametros, codigoServicio, p.predio, dia)) {
                     is ZonaResuelta.Es -> {
                         zonas[servicio.id!!] = resuelta.zona
                         if (sector == null) rasgosPorUbicacion = true

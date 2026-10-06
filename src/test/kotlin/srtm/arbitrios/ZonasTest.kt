@@ -2,6 +2,7 @@ package srtm.arbitrios
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import srtm.impuesto.ParametroTributario
 import srtm.rentas.Predio
@@ -171,6 +172,35 @@ class ZonasTest {
 
         val mismoTipo = listOf(ubicacion(tipoVia = "AV", zona = "Z4"))
         assertEquals("Z4", (Zonas.de(mismoTipo, emptyList(), servicio, conTipo, dia) as ZonaResuelta.Es).zona)
+    }
+
+    // the contexto's index (#82): the rows grouped by their normalized via once, and a predio's narrowed once per
+    // determination to those of its via, tipo_via, tramo and paridad. what Zonas.de decides from them is the same
+    @Test
+    fun `a predio's rows are those of its via, tipo_via, tramo and paridad - case and accent insensitive`() {
+        val suyas =
+            listOf(
+                ubicacion(via = " Avenida Perú ", tipoVia = "Av", ini = 201, fin = 299, paridad = "IMPAR", zona = "Z3"),
+                ubicacion(via = "AVENIDA PERU", zona = "Z4", desde = LocalDate.of(2027, 1, 1)) // a day decides its vigencia
+            )
+        val ajenas =
+            listOf(
+                ubicacion(via = "AVENIDA PERUANA", zona = "Z5"),
+                ubicacion(via = "avenida perú", tipoVia = "JR", zona = "Z5"),
+                ubicacion(via = "avenida perú", ini = 300, fin = 399, zona = "Z5"),
+                ubicacion(via = "avenida perú", paridad = "PAR", zona = "Z5")
+            )
+        val porVia = UbicacionesPorVia(ajenas + suyas)
+        val enPeru = predio.copy(via = "avenida peru", tipoVia = "AV", numero = "245")
+        val delPredio = porVia.delPredio(enPeru)
+        assertEquals(suyas, delPredio.filas)
+        val esperada = ZonaResuelta.Es("Z3", "ZONA_ARBITRIO_UBICACION:|Av|Avenida Perú||201|299|IMPAR|2026-01-01")
+        assertEquals(esperada, Zonas.de(delPredio, emptyList(), servicio, enPeru, dia))
+        assertEquals(Zonas.de(ajenas + suyas, emptyList(), servicio, enPeru, dia), Zonas.de(delPredio, emptyList(), servicio, enPeru, dia))
+        // the contexto builds it once, lazily, and keeps it
+        val c = ContextoArbitrios(2026, null, emptyList(), emptyList(), emptyList(), ajenas + suyas)
+        assertEquals(suyas, c.porVia.delPredio(enPeru).filas)
+        assertTrue(c.porVia === c.porVia)
     }
 
     // the same normalization as the via's (import_zonas_arbitrio.py checks overlaps with it too)
