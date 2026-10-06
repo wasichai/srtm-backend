@@ -43,7 +43,7 @@ class AlmacenGuardado(
     override suspend fun insert(
         definition: ObjectDefinition,
         organizationId: UUID,
-        userId: UUID,
+        userId: UUID?,
         attributes: Map<String, Any?>,
         sections: Map<String, Map<String, Any?>>,
         workflow: ObjectWorkflowState
@@ -60,7 +60,7 @@ class AlmacenGuardado(
     override suspend fun update(
         definition: ObjectDefinition,
         organizationId: UUID,
-        userId: UUID,
+        userId: UUID?,
         id: UUID,
         attributes: Map<String, Any?>,
         sections: Map<String, Map<String, Any?>>,
@@ -104,7 +104,7 @@ class AlmacenGuardado(
         operacion: String,
         definition: ObjectDefinition,
         organizationId: UUID,
-        userId: UUID,
+        userId: UUID?,
         id: UUID?
     ) {
         if (!regla.soloDesdeElServicio || currentCoroutineContext()[EscrituraDeSrtm.Clave] != null) return

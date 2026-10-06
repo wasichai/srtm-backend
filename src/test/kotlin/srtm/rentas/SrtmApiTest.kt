@@ -1,15 +1,22 @@
 package srtm.rentas
 
+import kotlinx.coroutines.reactor.asCoroutineContext
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.reactive.server.WebTestClient
+import srtm.emision.IdentidadEmision
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 import wasichai.test.WasichaiIntegrationTest
 import java.io.File
+import java.util.Base64
 import java.util.UUID
 
 // the base of the portal api's integration tests: the real model (model/model.json, applied the way model/apply.py
@@ -22,6 +29,19 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
     protected lateinit var token: String
 
     protected val json: JsonMapper get() = JSON
+
+    @Autowired
+    private lateinit var identidad: IdentidadEmision
+
+    // in-process, as the seeded admin (the token's subject): runs `bloque` with their Authentication, to call the services (Registros, ...) from a test the way
+    // a request would: same pattern as TrabajoDeterminacion
+    protected fun <T> comoAdmin(bloque: suspend () -> T): T =
+        runBlocking {
+            val carga = String(Base64.getUrlDecoder().decode(token.removePrefix("Bearer ").split('.')[1]))
+            val admin = UUID.fromString(tree(carga)["sub"].asString())
+            val autenticacion = checkNotNull(identidad.de(admin)) { "the seeded admin is not enabled" }
+            withContext(ReactiveSecurityContextHolder.withAuthentication(autenticacion).asCoroutineContext()) { bloque() }
+        }
 
     @BeforeEach
     fun adminYModelo() {

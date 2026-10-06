@@ -28,54 +28,47 @@ class Registros(
         objectName: String,
         type: Class<T>,
         query: RecordQuery
-    ): PageResponse<T> {
-        val result = records.list(objectName, query)
-        return PageResponse(result.content.map { read(type, it) }, result.page, result.size, result.totalElements, result.totalPages)
-    }
+    ): PageResponse<T> = records.list(objectName, query).map { read(type, it) }
 
-    // every record that matches, page by page: for the few rows a contribuyente or predio has, and catalogs
+    // every record that matches, in one keyset pass (count = false, after = nextCursor): no COUNT(*) and no OFFSET's
+    // growing skip (ADR-036). for the few rows a contribuyente or predio has, catalogs, and the cuotas of a year
     suspend fun <T : Any> all(
         objectName: String,
         type: Class<T>,
         filters: Map<String, String> = emptyMap(),
         sort: String? = null,
         descending: Boolean = false
-    ): List<T> {
-        val rows = mutableListOf<RecordResponse>()
-        var page = 0
-        do {
-            val result =
-                records.list(
-                    objectName,
-                    RecordQuery(page = PageRequest.of(page, PageRequest.MAX_SIZE), sort = sort, descending = descending, filters = filters)
-                )
-            rows += result.content
-            page++
-        } while (page < result.totalPages)
-        return rows.map { read(type, it) }
-    }
+    ): List<T> =
+        todas(
+            objectName,
+            RecordQuery(page = PageRequest.of(0, PageRequest.MAX_SIZE), sort = sort, descending = descending, filters = filters, count = false)
+        ).map { read(type, it) }
 
     // every record that meets `criteria` (conditions a module writes on the object's columns; core binds their
-    // values) and `filters`, page by page
+    // values) and `filters`, in the same keyset pass
     suspend fun <T : Any> donde(
         objectName: String,
         type: Class<T>,
         criteria: List<RecordCriterion>,
         filters: Map<String, String> = emptyMap(),
         sort: String? = null
-    ): List<T> {
+    ): List<T> =
+        todas(
+            objectName,
+            RecordQuery(page = PageRequest.of(0, PageRequest.MAX_SIZE), sort = sort, filters = filters, criteria = criteria, count = false)
+        ).map { read(type, it) }
+
+    private suspend fun todas(
+        objectName: String,
+        primera: RecordQuery
+    ): List<RecordResponse> {
         val rows = mutableListOf<RecordResponse>()
-        var page = 0
-        do {
-            val result =
-                records.list(
-                    objectName,
-                    RecordQuery(page = PageRequest.of(page, PageRequest.MAX_SIZE), sort = sort, filters = filters, criteria = criteria)
-                )
+        var query = primera
+        while (true) {
+            val result = records.list(objectName, query)
             rows += result.content
-            page++
-        } while (page < result.totalPages)
-        return rows.map { read(type, it) }
+            query = query.copy(after = result.nextCursor ?: return rows)
+        }
     }
 
     suspend fun <T : Any> get(
@@ -132,7 +125,7 @@ class Registros(
         id: UUID
     ) = records.delete(objectName, id)
 
-    suspend fun count(objectName: String): Long = records.list(objectName, RecordQuery(page = PageRequest.of(0, 1))).totalElements
+    suspend fun count(objectName: String): Long = records.list(objectName, RecordQuery(page = PageRequest.of(0, 1))).totalElements ?: 0L
 
     // the highest value a field holds, among those starting with `prefix` when given. nulls are left out:
     // postgres sorts them first when descending

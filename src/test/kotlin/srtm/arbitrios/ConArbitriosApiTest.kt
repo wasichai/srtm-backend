@@ -1,18 +1,11 @@
 package srtm.arbitrios
 
-import kotlinx.coroutines.reactor.asCoroutineContext
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.r2dbc.core.awaitSingle
-import org.springframework.security.core.context.ReactiveSecurityContextHolder
-import srtm.emision.IdentidadEmision
 import srtm.rentas.SrtmApiTest
 import tools.jackson.databind.JsonNode
-import java.util.Base64
-import java.util.UUID
 import kotlin.random.Random
 
 // the arbitrios' api tests: a year of their own with its ordinance, servicios, parameters and a declared predio
@@ -21,9 +14,6 @@ import kotlin.random.Random
 abstract class ConArbitriosApiTest : SrtmApiTest() {
     @Autowired
     lateinit var arbitrios: ArbitriosService
-
-    @Autowired
-    lateinit var identidad: IdentidadEmision
 
     @Autowired
     lateinit var db: DatabaseClient
@@ -157,12 +147,4 @@ abstract class ConArbitriosApiTest : SrtmApiTest() {
         if (tree(send("GET", "/api/objects/uso_predio/records?codigo=010101", null, HttpStatus.OK))["totalElements"].asInt() > 0) return
         crear("uso_predio", mapOf("codigo" to "010101", "clase" to "RESIDENCIAL", "sub_clase" to "UNIFAMILIAR", "uso" to "CASA HABITACIÓN"))
     }
-
-    // in-process, as the seeded admin: the identity a request would carry
-    protected fun <T> comoAdmin(bloque: suspend () -> T): T =
-        runBlocking {
-            val carga = String(Base64.getUrlDecoder().decode(token.removePrefix("Bearer ").split('.')[1]))
-            val admin = identidad.de(UUID.fromString(tree(carga)["sub"].asString()))!!
-            withContext(ReactiveSecurityContextHolder.withAuthentication(admin).asCoroutineContext()) { bloque() }
-        }
 }

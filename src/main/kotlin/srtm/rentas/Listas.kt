@@ -53,7 +53,7 @@ class Listas(
     ): Long =
         registros
             .page(objectName, Map::class.java, RecordQuery(page = PageRequest.of(0, 1), filters = mapOf(parentField to parent.toString())))
-            .totalElements
+            .totalElements ?: 0L
 
     companion object {
         const val ACTIVO = "ACTIVO"
