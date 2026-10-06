@@ -122,6 +122,19 @@ class CalculoTest {
     }
 
     @Test
+    fun `sin factor de habitantes, numeroHabitantes de la declaracion no se filtra al desglose`() {
+        // una Declaracion se comparte entre servicios (barrido no reparte por habitantes aunque la declaración
+        // sí los tenga, p.ej. para recolección): Desglose.habitantes debe quedar nulo, igual que los demás campos
+        val d = declaracion(longitudFrente = BigDecimal("12"), numeroHabitantes = 4)
+        val calculado = Calculo.calcular(Base.FRONTIS_ML, BigDecimal("3.37"), d, null, null, quien)
+        val desglose = (calculado as Calculado.Es).desglose
+        assertEquals(null, desglose.habitantes)
+        assertEquals(false, desglose.habitantesPresuntos)
+        assertEquals(null, desglose.promedioHabitantes)
+        assertEquals(null, desglose.variacionHabitante)
+    }
+
+    @Test
     fun `un factor de habitantes negativo falla, sin monto`() {
         val d = declaracion(numeroHabitantes = 0)
         val habitantes = Habitantes(BigDecimal("2"), BigDecimal("0.8"))

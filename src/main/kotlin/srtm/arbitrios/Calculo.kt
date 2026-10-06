@@ -76,7 +76,7 @@ object Calculo {
                 base = base,
                 cantidadBase = cantidad,
                 tasaUnitaria = tasa,
-                habitantes = d.numeroHabitantes,
+                habitantes = if (habitantes == null) null else d.numeroHabitantes,
                 habitantesPresuntos = habitantesPresuntos,
                 promedioHabitantes = habitantes?.promedio,
                 variacionHabitante = habitantes?.variacion,
