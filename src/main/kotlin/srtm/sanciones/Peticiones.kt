@@ -1,11 +1,6 @@
 package srtm.sanciones
 
-import org.springframework.core.Ordered
-import org.springframework.core.annotation.Order
-import org.springframework.http.ProblemDetail
 import org.springframework.stereotype.Component
-import org.springframework.web.bind.annotation.ExceptionHandler
-import org.springframework.web.bind.annotation.RestControllerAdvice
 import wasichai.core.common.Actions
 import wasichai.core.common.FieldViolation
 import wasichai.core.common.ForbiddenException
@@ -14,7 +9,6 @@ import wasichai.core.common.ValidationException
 import wasichai.core.data.RecordCriterion
 import wasichai.core.identity.CurrentUser
 import wasichai.core.metadata.MetadataService
-import wasichai.core.platform.WasichaiWebProperties
 import java.time.LocalDate
 import java.util.UUID
 
@@ -137,14 +131,4 @@ class Permisos(
             throw ForbiddenException("${acto.replaceFirstChar { it.uppercase() }} exige permiso de creación sobre $objeto")
         }
     }
-}
-
-// the 422 with `faltan` of every endpoint of the sanciones, before core's handler (which would drop the faltan)
-@RestControllerAdvice(basePackageClasses = [Permisos::class])
-@Order(Ordered.HIGHEST_PRECEDENCE)
-class ErroresDeSanciones(
-    private val web: WasichaiWebProperties
-) {
-    @ExceptionHandler(FaltanSanciones::class)
-    fun faltan(ex: FaltanSanciones): ProblemDetail = problemaFaltan(ex, web)
 }

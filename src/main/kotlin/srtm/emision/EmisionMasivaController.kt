@@ -9,10 +9,8 @@ import org.springframework.core.io.buffer.DefaultDataBufferFactory
 import org.springframework.http.ContentDisposition
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
-import org.springframework.http.ProblemDetail
 import org.springframework.http.codec.ResourceHttpMessageWriter
 import org.springframework.web.bind.annotation.DeleteMapping
-import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -26,8 +24,6 @@ import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import reactor.core.scheduler.Schedulers
 import wasichai.core.common.ValidationException
-import wasichai.core.platform.WasichaiWebProperties
-import java.net.URI
 import java.time.LocalDate
 import java.util.UUID
 
@@ -56,23 +52,13 @@ fun documentosPedidos(nombres: List<String>?): Set<DocumentoEmision> {
 @RestController
 @RequestMapping("/api/srtm/emisiones")
 class EmisionMasivaController(
-    private val emisiones: EmisionMasivaService,
-    private val web: WasichaiWebProperties
+    private val emisiones: EmisionMasivaService
 ) {
     @PostMapping
     @ResponseStatus(HttpStatus.ACCEPTED)
     suspend fun emitir(
         @RequestBody pedido: PedidoEmision
     ): Emision = emisiones.emitir(pedido.anio ?: LocalDate.now().year, pedido.formato ?: FormatoEmision.PDF, documentosPedidos(pedido.documentos))
-
-    // the problem core's handler would write, plus what the year lacks for the documents asked for (the HLA's)
-    @ExceptionHandler(FaltanParametros::class)
-    fun faltanParametros(ex: FaltanParametros): ProblemDetail =
-        ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.message).apply {
-            type = URI.create("${web.problemBaseUri.trimEnd('/')}/${HttpStatus.UNPROCESSABLE_CONTENT.value()}")
-            title = HttpStatus.UNPROCESSABLE_CONTENT.reasonPhrase
-            setProperty("faltan", ex.faltan)
-        }
 
     // the most recent first
     @GetMapping

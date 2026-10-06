@@ -1,9 +1,7 @@
 package srtm.anuncios
 
 import org.springframework.http.HttpStatus
-import org.springframework.http.ProblemDetail
 import org.springframework.http.ResponseEntity
-import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
@@ -17,8 +15,6 @@ import wasichai.core.common.FieldViolation
 import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
 import wasichai.core.common.WasichaiException
-import wasichai.core.platform.WasichaiWebProperties
-import java.net.URI
 import java.time.LocalDate
 import java.util.UUID
 
@@ -33,8 +29,7 @@ class FiltroInvalido(
 @RestController
 @RequestMapping("/api/srtm")
 class AnunciosController(
-    private val anuncios: AnunciosService,
-    private val web: WasichaiWebProperties
+    private val anuncios: AnunciosService
 ) {
     @GetMapping("/anuncios")
     suspend fun padron(
@@ -118,15 +113,6 @@ class AnunciosController(
         soloConoce(params)
         return anuncios.delPredio(id)
     }
-
-    // the problem core's handler would write, plus what is missing
-    @ExceptionHandler(FaltanAnuncios::class)
-    fun faltan(ex: FaltanAnuncios): ProblemDetail =
-        ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.message).apply {
-            type = URI.create("${web.problemBaseUri.trimEnd('/')}/${HttpStatus.UNPROCESSABLE_CONTENT.value()}")
-            title = HttpStatus.UNPROCESSABLE_CONTENT.reasonPhrase
-            setProperty("faltan", ex.faltan)
-        }
 
     private fun soloConoce(
         params: Map<String, String>,

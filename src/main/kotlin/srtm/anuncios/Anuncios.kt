@@ -1,6 +1,7 @@
 package srtm.anuncios
 
 import org.springframework.http.HttpStatus
+import srtm.Faltan
 import srtm.impuesto.ParametroTributario
 import srtm.impuesto.enVigor
 import srtm.legible
@@ -23,10 +24,10 @@ val ESTADOS = listOf(VIGENTE, VENCIDO, CESADO, RETIRADO)
 val CLASES = listOf("LETRERO", "PANEL", "TOLDO", "BANDEROLA", "PANTALLA_DIGITAL", "GLOBO_AEROSTATICO")
 val TIPOS_DE_ANUNCIO = listOf("AVISO_SIMPLE", "AVISO_LUMINOSO", "AVISO_ILUMINADO", "AVISO_ELECTRONICO")
 
-// what keeps an act from accruing: a 422 that names each missing parámetro (TASA_ANUNCIO PANEL 2026)
+// what keeps an act from accruing: a 422 that names each missing parámetro (TASA_ANUNCIO PANEL 2026; srtm.Faltan)
 class FaltanAnuncios(
-    val faltan: List<String>
-) : WasichaiException(HttpStatus.UNPROCESSABLE_CONTENT, "No hay tasa que devengar: falta ${faltan.joinToString("; ")}")
+    faltan: List<String>
+) : Faltan("No hay tasa que devengar: falta ${faltan.joinToString("; ")}", faltan)
 
 // an act the anuncio does not admit (cesado, out of order, several ejercicios...): a 422 that says why
 class ActoNoAdmitido(

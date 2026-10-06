@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import srtm.Faltan
 import srtm.impuesto.LiquidacionService
 import srtm.impuesto.ParametroTributario
 import srtm.rentas.CONTRIBUYENTE
@@ -42,11 +43,11 @@ class VariosTitulares(
     val titulares: List<Titular>
 ) : WasichaiException(HttpStatus.CONFLICT, "El predio tiene ${titulares.size} titulares: indique el contribuyente")
 
-// the year's liquidación lacks a parameter: problem+json 422 with `faltan`, the ones missing
+// the year's liquidación lacks a parameter: problem+json 422 with `faltan`, the ones missing (srtm.Faltan)
 class FaltanParametros(
     anio: Int,
-    val faltan: List<String>
-) : WasichaiException(HttpStatus.UNPROCESSABLE_CONTENT, "Faltan parámetros tributarios de $anio: ${faltan.joinToString(", ")}")
+    faltan: List<String>
+) : Faltan("Faltan parámetros tributarios de $anio: ${faltan.joinToString(", ")}", faltan)
 
 // the predial documents: the PU (a predio and one titular) and the HR (a contribuyente). the only way in for the
 // endpoints and the masiva (wasichai/srtm-backend#41). reads go through Registros as the caller, so core applies their
