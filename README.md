@@ -417,6 +417,39 @@ python3 import_tasas_arbitrio.py --tasas data/arbitrios/ficticio-tasas.csv \
     --salida data/arbitrios/ficticio-parametros.csv
 ```
 
+**Tasas reajustadas por IPC, sin ordenanza con cuadro** (art. 69-B del TUO de la Ley de Tributación Municipal;
+art. 8 de la Ord. 2386-MML, #88). Muchas ordenanzas que reajustan sus tasas del año anterior por el IPC no
+publican ningún cuadro, solo el porcentaje (a veces ni eso: Arequipa 2026 no lo dice). `derivar_ipc_arbitrio.py`
+deriva el CSV del año siguiente desde el del año base, sin teclear ninguna cifra:
+
+```bash
+cd model
+python3 derivar_ipc_arbitrio.py --csv parametros-2026.csv --desde 2026 --ipc 2.10 \
+    --norma "OM 012-2027-MDP" --redondeo 4:MEDIO \
+    --transcribio "CARLA, 2027-01-05" --verifico "DIEGO, 2027-01-09" --salida parametros-2027.csv
+```
+
+Toma, de `--csv`, la fila de cada `(tipo, clave)` de `TIPOS_ARBITRIO` con la `vigencia_desde` más reciente que no
+pase el 31/12 de `--desde` (una fila que empieza después de esa fecha se ignora), y escribe cada una para el año
+siguiente, con `vigencia_desde` el 01/01 de ese año:
+- `TASA_ARBITRIO`: su `valor_numerico` × (1 + `--ipc` / 100), redondeado con `--redondeo` (`decimales:modo`, el
+  mismo `ABAJO`/`MEDIO`/`ARRIBA` de `REDONDEO_ARBITRIO`); su `texto` queda `DERIVADA IPC <ipc>% de <clave> <año
+  base>`. Ejemplo de Miraflores 2026 con IPC 2,10 % y `4:MEDIO`: `2.5428` → `2.5962` (`2.5428 × 1.021 =
+  2.5961988`).
+- Toda otra fila (`ARBITRIO_ZONA`, `ARBITRIO_USO`, `ARBITRIO_INFLUENCIA`, `ARBITRIO_AFLUENCIA`, `BASE_ARBITRIO`,
+  `DIMENSIONES_ARBITRIO`, `HABITANTES_PROMEDIO`/`HABITANTES_VARIACION`, `REDONDEO_ARBITRIO`, `TOPE_ARBITRIO`) se
+  copia tal cual (mismo `valor_numerico` y `texto`), salvo el `texto` de `ARBITRIO_VENCIMIENTO` y el de
+  `TOPE_ARBITRIO` cuando es una fecha: ambos se corren un año (29 de febrero → 28 de febrero si el año siguiente
+  no es bisiesto). `REDONDEO_ARBITRIO` se copia con su propio modo; `--redondeo` solo redondea las tasas de este
+  reajuste, no la reemplaza.
+- Toda fila derivada cita la fila base (su `clave` y el año base, en `fuente`) y lleva la `norma`, `transcribio`
+  y `verifico` del propio reajuste, no los de la fila base: dos firmas distintas por fila, exigidas por
+  `import_parametros.errores`.
+
+`--redondeo` es **obligatorio**: ninguna de las ordenanzas revisadas publica cómo redondea un reajuste por IPC.
+Sale con `2` (nada escrito) si falta `--redondeo` o no es `decimales:modo`, si `--ipc` no es un número, o si el
+CSV construido no pasa `import_parametros.errores`.
+
 **La ordenanza, los servicios y las inafectaciones** se cargan con `import_arbitrios.py`, desde un JSON:
 
 ```json
