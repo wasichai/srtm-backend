@@ -44,7 +44,7 @@ class GuardiaDeEscrituraApiTest : ConParametrosApiTest() {
         val acta = conLaMarca(PAPELETA, EjemplosSanciones.papeleta("AC-${uniqueDocumento()}", codigo, uit, c))
         val notificacion = conLaMarca(NOTIFICACION_ADMINISTRATIVA, EjemplosSanciones.notificacion("NP-${uniqueDocumento()}", c))
         val anuncio = conLaMarca(ANUNCIO, EjemplosAnuncios.anuncio(c, correlativo = uniqueDocumento().toInt()))
-        // a year no service numbers in, and a correlativo of its own: numero is unique
+        // a year only this class gives rows to, so no service numbers a resolución in it; numero is unique
         val correlativo = uniqueDocumento().take(6).toInt() + 1
         val resolucion =
             conLaMarca(
@@ -190,7 +190,7 @@ class GuardiaDeEscrituraApiTest : ConParametrosApiTest() {
     private fun atributos(registro: JsonNode): Map<String, Any?> = fields(registro["attributes"])
 
     private companion object {
-        // no service dictates a resolución of this year: the one written here takes no number of theirs
-        const val ANIO_SIN_SERVICIO = 1989
+        // years only this class gives rows to
+        const val ANIO_SIN_SERVICIO = 1984
     }
 }

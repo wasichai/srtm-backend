@@ -1,26 +1,21 @@
 package srtm.sanciones
 
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import srtm.EscrituraDeSrtm
 import srtm.rentas.SrtmApiTest
 import tools.jackson.databind.JsonNode
-import wasichai.core.data.RecordStore
-import wasichai.core.metadata.MetadataService
-import java.util.UUID
+import wasichai.core.data.RecordRequest
+import wasichai.core.data.RecordService
 
 // an api test of the sanciones: a FICTITIOUS UIT, PLAZO and FERIADOS rows for years no other test uses (decision 14),
 // and the CUIS, the notificaciones, the actas, the descargos, the resoluciones and their notificaciones written through
-// srtm's endpoints (conLaMarca writes a record raw, as srtm's services do, for what an endpoint would refuse). an acta
+// srtm's endpoints (conLaMarca writes a record as srtm's services do, for what an endpoint would refuse). an acta
 // is dated in the past (no act is dated after today), so its UIT is the one of ANIO_PASADO
 abstract class ConSancionesApiTest : SrtmApiTest() {
     @Autowired
-    lateinit var recordStore: RecordStore
-
-    @Autowired
-    lateinit var metadata: MetadataService
+    lateinit var records: RecordService
 
     // the UIT row of `anio` (Ficticios.UIT by default), added once: its id
     protected fun uit(
@@ -237,7 +232,7 @@ abstract class ConSancionesApiTest : SrtmApiTest() {
         previa: String? = null
     ): JsonNode = post(ACTAS, pedidoActa(codigo, obligado, fecha, previa))
 
-    // an acta written raw, as ActasService writes it, for a test whose dates have no UIT (the CUIS' own): its id
+    // an acta written as ActasService writes it, for a test whose dates have no UIT (the CUIS' own): its id
     protected fun acta(
         codigo: String,
         uit: String,
@@ -252,23 +247,12 @@ abstract class ConSancionesApiTest : SrtmApiTest() {
     // a json array's elements
     protected fun JsonNode.filas(): List<JsonNode> = iterator().asSequence().toList()
 
-    // the admin's organization and id
-    private val yo: JsonNode by lazy { tree(send("GET", "/api/auth/me", null, HttpStatus.OK)) }
-
-    // a record written as srtm's services write it (through the app's RecordStore, with the mark), for a state no
-    // endpoint would write (an acta whose days have no UIT): its id
+    // a record written as srtm's services write it (RecordService as the admin, with the mark: the rules, the relation
+    // targets and the guard all run), for a state no endpoint would write (an acta whose days have no UIT): its id
     protected fun conLaMarca(
         objeto: String,
         attrs: Map<String, Any?>
-    ): String {
-        val organizacion = UUID.fromString(yo["organizationId"].asString())
-        val usuario = UUID.fromString(yo["userId"].asString())
-        return runBlocking {
-            withContext(EscrituraDeSrtm) {
-                recordStore.insert(metadata.loadDefinition(organizacion, objeto), organizacion, usuario, attrs, emptyMap()).id.toString()
-            }
-        }
-    }
+    ): String = comoAdmin { withContext(EscrituraDeSrtm) { records.create(objeto, RecordRequest(attrs)).id } }
 
     companion object {
         const val ACTAS = "/api/srtm/infracciones/actas"

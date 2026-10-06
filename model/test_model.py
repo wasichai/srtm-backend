@@ -183,7 +183,8 @@ class ShippedModelTests(unittest.TestCase):
     def test_the_arbitrios_objects_carry_rentas_guarantees(self):
         # determinacion_arbitrio of rentas, carried over: one cuota per predio, servicio, year and month (the unique
         # clave), every relation required, the amount, period and key required. periodo 1..12, monto >= 0 and the
-        # 120 characters of parametro_aplicado are kotlin's; immutability is the RecordStore's (README, Arbitrios)
+        # 120 characters of parametro_aplicado are kotlin's; immutability is the write guard's,
+        # srtm.GuardiaDeEscritura (README, Arbitrios)
         objetos = {o["name"]: o for o in self.model["objects"]}
         cuota = {f["name"]: f for f in objetos["cuota_arbitrio"]["fields"]}
         self.assertEqual(list(cuota), ["anio", "periodo", "monto", "parametro_aplicado", "zona", "uso_arbitrio", "fecha_calculo",
