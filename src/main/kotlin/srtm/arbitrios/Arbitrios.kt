@@ -5,6 +5,8 @@ import srtm.rentas.Declaracion
 import srtm.rentas.Predio
 import srtm.rentas.UsoPredio
 import srtm.rentas.secuenciaUso
+import tools.jackson.databind.PropertyNamingStrategies
+import tools.jackson.databind.annotation.JsonNaming
 import java.time.LocalDate
 
 // what a determination needs that is the same for every predio of the year: read once per determination, and once
@@ -42,6 +44,7 @@ data class Determinacion(
 
 // one missing thing: its mensaje (what faltan lists), the predio it was found on and the declaración that lacks it,
 // when a declaración can fix it (an área, a frontis, a uso)
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class Falta(
     val mensaje: String,
     val predio: String? = null,

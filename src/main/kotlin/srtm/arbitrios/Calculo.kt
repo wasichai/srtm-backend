@@ -1,7 +1,9 @@
 package srtm.arbitrios
 
+import srtm.emision.soles
 import srtm.rentas.Declaracion
 import java.math.BigDecimal
+import java.math.RoundingMode
 
 // a servicio's cuota breakdown for one declaración: its base's cantidad, its tasa, the habitantes factor (when the
 // servicio has one) and the monto, after redondeo (null when there is none). kept apart from how it is applied
@@ -84,5 +86,28 @@ object Calculo {
                 monto = redondeo?.aplicar(bruto) ?: bruto
             )
         )
+    }
+
+    // the formula a DesgloseCuota shows, as the ordenanza reads: tasa × cantidad (unit per Base) × habitantes
+    // factor (only when there is one, H non null) = monto. tasa is printed with the norm's own decimals
+    // (toPlainString), cantidad always with 2 (setScale, whatever its stored scale); the base PREDIO's cantidad is
+    // always 1 and never printed, so it only ends in "= monto" when there was a redondeo (FRONTIS_ML and
+    // AREA_CONSTRUIDA_M2 always do, since their cantidad is printed). a cuota written before the desglose (base
+    // null) has nothing to show but its monto
+    fun formula(c: CuotaArbitrio): String {
+        val base = c.base?.let { runCatching { Base.valueOf(it) }.getOrNull() } ?: return soles(c.monto)
+
+        val sb = StringBuilder("${c.tasaUnitaria!!.toPlainString()} S/ por ${base.porUnidad}")
+        if (base.unidad != null) {
+            sb.append(" × ${c.cantidadBase!!.setScale(2, RoundingMode.HALF_UP).toPlainString()} ${base.unidad}")
+        }
+        val h = c.habitantes
+        if (h != null) {
+            sb.append(" × (1 + ($h − ${c.promedioHabitantes!!.toPlainString()}) × ${c.variacionHabitante!!.toPlainString()})")
+        }
+        if (base.unidad != null || c.redondeo != null) {
+            sb.append(" = ${c.monto!!.toPlainString()}")
+        }
+        return sb.toString()
     }
 }

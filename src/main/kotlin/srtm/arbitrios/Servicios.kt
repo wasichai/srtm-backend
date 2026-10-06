@@ -6,8 +6,16 @@ import java.math.RoundingMode
 import java.time.LocalDate
 
 // how a servicio's cuota is based: on the predio as a unit (today's only case, and the default), on its frontis
-// (ml) or on its built area (m2)
-enum class Base { PREDIO, FRONTIS_ML, AREA_CONSTRUIDA_M2 }
+// (ml) or on its built area (m2). porUnidad and unidad are how Calculo.formula prints it: "S/ por <porUnidad>",
+// and, for a base that reads a cantidad (unlike PREDIO, always 1), "× <cantidad> <unidad>"
+enum class Base(
+    val porUnidad: String,
+    val unidad: String?
+) {
+    PREDIO("predio", null),
+    FRONTIS_ML("ml", "ml"),
+    AREA_CONSTRUIDA_M2("m²", "m²")
+}
 
 // the rasgos a servicio's tasa can key on, besides zona and uso (today's defaults)
 enum class Dimension { ZONA, USO, INFLUENCIA, AFLUENCIA }

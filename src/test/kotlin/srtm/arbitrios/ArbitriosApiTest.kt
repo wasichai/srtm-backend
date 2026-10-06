@@ -64,6 +64,11 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         assertEquals(LocalDate.now().toString(), m["fecha_calculo"].asString())
         assertEquals(0, m["pendientes"].asInt())
         assertEquals(List(12) { e.contribuyente }, lista(m["titulares"]) { it["titular"]["id"].asString() })
+        // the cell's desglose: one entry, base PREDIO (no BASE_ARBITRIO row), no redondeo - the formula does not
+        // repeat the monto (Calculo.formula)
+        val enero = m["filas"][0]["meses"][0]
+        assertEquals(1, enero["desglose"].size())
+        assertEquals("8.50 S/ por predio", enero["desglose"][0]["formula"].asString())
     }
 
     @Test
@@ -73,6 +78,9 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         val otro = e.predioDeclarado(inscribir(), sinZona)
         val problema = tree(send("POST", "/api/srtm/predios/$otro/arbitrios", pedido(e.anio), HttpStatus.UNPROCESSABLE_CONTENT))
         assertEquals(listOf("ARBITRIO_ZONA $sinZona ${e.anio}"), lista(problema["faltan"]) { it.asString() })
+        assertEquals(1, problema["faltan_detalle"].size())
+        assertEquals("ARBITRIO_ZONA $sinZona ${e.anio}", problema["faltan_detalle"][0]["mensaje"].asString())
+        assertEquals(otro, problema["faltan_detalle"][0]["predio"].asString())
         assertEquals(0, pagina("anio=${e.anio}&predio=$otro")["totalElements"].asInt())
     }
 
@@ -167,6 +175,9 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         val codigo = tree(send("GET", "/api/srtm/predios/$otro/arbitrios?anio=${e.anio}", null, HttpStatus.OK))["predio"]["codigo"].asString()
         val problema = tree(send("POST", "/api/srtm/contribuyentes/${e.contribuyente}/arbitrios", pedido(e.anio), HttpStatus.UNPROCESSABLE_CONTENT))
         assertTrue(lista(problema["faltan"]) { it.asString() }.all { it.startsWith("Predio $codigo: ") }, problema.toString())
+        // faltan_detalle: the same messages, each still naming its own predio (not the contribuyente's)
+        assertEquals(lista(problema["faltan"]) { it.asString() }, lista(problema["faltan_detalle"]) { it["mensaje"].asString() })
+        assertTrue(lista(problema["faltan_detalle"]) { it["predio"].asString() }.all { it == otro }, problema.toString())
         assertEquals(0, pagina("anio=${e.anio}&contribuyente=${e.contribuyente}")["totalElements"].asInt())
     }
 

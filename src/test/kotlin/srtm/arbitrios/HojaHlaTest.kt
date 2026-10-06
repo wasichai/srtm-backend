@@ -19,7 +19,7 @@ class HojaHlaTest {
             ServicioArbitrio(id = "s2", codigo = "SERENAZGO", nombre = "Serenazgo", orden = 2)
         )
 
-    private fun cuota(monto: String) = CuotaMes("c", BigDecimal(monto), "c1", LocalDate.of(2026, 3, 15), "TASA_ARBITRIO:X")
+    private fun cuota(monto: String) = CuotaMes("c", BigDecimal(monto), "c1", LocalDate.of(2026, 3, 15), "TASA_ARBITRIO:X", emptyList())
 
     // january to may only: the contribuyente sold in may
     private val matriz =
@@ -36,7 +36,8 @@ class HojaHlaTest {
             total = BigDecimal("63.75"),
             fechaCalculo = LocalDate.of(2026, 3, 15),
             pendientes = 0,
-            faltan = emptyList()
+            faltan = emptyList(),
+            faltanDetalle = emptyList()
         )
     private val ordenanza =
         OrdenanzaArbitrio(
