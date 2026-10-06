@@ -239,6 +239,8 @@ class FakeCore:
             return 201, {"name": name}
         if OBJECT.match(path) and method == "PUT":
             return self._update_object(path, body)
+        if path == "/api/relationships" and method == "GET":
+            return 200, [{"name": n} for n in sorted(self.existing_relationships)]
         if path == "/api/relationships" and method == "POST":
             name = body["name"]
             if name in self.existing_relationships:

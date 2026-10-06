@@ -18,6 +18,11 @@ valid. An object's indexes and appendOnly are model.json's: what differs is
 set, an index only Core has is dropped. --drop switches those rules off and
 tears everything down in reverse order (data included).
 
+--dry-run prints model.json's payloads and asks Core nothing. --diff logs in
+and reads the real Core, writes nothing, and prints each write the real run
+would send ("would PUT /api/objects/... {...}"), then "diff: nothing pending"
+or how many are: the evidence asked for before applying to a shared Core.
+
 GEOMETRY fields (the lotes' polygons, the domicilio's point) are wasichai-gis's:
 srtm installs it, on PostGIS. Adapted from wasichai's
 examples/gis-sample/perene/apply.py. Stdlib only. See README.md.
@@ -622,6 +627,71 @@ def do_drop(client, model):
     return 0
 
 
+OBJECT_PATH = re.compile(r"^/api/objects/[a-z0-9_]+$")
+FIELD_PATH = re.compile(r"^(/api/metadata/objects/[a-z0-9_]+/fields)/([a-z0-9_]+)$")
+
+
+class DiffClient:
+    """--diff: the real Core is read, never written. A GET goes to Core; a write the real run would send is printed as
+    "would <METHOD> <path> <summary>" and answered as Core would, so do_apply and do_drop run unchanged. What Core
+    already has is no write: a relationship it has is the 409 apply skips, and a field PUT that changes nothing of what
+    Core has (apply re-marks every required relationship's field on each run) is not printed."""
+
+    def __init__(self, client):
+        self.client = client
+        self.pending = 0
+        self._fields = {}
+        self.relationships = {r["name"] for r in client.get("/api/relationships") or []}
+
+    def get(self, path):
+        return self.client.get(path)
+
+    def post(self, path, body):
+        if path == "/api/relationships" and body.get("name") in self.relationships:
+            raise CoreError(409, "exists")
+        self._would("POST", path, body)
+        return 201, {"name": body.get("name")}
+
+    def put(self, path, body):
+        if self._unchanged(path, body):
+            return 200, {}
+        self._would("PUT", path, body)
+        return 200, {}
+
+    def delete(self, path):
+        self._would("DELETE", path, None)
+        return 204, None
+
+    def _unchanged(self, path, body):
+        field = FIELD_PATH.match(path)
+        if not field:
+            return False
+        fields_path, name = field.groups()
+        if fields_path not in self._fields:
+            self._fields[fields_path] = _fields_by_name(self.client.get(fields_path))
+        current = self._fields[fields_path].get(name)
+        return current is not None and all(current.get(k) == v for k, v in body.items())
+
+    def _would(self, method, path, body):
+        self.pending += 1
+        print(f"would {method} {path} {_summary(path, body)}".rstrip())
+
+    def report(self):
+        print("diff: nothing pending" if not self.pending else f"diff: {self.pending} writes pending, none sent")
+
+
+def _summary(path, body):
+    """A write's payload in one line: the name of what it creates, else what it changes (a rule PUT without the label,
+    plural, description and enabled it sends back as Core has them)."""
+    if body is None:
+        return ""
+    if "name" in body:
+        return body["name"]
+    if OBJECT_PATH.match(path):
+        body = {k: v for k, v in body.items() if k not in OBJECT_KEYS}
+    return json.dumps(body, ensure_ascii=False)
+
+
 DRY_RUN_KEPT = "(plus label, pluralLabel, description and enabled as Core has them)"
 
 
@@ -663,7 +733,10 @@ def _parse_args(argv):
     p.add_argument("--core", default=os.environ.get("WASICHAI_CORE", "http://localhost:8090"))
     p.add_argument("--email", default=os.environ.get("WASICHAI_EMAIL", "admin@wasichai.local"))
     p.add_argument("--password", default=os.environ.get("WASICHAI_PASSWORD", "admin"))
-    p.add_argument("--dry-run", action="store_true")
+    # --dry-run prints model.json's payloads and asks Core nothing; --diff asks the real Core and prints what is pending
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true")
+    mode.add_argument("--diff", action="store_true")
     p.add_argument("--drop", action="store_true")
     p.add_argument("--validate-only", action="store_true")
     return p.parse_args(argv)
@@ -698,9 +771,17 @@ def main(argv=None):
         _fatal("POST", "/api/auth/login", e)
         return 1
 
-    if args.drop:
-        return do_drop(client, model)
-    return do_apply(client, model)
+    if not args.diff:
+        return do_drop(client, model) if args.drop else do_apply(client, model)
+    try:
+        diff = DiffClient(client)
+    except CoreError as e:
+        _fatal("GET", "/api/relationships", e)
+        return 1
+    code = do_drop(diff, model) if args.drop else do_apply(diff, model)
+    if code == 0:
+        diff.report()
+    return code
 
 
 if __name__ == "__main__":

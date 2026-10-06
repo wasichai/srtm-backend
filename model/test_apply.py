@@ -280,6 +280,90 @@ class ObjectRulesTests(ApplyCliTestCase):
                       '\n{\n  "indexes": [\n    [\n      "anio",\n      "predio"\n    ],\n    [\n      "anio",\n      "contribuyente"\n    ]\n  ],\n  "appendOnly": true\n}', out)
 
 
+def core_fields_with_relations(model, obj_name):
+    """What Core answers for an object model.json created whole: its fields with required, and the field of each
+    relationship it is the source of (required as model.json marks it)."""
+    obj = next(o for o in model["objects"] if o["name"] == obj_name)
+    required = {f["name"]: f.get("required", False) for f in obj["fields"]}
+    fields = [{**f, "required": required[f["name"]]} for f in core_fields(model, obj_name)]
+    return fields + [
+        {"name": r["fieldName"], "label": r["label"], "type": "RELATION", "required": r.get("required", False)}
+        for r in model["relationships"] if r["source"] == obj_name]
+
+
+def writes(core):
+    """What Core got that is not a read: the login aside."""
+    return [r for r in core.requests if r[0] != "GET" and r[1] != "/api/auth/login"]
+
+
+def would_lines(out):
+    return [line for line in out.splitlines() if line.startswith("would ")]
+
+
+class DiffTests(ApplyCliTestCase):
+    """--diff reads the real Core and writes nothing: what the real run would send is printed, "would <METHOD> <path>
+    <summary>". the dev procedure is --diff, an OK, and then the real run."""
+
+    def core_with(self, rules):
+        model = load_model()
+        self.core = FakeCore(
+            existing_objects=[o["name"] for o in model["objects"]],
+            existing_relationships=[r["name"] for r in model["relationships"]],
+            existing_fields={o["name"]: core_fields_with_relations(model, o["name"]) for o in model["objects"]},
+            object_rules=rules,
+            object_meta=core_meta(model),
+        )
+        self.addCleanup(self.core.stop)
+
+    def test_a_core_without_the_rules_would_get_exactly_their_two_puts(self):
+        self.core_with({})
+        code, out, err = self.run_cli(["--diff"])
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(writes(self.core), [])
+        self.assertEqual(would_lines(out), [
+            'would PUT /api/objects/cuota_arbitrio {"indexes": [["anio", "predio"], ["anio", "contribuyente"]], '
+            '"appendOnly": true}',
+            'would PUT /api/objects/anulacion_cuota_arbitrio {"appendOnly": true}',
+        ])
+        self.assertIn("diff: 2 writes pending, none sent", out)
+        # and Core still lacks them
+        self.assertEqual({n: r for n, r in self.core.object_rules.items() if r}, {})
+
+    def test_an_up_to_date_core_has_nothing_pending(self):
+        self.core_with(core_rules(load_model()))
+        code, out, err = self.run_cli(["--diff"])
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(writes(self.core), [])
+        self.assertEqual(would_lines(out), [])
+        self.assertIn("diff: nothing pending", out)
+
+    def test_an_empty_core_would_get_the_whole_model(self):
+        code, out, err = self.run_cli(["--diff"])
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(writes(self.core), [])
+        lines = would_lines(out)
+        self.assertEqual([line for line in lines if line.startswith("would POST /api/objects ")],
+                         [f"would POST /api/objects {n}" for n in OBJECT_ORDER])
+        self.assertEqual([line for line in lines if line.startswith("would POST /api/relationships ")],
+                         [f"would POST /api/relationships {n}" for n in RELATIONSHIP_ORDER])
+        self.assertEqual(len([line for line in lines if line.startswith("would PUT /api/objects/")]), len(APPEND_ONLY))
+
+    def test_a_drop_diff_lists_what_it_would_delete(self):
+        self.core_with(core_rules(load_model()))
+        code, out, err = self.run_cli(["--drop", "--diff"])
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(writes(self.core), [])
+        lines = would_lines(out)
+        self.assertEqual(lines[:2], ['would PUT /api/objects/anulacion_cuota_arbitrio {"appendOnly": false}',
+                                     'would PUT /api/objects/cuota_arbitrio {"indexes": [], "appendOnly": false}'])
+        self.assertEqual(len([line for line in lines if line.startswith("would DELETE ")]), OBJECTS + RELATIONSHIPS)
+        self.assertIn(f"diff: {OBJECTS + RELATIONSHIPS + 2} writes pending, none sent", out)
+
+    def test_diff_and_dry_run_do_not_go_together(self):
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            self.run_cli(["--diff", "--dry-run"])
+
+
 class RuleChangesTests(unittest.TestCase):
     """rule_changes compares as Core stores: names trimmed and lower-cased in their order, appendOnly left out is false."""
 

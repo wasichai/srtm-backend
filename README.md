@@ -75,6 +75,7 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
+python3 apply.py --diff            # lee la base y dice qué escribiría ("would PUT …"), sin escribir nada
 python3 apply.py                   # done: 81 created, 2 updated, 0 skipped  (39 objetos + 42 relaciones; 2 appendOnly)
 python3 apply.py                   # idempotente: done: 0 created, 0 updated, 81 skipped
 python3 apply.py --drop            # apaga appendOnly y lo borra, en orden inverso (¡borra también los datos!)
@@ -95,6 +96,22 @@ Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
   que solo tiene Core se quita, y un objeto sin `appendOnly` queda sin él. El PUT devuelve la etiqueta, el plural, la
   descripción y `enabled` tal como los tiene Core (si faltan, Core los pisa), así que solo cambia las reglas.
   `--dry-run` no consulta a Core: muestra lo que declara `model.json`, no la diferencia con la base.
+
+**`--diff`, antes de aplicar a una base compartida (dev).** Entra a Core y solo lo lee: corre la misma sincronización
+que `apply.py`, pero cada escritura (POST, PUT o DELETE) se imprime como `would <MÉTODO> <ruta> <resumen>` en lugar de
+enviarse, y al final `diff: nothing pending` o `diff: N writes pending, none sent`. Lo que la base ya tiene no cuenta
+como pendiente: una relación que existe, y la marca de obligatoria de un campo que ya lo es. Sobre la base de dev de
+antes de 0.3.2 muestra exactamente las dos reglas:
+
+```text
+would PUT /api/objects/cuota_arbitrio {"indexes": [["anio", "predio"], ["anio", "contribuyente"]], "appendOnly": true}
+would PUT /api/objects/anulacion_cuota_arbitrio {"appendOnly": true}
+diff: 2 writes pending, none sent
+```
+
+En dev el procedimiento es: `python3 apply.py --diff`, mostrar lo pendiente y pedir OK; recién entonces
+`python3 apply.py`. Una segunda corrida de `--diff` debe decir `diff: nothing pending`. Con `--drop`, `--diff` lista
+lo que borraría.
 
 Solo añade, relaja, reetiqueta o quita opciones sin uso: no renombra, no cambia tipos y no borra campos, así los
 registros importados siguen siendo válidos. Por ejemplo, sobre la base del padrón:
@@ -117,7 +134,8 @@ Una relación queda obligatoria cuando `model.json` dice `"required": true`; las
 [Modelo](#modelo)) se crean sin ese paso.
 
 Flags: `--core` (default `http://localhost:8090` o `$WASICHAI_CORE`), `--email`, `--password`, `--dry-run`,
-`--drop`, `--validate-only`. Salida: `0` ok, `1` error de Core, `2` `model.json` inválido.
+`--diff` (no va con `--dry-run`), `--drop`, `--validate-only`. Salida: `0` ok, `1` error de Core, `2` `model.json`
+inválido.
 
 ## Cargar los catálogos
 
