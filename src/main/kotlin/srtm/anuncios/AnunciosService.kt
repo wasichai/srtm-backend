@@ -14,6 +14,7 @@ import srtm.Violaciones
 import srtm.impuesto.PARAMETRO_TRIBUTARIO
 import srtm.impuesto.ParametroTributario
 import srtm.legible
+import srtm.pagina
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
 import srtm.rentas.PREDIO
@@ -322,7 +323,7 @@ class AnunciosService(
         }
         val filas = enPadron(todos(ANUNCIO, Anuncio::class.java, campos, criterios), filtros.vigentesA).filter { it.estado == filtros.estado }
         val pedida = PageRequest.of(page, size)
-        return PageResponse.of(filas.drop(pedida.offset.toInt()).take(pedida.size), pedida.page, pedida.size, filas.size.toLong())
+        return filas.pagina(pedida.page, pedida.size)
     }
 
     // GET /anuncios/tasas: each clase's tasa of the year, and the clases without one (never a 0)

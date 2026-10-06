@@ -13,6 +13,7 @@ import srtm.Observacion
 import srtm.Permisos
 import srtm.impuesto.ParametrosTributarios
 import srtm.legible
+import srtm.pagina
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
 import srtm.rentas.PREDIO
@@ -313,7 +314,7 @@ class ActasService(
             return PageResponse(filas(pagina.content, corte), pagina.page, pagina.size, pagina.totalElements, pagina.totalPages)
         }
         val conEsaFase = filas(registros.donde(PAPELETA, Papeleta::class.java, criterios, filtrosDeCampo), corte).filter { it.fase == filtros.fase }
-        return PageResponse.of(ordenadas(conEsaFase).drop(page * size).take(size), page, size, conEsaFase.size.toLong())
+        return ordenadas(conEsaFase).pagina(page, size)
     }
 
     // GET /contribuyentes/{id}/infracciones: every acta where it is the obligado or the contribuyente (404 when it does
