@@ -31,6 +31,13 @@ object Llaves {
     // the global key (clave "") -> texto, "decimales:modo" of the rounding to apply (Redondeo.de)
     const val REDONDEO_ARBITRIO = "REDONDEO_ARBITRIO"
 
+    // a predio's ubicacion_area_verde (model.json's enum) -> texto, its nivel de influencia (Dimension.INFLUENCIA)
+    const val ARBITRIO_INFLUENCIA = "ARBITRIO_INFLUENCIA"
+
+    // a prefix of a uso_predio code (2, 4 or 6 digits), alone or as servicio:prefijo (which wins) -> texto, its nivel
+    // de afluencia (Dimension.AFLUENCIA). the longest prefix wins within each family, same rule as ARBITRIO_USO
+    const val ARBITRIO_AFLUENCIA = "ARBITRIO_AFLUENCIA"
+
     val TIPOS =
         listOf(
             TASA_ARBITRIO,
@@ -41,7 +48,9 @@ object Llaves {
             DIMENSIONES_ARBITRIO,
             HABITANTES_PROMEDIO,
             HABITANTES_VARIACION,
-            REDONDEO_ARBITRIO
+            REDONDEO_ARBITRIO,
+            ARBITRIO_INFLUENCIA,
+            ARBITRIO_AFLUENCIA
         )
 
     fun tasa(

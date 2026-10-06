@@ -342,11 +342,14 @@ firma, y se cargan con `import_parametros.py --csv <archivo>`:
 | `DIMENSIONES_ARBITRIO` | el servicio | `texto`: sus Dimension separadas por comas, sin repetir (`ZONA`, `USO`, `INFLUENCIA`, `AFLUENCIA`); ej. Miraflores 2026, PARQUES: `ZONA,INFLUENCIA,AFLUENCIA` |
 | `HABITANTES_PROMEDIO` / `HABITANTES_VARIACION` | `servicio:zona:uso` | `valor_numerico`: sus habitantes promedio y su variación, mayor que 0 (una sin la otra en el archivo no cuenta); ej. Miraflores 2026: P=2, V=0.5 |
 | `REDONDEO_ARBITRIO` | vacía (global a la ordenanza) | `texto`: `decimales:modo` (`ABAJO`, `MEDIO` o `ARRIBA`); ej. Miraflores 2026: `2:ABAJO` |
+| `ARBITRIO_INFLUENCIA` | la `ubicacion_area_verde` del predio (enum del modelo: `FRENTE A PARQUE`, `MEDIANAMENTE CERCANO A AREAS VERDES`, `FRENTE A BERMA`, `OTRAS UBICACIONES`) | `texto`: su nivel de influencia; ej. Miraflores 2026: `FRENTE A PARQUE` → `Frente a Parque y/o Área Verde` |
+| `ARBITRIO_AFLUENCIA` | un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos, solo o como `servicio:prefijo` (gana el de su servicio; dentro de cada familia, el más largo) | `texto`: su nivel de afluencia |
 
 `import_parametros.py` revisa la forma de estas filas antes de enviar nada: la llave de la tasa (según las
 `DIMENSIONES_ARBITRIO` vigentes de su servicio), el valor, el mes, la fecha y que `transcribio` y `verifico` sean dos
 personas distintas. Si una no encaja, la nombra y sale con `2`. `BASE_ARBITRIO`, `DIMENSIONES_ARBITRIO`,
-`HABITANTES_PROMEDIO`, `HABITANTES_VARIACION` y `REDONDEO_ARBITRIO` son opcionales: sin estas filas el cálculo es el
+`HABITANTES_PROMEDIO`, `HABITANTES_VARIACION`, `REDONDEO_ARBITRIO`, `ARBITRIO_INFLUENCIA` y `ARBITRIO_AFLUENCIA` son
+opcionales: sin estas filas el cálculo es el
 de siempre (base `PREDIO`, dimensiones `ZONA,USO` y sin redondeo adicional).
 
 **La ordenanza, los servicios y las inafectaciones** se cargan con `import_arbitrios.py`, desde un JSON:
@@ -435,13 +438,20 @@ cambio.
   - **Uso de arbitrio:** `ARBITRIO_USO` del código de uso de la DJ principal. Ese código es tan preciso como la DJ:
     `XXYYZZ` con clase, sub clase y uso; `XXYY` sin uso; `XX` con solo la clase. Gana el prefijo más largo.
   - **Servicios:** cada servicio vigente ese día, salvo que el predio tenga una inafectación suya vigente ese día o
-    que la cuota ya exista. Su monto es la tasa `TASA_ARBITRIO servicio:zona:uso` vigente ese día, tal cual (sin
-    área, prorrateo ni redondeo). `parametro_aplicado` guarda la llave exacta que se leyó.
+    que la cuota ya exista. Su monto es la tasa `TASA_ARBITRIO servicio` más una parte por cada `Dimension` de
+    `Servicios.dimensiones` (`zona:uso` por defecto), vigente ese día, tal cual (sin área, prorrateo ni redondeo).
+    `parametro_aplicado` guarda la llave exacta que se leyó. Sin `DIMENSIONES_ARBITRIO`, la llave es la de siempre.
+  - **Influencia y afluencia** (`Dimensiones.influencia`/`afluencia`, cuando el servicio las lista): la influencia es
+    `ARBITRIO_INFLUENCIA` de la `ubicacion_area_verde` del predio; sin esa ubicación, o sin su fila, falta y el predio
+    entero no se determina (todo o nada, igual que una zona o un uso que falta). La afluencia es `ARBITRIO_AFLUENCIA`
+    del código de uso, con la misma regla del prefijo más largo que `ARBITRIO_USO`, pero primero por su servicio
+    (`servicio:prefijo`, si existe) antes de caer a uno general (`prefijo`).
 - **Meses sin cobro:** un mes sin titular, o sin zona (por sector o por ubicación) o sin uso, no se cobra. Un predio
   que aparece en julio no debe de enero a junio.
 - **No se puede determinar** un predio sin titular en ningún mes, o sin zona y uso a la vez en ningún mes con
   titular.
-- **Todo o nada:** si falta un parámetro (una zona, un uso, una tasa), no se determina nada de ese predio. `faltan`
+- **Todo o nada:** si falta un parámetro (una zona, un uso, una tasa, una influencia o una afluencia), no se
+  determina nada de ese predio. `faltan`
   nombra cada uno una vez (`TASA_ARBITRIO LIMPIEZA:Z1:CASA 2026`).
 - **Reejecutar no duplica:** las cuotas que ya existen no se recalculan.
 

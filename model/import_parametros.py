@@ -46,7 +46,9 @@ def read_parametros(path):
 # Dimension names in texto, comma-separated and without repeats (ZONA, USO, INFLUENCIA, AFLUENCIA) — a TASA_ARBITRIO
 # of that servicio keys on servicio plus one parte per dimension, in that order; HABITANTES_PROMEDIO/
 # HABITANTES_VARIACION servicio:zona:uso its average habitantes and their variación, one without the other in the
-# same file is incomplete; REDONDEO_ARBITRIO (clave vacía, global) "decimales:modo" of the rounding to apply
+# same file is incomplete; REDONDEO_ARBITRIO (clave vacía, global) "decimales:modo" of the rounding to apply;
+# ARBITRIO_INFLUENCIA <ubicacion_area_verde, model.json's enum> its nivel de influencia in texto; ARBITRIO_AFLUENCIA
+# <prefix of a uso_predio code, 2, 4 or 6 digits, alone or as servicio:prefijo> its nivel de afluencia in texto
 TASA_ARBITRIO = "TASA_ARBITRIO"
 ARBITRIO_ZONA = "ARBITRIO_ZONA"
 ARBITRIO_USO = "ARBITRIO_USO"
@@ -56,8 +58,10 @@ DIMENSIONES_ARBITRIO = "DIMENSIONES_ARBITRIO"
 HABITANTES_PROMEDIO = "HABITANTES_PROMEDIO"
 HABITANTES_VARIACION = "HABITANTES_VARIACION"
 REDONDEO_ARBITRIO = "REDONDEO_ARBITRIO"
+ARBITRIO_INFLUENCIA = "ARBITRIO_INFLUENCIA"
+ARBITRIO_AFLUENCIA = "ARBITRIO_AFLUENCIA"
 TIPOS_ARBITRIO = (TASA_ARBITRIO, ARBITRIO_ZONA, ARBITRIO_USO, ARBITRIO_VENCIMIENTO, BASE_ARBITRIO, DIMENSIONES_ARBITRIO,
-                  HABITANTES_PROMEDIO, HABITANTES_VARIACION, REDONDEO_ARBITRIO)
+                  HABITANTES_PROMEDIO, HABITANTES_VARIACION, REDONDEO_ARBITRIO, ARBITRIO_INFLUENCIA, ARBITRIO_AFLUENCIA)
 BASES_ARBITRIO = ("PREDIO", "FRONTIS_ML", "AREA_CONSTRUIDA_M2")
 DIMENSIONES_VALIDAS = ("ZONA", "USO", "INFLUENCIA", "AFLUENCIA")
 
@@ -86,6 +90,12 @@ def _clases_de_anuncio():
     """model.json's clase_anuncio: a TASA_ANUNCIO's clave is one of them."""
     with open(os.path.join(HERE, "model.json"), encoding="utf-8") as f:
         return tuple(json.load(f)["enums"]["clase_anuncio"])
+
+
+def _ubicaciones_area_verde():
+    """model.json's ubicacion_area_verde: an ARBITRIO_INFLUENCIA's clave is one of them."""
+    with open(os.path.join(HERE, "model.json"), encoding="utf-8") as f:
+        return tuple(json.load(f)["enums"]["ubicacion_area_verde"])
 
 
 def _firmante(firma):
@@ -176,6 +186,14 @@ def _error_arbitrio(tipo, clave, texto, p, contexto):
             return "la clave del redondeo es global (vacía)"
         if not re.fullmatch(r"\d:(ABAJO|MEDIO|ARRIBA)", texto):
             return "el redondeo es decimales:modo (ABAJO, MEDIO o ARRIBA) en texto"
+    elif tipo == ARBITRIO_INFLUENCIA:
+        if clave not in _ubicaciones_area_verde() or not texto:
+            return f"la clave de una influencia es una ubicación del área verde ({', '.join(_ubicaciones_area_verde())}) y su texto"
+    elif tipo == ARBITRIO_AFLUENCIA:
+        partes = clave.split(":")
+        prefijo = partes[1] if len(partes) == 2 and partes[0].strip() else partes[0] if len(partes) == 1 else None
+        if prefijo is None or not re.fullmatch(r"\d{2}|\d{4}|\d{6}", prefijo) or not texto:
+            return "una afluencia es un prefijo de código de uso_predio de 2, 4 o 6 dígitos, o servicio:prefijo (clave), y su texto"
     return None
 
 
