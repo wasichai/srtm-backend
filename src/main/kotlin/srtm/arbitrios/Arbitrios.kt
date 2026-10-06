@@ -48,21 +48,30 @@ data class PredioArbitrios(
 }
 
 // the cuotas to write, or what is missing to write any: never both. faltan names each missing thing once; detalle
-// is the same, each with the predio and the declaración to fix when it is theirs (the portal links to them)
+// is the same, each with its predio, its declaración when it is one's, and where it gets fixed (Falta.enlace: the
+// portal links to it)
 data class Determinacion(
     val cuotas: List<CuotaArbitrio>,
     val faltan: List<String>,
     val detalle: List<Falta> = emptyList()
 )
 
-// one missing thing: its mensaje (what faltan lists), the predio it was found on and the declaración that lacks it,
-// when a declaración can fix it (an área, a frontis, a uso)
+// one missing thing: its mensaje (what faltan lists), the predio it was found on, the declaración that lacks it (an
+// área, a frontis, a uso) and where it gets fixed (enlace): the declaración (DECLARACION), the predio's ubicación
+// (PREDIO), or neither (null: a row of the ordinance, even one that names the predio's sector or uso, a titular no
+// declaración covers, an invariant). predio and declaracion identify the case; enlace is what the portal links to
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class Falta(
     val mensaje: String,
     val predio: String? = null,
-    val declaracion: String? = null
+    val declaracion: String? = null,
+    val enlace: Enlace? = null
 )
+
+// where a Falta gets fixed: DECLARACION, the declaración's own data (its uso, frontis, área construida);
+// PREDIO, the predio's ubicación (its sector catastral, its via and número for a zona by ubicación, its ubicación
+// respecto del área verde)
+enum class Enlace { DECLARACION, PREDIO }
 
 // rentas' DeterminarArbitrios, without the writing (rentas#31), one PU per uso as the SRTM web (#84). each month of
 // the year is decided on its day of atribución (Periodo): its titular (the titular principal of the declarations that
@@ -126,9 +135,10 @@ object Arbitrios {
 
         fun falta(
             mensaje: String,
-            declaracion: String? = null
+            declaracion: String? = null,
+            enlace: Enlace? = null
         ) {
-            faltan.putIfAbsent(mensaje, Falta(mensaje, predioId, declaracion))
+            faltan.putIfAbsent(mensaje, Falta(mensaje, predioId, declaracion, enlace))
         }
         val cuotas = mutableListOf<CuotaArbitrio>()
         val vigentes = p.vigentes // filtered once, not per month, secuencia and servicio
@@ -191,10 +201,22 @@ object Arbitrios {
                     }
                     is ZonaResuelta.Ambigua -> {
                         if (sector == null) rasgosPorUbicacion = true
-                        if (pendiente) falta("Zona ambigua de $codigoServicio para ${p.predio.via} ${p.predio.numero}: ${resuelta.zonas.joinToString()}")
+                        if (pendiente) {
+                            falta(
+                                "Zona ambigua de $codigoServicio para ${p.predio.via} ${p.predio.numero}: ${resuelta.zonas.joinToString()}",
+                                enlace = Enlace.PREDIO
+                            )
+                        }
                     }
+                    // with a sector, its ARBITRIO_ZONA row is the ordinance's; without one, the predio lacks it
                     ZonaResuelta.Ninguna ->
-                        if (pendiente) falta(if (sector != null) "${Llaves.ARBITRIO_ZONA} $sector ${c.anio}" else "Sector catastral del predio $nombre")
+                        if (pendiente) {
+                            if (sector != null) {
+                                falta("${Llaves.ARBITRIO_ZONA} $sector ${c.anio}")
+                            } else {
+                                falta("Sector catastral del predio $nombre", enlace = Enlace.PREDIO)
+                            }
+                        }
                 }
             }
             val rasgos = sector != null || rasgosPorUbicacion
@@ -231,7 +253,7 @@ object Arbitrios {
                             { Dimensiones.afluencia(c.parametros, codigoServicio, codigoUso, c.anio, dia) }
                         )
                     if (faltanDimensiones.isNotEmpty()) {
-                        faltanDimensiones.forEach { falta(it) }
+                        faltanDimensiones.forEach { falta(it.mensaje, enlace = it.enlace) }
                         continue
                     }
                     val claveDeTasa = Llaves.tasa(codigoServicio, valoresDimensiones)
@@ -250,7 +272,7 @@ object Arbitrios {
                     val desglose =
                         when (val calculado = Calculo.calcular(baseLeida ?: Base.PREDIO, tasa.valorNumerico!!, d, habitantes, redondeo, quien)) {
                             is Calculado.Falta -> {
-                                falta(calculado.mensaje, d.id)
+                                falta(calculado.mensaje, d.id, calculado.enlace)
                                 continue
                             }
                             is Calculado.Es -> calculado.desglose
@@ -322,7 +344,11 @@ object Arbitrios {
             sinUso
                 .filterKeys { !algunMesConRasgos || it !in conUso }
                 .forEach { (secuencia, declaracion) ->
-                    falta("Uso del catálogo en la declaración ${c.anio} del predio $nombre" + (if (varios) ", uso $secuencia" else ""), declaracion)
+                    falta(
+                        "Uso del catálogo en la declaración ${c.anio} del predio $nombre" + (if (varios) ", uso $secuencia" else ""),
+                        declaracion,
+                        Enlace.DECLARACION
+                    )
                 }
         }
         if (faltan.isEmpty()) {

@@ -21,14 +21,17 @@ data class Desglose(
 )
 
 // Calculo.calcular's result: Es with the breakdown, Falta naming what is missing or wrong (a missing/non-positive
-// frontis or área construida, or a negative habitantes factor) - all-or-nothing, same convention as ValorDimension
+// frontis or área construida, or a negative habitantes factor) - all-or-nothing, same convention as ValorDimension.
+// its enlace is where it gets fixed (Falta.enlace): the declaración for a frontis or an área; none for a negative
+// factor, whose P and V are the ordinance's
 sealed interface Calculado {
     data class Es(
         val desglose: Desglose
     ) : Calculado
 
     data class Falta(
-        val mensaje: String
+        val mensaje: String,
+        val enlace: Enlace? = null
     ) : Calculado
 }
 
@@ -54,10 +57,10 @@ object Calculo {
                 Base.PREDIO -> BigDecimal.ONE
                 Base.FRONTIS_ML ->
                     d.longitudFrente?.takeIf { it > BigDecimal.ZERO }
-                        ?: return Calculado.Falta("Frontis del predio $quien")
+                        ?: return Calculado.Falta("Frontis del predio $quien", Enlace.DECLARACION)
                 Base.AREA_CONSTRUIDA_M2 ->
                     d.areaConstruida?.takeIf { it > BigDecimal.ZERO }
-                        ?: return Calculado.Falta("Área construida del predio $quien")
+                        ?: return Calculado.Falta("Área construida del predio $quien", Enlace.DECLARACION)
             }
 
         val habitantesPresuntos = habitantes != null && d.numeroHabitantes == null

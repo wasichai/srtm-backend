@@ -81,6 +81,9 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         assertEquals(1, problema["faltan_detalle"].size())
         assertEquals("ARBITRIO_ZONA $sinZona ${e.anio}", problema["faltan_detalle"][0]["mensaje"].asString())
         assertEquals(otro, problema["faltan_detalle"][0]["predio"].asString())
+        // a row of the ordinance: nowhere in the portal fixes it, though it names the predio (enlace, wasichai/srtm-ui#94)
+        assertTrue(problema["faltan_detalle"][0].has("enlace"), problema.toString())
+        assertTrue(problema["faltan_detalle"][0]["enlace"].isNull, problema.toString())
         assertEquals(0, pagina("anio=${e.anio}&predio=$otro")["totalElements"].asInt())
     }
 

@@ -47,8 +47,8 @@ data class PedidoAnulacion(
 )
 
 // what keeps a year or a predio from being determined: a 422 that names each missing thing. detalle is the same,
-// with the predio and declaración to fix when it is theirs (the portal links to them); empty for a caller that has
-// none (DocumentosArbitrios, DeterminacionMasivaService), same as faltan would be without this
+// each with its predio, its declaración and where it gets fixed (Falta.enlace, what the portal links to); empty
+// for a caller that has none (DocumentosArbitrios, DeterminacionMasivaService), same as faltan would be without this
 class FaltanArbitrios(
     anio: Int,
     val faltan: List<String>,

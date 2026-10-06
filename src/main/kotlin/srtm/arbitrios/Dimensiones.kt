@@ -6,14 +6,16 @@ import java.time.LocalDate
 
 // one dimension's contribution to a servicio's tasa key that month: Es when it resolves, Falta naming what is
 // missing. a Falta is all-or-nothing, same as a missing zona/uso: Arbitrios.determinar adds its mensaje to faltan,
-// which empties every cuota of the predio when it ends up non-empty
+// which empties every cuota of the predio when it ends up non-empty. its enlace is where it gets fixed
+// (Falta.enlace): the predio, for its ubicación respecto del área verde; none, for a missing mapping row
 sealed interface ValorDimension {
     data class Es(
         val valor: String
     ) : ValorDimension
 
     data class Falta(
-        val mensaje: String
+        val mensaje: String,
+        val enlace: Enlace? = null
     ) : ValorDimension
 }
 
@@ -31,7 +33,7 @@ object Dimensiones {
     ): ValorDimension {
         val ubicacion =
             predio.ubicacionAreaVerde?.trim()?.ifEmpty { null }
-                ?: return ValorDimension.Falta("Ubicación respecto del área verde del predio $nombre")
+                ?: return ValorDimension.Falta("Ubicación respecto del área verde del predio $nombre", Enlace.PREDIO)
         val fila = enVigor(parametros, Llaves.ARBITRIO_INFLUENCIA, dia) { it.clave?.trim() == ubicacion && !it.texto.isNullOrBlank() }
         return fila?.texto?.trim()?.let { ValorDimension.Es(it) }
             ?: ValorDimension.Falta("${Llaves.ARBITRIO_INFLUENCIA} $ubicacion $anio")
@@ -68,17 +70,17 @@ object Dimensiones {
     }
 
     // a servicio's dimensiones' valores, in the order they are listed (zona and uso already resolved): the ones
-    // found, and the mensaje of each one that is missing. the caller decides what to do with faltan - today,
-    // all-or-nothing, same as zona/sector
+    // found, and the Falta of each one that is missing (its mensaje and enlace). the caller decides what to do with
+    // faltan - today, all-or-nothing, same as zona/sector
     fun valores(
         dimensiones: List<Dimension>,
         zona: String,
         uso: String,
         influencia: () -> ValorDimension,
         afluencia: () -> ValorDimension
-    ): Pair<List<String>, List<String>> {
+    ): Pair<List<String>, List<ValorDimension.Falta>> {
         val valores = mutableListOf<String>()
-        val faltan = mutableListOf<String>()
+        val faltan = mutableListOf<ValorDimension.Falta>()
         for (dimension in dimensiones) {
             val valor =
                 when (dimension) {
@@ -89,7 +91,7 @@ object Dimensiones {
                 }
             when (valor) {
                 is ValorDimension.Es -> valores += valor.valor
-                is ValorDimension.Falta -> faltan += valor.mensaje
+                is ValorDimension.Falta -> faltan += valor
             }
         }
         return valores to faltan
