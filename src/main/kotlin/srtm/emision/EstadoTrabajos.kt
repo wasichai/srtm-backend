@@ -21,9 +21,11 @@ private const val FALLIDA = "FALLIDA"
 internal val TRABAJOS_ACTIVOS = listOf(PENDIENTE, EN_PROCESO, ENSAMBLANDO)
 
 // the transitions of one kind of job by lotes (estado_emision), straight on its table and audited by hand: the
-// system's writes, done by whichever instance (wasichai 0.2.0 has no system context for RecordService). each one
-// applies only from the states it names, so two instances never both make it. latido is the lease of the instance
-// that prepares (or ends) the job; renewing it is no transition, and is not audited
+// system's writes, done by whichever instance. not moved to RecordService.asPlatform (#76): a transition is a
+// compare-and-set on the state, with the "before" read under lock in the same statement, and procesados sums the
+// lotes'; RecordService can express none of it, and a ClusterLock would serialize what SKIP LOCKED shares out. each
+// one applies only from the states it names, so two instances never both make it. latido is the lease of the
+// instance that prepares (or ends) the job; renewing it is no transition, and is not audited
 class EstadoTrabajos internal constructor(
     private val db: DatabaseClient,
     private val tablas: TablasCore,

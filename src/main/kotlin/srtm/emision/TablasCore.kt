@@ -18,8 +18,9 @@ class TablaCore(
     fun columna(campo: String): String = SqlIdentifier.quote(columnas.getValue(campo))
 }
 
-// the system's writes go straight to an object's physical table (wasichai 0.2.0 has no system context for
-// RecordService). core makes one table per organization and names its columns: both come from its metadata
+// the system's writes go straight to an object's physical table, not through RecordService.asPlatform (#76): the
+// lotes' state machines need SKIP LOCKED and compare-and-set updates that it cannot express. core makes one table per
+// organization and names its columns: both come from its metadata
 @Component
 class TablasCore(
     private val db: DatabaseClient,

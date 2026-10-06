@@ -333,7 +333,8 @@ Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
   `clave` coherente:** los revisa la regla `ReglaDeArbitrios` de la guardia de escritura (`srtm.GuardiaDeEscritura`, ver
   [Modelo](#modelo)) al insertar, venga la cuota de donde venga; si no, **400**.
 - **Un valor único repetido** (dos cuotas con la misma `clave`, o cualquier otro campo único del modelo) responde
-  **409** y no 500 (`srtm.Duplicados`; Core 0.2.0 lo deja caer como error interno).
+  **409** y no 500 (`srtm.Duplicados`; Core 0.3 también responde 409, con `errors[].field`, pero en inglés; srtm lo
+  sobrescribe para dar el mensaje en castellano, y pierde el campo).
 - **Observación de 5 a 500 caracteres:** va en la propia cuota, porque la auditoría de Core no guarda observación.
 
 **Parámetros de la ordenanza.** Las tasas y los mapeos son filas de `parametro_tributario`, con vigencia y doble
@@ -1533,8 +1534,8 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
   - **Intentos:** un lote tomado más de `srtm.emision.intentos` veces (`SRTM_EMISION_INTENTOS`, por defecto 3) queda
     FALLIDO y sus contribuyentes pasan a `errores` con "lote fallido tras N intentos". Un fallo inesperado al generar
     lo suelta (PENDIENTE) para el siguiente.
-- **Identidad:** `RecordService` revisa los permisos, y wasichai 0.2.0 no ofrece cómo reconstruir el `Authentication`
-  de un usuario ni un contexto de sistema; `CurrentUser` solo lee un principal `Jwt` (`sub` y los claims `org`,
+- **Identidad:** `RecordService` revisa los permisos, y `asPlatform` (wasichai 0.3) los saltaría; la emisión corre a
+  propósito como el usuario que la lanzó. `CurrentUser` solo lee un principal `Jwt` (`sub` y los claims `org`,
   `email` y `roles`). Por eso cada lote se genera **como quien lo creó** (el `created_by` del lote, el mismo usuario que
   lanzó la emisión): `IdentidadEmision` arma en memoria el `Jwt` que armaría el filtro de Core, con la fila y los roles
   actuales de ese usuario. Ese `Jwt` nunca se firma ni sale del proceso. Si el usuario fue borrado o deshabilitado, el
@@ -1791,6 +1792,23 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - Los de integración corren en el CI de cada PR. Con un Docker remoto no corren en local tal cual (Testcontainers no
   llega a sus puertos): se usa una base de test externa tunelizada, con PostGIS y un nombre que termine en `_test`.
   Cómo, en [docs/develop/README.md](docs/develop/README.md#6-tests).
+
+## wasichai 0.3: lo que srtm no migra
+
+Con `RecordService.asPlatform(organizationId)` (ADR-039) y el bean `ClusterLock` (candados de postgres), 0.3 permite
+escribir como la plataforma. srtm no pasó nada a ellos (#76), y esto queda anotado con su motivo:
+
+- **Las máquinas de lotes** (`MaquinaLotes`, `EstadoTrabajos`, `EstadoEmisiones`, `LotesEmision`): toman con
+  `FOR UPDATE SKIP LOCKED`; las transiciones son compare-and-set, condicionadas al estado, con el «antes» leído bajo
+  bloqueo en la misma sentencia; `procesados` suma lo de los lotes. `RecordService` no puede expresar nada de eso, y un
+  `ClusterLock` serializaría lo que hoy reparte `SKIP LOCKED`.
+- **`RetencionEmision`:** el `UPDATE ... WHERE archivo IS NOT NULL` es idempotente entre instancias. Con `asPlatform`
+  haría falta leer, reemplazar la fila entera y tomar un `ClusterLock`, sin ganar nada. Queda como mejora posible.
+- **`IdentidadEmision`:** la emisión y la determinación corren a propósito como el usuario que las lanzó, para que
+  core revise sus permisos; `asPlatform` los saltaría. Es una elección, no una carencia.
+- **`Duplicados`:** desde 0.3.0 core responde 409 con `errors[].field` (D23), pero en inglés. srtm lo sigue
+  sobrescribiendo para dar al portal el mensaje en castellano, y pierde el campo. Seguimiento: traducir el `detail` de
+  core o pasar el campo.
 
 ## Siguientes pasos (fuera de este alcance)
 
