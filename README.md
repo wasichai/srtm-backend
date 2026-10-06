@@ -430,8 +430,8 @@ python3 derivar_ipc_arbitrio.py --csv parametros-2026.csv --desde 2026 --ipc 2.1
 ```
 
 Toma, de `--csv`, la fila de cada `(tipo, clave)` de `TIPOS_ARBITRIO` con la `vigencia_desde` más reciente que no
-pase el 31/12 de `--desde` (una fila que empieza después de esa fecha se ignora), y escribe cada una para el año
-siguiente, con `vigencia_desde` el 01/01 de ese año:
+pase el 31/12 de `--desde`, entre las que siguen vigentes ese día (una fila que empieza después de esa fecha, o
+cuya `vigencia_hasta` es anterior, se ignora), y escribe cada una para el año siguiente, con `vigencia_desde` el 01/01 de ese año:
 - `TASA_ARBITRIO`: su `valor_numerico` × (1 + `--ipc` / 100), redondeado con `--redondeo` (`decimales:modo`, el
   mismo `ABAJO`/`MEDIO`/`ARRIBA` de `REDONDEO_ARBITRIO`); su `texto` queda `DERIVADA IPC <ipc>% de <clave> <año
   base>`. Ejemplo de Miraflores 2026 con IPC 2,10 % y `4:MEDIO`: `2.5428` → `2.5962` (`2.5428 × 1.021 =
