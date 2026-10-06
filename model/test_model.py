@@ -190,7 +190,7 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(list(cuota), ["anio", "periodo", "monto", "parametro_aplicado", "zona", "uso_arbitrio", "secuencia_uso",
                                        "base", "cantidad_base", "tasa_unitaria", "habitantes", "habitantes_presuntos",
                                        "promedio_habitantes", "variacion_habitante", "influencia", "afluencia", "redondeo",
-                                       "fecha_calculo", "observacion", "clave"])
+                                       "monto_sin_tope", "tope_aplicado", "fecha_calculo", "observacion", "clave"])
         desglose = {n: cuota[n]["type"] for n in list(cuota)[6:17]}
         self.assertEqual(desglose, {"secuencia_uso": "TEXT", "base": "ENUM", "cantidad_base": "DECIMAL", "tasa_unitaria": "DECIMAL",
                                     "habitantes": "INTEGER", "habitantes_presuntos": "BOOLEAN", "promedio_habitantes": "DECIMAL",
@@ -201,6 +201,8 @@ class ShippedModelTests(unittest.TestCase):
                          {"anio", "periodo", "monto", "parametro_aplicado", "fecha_calculo", "observacion", "clave"})
         self.assertEqual({n for n, f in cuota.items() if f.get("unique")}, {"clave"})
         self.assertEqual(cuota["monto"]["type"], "DECIMAL")
+        # TOPE_ARBITRIO (#87): lo determinado antes del tope y el % que lo topó, vacíos sin tope
+        self.assertEqual((cuota["monto_sin_tope"]["type"], cuota["tope_aplicado"]["type"]), ("DECIMAL", "DECIMAL"))
         relaciones = {(r["source"], r["fieldName"]): r for r in self.model["relationships"]}
         for campo, destino in [("predio", "predio"), ("contribuyente", "contribuyente"), ("servicio", "servicio_arbitrio"),
                                ("parametro", "parametro_tributario")]:

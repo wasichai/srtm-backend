@@ -51,6 +51,14 @@ data class Habitantes(
     val variacion: BigDecimal
 )
 
+// a predio's tope de incremento (TOPE_ARBITRIO): the row's clave (a uso prefix or "*"), its % and, when it has one,
+// the cut date of the predio's registration
+data class Tope(
+    val clave: String,
+    val porcentaje: BigDecimal,
+    val corte: LocalDate?
+)
+
 // the per-servicio reading of an ordenanza's rows: its base, its dimensiones, its habitantes and the global
 // redondeo. each reads the row of its tipo and clave in force that day (the latest vigencia_desde), same rule as
 // Arbitrios' enVigor. a texto that is not a known value (an unknown base, an unknown dimension) counts as absent,
@@ -119,6 +127,29 @@ object Servicios {
         val fila = enVigor(parametros, Llaves.REDONDEO_ARBITRIO, dia) { it.clave?.trim().isNullOrEmpty() && !it.texto.isNullOrBlank() }
         return Redondeo.de(fila?.texto)
     }
+
+    // the tope of a uso_predio code that day: the row of its longest prefix in force, "*" when none matches, the
+    // latest vigencia among equals. null without one. a row without a % above 0, or whose texto is not empty nor a
+    // date, counts as absent (the importer already rejects it)
+    fun tope(
+        parametros: List<ParametroTributario>,
+        codigoUso: String,
+        dia: LocalDate
+    ): Tope? {
+        val fila =
+            parametros
+                .filter {
+                    val clave = it.clave?.trim()
+                    it.tipo == Llaves.TOPE_ARBITRIO && !clave.isNullOrEmpty() && (clave == "*" || codigoUso.startsWith(clave)) &&
+                        it.valorNumerico != null && it.valorNumerico.signum() > 0 && (it.texto.isNullOrBlank() || corte(it.texto) != null) &&
+                        vigente(it.vigenciaDesde, it.vigenciaHasta, dia)
+                }.maxWithOrNull(compareBy<ParametroTributario> { it.clave!!.trim().let { c -> if (c == "*") 0 else c.length } }.thenBy { it.vigenciaDesde })
+                ?: return null
+        return Tope(fila.clave!!.trim(), fila.valorNumerico!!, corte(fila.texto))
+    }
+
+    // a tope's cut date: its texto as YYYY-MM-DD, null when blank or malformed
+    private fun corte(texto: String?): LocalDate? = texto?.trim()?.takeIf { it.isNotEmpty() }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
 }
 
 // the row of a tipo in force that day that matches; the latest one when several do (Arbitrios' zonaDe, usoDe and

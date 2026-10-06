@@ -91,6 +91,27 @@ class ServiciosTest {
     }
 
     @Test
+    fun `a tope is read by the longest prefix of the uso code, then by star - fictitious percentages`() {
+        val todos = param(Llaves.TOPE_ARBITRIO, "*", valor = "18")
+        val casa = param(Llaves.TOPE_ARBITRIO, "0101", valor = "8", texto = "2025-12-31")
+        val residencial = param(Llaves.TOPE_ARBITRIO, "01", valor = "10")
+        val filas = listOf(todos, casa, residencial)
+        assertEquals(Tope("0101", BigDecimal("8"), LocalDate.of(2025, 12, 31)), Servicios.tope(filas, "010101", dia))
+        assertEquals(Tope("01", BigDecimal("10"), null), Servicios.tope(filas, "010201", dia))
+        assertEquals(Tope("*", BigDecimal("18"), null), Servicios.tope(filas, "020501", dia))
+        assertNull(Servicios.tope(listOf(casa, residencial), "020501", dia))
+        assertNull(Servicios.tope(emptyList(), "010101", dia))
+    }
+
+    @Test
+    fun `a tope not in force, not above 0 or with a malformed cut date counts as absent`() {
+        assertNull(Servicios.tope(listOf(param(Llaves.TOPE_ARBITRIO, "*", valor = "8", desde = LocalDate.of(2027, 1, 1))), "010101", dia))
+        assertNull(Servicios.tope(listOf(param(Llaves.TOPE_ARBITRIO, "*", valor = "0")), "010101", dia))
+        assertNull(Servicios.tope(listOf(param(Llaves.TOPE_ARBITRIO, "*")), "010101", dia))
+        assertNull(Servicios.tope(listOf(param(Llaves.TOPE_ARBITRIO, "*", valor = "8", texto = "31/12/2025")), "010101", dia))
+    }
+
+    @Test
     fun `Redondeo de rejects a malformed texto`() {
         assertNull(Redondeo.de("dos"))
         assertNull(Redondeo.de("2:CERCA"))

@@ -87,21 +87,33 @@ class ArbitriosService(
             registros.all(ZONA_ARBITRIO_UBICACION, ZonaUbicacion::class.java)
         )
 
-    // a predio's declarations of the year, its contribuyentes' codes, its inafectaciones and its cuotas of the year
+    // a predio's declarations of the year, its contribuyentes' codes, its inafectaciones and its cuotas of the year;
+    // with conAnteriores (Arbitrios.conTope: the year has a TOPE_ARBITRIO), its vigente cuotas of the year before too
     suspend fun delPredio(
         predio: Predio,
-        anio: Int
+        anio: Int,
+        conAnteriores: Boolean = false
     ): PredioArbitrios {
         val id = requireNotNull(predio.id)
         val declaraciones = registros.all(DECLARACION, Declaracion::class.java, filters = mapOf("predio" to id, "anio" to "$anio"))
         val codigos = personas(declaraciones.mapNotNull { it.contribuyente }).mapValues { it.value.codigo }
         val inafectaciones = registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java, filters = mapOf("predio" to id))
+        val (existentes, anuladas) = delAnio(id, anio)
+        val anteriores = if (conAnteriores) delAnio(id, anio - 1).let { (cs, anuladasAntes) -> Arbitrios.vigentes(cs, anuladasAntes) } else emptyList()
+        return PredioArbitrios(predio, declaraciones, codigos, inafectaciones, existentes, anuladas, anteriores)
+    }
+
+    // a predio's cuotas of a year and the ids of the annulled ones
+    private suspend fun delAnio(
+        predio: String,
+        anio: Int
+    ): Pair<List<CuotaArbitrio>, Set<String>> {
         val anuladas =
             registros
-                .all(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, filters = mapOf("predio" to id, "anio" to "$anio"))
+                .all(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, filters = mapOf("predio" to predio, "anio" to "$anio"))
                 .mapNotNull { it.cuota }
                 .toSet()
-        return PredioArbitrios(predio, declaraciones, codigos, inafectaciones, cuotas(mapOf("predio" to id, "anio" to "$anio")), anuladas)
+        return cuotas(mapOf("predio" to predio, "anio" to "$anio")) to anuladas
     }
 
     // POST /predios/{id}/arbitrios: the cuotas it wrote; none when nothing was pending
@@ -128,7 +140,8 @@ class ArbitriosService(
         val contexto = contexto(anio)
         val hoy = LocalDate.now()
         val predios = prediosDe(id, anio, conCuotas = false)
-        val calculadas = predios.map { it to Arbitrios.determinar(contexto, delPredio(it, anio), observacion, hoy) }
+        val conTope = Arbitrios.conTope(contexto)
+        val calculadas = predios.map { it to Arbitrios.determinar(contexto, delPredio(it, anio, conTope), observacion, hoy) }
         val detalle =
             calculadas
                 .flatMap { (p, d) ->
@@ -272,11 +285,12 @@ class ArbitriosService(
         hoy: LocalDate,
         calculada: Determinacion? = null
     ): List<CuotaArbitrio> {
-        val primera = calculada ?: Arbitrios.determinar(contexto, delPredio(predio, contexto.anio), observacion, hoy)
+        val conTope = Arbitrios.conTope(contexto)
+        val primera = calculada ?: Arbitrios.determinar(contexto, delPredio(predio, contexto.anio, conTope), observacion, hoy)
         return try {
             guardar(contexto.anio, primera)
         } catch (_: DuplicateKeyException) {
-            guardar(contexto.anio, Arbitrios.determinar(contexto, delPredio(predio, contexto.anio), observacion, hoy))
+            guardar(contexto.anio, Arbitrios.determinar(contexto, delPredio(predio, contexto.anio, conTope), observacion, hoy))
         }
     }
 

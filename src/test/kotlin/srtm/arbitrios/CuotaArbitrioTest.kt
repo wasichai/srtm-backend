@@ -116,6 +116,27 @@ class CuotaArbitrioTest {
     }
 
     @Test
+    fun `a cuota with a tope squares its monto_sin_tope with the desglose, and its monto never goes above it`() {
+        // fictitious 8 %: barrido's 53.39 lowered to 48.05
+        val topada = barrido.copy(monto = BigDecimal("48.05"), montoSinTope = BigDecimal("53.39"), topeAplicado = BigDecimal("8"))
+        assertEquals(emptyList<String>(), campos(topada))
+        assertEquals(emptyList<String>(), campos(topada.copy(monto = BigDecimal.ZERO)))
+        assertEquals(emptyList<String>(), campos(topada.copy(monto = BigDecimal("53.39"))))
+        assertEquals(listOf("monto"), campos(topada.copy(monto = BigDecimal("53.40"))))
+        // monto_sin_tope is what squares with the desglose
+        assertEquals(listOf("monto_sin_tope"), campos(topada.copy(montoSinTope = BigDecimal("53.40"), monto = BigDecimal("50"))))
+        assertEquals(listOf("monto"), campos(topada.copy(monto = BigDecimal("-1"))))
+        // the two together, or neither; the tope above 0
+        assertEquals(listOf("monto_sin_tope", "monto"), campos(topada.copy(montoSinTope = null)))
+        assertEquals(listOf("tope_aplicado"), campos(topada.copy(topeAplicado = null)))
+        assertEquals(listOf("tope_aplicado"), campos(topada.copy(topeAplicado = BigDecimal.ZERO)))
+        // a cuota without desglose still keeps its monto under its monto_sin_tope
+        val sinDesglose = cuota.copy(monto = BigDecimal("9"), montoSinTope = BigDecimal("10"), topeAplicado = BigDecimal("8"))
+        assertEquals(emptyList<String>(), campos(sinDesglose))
+        assertEquals(listOf("monto"), campos(sinDesglose.copy(monto = BigDecimal("11"))))
+    }
+
+    @Test
     fun `a desglose needs a positive cantidad, a tasa not negative, a known redondeo and P with V`() {
         assertEquals(listOf("cantidad_base"), campos(barrido.copy(cantidadBase = BigDecimal.ZERO)))
         assertEquals(listOf("cantidad_base"), campos(barrido.copy(cantidadBase = null)))

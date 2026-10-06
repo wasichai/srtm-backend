@@ -92,8 +92,9 @@ object Calculo {
     // factor (only when there is one, H non null) = monto. tasa is printed with the norm's own decimals
     // (toPlainString), cantidad always with 2 (setScale, whatever its stored scale); the base PREDIO's cantidad is
     // always 1 and never printed, so it only ends in "= monto" when there was a redondeo (FRONTIS_ML and
-    // AREA_CONSTRUIDA_M2 always do, since their cantidad is printed). a cuota written before the desglose (base
-    // null) has nothing to show but its monto
+    // AREA_CONSTRUIDA_M2 always do, since their cantidad is printed). a cuota lowered by TOPE_ARBITRIO always ends in
+    // "= monto_sin_tope, con tope de N %: monto". a cuota written before the desglose (base null) has nothing to show
+    // but its monto
     fun formula(c: CuotaArbitrio): String {
         val base = c.base?.let { runCatching { Base.valueOf(it) }.getOrNull() } ?: return soles(c.monto)
 
@@ -105,7 +106,11 @@ object Calculo {
         if (h != null) {
             sb.append(" × (1 + ($h − ${c.promedioHabitantes!!.toPlainString()}) × ${c.variacionHabitante!!.toPlainString()})")
         }
-        if (base.unidad != null || c.redondeo != null) {
+        val tope = c.topeAplicado
+        val sinTope = c.montoSinTope
+        if (tope != null && sinTope != null) {
+            sb.append(" = ${sinTope.toPlainString()}, con tope de ${tope.stripTrailingZeros().toPlainString()} %: ${c.monto!!.toPlainString()}")
+        } else if (base.unidad != null || c.redondeo != null) {
             sb.append(" = ${c.monto!!.toPlainString()}")
         }
         return sb.toString()
