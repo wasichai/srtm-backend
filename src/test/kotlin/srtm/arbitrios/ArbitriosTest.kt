@@ -342,7 +342,7 @@ class ArbitriosTest {
     }
 
     @Test
-    fun `an ambiguous zona is named, and does not block the other servicios`() {
+    fun `an ambiguous zona is named alone, and the whole predio gets no cuota`() {
         val conVia = predio.copy(via = "AV. X", numero = "100")
         val ubicaciones =
             listOf(
@@ -352,6 +352,7 @@ class ArbitriosTest {
         val c = contexto(parametros = tasas + mapeos).copy(ubicaciones = ubicaciones)
         val d = determinar(c, p = del(predio = conVia))
         assertEquals(listOf("Zona ambigua de LIMPIEZA para AV. X 100: Z9, Z10"), d.faltan)
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas) // todo o nada: the servicios with a zona get none either
     }
 
     @Test

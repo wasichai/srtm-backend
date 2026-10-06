@@ -489,9 +489,9 @@ Una fila de `zona_arbitrio_ubicacion` coincide cuando está vigente ese día, su
 mayúsculas ni tildes), su `tipo_via` está vacío o es el del predio (comparado igual que la vía), el número del predio cae en su tramo
 (`numero_inicial`/`numero_final`, extremos vacíos abiertos) y su `paridad` es `AMBOS`, vacía o la del número. Sin
 ninguna fila que coincida en los cuatro niveles de ubicación, cae al sector catastral (niveles 5 y 6); sin sector
-catastral tampoco, la zona de ese servicio no se resuelve — a menos que algún otro servicio del predio sí resuelva
-por ubicación, en cuyo caso el sector deja de exigirse ese mes y el predio se determina igual, con la zona que cada
-servicio tenga.
+catastral tampoco, la zona de ese servicio no se resuelve, falta «Sector catastral del predio …» y **el predio entero
+no se determina** (todo o nada), aunque otros servicios del predio sí resuelvan por ubicación. Un predio sin sector
+se determina solo cuando cada uno de sus servicios resuelve su zona por ubicación.
 
 Se carga con `import_zonas_arbitrio.py`, desde un CSV con las columnas
 `servicio,tipo_via,via,manzana,numero_inicial,numero_final,paridad,zona,vigencia_desde,vigencia_hasta,norma,observacion`
@@ -572,8 +572,9 @@ cambio.
   nombra cada uno una vez (`TASA_ARBITRIO LIMPIEZA:Z1:CASA 2026`).
 - **Reejecutar no duplica:** las cuotas que ya existen, de cada secuencia, no se recalculan.
 - **La clave** de cada cuota es `predio|servicio|anio|periodo|secuencia|version` (ver **Modelo** arriba): un predio
-  de un solo uso tiene, como antes de este cambio, una cuota por servicio y mes; uno de varios usos tiene una por
-  secuencia, con el mismo `monto` y el mismo `parametro_aplicado` de siempre en cada una.
+  de un solo uso tiene, como antes de este cambio, una cuota por servicio y mes, con el mismo `monto` y el mismo
+  `parametro_aplicado` de siempre; uno de varios usos tiene una por secuencia, y cada una se calcula con su propio
+  uso de arbitrio, su base y su tasa, así que tiene su propio `monto` y su propio `parametro_aplicado`.
 
 **Tope de incremento** (`TOPE_ARBITRIO`, #87). Muchas ordenanzas limitan lo que un predio paga en un año a lo que
 pagó el anterior más un porcentaje (Miraflores 2026: 8 % en casa habitación, 18 % en otros usos; la diferencia la
