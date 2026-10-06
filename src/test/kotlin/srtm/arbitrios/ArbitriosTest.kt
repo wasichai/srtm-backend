@@ -537,6 +537,26 @@ class ArbitriosTest {
         assertEquals((1..12).toList(), d.cuotas.filter { it.servicio == "srv-LIMPIEZA" && it.secuenciaUso == "001" }.map { it.periodo })
     }
 
+    // a predio without a sector, every servicio's zona by ubicación, determined for the whole year; then its
+    // secuencia 002 loses its uso from june on (a sale registered later). running it again has nothing pending: it
+    // writes nothing and names nothing, the same as with a sector - not a 422 for the months without a uso
+    @Test
+    fun `without a sector, running it again with nothing pending adds nothing though a secuencia lost its uso since`() {
+        val sinSector = predio.copy(sectorCatastral = null, via = "AV. X", numero = "100")
+        val c = contexto(parametros = porArea).copy(ubicaciones = servicios.map { ubicacion(servicio = it.codigo, zona = "Z1") })
+        val primera = determinar(c, del(declaraciones = listOf(casa, tienda), predio = sinSector))
+        assertEquals(emptyList<String>(), primera.faltan)
+        assertEquals(72, primera.cuotas.size)
+
+        val cambio = LocalDate.of(2026, 5, 20)
+        val conUso = tienda.copy(estado = ANULADA, fechaAnulacion = cambio)
+        val sinUso = declaracion("dj-4", "c-200").copy(secuenciaUso = "002", fechaAdquisicion = cambio, claseUso = null, subClaseUso = null, uso = null)
+        val despues = listOf(casa, conUso, sinUso)
+        val nada = Determinacion(emptyList(), emptyList())
+        assertEquals(nada, determinar(contexto(parametros = porArea), del(declaraciones = despues, existentes = primera.cuotas)))
+        assertEquals(nada, determinar(c, del(declaraciones = despues, predio = sinSector, existentes = primera.cuotas)))
+    }
+
     @Test
     fun `with condóminos in a secuencia, its data are its titular principal's - the contribuyente, the day's`() {
         val casa30 = casa.copy(porcentajeCondominio = BigDecimal("30"), areaConstruida = BigDecimal("100"))

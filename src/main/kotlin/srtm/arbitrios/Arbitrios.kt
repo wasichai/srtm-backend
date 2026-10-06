@@ -174,22 +174,27 @@ object Arbitrios {
             // problem always fails the whole predio: it never gets silently skipped. a resolved or ambiguous zona
             // (by ubicación, without a sector) lifts the sector requirement for the whole month: the uso mapping is
             // only worth checking then, same as when the sector itself is present. the zona is the predio's: the
-            // same for every secuencia
+            // same for every secuencia. whether the month has a zona does not depend on what is pending: a due
+            // servicio already determined is tried too, until one resolves, only to decide it (its problems are not
+            // named, there is nothing of it to write) - so a run with nothing pending checks the usos the same as
+            // the first one did, with or without a sector
             var rasgosPorUbicacion = false
             val zonas = mutableMapOf<String, String>()
-            for (servicio in servicios) {
+            for (servicio in debidos) {
+                val pendiente = servicio in servicios
+                if (!pendiente && (sector != null || rasgosPorUbicacion)) continue
                 val codigoServicio = servicio.codigo!!.trim()
                 when (val resuelta = Zonas.de(ubicaciones, c.parametros, codigoServicio, p.predio, dia)) {
                     is ZonaResuelta.Es -> {
-                        zonas[servicio.id!!] = resuelta.zona
+                        if (pendiente) zonas[servicio.id!!] = resuelta.zona
                         if (sector == null) rasgosPorUbicacion = true
                     }
                     is ZonaResuelta.Ambigua -> {
                         if (sector == null) rasgosPorUbicacion = true
-                        falta("Zona ambigua de $codigoServicio para ${p.predio.via} ${p.predio.numero}: ${resuelta.zonas.joinToString()}")
+                        if (pendiente) falta("Zona ambigua de $codigoServicio para ${p.predio.via} ${p.predio.numero}: ${resuelta.zonas.joinToString()}")
                     }
                     ZonaResuelta.Ninguna ->
-                        falta(if (sector != null) "${Llaves.ARBITRIO_ZONA} $sector ${c.anio}" else "Sector catastral del predio $nombre")
+                        if (pendiente) falta(if (sector != null) "${Llaves.ARBITRIO_ZONA} $sector ${c.anio}" else "Sector catastral del predio $nombre")
                 }
             }
             val rasgos = sector != null || rasgosPorUbicacion
