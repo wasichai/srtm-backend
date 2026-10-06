@@ -2,6 +2,10 @@ package srtm.rentas
 
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
+import org.springframework.transaction.ReactiveTransactionManager
+import org.springframework.transaction.reactive.TransactionalOperator
+import org.springframework.transaction.reactive.executeAndAwait
+import srtm.arbitrios.CUOTA_ARBITRIO
 import srtm.pide.ConsultasReniec
 import wasichai.core.common.ConflictException
 import wasichai.core.common.PageRequest
@@ -19,8 +23,11 @@ import java.util.UUID
 class ContribuyenteService(
     private val registros: Registros,
     private val listas: Listas,
+    transacciones: ReactiveTransactionManager,
     private val reniec: ConsultasReniec = ConsultasReniec(Duration.ZERO)
 ) {
+    private val transaccion = TransactionalOperator.create(transacciones)
+
     suspend fun buscar(
         q: String?,
         page: Int?,
@@ -71,15 +78,20 @@ class ContribuyenteService(
         return registros.replace(CONTRIBUYENTE, Contribuyente::class.java, id, Records.attributes(next))
     }
 
-    // only while it declares nothing, vigente or annulled. its four lists go with it, straight: borrarDomicilio would
-    // keep the last fiscal domicilio in step with a contribuyente that is going away
+    // only while it declares nothing, vigente or annulled, and no cuota de arbitrio names it (an empty declaración may
+    // go after its cuotas were determined). its four lists go with it, straight: borrarDomicilio would keep the last
+    // fiscal domicilio in step with a contribuyente that is going away. in one transaction: a delete refused midway
+    // leaves every list where it was
     suspend fun borrarContribuyente(id: UUID) {
         get(id)
         bajaConDeclaraciones("El contribuyente", listas.contar(DECLARACION, PARENT, id))?.let { throw ConflictException(it) }
-        for (lista in listOf(DOMICILIO, RELACIONADO, MEDIO_CONTACTO, SUSTENTO)) {
-            hijos(lista, Map::class.java, id).forEach { registros.delete(lista, UUID.fromString(it["id"].toString())) }
+        bajaConCuotas("El contribuyente", listas.contar(CUOTA_ARBITRIO, PARENT, id))?.let { throw ConflictException(it) }
+        transaccion.executeAndAwait {
+            for (lista in listOf(DOMICILIO, RELACIONADO, MEDIO_CONTACTO, SUSTENTO)) {
+                hijos(lista, Map::class.java, id).forEach { registros.delete(lista, UUID.fromString(it["id"].toString())) }
+            }
+            registros.delete(CONTRIBUYENTE, id)
         }
-        registros.delete(CONTRIBUYENTE, id)
     }
 
     // domicilios: coded under their contribuyente, the description always rebuilt; an active fiscal one is copied to

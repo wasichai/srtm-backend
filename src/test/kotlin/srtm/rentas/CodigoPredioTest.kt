@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import org.mockito.Mockito
 import org.springframework.dao.DataIntegrityViolationException
+import org.springframework.transaction.ReactiveTransactionManager
 import wasichai.core.common.ValidationException
 import wasichai.core.data.RecordService
 import wasichai.core.metadata.MetadataService
@@ -15,7 +16,12 @@ import java.util.UUID
 // unique there as in the database, and a rival clerk can take a code between our read and our insert
 class CodigoPredioTest {
     private val registros = RegistrosEnMemoria()
-    private val service = DeclaracionService(registros, Listas(registros), ContribuyenteService(registros, Listas(registros)))
+    private val service =
+        DeclaracionService(
+            registros,
+            Listas(registros),
+            ContribuyenteService(registros, Listas(registros), Mockito.mock(ReactiveTransactionManager::class.java))
+        )
 
     private fun registrar(predio: Predio) = runBlocking { service.registrarPredio(predio.copy(direccion = "S/N")) }
 
