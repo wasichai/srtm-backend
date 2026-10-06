@@ -2,6 +2,7 @@ package srtm.anuncios
 
 import org.springframework.http.HttpStatus
 import srtm.impuesto.ParametroTributario
+import srtm.impuesto.enVigor
 import srtm.legible
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
@@ -115,10 +116,7 @@ object Anuncios {
         clase: String,
         dia: LocalDate
     ): ParametroTributario? =
-        parametros
-            .filter { it.tipo == Llaves.TASA_ANUNCIO && it.clave == clase && vigente(it, dia) }
-            .filter { it.valorNumerico != null && it.valorNumerico.signum() > 0 && it.id != null }
-            .maxByOrNull { it.vigenciaDesde!! }
+        parametros.enVigor(Llaves.TASA_ANUNCIO, dia) { it.clave == clase && it.valorNumerico != null && it.valorNumerico.signum() > 0 && it.id != null }
 
     // a clase's tasa of an ejercicio, as GET /anuncios/tasas shows it: the row in force on January 1 (the one a renewal
     // of that ejercicio reads), else the first one that starts within the year. null: the year does not charge it
@@ -233,9 +231,4 @@ object Anuncios {
                 }
         )
     }
-
-    private fun vigente(
-        p: ParametroTributario,
-        dia: LocalDate
-    ) = p.vigenciaDesde != null && p.vigenciaDesde <= dia && (p.vigenciaHasta == null || p.vigenciaHasta >= dia)
 }
