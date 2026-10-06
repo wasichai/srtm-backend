@@ -1,5 +1,7 @@
 package srtm.arbitrios
 
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.reactive.asFlow
 import kotlinx.coroutines.reactor.asCoroutineContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -9,9 +11,9 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.r2dbc.core.DatabaseClient
-import org.springframework.r2dbc.core.awaitSingle
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import srtm.emision.IdentidadEmision
+import srtm.emision.TablasCore
 import srtm.impuesto.PARAMETRO_TRIBUTARIO
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.PREDIO
@@ -29,6 +31,9 @@ import kotlin.random.Random
 // FICTITIOUS. the test db is shared and an ordinance is one per year: each test takes a year of its own, and its
 // servicios and parameters rule only in it
 class ArbitriosApiTest : ConArbitriosApiTest() {
+    @Autowired
+    lateinit var tablas: TablasCore
+
     @Test
     fun `a predio is determined once - 201 with its cuotas, then 200 with none`() {
         val e = Escenario()
@@ -226,16 +231,24 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
     }
 
     @Test
-    fun `the app indexes its cuotas by year and predio, and by year and contribuyente`() {
-        val e = Escenario()
-        send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED)
-        val nombres =
+    fun `the model declares the cuotas' indexes, in an organization made after startup too`() {
+        val suyo = otraOrganizacion()
+        val org = UUID.fromString(tree(send("GET", "/api/auth/me", null, HttpStatus.OK, suyo))["organizationId"].asString())
+        val t = runBlocking { tablas.de(CUOTA_ARBITRIO, listOf("anio", "predio", "contribuyente")) }.single { it.organizacion == org }
+        // tabla is schema-qualified and quoted: to_regclass reads it as it is
+        val defs =
             runBlocking {
                 db
-                    .sql("SELECT string_agg(indexname, ',') AS n FROM pg_indexes WHERE indexname LIKE 'cuota_arbitrio_%'")
-                    .map { row, _ -> row.get("n", String::class.java) ?: "" }
-                    .awaitSingle()
-            }.split(",")
-        assertTrue(nombres.any { it.endsWith("_predio") } && nombres.any { it.endsWith("_contribuyente") }, nombres.toString())
+                    .sql("SELECT pg_get_indexdef(indexrelid) AS indexdef FROM pg_index WHERE indrelid = to_regclass(CAST(:t AS text))")
+                    .bind("t", t.tabla)
+                    // postgres prints a column's name unquoted when it needs no quotes: compare the names bare
+                    .map { r, _ -> r.get("indexdef", String::class.java)!!.replace("\"", "") }
+                    .all()
+                    .asFlow()
+                    .toList()
+            }
+        for (campo in listOf("predio", "contribuyente")) {
+            assertTrue(defs.any { it.contains("(${t.columna("anio").replace("\"", "")}, ${t.columna(campo).replace("\"", "")})") }, defs.toString())
+        }
     }
 }

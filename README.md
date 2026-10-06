@@ -401,9 +401,9 @@ predio escribe alguna entre la lectura y la escritura (la `clave` es única), no
 otra vez, una sola vez, y lo que la otra escribió ya no se recalcula.
 
 **Índices.** Core indexa solo `organization_id`, el estado y los campos únicos, y un año trae de 540 000 a 900 000
-cuotas. La app crea dos índices propios sobre la tabla física de `cuota_arbitrio` de cada organización:
-`(anio, predio)` y `(anio, contribuyente)`. Los crea al arrancar y, para una organización cuyo modelo llegó después,
-en su primer uso (`IndicesArbitrios`). Medido en el CI sobre 505 000 filas: listar un predio pasa de 62 ms a 3,3 ms.
+cuotas. El modelo declara dos índices en `cuota_arbitrio` (`indexes` de `model/model.json`): `(anio, predio)` y
+`(anio, contribuyente)`. Core los crea en la tabla física de cada organización, también en una que se crea después
+(wasichai 0.3). Medido en el CI sobre 505 000 filas: listar un predio pasa de 62 ms a 3,3 ms.
 
 **API** (`/api/srtm`, JSON en snake_case; sin `anio`, el año en curso):
 

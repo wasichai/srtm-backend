@@ -81,7 +81,9 @@ def rule_put(name, **rules):
 
 # the objects model.json makes append-only, and the PUT apply sends Core for each
 APPEND_ONLY = ["cuota_arbitrio", "anulacion_cuota_arbitrio"]
-APPEND_ONLY_PUTS = [rule_put(n, appendOnly=True) for n in APPEND_ONLY]
+CUOTA_INDEXES = [["anio", "predio"], ["anio", "contribuyente"]]
+APPEND_ONLY_PUTS = [rule_put(n, appendOnly=True, **({"indexes": CUOTA_INDEXES} if n == "cuota_arbitrio" else {}))
+                    for n in APPEND_ONLY]
 
 
 class ApplyCliTestCase(unittest.TestCase):
@@ -172,7 +174,7 @@ class HappyPathTests(ApplyCliTestCase):
             else:
                 self.assertEqual(auth, "Bearer t")
 
-        self.assertIn("update object cuota_arbitrio (appendOnly)", out)
+        self.assertIn("update object cuota_arbitrio (appendOnly, indexes)", out)
         self.assertIn("done: 81 created, 2 updated, 0 skipped", out)
 
 
@@ -222,11 +224,12 @@ class ObjectRulesTests(ApplyCliTestCase):
         code, out, err = self.run_cli([])
         self.assertEqual(code, 0, msg=err)
         self.assertEqual(object_puts(self.core), APPEND_ONLY_PUTS)
-        self.assertIn("update object cuota_arbitrio (appendOnly)", out)
+        self.assertIn("update object cuota_arbitrio (appendOnly, indexes)", out)
         self.assertIn("update object anulacion_cuota_arbitrio (appendOnly)", out)
         self.assertIn("done: 0 created, 2 updated, 81 skipped", out)
         self.assertEqual({n: r for n, r in self.core.object_rules.items() if r.get("appendOnly")},
-                         {n: {"appendOnly": True} for n in APPEND_ONLY})
+                         {n: {"appendOnly": True, **({"indexes": CUOTA_INDEXES} if n == "cuota_arbitrio" else {})}
+                          for n in APPEND_ONLY})
 
         self.core.requests.clear()
         code, out, err = self.run_cli([])
@@ -254,7 +257,7 @@ class ObjectRulesTests(ApplyCliTestCase):
         self.core.object_meta["cuota_arbitrio"] = dict(admin)
         code, out, err = self.run_cli([])
         self.assertEqual(code, 0, msg=err)
-        self.assertIn(("/api/objects/cuota_arbitrio", {**admin, "appendOnly": True}), object_puts(self.core))
+        self.assertIn(("/api/objects/cuota_arbitrio", {**admin, "appendOnly": True, "indexes": CUOTA_INDEXES}), object_puts(self.core))
         self.assertEqual(self.core.object_meta["cuota_arbitrio"], admin)
         self.assertTrue(self.core.object_rules["cuota_arbitrio"]["appendOnly"])
         # and the other objects keep model.json's own
@@ -274,7 +277,7 @@ class ObjectRulesTests(ApplyCliTestCase):
         self.assertEqual(self.core.requests, [])
         # what model.json declares, not a diff against Core: the dry run asks Core nothing
         self.assertIn("# PUT /api/objects/cuota_arbitrio (plus label, pluralLabel, description and enabled as Core has them)"
-                      '\n{\n  "appendOnly": true\n}', out)
+                      '\n{\n  "indexes": [\n    [\n      "anio",\n      "predio"\n    ],\n    [\n      "anio",\n      "contribuyente"\n    ]\n  ],\n  "appendOnly": true\n}', out)
 
 
 class RuleChangesTests(unittest.TestCase):
@@ -563,11 +566,12 @@ class DropTests(ApplyCliTestCase):
         self.addCleanup(self.core.stop)
         code, out, err = self.run_cli(["--drop"])
         self.assertEqual(code, 0, msg=err)
-        self.assertEqual(object_puts(self.core), [rule_put(n, appendOnly=False) for n in reversed(APPEND_ONLY)])
+        self.assertEqual(object_puts(self.core), [rule_put(n, appendOnly=False, **({"indexes": []} if n == "cuota_arbitrio" else {}))
+                          for n in reversed(APPEND_ONLY)])
         first_delete = min(i for i, r in enumerate(self.core.requests) if r[0] == "DELETE")
         last_put = max(i for i, r in enumerate(self.core.requests) if r[0] == "PUT")
         self.assertLess(last_put, first_delete)
-        self.assertIn("update object cuota_arbitrio (appendOnly)", out)
+        self.assertIn("update object cuota_arbitrio (appendOnly, indexes)", out)
         self.assertIn("done: 81 deleted, 0 skipped", out)
 
     def test_drop_dry_run_makes_no_requests(self):

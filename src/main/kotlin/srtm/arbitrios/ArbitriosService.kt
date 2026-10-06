@@ -67,7 +67,6 @@ class ArbitriosService(
     private val parametrosTributarios: ParametrosTributarios,
     private val metadata: MetadataService,
     private val currentUser: CurrentUser,
-    private val indices: IndicesArbitrios,
     transacciones: ReactiveTransactionManager
 ) {
     private val transaccion = TransactionalOperator.create(transacciones)
@@ -240,10 +239,8 @@ class ArbitriosService(
         filtros: Map<String, String>,
         page: Int,
         size: Int
-    ): PageResponse<CuotaArbitrio> {
-        indices.asegurar(currentUser.require().organizationId)
-        return registros.page(CUOTA_ARBITRIO, CuotaArbitrio::class.java, RecordQuery(page = PageRequest.of(page, size), sort = "periodo", filters = filtros))
-    }
+    ): PageResponse<CuotaArbitrio> =
+        registros.page(CUOTA_ARBITRIO, CuotaArbitrio::class.java, RecordQuery(page = PageRequest.of(page, size), sort = "periodo", filters = filtros))
 
     // the cuotas to write, written in one transaction: all of the predio's or none. another determination of the same
     // predio may write some of them between our read and our write (the clave is unique): then nothing of ours stayed,
@@ -279,10 +276,7 @@ class ArbitriosService(
         anio: Int
     ) = cuotas(mapOf("contribuyente" to "$contribuyente", "anio" to "$anio"))
 
-    private suspend fun cuotas(filtros: Map<String, String>): List<CuotaArbitrio> {
-        indices.asegurar(currentUser.require().organizationId)
-        return registros.all(CUOTA_ARBITRIO, CuotaArbitrio::class.java, filters = filtros)
-    }
+    private suspend fun cuotas(filtros: Map<String, String>): List<CuotaArbitrio> = registros.all(CUOTA_ARBITRIO, CuotaArbitrio::class.java, filters = filtros)
 
     // the predios of a contribuyente's declarations of the year, and (conCuotas) of the cuotas charged to it, by code
     private suspend fun prediosDe(
