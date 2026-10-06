@@ -348,7 +348,8 @@
     "clase_anuncio": ["LETRERO", "PANEL", "TOLDO", "BANDEROLA", "PANTALLA_DIGITAL", "GLOBO_AEROSTATICO"],
     "tipo_anuncio": ["AVISO_SIMPLE", "AVISO_LUMINOSO", "AVISO_ILUMINADO", "AVISO_ELECTRONICO"],
     "tipo_movimiento_anuncio": ["AUTORIZACION", "RENOVACION", "CESE", "RETIRO"],
-    "paridad_numeracion": ["PAR", "IMPAR", "AMBOS"]
+    "paridad_numeracion": ["PAR", "IMPAR", "AMBOS"],
+    "base_arbitrio": ["PREDIO", "FRONTIS_ML", "AREA_CONSTRUIDA_M2"]
   },
   "objects": [
     {
@@ -924,20 +925,35 @@
       "name": "cuota_arbitrio",
       "label": "Cuota de arbitrio",
       "pluralLabel": "Cuotas de arbitrio",
-      "description": "Lo determinado de un servicio, un predio y un mes. Inmutable: nunca se edita ni se borra (una corrección es una anulación que se agrega). No es deuda: es lo determinado a su fecha_calculo.",
+      "description": "Lo determinado de un servicio, un predio, un uso (secuencia) y un mes, con su desglose. Inmutable: nunca se edita ni se borra (una corrección es una anulación que se agrega). No es deuda: es lo determinado a su fecha_calculo.",
       "fields": [
         {"name": "anio", "label": "Año", "type": "INTEGER", "required": true},
         {"name": "periodo", "label": "Periodo", "type": "INTEGER", "required": true, "description": "El mes, de 1 a 12."},
-        {"name": "monto", "label": "Monto", "type": "DECIMAL", "required": true, "description": "La tasa mensual del parámetro, tal cual: sin prorrateo ni redondeo, nunca negativa."},
+        {"name": "monto", "label": "Monto", "type": "DECIMAL", "required": true,
+          "description": "tasa_unitaria × cantidad_base × (1 + (H − P) × V) cuando el servicio reparte por habitantes, ya redondeado según REDONDEO_ARBITRIO; nunca negativo. Sin BASE_ARBITRIO, habitantes ni redondeo es la tasa mensual tal cual."},
         {"name": "parametro_aplicado", "label": "Parámetro aplicado", "type": "TEXT", "required": true,
-          "description": "La llave exacta que se leyó (TASA_ARBITRIO servicio:zona:uso), hasta 120 caracteres."},
+          "description": "Las llaves que se leyeron, separadas por ;: siempre TASA_ARBITRIO servicio:zona:uso, y BASE_ARBITRIO, HABITANTES_PROMEDIO, HABITANTES_VARIACION y REDONDEO_ARBITRIO cuando hubo filas. Hasta 500 caracteres."},
         {"name": "zona", "label": "Zona", "type": "TEXT", "description": "La zona del predio ese mes, según la ordenanza."},
-        {"name": "uso_arbitrio", "label": "Uso de arbitrio", "type": "TEXT", "description": "El uso del predio ese mes, según la ordenanza."},
+        {"name": "uso_arbitrio", "label": "Uso de arbitrio", "type": "TEXT", "description": "El uso de la secuencia ese mes, según la ordenanza."},
+        {"name": "secuencia_uso", "label": "Secuencia de uso", "type": "TEXT",
+          "description": "La secuencia de uso de la declaración (001, 002...): un PU por uso, como el SRTM. Vacía en las cuotas anteriores, que cuentan como la secuencia menor del predio."},
+        {"name": "base", "label": "Base", "type": "ENUM", "enum": "base_arbitrio",
+          "description": "Sobre qué se cobró la tasa (BASE_ARBITRIO): el predio, el frontis en ml o el área construida en m². Vacía en las cuotas anteriores al desglose."},
+        {"name": "cantidad_base", "label": "Cantidad de la base", "type": "DECIMAL", "description": "1 por predio, o los ml de frontis o los m² construidos de la declaración."},
+        {"name": "tasa_unitaria", "label": "Tasa unitaria", "type": "DECIMAL", "description": "La tasa mensual del parámetro, por unidad de la base."},
+        {"name": "habitantes", "label": "Habitantes", "type": "INTEGER", "description": "Los habitantes declarados (H), cuando el servicio reparte por habitantes."},
+        {"name": "habitantes_presuntos", "label": "Habitantes presuntos", "type": "BOOLEAN",
+          "description": "Sí cuando la declaración no trae habitantes: se presume el promedio y el factor es 1."},
+        {"name": "promedio_habitantes", "label": "Promedio de habitantes", "type": "DECIMAL", "description": "P: HABITANTES_PROMEDIO de servicio:zona:uso."},
+        {"name": "variacion_habitante", "label": "Variación por habitante", "type": "DECIMAL", "description": "V: HABITANTES_VARIACION de servicio:zona:uso."},
+        {"name": "influencia", "label": "Influencia", "type": "TEXT", "description": "El nivel de influencia del predio, cuando la tasa del servicio lo usa."},
+        {"name": "afluencia", "label": "Afluencia", "type": "TEXT", "description": "El nivel de afluencia del uso, cuando la tasa del servicio lo usa."},
+        {"name": "redondeo", "label": "Redondeo", "type": "TEXT", "description": "decimales:modo (REDONDEO_ARBITRIO) aplicado al monto, p. ej. 2:ABAJO."},
         {"name": "fecha_calculo", "label": "Fecha de cálculo", "type": "DATE", "required": true},
         {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true,
           "description": "Por qué se determinó, de 5 a 500 caracteres: core no guarda observación en su auditoría."},
         {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true,
-          "description": "predio|servicio|anio|periodo|version: una sola cuota por predio, servicio, año y mes (det_arbitrio_uq de rentas). La versión sube con cada anulación."}
+          "description": "predio|servicio|anio|periodo|secuencia|version: una sola cuota por predio, servicio, año, mes y secuencia de uso (det_arbitrio_uq de rentas, un PU por uso). La versión sube con cada anulación. Las cuotas anteriores a la secuencia tienen predio|servicio|anio|periodo|version."}
       ]
     },
     {
