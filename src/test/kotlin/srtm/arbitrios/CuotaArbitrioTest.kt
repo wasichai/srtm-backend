@@ -149,6 +149,18 @@ class CuotaArbitrioTest {
         assertEquals(emptyList<String>(), campos(cuota.copy(cantidadBase = BigDecimal.ZERO)))
     }
 
+    // Calculo.formula prints H's factor with P and V: a cuota with H and neither of them is not written (it would
+    // not print). P and V without H are the presumed ones, as Calculo writes them
+    @Test
+    fun `declared habitantes need P and V`() {
+        val sinPyV = recoleccion.copy(promedioHabitantes = null, variacionHabitante = null, monto = BigDecimal("5.14"))
+        assertEquals(listOf("habitantes"), campos(sinPyV))
+        assertEquals(emptyList<String>(), campos(sinPyV.copy(habitantes = null, habitantesPresuntos = null)))
+        val presuntos = recoleccion.copy(habitantes = null, habitantesPresuntos = true, monto = BigDecimal("5.14"))
+        assertEquals(emptyList<String>(), campos(presuntos))
+        assertEquals("0.0514 S/ por m² × 100.00 m² × (1 + (4 − 2) × 0.5) = 10.28", Calculo.formula(recoleccion))
+    }
+
     @Test
     fun `every field of a cuota is model json's, so none is dropped when written`() {
         val json = JsonMapper.builder().build()
