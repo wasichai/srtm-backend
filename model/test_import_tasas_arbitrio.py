@@ -1,11 +1,8 @@
 """Tests for import_tasas_arbitrio.py: deriving import_parametros.py's CSV from the long table of an ordinance's
 tasas de arbitrios.
 
-Every tasa here is FICTITIOUS (data/arbitrios/ficticio-*.csv, año 2041), except the end-to-end test that cites
-Miraflores 2026 (Ord. 665/MM), whitelisted with its source in global-constraints.md. Run: cd model && python3
--m unittest -v
+Every tasa here is FICTITIOUS (data/arbitrios/ficticio-*.csv, año 2041). Run: cd model && python3 -m unittest -v
 """
-import csv
 import io
 import json
 import os
@@ -23,6 +20,7 @@ DATOS = os.path.join(HERE, "data", "arbitrios")
 FICTICIO_TASAS = os.path.join(DATOS, "ficticio-tasas.csv")
 FICTICIO_USOS = os.path.join(DATOS, "ficticio-usos.csv")
 FICTICIO_INFLUENCIAS = os.path.join(DATOS, "ficticio-influencias.csv")
+FICTICIO_PARAMETROS = os.path.join(DATOS, "ficticio-parametros.csv")
 SERVICIOS = "BARRIDO_CALLES=BAR,RECOLECCION_RESIDUOS=RRS,PARQUES_JARDINES=PYJ,SERENAZGO=SER"
 
 
@@ -31,6 +29,27 @@ def comunes(**cambios):
             "transcribio": "ANA, 2041-01-05", "verifico": "BETO, 2041-01-09", "redondeo": None}
     base.update(cambios)
     return base
+
+
+# el contrato cruzado con ArbitriosTest.kt (#86): data/arbitrios/ficticio-parametros.csv es exactamente lo que esta
+# corrida produce; ArbitriosTest.kt lee ese mismo archivo. Para regenerarlo a mano:
+#   cd model && python3 import_tasas_arbitrio.py --tasas data/arbitrios/ficticio-tasas.csv --servicios \
+#     BARRIDO_CALLES=BAR,RECOLECCION_RESIDUOS=RRS,PARQUES_JARDINES=PYJ,SERENAZGO=SER \
+#     --usos data/arbitrios/ficticio-usos.csv --influencias data/arbitrios/ficticio-influencias.csv \
+#     --vigencia-desde 2041-01-01 --norma "Ordenanza ficticia 000-2041-MDP" --fuente test \
+#     --transcribio "ANA, 2041-01-05" --verifico "BETO, 2041-01-09" --redondeo 2:ABAJO \
+#     --habitantes RECOLECCION_RESIDUOS=4:0.3 --vencimientos 2041-02-28,2041-05-30,2041-08-29,2041-11-30 \
+#     --salida data/arbitrios/ficticio-parametros.csv
+def generar_ficticio_parametros(salida):
+    out, err = io.StringIO(), io.StringIO()
+    with redirect_stdout(out), redirect_stderr(err):
+        code = it.main(["--tasas", FICTICIO_TASAS, "--servicios", SERVICIOS, "--usos", FICTICIO_USOS,
+                         "--influencias", FICTICIO_INFLUENCIAS, "--vigencia-desde", "2041-01-01",
+                         "--norma", "Ordenanza ficticia 000-2041-MDP", "--fuente", "test",
+                         "--transcribio", "ANA, 2041-01-05", "--verifico", "BETO, 2041-01-09",
+                         "--redondeo", "2:ABAJO", "--habitantes", "RECOLECCION_RESIDUOS=4:0.3",
+                         "--vencimientos", "2041-02-28,2041-05-30,2041-08-29,2041-11-30", "--salida", salida])
+    return code, err.getvalue()
 
 
 class NormalizarYBaseTests(unittest.TestCase):
@@ -45,6 +64,15 @@ class NormalizarYBaseTests(unittest.TestCase):
         self.assertEqual(it._base_de("S/ por predio"), "PREDIO")
         self.assertIsNone(it._base_de("S/ por otra cosa"))
 
+    def test_base_de_no_confunde_una_unidad_con_una_parte_de_otra_palabra(self):
+        # decoys: "ml" y "m2" aparecen como subcadena de otra palabra, no como la unidad sola
+        self.assertIsNone(it._base_de("S/ por acumlado"))
+        self.assertIsNone(it._base_de("S/ por el item2 del cuadro"))
+        self.assertIsNone(it._base_de("S/ por xpredioy"))
+        # pero siguen reconociéndose con otras palabras alrededor
+        self.assertEqual(it._base_de("S/ por ml de frontis municipal"), "FRONTIS_ML")
+        self.assertEqual(it._base_de("S/ por m² construido"), "AREA_CONSTRUIDA_M2")
+
     def test_casa_habitacion_es_insensible_a_acentos_y_mayusculas(self):
         self.assertTrue(it._casa_habitacion("Casa habitación y predios en construcción"))
         self.assertFalse(it._casa_habitacion("Otro uso ficticio"))
@@ -53,7 +81,7 @@ class NormalizarYBaseTests(unittest.TestCase):
 class LeerTests(unittest.TestCase):
     def test_leer_tasas_mantiene_las_columnas_vacias(self):
         filas = it.leer_tasas(FICTICIO_TASAS)
-        self.assertEqual(len(filas), 14)
+        self.assertEqual(len(filas), 15)
         self.assertEqual(filas[0], {"servicio": "BARRIDO_CALLES", "zona": "Zona 1", "uso_codigo": "", "uso": "",
                                      "ubicacion": "", "nivel_afluencia": "", "base": "S/ por ml de frontis",
                                      "tasa_mensual": "3.1000"})
@@ -61,7 +89,7 @@ class LeerTests(unittest.TestCase):
     def test_leer_mapeo_usos_e_influencias(self):
         usos = it.leer_mapeo(FICTICIO_USOS, ("prefijo", "uso"))
         self.assertEqual(usos, [{"prefijo": "0100", "uso": "1"}, {"prefijo": "0101", "uso": "2"},
-                                 {"prefijo": "0102", "uso": "9"}])
+                                 {"prefijo": "0102", "uso": "9"}, {"prefijo": "0103", "uso": "15"}])
         influencias = it.leer_mapeo(FICTICIO_INFLUENCIAS, ("enum", "etiqueta"))
         self.assertEqual(influencias, [{"enum": "FRENTE A PARQUE", "etiqueta": "Frente a parque ficticio"}])
 
@@ -84,10 +112,10 @@ class GenerarTests(unittest.TestCase):
     def test_cantidades_por_tipo(self):
         parametros, malas = self.generar(habitantes=[("RECOLECCION_RESIDUOS", ("4", "0.3"))], redondeo="2:MEDIO")
         self.assertEqual(malas, [])
-        self.assertEqual(len(self.por_tipo(parametros, "TASA_ARBITRIO")), 14)
+        self.assertEqual(len(self.por_tipo(parametros, "TASA_ARBITRIO")), 15)
         self.assertEqual(len(self.por_tipo(parametros, "BASE_ARBITRIO")), 4)
         self.assertEqual(len(self.por_tipo(parametros, "DIMENSIONES_ARBITRIO")), 4)
-        self.assertEqual(len(self.por_tipo(parametros, "ARBITRIO_USO")), 3)
+        self.assertEqual(len(self.por_tipo(parametros, "ARBITRIO_USO")), 4)
         self.assertEqual(len(self.por_tipo(parametros, "ARBITRIO_INFLUENCIA")), 1)
         # solo RECOLECCION_RESIDUOS tiene --habitantes, y dos zonas de casa habitación
         self.assertEqual(len(self.por_tipo(parametros, "HABITANTES_PROMEDIO")), 2)
@@ -101,7 +129,7 @@ class GenerarTests(unittest.TestCase):
         claves = {p["clave"] for p in self.por_tipo(parametros, "TASA_ARBITRIO")}
         self.assertEqual(claves, {
             "BAR:ZONA_1", "BAR:ZONA_2",
-            "RRS:ZONA_1:2", "RRS:ZONA_2:2", "RRS:ZONA_1:9", "RRS:ZONA_2:9",
+            "RRS:ZONA_1:2", "RRS:ZONA_2:2", "RRS:ZONA_1:9", "RRS:ZONA_2:9", "RRS::15",
             "PYJ:ZONA_A:Frente a parque ficticio:ALTA", "PYJ:ZONA_A:Frente a parque ficticio:MUY_ALTA",
             "PYJ:ZONA_B:Frente a parque ficticio:ALTA", "PYJ:ZONA_B:Frente a parque ficticio:MUY_ALTA",
             "SER:AREA_0:1", "SER:AREA_0:2", "SER:AREA_1:1", "SER:AREA_1:2",
@@ -158,13 +186,24 @@ class GenerarTests(unittest.TestCase):
         filas = self.filas + [dict(self.filas[0])]  # BARRIDO_CALLES Zona 1 dos veces
         parametros, malas = it.generar(filas, self.servicios, self.usos, self.influencias, {}, **comunes())
         self.assertTrue(any("tasa repetida" in e and "BAR:ZONA_1" in e for e in malas))
-        # el intento completo sigue disponible (15 filas -> 15 TASA_ARBITRIO), aunque no se escriba
-        self.assertEqual(len([p for p in parametros if p["tipo"] == "TASA_ARBITRIO"]), 15)
+        # el intento completo sigue disponible (16 filas -> 16 TASA_ARBITRIO), aunque no se escriba
+        self.assertEqual(len([p for p in parametros if p["tipo"] == "TASA_ARBITRIO"]), 16)
 
     def test_el_csv_generado_pasa_import_parametros_errores(self):
         parametros, malas = self.generar(habitantes=[("RECOLECCION_RESIDUOS", ("4", "0.3"))], redondeo="2:ABAJO")
         self.assertEqual(malas, [])
         self.assertEqual(import_parametros.errores(parametros), [])
+
+    def test_habitantes_de_una_fila_de_casa_habitacion_sin_zona_es_un_error(self):
+        # RECOLECCION_RESIDUOS, Zona 1, uso 2 (casa habitación): si le quitamos la zona, --habitantes no tiene
+        # cómo repartirla en "toda zona del servicio" (a diferencia de una tasa, que sí admite la zona vacía)
+        filas = [dict(f) for f in self.filas]
+        filas[2] = dict(filas[2], zona="")
+        parametros, malas = it.generar(filas, self.servicios, self.usos, self.influencias,
+                                        {"RECOLECCION_RESIDUOS": ("4", "0.3")}, **comunes())
+        self.assertTrue(any("--habitantes" in e and "zona" in e and "RRS" in e for e in malas))
+        # no se escribe ninguna fila de habitantes para esa fila sin zona
+        self.assertFalse(any(p["clave"] == "RRS::2" for p in parametros if p["tipo"] == "HABITANTES_PROMEDIO"))
 
     def test_una_fila_sin_zona_en_un_servicio_con_zona_genera_la_clave_con_esa_parte_vacia(self):
         # RECOLECCION_RESIDUOS,Zona 1,9,Otro uso ficticio,...: esta tasa no varía por zona (como los "otros usos"
@@ -245,7 +284,7 @@ class MainTests(unittest.TestCase):
         self.addCleanup(os.unlink, f.name)
         leidos = import_parametros.read_parametros(f.name)
         self.assertEqual(import_parametros.errores(leidos), [])
-        self.assertEqual(len([p for p in leidos if p["tipo"] == "TASA_ARBITRIO"]), 14)
+        self.assertEqual(len([p for p in leidos if p["tipo"] == "TASA_ARBITRIO"]), 15)
 
     def test_la_salida_es_idempotente(self):
         _, _, _, primera = self.run_main()
@@ -271,7 +310,6 @@ class MainTests(unittest.TestCase):
             self.assertFalse(os.path.exists(salida))
 
     def test_servicios_malformado_sale_con_2(self):
-        code, out, err, contenido = self.run_main()
         with tempfile.TemporaryDirectory() as d:
             salida = os.path.join(d, "parametros.csv")
             out, err = io.StringIO(), io.StringIO()
@@ -287,7 +325,7 @@ class MainTests(unittest.TestCase):
         code, out, err, contenido = self.run_main("--dry-run", "--vencimientos", "2041-02-28,2041-05-30,2041-08-29,2041-11-30")
         self.assertEqual(code, 0, err)
         self.assertIsNone(contenido)
-        self.assertIn("TASA_ARBITRIO: 14", out)
+        self.assertIn("TASA_ARBITRIO: 15", out)
         self.assertIn("BASE_ARBITRIO: 4", out)
         self.assertIn("DIMENSIONES_ARBITRIO: 4", out)
         self.assertIn("ARBITRIO_VENCIMIENTO: 12", out)
@@ -307,20 +345,88 @@ class MainTests(unittest.TestCase):
             self.assertIn("12", err.getvalue())
             self.assertFalse(os.path.exists(salida))
 
+    def test_sin_salida_ni_dry_run_sale_con_2(self):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = it.main(["--tasas", FICTICIO_TASAS, "--servicios", SERVICIOS, "--usos", FICTICIO_USOS,
+                             "--influencias", FICTICIO_INFLUENCIAS, "--vigencia-desde", "2041-01-01",
+                             "--norma", "x", "--fuente", "x", "--transcribio", "ANA, 2041-01-05",
+                             "--verifico", "BETO, 2041-01-09"])
+        self.assertEqual(code, 2)
+        self.assertIn("--salida", err.getvalue())
 
-# el final de punta a punta (#86, Step 2): generar -> import_parametros.py --csv -> import_arbitrios.py, sobre una
-# ordenanza y servicios ficticios, con las cifras de Miraflores 2026 (Ord. 665/MM) citadas en global-constraints.md
-# (whitelisted: 0.0514, 5.0856, 85.9875, 61.0535, P=2, V=0.5, redondeo 2:ABAJO). Las mismas filas están en
-# ArbitriosTest.kt («un predio por base»): no se duplica aquí el cálculo, solo que esto es lo que Kotlin lee.
-MIRAFLORES_TASAS = """# Extracto de Miraflores 2026, Ord. 665/MM (cifras reales, citadas en global-constraints.md); zona y uso ficticios
-servicio,zona,uso_codigo,uso,ubicacion,nivel_afluencia,base,tasa_mensual
-BARRIDO,Zona 2,,,,,S/ por ml de frontis,5.0856
-RECOLECCION,Zona 01A,2,Casa habitación,,,S/ por m2 de área construida,0.0514
-PARQUES,Zona A,,,Frente a parque,Baja,S/ por predio,85.9875
-SERENAZGO,Zona 1,1,Otro uso,,,S/ por predio,61.0535
-"""
+    def test_dry_run_sin_salida_funciona(self):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = it.main(["--tasas", FICTICIO_TASAS, "--servicios", SERVICIOS, "--usos", FICTICIO_USOS,
+                             "--influencias", FICTICIO_INFLUENCIAS, "--vigencia-desde", "2041-01-01",
+                             "--norma", "x", "--fuente", "x", "--transcribio", "ANA, 2041-01-05",
+                             "--verifico", "BETO, 2041-01-09", "--dry-run"])
+        self.assertEqual(code, 0, err.getvalue())
+
+    def _main_con_tasas(self, tasas_texto):
+        """Corre main() con un --tasas de contenido arbitrario; (code, stderr, si --salida existe)."""
+        with tempfile.TemporaryDirectory() as d:
+            tasas = os.path.join(d, "tasas.csv")
+            with open(tasas, "w", encoding="utf-8") as f:
+                f.write(tasas_texto)
+            salida = os.path.join(d, "parametros.csv")
+            out, err = io.StringIO(), io.StringIO()
+            with redirect_stdout(out), redirect_stderr(err):
+                code = it.main(["--tasas", tasas, "--servicios", SERVICIOS, "--usos", FICTICIO_USOS,
+                                 "--influencias", FICTICIO_INFLUENCIAS, "--vigencia-desde", "2041-01-01",
+                                 "--norma", "x", "--fuente", "x", "--transcribio", "ANA, 2041-01-05",
+                                 "--verifico", "BETO, 2041-01-09", "--salida", salida])
+            return code, err.getvalue(), os.path.exists(salida)
+
+    # AC de #86: una tasa repetida, una base desconocida o un uso sin mapa salen con 2 y no escriben nada, a
+    # través de main() (no solo de generar()) con el mismo CSV ficticio de base
+    def test_tasa_repetida_sale_con_2_y_no_escribe_por_cli(self):
+        with open(FICTICIO_TASAS, encoding="utf-8") as f:
+            original = f.read()
+        duplicada = original + "BARRIDO_CALLES,Zona 1,,,,,S/ por ml de frontis,3.1000\n"
+        code, err, existe = self._main_con_tasas(duplicada)
+        self.assertEqual(code, 2)
+        self.assertIn("tasa repetida", err)
+        self.assertFalse(existe)
+
+    def test_base_desconocida_sale_con_2_y_no_escribe_por_cli(self):
+        with open(FICTICIO_TASAS, encoding="utf-8") as f:
+            original = f.read()
+        modificado = original.replace("S/ por ml de frontis", "S/ por litro", 1)
+        code, err, existe = self._main_con_tasas(modificado)
+        self.assertEqual(code, 2)
+        self.assertIn("base desconocida", err)
+        self.assertFalse(existe)
+
+    def test_uso_sin_mapeo_sale_con_2_y_no_escribe_por_cli(self):
+        with open(FICTICIO_TASAS, encoding="utf-8") as f:
+            original = f.read()
+        modificado = original.replace(",9,Otro uso ficticio,", ",99,Otro uso ficticio,", 1)
+        code, err, existe = self._main_con_tasas(modificado)
+        self.assertEqual(code, 2)
+        self.assertIn("--usos", err)
+        self.assertFalse(existe)
 
 
+# el contrato cruzado con ArbitriosTest.kt (#86, AC 4): el archivo committeado es byte a byte lo que esta misma
+# corrida produce de las tasas ficticias
+class ArchivoFicticioGeneradoTests(unittest.TestCase):
+    def test_el_archivo_committeado_es_igual_byte_a_byte_a_la_corrida_fija(self):
+        with tempfile.TemporaryDirectory() as d:
+            salida = os.path.join(d, "ficticio-parametros.csv")
+            code, err = generar_ficticio_parametros(salida)
+            self.assertEqual(code, 0, err)
+            with open(salida, encoding="utf-8") as f:
+                generado = f.read()
+        with open(FICTICIO_PARAMETROS, encoding="utf-8") as f:
+            comiteado = f.read()
+        self.assertEqual(generado, comiteado)
+
+
+# el final de punta a punta (#86, Step 2 y AC 4): generar (las tasas ficticias, con los mismos flags fijos de
+# arriba) -> import_parametros.py --csv -> import_arbitrios.py, sobre una ordenanza y servicios ficticios. El
+# mismo archivo que esto genera es el que ArbitriosTest.kt («un predio por base») lee directamente del repo.
 class PuntaAPuntaTests(unittest.TestCase):
     def setUp(self):
         self.core = FakeCore()
@@ -328,31 +434,10 @@ class PuntaAPuntaTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.dir = tmp.name
-        self.tasas = os.path.join(self.dir, "miraflores-tasas.csv")
-        with open(self.tasas, "w", encoding="utf-8") as f:
-            f.write(MIRAFLORES_TASAS)
-        self.usos = os.path.join(self.dir, "usos.csv")
-        with open(self.usos, "w", encoding="utf-8") as f:
-            f.write("prefijo,uso\n0101,2\n0102,1\n")
-        self.influencias = os.path.join(self.dir, "influencias.csv")
-        with open(self.influencias, "w", encoding="utf-8") as f:
-            f.write("enum,etiqueta\nFRENTE A PARQUE,Frente a parque\n")
         self.parametros_csv = os.path.join(self.dir, "parametros.csv")
 
-    def generar_parametros(self):
-        out, err = io.StringIO(), io.StringIO()
-        with redirect_stdout(out), redirect_stderr(err):
-            code = it.main(["--tasas", self.tasas, "--servicios",
-                             "BARRIDO=BARRIDO,RECOLECCION=RECOLECCION,PARQUES=PARQUES,SERENAZGO=SERENAZGO",
-                             "--usos", self.usos, "--influencias", self.influencias,
-                             "--vigencia-desde", "2026-01-01", "--norma", "Ordenanza N.° 665/MM",
-                             "--fuente", "El Peruano, 20/12/2025", "--transcribio", "ANA, 2026-01-05",
-                             "--verifico", "BETO, 2026-01-09", "--redondeo", "2:ABAJO",
-                             "--habitantes", "RECOLECCION=2:0.5", "--salida", self.parametros_csv])
-        return code, err.getvalue()
-
     def test_generar_y_cargar_con_import_parametros_y_import_arbitrios(self):
-        code, err = self.generar_parametros()
+        code, err = generar_ficticio_parametros(self.parametros_csv)
         self.assertEqual(code, 0, err)
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
@@ -360,16 +445,15 @@ class PuntaAPuntaTests(unittest.TestCase):
         self.assertEqual(code, 0, err.getvalue())
         tasas = {r["attributes"]["clave"]: r["attributes"]["valor_numerico"]
                  for r in self.core.records["parametro_tributario"] if r["attributes"]["tipo"] == "TASA_ARBITRIO"}
-        self.assertEqual(tasas, {
-            "BARRIDO:ZONA_2": "5.0856", "RECOLECCION:ZONA_01A:2": "0.0514",
-            "PARQUES:ZONA_A:Frente a parque:BAJA": "85.9875", "SERENAZGO:ZONA_1:1": "61.0535",
-        })
+        self.assertEqual(len(tasas), 15)
+        self.assertEqual(tasas["BAR:ZONA_1"], "3.1000")
+        self.assertEqual(tasas["RRS::15"], "0.1500")  # la tasa de zona vacía también se carga bien
 
         archivo = {
-            "ordenanzas": [{"anio": 2026, "numero": "665/MM"}],
+            "ordenanzas": [{"anio": 2041, "numero": "000-2041-MDP (ficticia)"}],
             "servicios": [
-                {"codigo": c, "nombre": c, "orden": i, "vigencia_desde": "2026-01-01", "ordenanza": 2026}
-                for i, c in enumerate(("BARRIDO", "RECOLECCION", "PARQUES", "SERENAZGO"), start=1)
+                {"codigo": c, "nombre": c, "orden": i, "vigencia_desde": "2041-01-01", "ordenanza": 2041}
+                for i, c in enumerate(("BAR", "RRS", "PYJ", "SER"), start=1)
             ],
             "inafectaciones": [],
         }
@@ -381,7 +465,7 @@ class PuntaAPuntaTests(unittest.TestCase):
             code = import_arbitrios.main(["--core", self.core.base_url, "--archivo", archivo_path])
         self.assertEqual(code, 0, err.getvalue())
         self.assertEqual({r["attributes"]["codigo"] for r in self.core.records["servicio_arbitrio"]},
-                          {"BARRIDO", "RECOLECCION", "PARQUES", "SERENAZGO"})
+                          {"BAR", "RRS", "PYJ", "SER"})
 
 
 # el CSV real de Miraflores (#86): no se versiona (se carga más adelante); se salta si no está la variable
@@ -439,8 +523,6 @@ class MirafloresRealTests(unittest.TestCase):
             "10": "2026-11-30", "11": "2026-11-30", "12": "2026-11-30",
         })
         self.assertEqual(import_parametros.errores(parametros), [])
-        print(f"Miraflores real: {len(parametros)} parámetros generados, de ellos {len(tasas)} TASA_ARBITRIO "
-              f"(3/68/64/111); 0 errores propios, 0 de import_parametros.errores")
 
     def test_el_csv_generado_pasa_import_parametros_dry_run_sin_errores_y_una_segunda_corrida_es_idempotente(self):
         core = FakeCore()

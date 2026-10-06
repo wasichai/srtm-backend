@@ -379,16 +379,41 @@ diferencia de la de casa habitación del mismo servicio). `--usos` (`prefijo,uso
 pasan verbatim a `ARBITRIO_USO`/`ARBITRIO_INFLUENCIA`; toda tasa cuyo `uso_codigo`/`ubicacion` no esté en esas
 columnas no encaja. `--habitantes SERVICIO=P:V` (repetible) escribe `HABITANTES_PROMEDIO`/`HABITANTES_VARIACION` por
 cada `servicio:zona:uso` de casa habitación presente para ese servicio (su columna `uso` contiene «casa
-habitación», sin acentos). `--redondeo` escribe la fila global; `--vencimientos` escribe las 12 `ARBITRIO_VENCIMIENTO`
-a partir de 12 fechas (una por mes) o 4 (trimestral: cada una cubre sus 3 meses). `--dry-run` imprime la cantidad por
-tipo y no escribe `--salida`; los códigos de salida no cambian con `--dry-run`.
+habitación», sin acentos); una fila de casa habitación sin zona no tiene cómo repartirse "en toda zona del
+servicio", así que no encaja. `--redondeo` escribe la fila global; `--vencimientos` escribe las 12
+`ARBITRIO_VENCIMIENTO` a partir de 12 fechas (una por mes) o 4 (trimestral: cada una cubre sus 3 meses).
+`--dry-run` imprime la cantidad por tipo y no escribe nada: `--salida` es obligatorio sin `--dry-run`, y no hace
+falta con él. Los códigos de salida no cambian con `--dry-run`.
 
 `ARBITRIO_AFLUENCIA` **no se deriva aquí a propósito**: mapea el uso propio de un predio a su nivel de afluencia —
 dato del predio, no de la ordenanza — y esta tabla no lo trae.
 
 Sale con `2` (nada escrito) si un servicio de una fila no está en `--servicios`, una base no se reconoce, una tasa
-se repite, un uso o una ubicación no tienen mapeo, `--vencimientos` no trae 12 ni 4 fechas, o el CSV construido no
-pasa `import_parametros.errores`.
+se repite, un uso o una ubicación no tienen mapeo, una fila de casa habitación no tiene zona bajo `--habitantes`,
+`--vencimientos` no trae 12 ni 4 fechas, o el CSV construido no pasa `import_parametros.errores`.
+
+**Cuidado al cargar `ARBITRIO_ZONA`, `zona_arbitrio_ubicacion` y `ARBITRIO_AFLUENCIA` aparte.** Estos tres no los
+escribe `import_tasas_arbitrio.py` (zona y ubicación son del predio, no de la tabla de tasas); quien los carga
+—a mano o con `import_zonas_arbitrio.py`— **debe escribir el mismo texto normalizado que las `TASA_ARBITRIO`
+usan en su clave**: sin acentos, en mayúsculas, lo que no es letra ni número vuelto `_` («Zona 1» → `ZONA_1`,
+«Área 0» → `AREA_0`, «Muy alta» → `MUY_ALTA`). Una zona o una afluencia escrita como la ordenanza la imprime
+(«Zona 1», «Muy alta») no calza con la clave de ninguna `TASA_ARBITRIO`, y el predio entero falla con un
+`TASA_ARBITRIO` en `faltan` — sin ningún otro aviso.
+
+`model/data/arbitrios/ficticio-parametros.csv` es exactamente lo que `import_tasas_arbitrio.py` produce de
+`ficticio-tasas.csv`, `ficticio-usos.csv` y `ficticio-influencias.csv` (un contrato cruzado: `ArbitriosTest.kt`
+lee este mismo archivo, y `test_import_tasas_arbitrio.py` lo regenera y compara byte a byte). Para regenerarlo:
+
+```bash
+cd model
+python3 import_tasas_arbitrio.py --tasas data/arbitrios/ficticio-tasas.csv \
+    --servicios BARRIDO_CALLES=BAR,RECOLECCION_RESIDUOS=RRS,PARQUES_JARDINES=PYJ,SERENAZGO=SER \
+    --usos data/arbitrios/ficticio-usos.csv --influencias data/arbitrios/ficticio-influencias.csv \
+    --vigencia-desde 2041-01-01 --norma "Ordenanza ficticia 000-2041-MDP" --fuente test \
+    --transcribio "ANA, 2041-01-05" --verifico "BETO, 2041-01-09" --redondeo 2:ABAJO \
+    --habitantes RECOLECCION_RESIDUOS=4:0.3 --vencimientos 2041-02-28,2041-05-30,2041-08-29,2041-11-30 \
+    --salida data/arbitrios/ficticio-parametros.csv
+```
 
 **La ordenanza, los servicios y las inafectaciones** se cargan con `import_arbitrios.py`, desde un JSON:
 
@@ -436,7 +461,9 @@ servicio tenga.
 Se carga con `import_zonas_arbitrio.py`, desde un CSV con las columnas
 `servicio,tipo_via,via,manzana,numero_inicial,numero_final,paridad,zona,vigencia_desde,vigencia_hasta,norma,observacion`
 y una cabecera `#` con la fuente; `servicio` vacío aplica a todos, `manzana` vacía no filtra por manzana, `tipo_via`
-vacío no filtra por tipo de vía y `vigencia_hasta` vacía sigue vigente:
+vacío no filtra por tipo de vía y `vigencia_hasta` vacía sigue vigente. **La columna `zona` debe traer el mismo
+texto normalizado que las `TASA_ARBITRIO` de ese servicio** (ver la advertencia de arriba, en **Tasas de una
+ordenanza**): `import_zonas_arbitrio.py` no normaliza nada, solo lo versiona tal cual se le da.
 
 ```bash
 cd model

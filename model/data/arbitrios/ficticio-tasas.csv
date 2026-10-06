@@ -8,6 +8,7 @@ RECOLECCION_RESIDUOS,Zona 1,2,Casa habitación ficticia,,,S/ por m2 de área con
 RECOLECCION_RESIDUOS,Zona 2,2,Casa habitación ficticia,,,S/ por m2 de área construida,0.0700
 RECOLECCION_RESIDUOS,Zona 1,9,Otro uso ficticio,,,S/ por m2 de área construida,0.1000
 RECOLECCION_RESIDUOS,Zona 2,9,Otro uso ficticio,,,S/ por m2 de área construida,0.1200
+RECOLECCION_RESIDUOS,,15,Otro uso ficticio 2,,,S/ por m2 de área construida,0.1500
 PARQUES_JARDINES,Zona A,,,Frente a parque ficticio,Alta,S/ por predio,50.0000
 PARQUES_JARDINES,Zona A,,,Frente a parque ficticio,Muy alta,S/ por predio,60.0000
 PARQUES_JARDINES,Zona B,,,Frente a parque ficticio,Alta,S/ por predio,40.0000

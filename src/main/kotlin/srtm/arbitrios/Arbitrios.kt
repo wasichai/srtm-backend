@@ -279,7 +279,10 @@ object Arbitrios {
                     if (malas.isEmpty()) {
                         cuotas += cuota
                     } else {
-                        falta("${Llaves.TASA_ARBITRIO} $claveDeTasa ${c.anio}: " + malas.joinToString("; ") { "${it.field} ${it.message}" })
+                        falta(
+                            "${Llaves.TASA_ARBITRIO} ${tasa.clave!!.trim()} ${c.anio}: " +
+                                malas.joinToString("; ") { "${it.field} ${it.message}" }
+                        )
                     }
                 }
             }

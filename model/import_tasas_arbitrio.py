@@ -23,7 +23,8 @@ checks their shape):
   column, or the file does not fit (sin mapeo). ARBITRIO_AFLUENCIA is NOT derived here on purpose: it maps a
   predio's own uso a su nivel de afluencia, dato del predio, no de la ordenanza (fuera de lo que esta tabla trae).
 - HABITANTES_PROMEDIO/HABITANTES_VARIACION, from --habitantes SERVICIO=P:V, one pair per servicio:zona:uso of casa
-  habitación present in --tasas for that servicio (its uso column contains «casa habitación», sin acentos).
+  habitación present in --tasas for that servicio (its uso column contains «casa habitación», sin acentos). A row
+  of casa habitación without a zona is an error (--habitantes cannot be split "en toda zona del servicio").
 - REDONDEO_ARBITRIO, one row (clave vacía) from --redondeo, when given.
 - ARBITRIO_VENCIMIENTO, 12 rows (one per month) from --vencimientos: 12 fechas (una por mes) o 4 (trimestral: cada
   una cubre sus 3 meses, 1-3/4-6/7-9/10-12), AAAA-MM-DD separadas por comas.
@@ -33,9 +34,10 @@ servicio_arbitrio (<=20 characters) that import_arbitrios.py loads separately an
 actually uses: NOMBRE=codigo, repeated with commas.
 
 Nothing is sent anywhere: generar() always returns what it could build, even malformed; a problem (a servicio
-outside --servicios, a base desconocida, a tasa repetida, a uso or una ubicación sin mapeo, --vencimientos with
-neither 12 nor 4 fechas, or anything import_parametros.errores rejects — called here, before writing) only stops
-main() from writing --salida. --dry-run prints the count per tipo instead of writing it; exit codes do not change.
+outside --servicios, a base desconocida, a tasa repetida, a uso or una ubicación sin mapeo, a casa habitación sin
+zona bajo --habitantes, --vencimientos with neither 12 nor 4 fechas, or anything import_parametros.errores rejects
+— called here, before writing) only stops main() from writing --salida. --dry-run prints the count per tipo
+instead of writing it, and --salida is then optional (required otherwise); exit codes do not change.
 
 Run: python3 import_tasas_arbitrio.py --tasas tasas.csv --servicios NOMBRE=codigo,... --usos usos.csv
      [--influencias influencias.csv] --vigencia-desde AAAA-MM-DD --norma "..." --fuente "..." --transcribio "X, fecha"
@@ -86,13 +88,14 @@ def _normalizar(texto):
 
 def _base_de(texto):
     """«S/ por ml de frontis» -> FRONTIS_ML, «S/ por m2/m² de área construida» -> AREA_CONSTRUIDA_M2, «S/ por
-    predio» -> PREDIO; None when the texto matches none of them (base desconocida)."""
+    predio» -> PREDIO; None when the texto matches none of them (base desconocida). Matched on word boundaries: a
+    unit that is merely a substring of another word (a decoy) does not count."""
     t = (texto or "").lower()
-    if "ml" in t:
+    if re.search(r"\bml\b", t):
         return "FRONTIS_ML"
-    if "m2" in t or "m²" in t:
+    if re.search(r"\bm2\b|\bm²\b", t):
         return "AREA_CONSTRUIDA_M2"
-    if "predio" in t:
+    if re.search(r"\bpredio\b", t):
         return "PREDIO"
     return None
 
@@ -189,8 +192,13 @@ def generar(filas, servicios, usos, influencias, habitantes, vigencia_desde, nor
         for f in por_servicio.get(codigo, []):
             if not _casa_habitacion(f.get("uso")):
                 continue
-            zona, uso = _segmento("ZONA", f), _segmento("USO", f)
-            if not zona or not uso:
+            uso = _segmento("USO", f)
+            if not uso:
+                continue
+            zona = _segmento("ZONA", f)
+            if not zona:
+                errores.append(f"--habitantes: una fila de casa habitación del servicio {codigo} (uso {uso}) "
+                                "no tiene zona: los habitantes no se pueden repartir en toda zona del servicio")
                 continue
             clave = f"{codigo}:{zona}:{uso}"
             if clave in vistos:
@@ -279,12 +287,15 @@ def _parse_args(argv):
     p.add_argument("--habitantes", action="append", default=[], help="SERVICIO=P:V, repetible")
     p.add_argument("--vencimientos", help="12 fechas (una por mes) o 4 (trimestral), AAAA-MM-DD separadas por comas")
     p.add_argument("--dry-run", action="store_true", help="imprime la cantidad por tipo; no escribe --salida")
-    p.add_argument("--salida", required=True)
+    p.add_argument("--salida", help="obligatorio sin --dry-run")
     return p.parse_args(argv)
 
 
 def main(argv=None):
     args = _parse_args(sys.argv[1:] if argv is None else argv)
+    if not args.dry_run and not args.salida:
+        print("error: --salida es obligatorio sin --dry-run", file=sys.stderr)
+        return 2
     try:
         servicios = _parse_pares(args.servicios)
         habitantes = _parse_habitantes(args.habitantes)

@@ -4,10 +4,12 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import srtm.impuesto.ParametroTributario
+import srtm.impuesto.Parametros
 import srtm.rentas.ANULADA
 import srtm.rentas.Declaracion
 import srtm.rentas.Predio
 import srtm.rentas.UsoPredio
+import java.io.File
 import java.math.BigDecimal
 import java.time.LocalDate
 
@@ -23,7 +25,10 @@ class ArbitriosTest {
             UsoPredio("010101", "RESIDENCIAL", "UNIFAMILIAR", "CASA HABITACIÓN"),
             UsoPredio("010201", "RESIDENCIAL", "MULTIFAMILIAR", "EDIFICIO"),
             UsoPredio("040101", "RECREACIONAL", "DEPORTIVO", "PARQUE METROPOLITANO"),
-            UsoPredio("020501", "COMERCIAL", "TIENDAS", "TIENDA")
+            UsoPredio("020501", "COMERCIAL", "TIENDAS", "TIENDA"),
+            // matches the ficticio ARBITRIO_USO 0103->15 of data/arbitrios/ficticio-parametros.csv (#86), the
+            // "otro uso" that has no zona of its own in RECOLECCION_RESIDUOS (the empty-zona TASA_ARBITRIO)
+            UsoPredio("010301", "OTRO", "OTRO", "OTRO USO FICTICIO 2")
         )
     private val tasas = servicios.map { tasa("${it.codigo}:Z1:CASA", "8.50") }
     private val mapeos = listOf(param(Llaves.ARBITRIO_ZONA, "S-01", texto = "Z1"), param(Llaves.ARBITRIO_USO, "0101", texto = "CASA"))
@@ -676,43 +681,83 @@ class ArbitriosTest {
         assertTrue(invariantes(rrss).isEmpty())
     }
 
-    // extends the Miraflores fixture above with PARQUES and SERENAZGO, both on PREDIO (no habitantes), PARQUES with
-    // INFLUENCIA and AFLUENCIA besides ZONA: the same real figures (global-constraints.md) of 85.9875 and 61.0535,
-    // checking that import_tasas_arbitrio.py's output (#86) is what this module actually reads, one base of each
-    // kind on the same predio. sector, zona, uso, influencia and afluencia names are fictitious
+    // #86: the exact file import_tasas_arbitrio.py generates from the ficticio tasas, usos and influencias (the
+    // fixed run cited in its header's regeneration command / test_import_tasas_arbitrio.py's
+    // generar_ficticio_parametros); a byte-equality test on the Python side keeps this file honest. Only the id
+    // is filled in here (the importer's CSV has none): Parametros.leer already parses commas inside quotes
+    // (DIMENSIONES_ARBITRIO's texto)
+    private fun leerFicticioParametros(): List<ParametroTributario> =
+        Parametros.leer(File("model/data/arbitrios/ficticio-parametros.csv")).mapIndexed { i, p -> p.copy(id = "fp-$i") }
+
+    private val servicioPorBase = listOf(servicio("BAR", 1), servicio("RRS", 2), servicio("PYJ", 3), servicio("SER", 4))
+
+    // ARBITRIO_ZONA (por servicio, sector S-01) y ARBITRIO_AFLUENCIA (prefijo 01): lo único que
+    // import_tasas_arbitrio.py no deriva de la tabla de tasas y que este test agrega, con los mismos textos
+    // normalizados que el importador escribe en las claves de TASA_ARBITRIO (ZONA_1, ZONA_A, AREA_0, ALTA).
+    // ARBITRIO_USO ya viene en el archivo (desde --usos): no hace falta agregarlo
+    private val mapeosPorBase =
+        listOf(
+            param(Llaves.ARBITRIO_ZONA, "BAR:S-01", texto = "ZONA_1"),
+            param(Llaves.ARBITRIO_ZONA, "RRS:S-01", texto = "ZONA_1"),
+            param(Llaves.ARBITRIO_ZONA, "PYJ:S-01", texto = "ZONA_A"),
+            param(Llaves.ARBITRIO_ZONA, "SER:S-01", texto = "AREA_0"),
+            param(Llaves.ARBITRIO_AFLUENCIA, "01", texto = "ALTA")
+        )
+
+    // un predio en el sector S-01, con ubicación FRENTE A PARQUE (para PYJ) y el uso de la declaración por
+    // defecto (CASA HABITACIÓN, código 010101 -> ARBITRIO_USO 0101 -> "2", la misma casa habitación de
+    // ficticio-tasas.csv): un predio por Base, sobre el CSV que import_tasas_arbitrio.py realmente genera
     @Test
-    fun `un predio por base - FRONTIS_ML, AREA_CONSTRUIDA_M2 y PREDIO dan los montos esperados`() {
-        val todosLosServicios = miraflores + listOf(servicio("PARQUES", 3), servicio("SERENAZGO", 4))
-        val filas =
-            filasMiraflores +
-                listOf(
-                    param(Llaves.DIMENSIONES_ARBITRIO, "PARQUES", texto = "ZONA,INFLUENCIA,AFLUENCIA"),
-                    param(Llaves.ARBITRIO_ZONA, "PARQUES:S-01", texto = "A"),
-                    param(Llaves.BASE_ARBITRIO, "PARQUES", texto = "PREDIO"),
-                    param(Llaves.ARBITRIO_INFLUENCIA, "FRENTE A PARQUE", texto = "Frente a parque"),
-                    param(Llaves.ARBITRIO_AFLUENCIA, "01", texto = "Baja"),
-                    tasa("PARQUES:A:Frente a parque:Baja", "85.9875"),
-                    param(Llaves.ARBITRIO_ZONA, "SERENAZGO:S-01", texto = "1"),
-                    param(Llaves.BASE_ARBITRIO, "SERENAZGO", texto = "PREDIO"),
-                    tasa("SERENAZGO:1:CASA", "61.0535")
-                )
-        val predioConAreaVerde = predio.copy(ubicacionAreaVerde = "FRENTE A PARQUE")
+    fun `un predio por base - FRONTIS_ML, AREA_CONSTRUIDA_M2 con habitantes y PREDIO dan los montos esperados`() {
+        val filas = leerFicticioParametros() + mapeosPorBase
+        val predioDeTodos = predio.copy(sectorCatastral = "S-01", ubicacionAreaVerde = "FRENTE A PARQUE")
+        val declaracionDeTodos = dj.copy(anio = 2041, longitudFrente = BigDecimal("10"), areaConstruida = BigDecimal("100"), numeroHabitantes = 7)
         val d =
             determinar(
-                contexto(servicios = todosLosServicios, parametros = filas),
-                del(declaraciones = listOf(djMiraflores), predio = predioConAreaVerde)
+                contexto(anio = 2041, servicios = servicioPorBase, parametros = filas),
+                del(declaraciones = listOf(declaracionDeTodos), predio = predioDeTodos)
             )
         assertEquals(emptyList<String>(), d.faltan)
         val enero = d.cuotas.filter { it.periodo == 1 }.associateBy { it.servicio }
-        assertEquals(BigDecimal("10.28"), enero["srv-RRSS"]!!.monto)
-        assertEquals(BigDecimal("53.39"), enero["srv-BARRIDO"]!!.monto)
-        assertEquals(BigDecimal("85.98"), enero["srv-PARQUES"]!!.monto)
-        assertEquals(BigDecimal("61.05"), enero["srv-SERENAZGO"]!!.monto)
+        // BAR (FRONTIS_ML): 3.1000 S/ por ml x 10 ml = 31.00
+        assertEquals(BigDecimal("31.00"), enero["srv-BAR"]!!.monto)
+        // RRS (AREA_CONSTRUIDA_M2, con habitantes P=4 V=0.3 de ficticio-parametros.csv): 0.0500 x 100 x
+        // (1 + (7 - 4) x 0.3) = 0.0500 x 100 x 1.9 = 9.50
+        assertEquals(BigDecimal("9.50"), enero["srv-RRS"]!!.monto)
+        assertEquals(listOf(7, false), listOf(enero["srv-RRS"]!!.habitantes, enero["srv-RRS"]!!.habitantesPresuntos))
+        // PYJ (PREDIO, con INFLUENCIA y AFLUENCIA además de ZONA): 50.0000
+        assertEquals(BigDecimal("50.00"), enero["srv-PYJ"]!!.monto)
         assertEquals(
-            listOf("A", "Frente a parque", "Baja"),
-            listOf(enero["srv-PARQUES"]!!.zona, enero["srv-PARQUES"]!!.influencia, enero["srv-PARQUES"]!!.afluencia)
+            listOf("ZONA_A", "Frente a parque ficticio", "ALTA"),
+            listOf(enero["srv-PYJ"]!!.zona, enero["srv-PYJ"]!!.influencia, enero["srv-PYJ"]!!.afluencia)
         )
+        // SER (PREDIO, sin habitantes: no se pidió --habitantes para SERENAZGO): 20.0000
+        assertEquals(BigDecimal("20.00"), enero["srv-SER"]!!.monto)
+        assertEquals(listOf(null, null), listOf(enero["srv-SER"]!!.habitantes, enero["srv-SER"]!!.habitantesPresuntos))
         assertTrue(d.cuotas.all { invariantes(it).isEmpty() })
+    }
+
+    // la fila RECOLECCION_RESIDUOS,,15,Otro uso ficticio 2 de ficticio-tasas.csv no tiene zona (no varía por
+    // zona, a diferencia de la de casa habitación del mismo servicio): import_tasas_arbitrio.py escribe
+    // "RRS::15" (#86). Un predio en S-01 (zona exacta "ZONA_1" para RRS) con ese otro uso no tiene una
+    // TASA_ARBITRIO "RRS:ZONA_1:15" exacta, pero sí usa el fallback de zona vacía
+    @Test
+    fun `un predio por base - la TASA_ARBITRIO de zona vacia del CSV generado se usa cuando la exacta no existe`() {
+        val filas = leerFicticioParametros() + listOf(param(Llaves.ARBITRIO_ZONA, "RRS:S-01", texto = "ZONA_1"))
+        val predioDeOtroUso = predio.copy(sectorCatastral = "S-01")
+        val declaracionOtroUso = dj.copy(anio = 2041, areaConstruida = BigDecimal("20"), claseUso = "OTRO", subClaseUso = "OTRO", uso = "OTRO USO FICTICIO 2")
+        val d =
+            determinar(
+                contexto(anio = 2041, servicios = listOf(servicio("RRS", 1)), parametros = filas),
+                del(declaraciones = listOf(declaracionOtroUso), predio = predioDeOtroUso)
+            )
+        assertEquals(emptyList<String>(), d.faltan)
+        val rrs = d.cuotas.first()
+        // 0.1500 S/ por m2 x 20 m2, sin habitantes (no es casa habitación) = 3.00
+        assertEquals(BigDecimal("3.00"), rrs.monto)
+        assertEquals("ZONA_1", rrs.zona) // el predio sigue resolviendo su propia zona, como siempre
+        assertEquals("TASA_ARBITRIO:RRS::15;BASE_ARBITRIO:RRS;REDONDEO_ARBITRIO", rrs.parametroAplicado)
+        assertTrue(invariantes(rrs).isEmpty())
     }
 
     // a TASA_ARBITRIO whose zona parte is empty means "every zona of the servicio" (import_tasas_arbitrio.py,
