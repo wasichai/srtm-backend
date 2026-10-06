@@ -658,6 +658,20 @@ plano, sobre la misma maquinaria de lotes de la [emisión masiva](#emisión-masi
 - **GET** lista (`?anio`) y **GET** `/{id}` devuelven el job. **DELETE** `/{id}` cancela sus lotes y lo borra (204);
   las cuotas que escribió quedan, porque una cuota no se borra.
 
+**Al desplegar** (un PU por uso, #84; **decisión abierta**). Antes de este cambio, un predio de varios usos tenía una
+cuota por servicio y mes, calculada con su secuencia menor; ahora tiene una por secuencia. Las cuotas que ya existen
+(sin `secuencia_uso`) cuentan como de la secuencia menor del mes, así que no se duplican. Pero las secuencias 002 en
+adelante de esos predios quedan **pendientes en todos los meses** de un año ya determinado:
+- volver a determinar ese año (la masiva, el POST de un predio o de un contribuyente, o los `pendientes` de la matriz)
+  **agrega** sus cuotas: un cobro nuevo sobre un año ya emitido;
+- si no se vuelve a determinar, la matriz de esos predios muestra `pendientes` y la HLA de sus contribuyentes responde
+  **422** («Predio …: N cuotas de arbitrios por determinar»).
+
+Un predio de un solo uso no cambia en nada. **Antes de desplegar**, conviene contar los predios de varios usos que ya
+tienen cuotas del año en curso (los que tienen DJ del año con más de una `secuencia_uso` y alguna `cuota_arbitrio` del
+año) y decidir qué hacer con ellos: volver a determinar el año y emitir lo nuevo, o desplegar después del cierre del
+año. El código no lo decide: es una decisión de la municipalidad.
+
 **HLA** (hoja de liquidación de arbitrios, `GET /api/srtm/contribuyentes/{id}/hla?anio`, PDF inline como la HR).
 - **Qué imprime:** las cuotas a nombre del contribuyente tal como se determinaron, con las mismas cifras que
   `GET /contribuyentes/{id}/arbitrios`:
