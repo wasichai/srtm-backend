@@ -676,6 +676,45 @@ class ArbitriosTest {
         assertTrue(invariantes(rrss).isEmpty())
     }
 
+    // extends the Miraflores fixture above with PARQUES and SERENAZGO, both on PREDIO (no habitantes), PARQUES with
+    // INFLUENCIA and AFLUENCIA besides ZONA: the same real figures (global-constraints.md) of 85.9875 and 61.0535,
+    // checking that import_tasas_arbitrio.py's output (#86) is what this module actually reads, one base of each
+    // kind on the same predio. sector, zona, uso, influencia and afluencia names are fictitious
+    @Test
+    fun `un predio por base - FRONTIS_ML, AREA_CONSTRUIDA_M2 y PREDIO dan los montos esperados`() {
+        val todosLosServicios = miraflores + listOf(servicio("PARQUES", 3), servicio("SERENAZGO", 4))
+        val filas =
+            filasMiraflores +
+                listOf(
+                    param(Llaves.DIMENSIONES_ARBITRIO, "PARQUES", texto = "ZONA,INFLUENCIA,AFLUENCIA"),
+                    param(Llaves.ARBITRIO_ZONA, "PARQUES:S-01", texto = "A"),
+                    param(Llaves.BASE_ARBITRIO, "PARQUES", texto = "PREDIO"),
+                    param(Llaves.ARBITRIO_INFLUENCIA, "FRENTE A PARQUE", texto = "Frente a parque"),
+                    param(Llaves.ARBITRIO_AFLUENCIA, "01", texto = "Baja"),
+                    tasa("PARQUES:A:Frente a parque:Baja", "85.9875"),
+                    param(Llaves.ARBITRIO_ZONA, "SERENAZGO:S-01", texto = "1"),
+                    param(Llaves.BASE_ARBITRIO, "SERENAZGO", texto = "PREDIO"),
+                    tasa("SERENAZGO:1:CASA", "61.0535")
+                )
+        val predioConAreaVerde = predio.copy(ubicacionAreaVerde = "FRENTE A PARQUE")
+        val d =
+            determinar(
+                contexto(servicios = todosLosServicios, parametros = filas),
+                del(declaraciones = listOf(djMiraflores), predio = predioConAreaVerde)
+            )
+        assertEquals(emptyList<String>(), d.faltan)
+        val enero = d.cuotas.filter { it.periodo == 1 }.associateBy { it.servicio }
+        assertEquals(BigDecimal("10.28"), enero["srv-RRSS"]!!.monto)
+        assertEquals(BigDecimal("53.39"), enero["srv-BARRIDO"]!!.monto)
+        assertEquals(BigDecimal("85.98"), enero["srv-PARQUES"]!!.monto)
+        assertEquals(BigDecimal("61.05"), enero["srv-SERENAZGO"]!!.monto)
+        assertEquals(
+            listOf("A", "Frente a parque", "Baja"),
+            listOf(enero["srv-PARQUES"]!!.zona, enero["srv-PARQUES"]!!.influencia, enero["srv-PARQUES"]!!.afluencia)
+        )
+        assertTrue(d.cuotas.all { invariantes(it).isEmpty() })
+    }
+
     @Test
     fun `no habitantes is a factor of 0, a cuota of 0 - a negative factor fails the whole predio`() {
         val cero =

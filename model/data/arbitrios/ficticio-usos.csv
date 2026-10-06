@@ -1,0 +1,6 @@
+# Mapeo FICTICIO de prefijo de uso_predio a uso de arbitrio, para probar import_tasas_arbitrio.py --usos. Ninguna
+# cifra ni código es de un padrón real.
+prefijo,uso
+0100,1
+0101,2
+0102,9
