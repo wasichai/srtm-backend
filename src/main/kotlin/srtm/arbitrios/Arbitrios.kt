@@ -63,8 +63,9 @@ data class Falta(
 // titular in any month cannot be determined. a zona/sector problem (no zona for a servicio, by ubicación or by
 // sector, or an ambiguous one) always fails the whole predio - the sector is a requirement unless every servicio's
 // zona resolves by ubicación instead. a secuencia's month without a uso código, though, is skipped silently, same as
-// a month without a titular - unless NO month and secuencia ever has both a zona (by sector or ubicación) and a uso
-// código, in which case the predio cannot be determined at all and it's named. a missing parameter fails the whole
+// a month without a titular, once that secuencia had one some month - a secuencia that never had one fails the
+// predio, named. and when NO month and secuencia ever has both a zona (by sector or ubicación) and a uso código, the
+// predio cannot be determined at all and each one without it is named. a missing parameter fails the whole
 // predio, same as a dimension (INFLUENCIA/AFLUENCIA) that does not resolve, or a secuencia without the frontis or
 // the área its base asks for: everything is computed before anything is written, so nothing stays half done. the
 // cuotas that exist are not recomputed, so running it again adds nothing. one annulled is determined again, with
@@ -102,14 +103,15 @@ object Arbitrios {
                 ?.ifEmpty { null }
         // each missing thing once, by its mensaje: the first place it was found names its declaración
         val faltan = linkedMapOf<String, Falta>()
-        val sinUso = linkedMapOf<String, Falta>()
+        // per secuencia: the declaración of its first month without a uso código, and whether some month had one
+        val sinUso = linkedMapOf<String, String?>()
+        val conUso = mutableSetOf<String>()
 
         fun falta(
             mensaje: String,
-            declaracion: String? = null,
-            en: MutableMap<String, Falta> = faltan
+            declaracion: String? = null
         ) {
-            en.putIfAbsent(mensaje, Falta(mensaje, predioId, declaracion))
+            faltan.putIfAbsent(mensaje, Falta(mensaje, predioId, declaracion))
         }
         val cuotas = mutableListOf<CuotaArbitrio>()
         val vigentes = p.vigentes // filtered once, not per month, secuencia and servicio
@@ -172,13 +174,14 @@ object Arbitrios {
             for ((d, secuencia, suyos) in pendientes) {
                 // rasgos complete: a zona is available this month (sector present, or ubicación resolved some
                 // servicio without one) and the secuencia's declaración has a uso código. same as today: a month
-                // missing either (unlike a zona/sector problem) is just skipped - it only fails the predio when NO
-                // month and secuencia ever has both
+                // missing either (unlike a zona/sector problem) is just skipped - it only fails the predio when the
+                // secuencia never has a uso código, or NO month and secuencia ever has both (see the end)
                 val codigoUso = codigoDeUso(d, c.usos)
                 if (codigoUso == null) {
-                    falta("Uso del catálogo en la declaración ${c.anio} del predio $nombre", d.id, sinUso)
-                } else if (rasgos) {
-                    algunMesConRasgos = true
+                    sinUso.putIfAbsent(secuencia, d.id)
+                } else {
+                    conUso += secuencia
+                    if (rasgos) algunMesConRasgos = true
                 }
 
                 val uso = if (rasgos && codigoUso != null) usoDe(c.parametros, codigoUso, dia) else null
@@ -267,8 +270,16 @@ object Arbitrios {
         }
         if (!algunMesConTitular) {
             falta("Titular del predio $nombre en ${c.anio}: ninguna declaración jurada lo cubre")
-        } else if (!algunMesConRasgos) {
-            sinUso.values.forEach { faltan.putIfAbsent(it.mensaje, it) }
+        } else {
+            // a secuencia's months without a uso código are skipped silently once it had one some month (a sale to a
+            // buyer without it); one that never had one fails the predio, named when the predio has several. when no
+            // month and secuencia ever had complete rasgos, every one without it is named, same as before
+            val varios = (sinUso.keys + conUso).size > 1
+            sinUso
+                .filterKeys { !algunMesConRasgos || it !in conUso }
+                .forEach { (secuencia, declaracion) ->
+                    falta("Uso del catálogo en la declaración ${c.anio} del predio $nombre" + (if (varios) ", uso $secuencia" else ""), declaracion)
+                }
         }
         val detalle = faltan.values.toList()
         return if (detalle.isEmpty()) Determinacion(cuotas, emptyList()) else Determinacion(emptyList(), detalle.map { it.mensaje }, detalle)

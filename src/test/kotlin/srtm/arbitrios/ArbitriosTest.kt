@@ -511,6 +511,27 @@ class ArbitriosTest {
     }
 
     @Test
+    fun `a secuencia without a uso código in any month fails the predio, naming the secuencia`() {
+        val sinClase = tienda.copy(claseUso = null, subClaseUso = null, uso = null)
+        val d = determinar(contexto(parametros = porArea), del(declaraciones = listOf(casa, sinClase)))
+        val mensaje = "Uso del catálogo en la declaración 2026 del predio 01-01-0001, uso 002"
+        assertEquals(listOf(mensaje), d.faltan)
+        assertEquals(listOf(Falta(mensaje, "predio-100", "dj-2")), d.detalle)
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
+    }
+
+    @Test
+    fun `a secuencia that loses its uso mid-year is charged while it had one, and the rest is skipped silently`() {
+        val cambio = LocalDate.of(2026, 5, 20)
+        val conUso = tienda.copy(estado = ANULADA, fechaAnulacion = cambio)
+        val sinUso = declaracion("dj-4", "c-200").copy(secuenciaUso = "002", fechaAdquisicion = cambio, claseUso = null, subClaseUso = null, uso = null)
+        val d = determinar(contexto(parametros = porArea), del(declaraciones = listOf(casa, conUso, sinUso)))
+        assertEquals(emptyList<String>(), d.faltan)
+        assertEquals((1..5).toList(), d.cuotas.filter { it.servicio == "srv-LIMPIEZA" && it.secuenciaUso == "002" }.map { it.periodo })
+        assertEquals((1..12).toList(), d.cuotas.filter { it.servicio == "srv-LIMPIEZA" && it.secuenciaUso == "001" }.map { it.periodo })
+    }
+
+    @Test
     fun `with condóminos in a secuencia, its data are its titular principal's - the contribuyente, the day's`() {
         val casa30 = casa.copy(porcentajeCondominio = BigDecimal("30"), areaConstruida = BigDecimal("100"))
         val casa70 = declaracion("dj-3", "c-201").copy(secuenciaUso = "001", porcentajeCondominio = BigDecimal("70"), areaConstruida = BigDecimal("150"))
