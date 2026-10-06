@@ -75,8 +75,8 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 81 created, 0 updated, 0 skipped  (39 objetos + 42 relaciones)
-python3 apply.py                   # idempotente: done: 0 created, 0 updated, 81 skipped
+python3 apply.py                   # done: 82 created, 0 updated, 0 skipped  (40 objetos + 42 relaciones)
+python3 apply.py                   # idempotente: done: 0 created, 0 updated, 82 skipped
 python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
 ```
 

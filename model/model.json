@@ -347,7 +347,8 @@
     "resultado_notificacion": ["NOTIFICADO", "NO_UBICADO", "RECHAZADO"],
     "clase_anuncio": ["LETRERO", "PANEL", "TOLDO", "BANDEROLA", "PANTALLA_DIGITAL", "GLOBO_AEROSTATICO"],
     "tipo_anuncio": ["AVISO_SIMPLE", "AVISO_LUMINOSO", "AVISO_ILUMINADO", "AVISO_ELECTRONICO"],
-    "tipo_movimiento_anuncio": ["AUTORIZACION", "RENOVACION", "CESE", "RETIRO"]
+    "tipo_movimiento_anuncio": ["AUTORIZACION", "RENOVACION", "CESE", "RETIRO"],
+    "paridad_numeracion": ["PAR", "IMPAR", "AMBOS"]
   },
   "objects": [
     {
@@ -1206,6 +1207,28 @@
         {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true,
           "description": "<anuncio>|AUTORIZACION, |CESE, |RETIRO o |RENOVACION|<anio>: un acto de cada uno."},
         {"name": "observacion", "label": "Observación", "type": "TEXT", "required": true, "description": "Por qué, de 5 a 500 caracteres."}
+      ]
+    },
+    {
+      "name": "zona_arbitrio_ubicacion",
+      "label": "Zona de arbitrio por ubicación",
+      "pluralLabel": "Zonas de arbitrio por ubicación",
+      "description": "Una zona por vía, tramo (rango de número y paridad) y manzana, opcionalmente de un solo servicio. Más precisa que el sector catastral de ARBITRIO_ZONA, y se intenta primero (Zonas.de).",
+      "fields": [
+        {"name": "servicio", "label": "Servicio", "type": "TEXT", "description": "El código del servicio al que aplica; vacío, aplica a todos."},
+        {"name": "tipo_via", "label": "Tipo de vía", "type": "TEXT", "description": "Vacío: no filtra por tipo de vía."},
+        {"name": "via", "label": "Vía", "type": "TEXT", "required": true},
+        {"name": "manzana", "label": "Manzana", "type": "TEXT", "description": "Vacía: no filtra por manzana."},
+        {"name": "numero_inicial", "label": "Número inicial", "type": "INTEGER", "required": true, "description": "Del tramo."},
+        {"name": "numero_final", "label": "Número final", "type": "INTEGER", "required": true, "description": "Del tramo."},
+        {"name": "paridad", "label": "Paridad", "type": "ENUM", "enum": "paridad_numeracion", "required": true},
+        {"name": "zona", "label": "Zona", "type": "TEXT", "required": true},
+        {"name": "vigencia_desde", "label": "Vigencia desde", "type": "DATE", "required": true},
+        {"name": "vigencia_hasta", "label": "Vigencia hasta", "type": "DATE", "description": "Vacía: sigue vigente."},
+        {"name": "norma", "label": "Norma", "type": "TEXT"},
+        {"name": "observacion", "label": "Observación", "type": "TEXT"},
+        {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true,
+          "description": "servicio|tipo_via|via|manzana|numero_inicial|numero_final|paridad|vigencia_desde: una sola fila por ellos."}
       ]
     }
   ],
