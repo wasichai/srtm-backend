@@ -129,6 +129,30 @@ class ConsultasTest {
         assertEquals(5, delVendedor.filas[0].meses.count { it != null })
     }
 
+    // un PU por uso (#84): a predio of two usos has two cuotas of the same servicio and month, one per secuencia.
+    // the cell sums them, with both keys
+    @Test
+    fun `two secuencias of the same servicio and month sum into one cell`() {
+        val soloLimpieza =
+            contexto.copy(
+                servicios = listOf(servicios[1]), // LIMPIEZA alone, to keep the fixture small
+                parametros = parametros + param("ARBITRIO_USO", "02", texto = "COMERCIO") + param("TASA_ARBITRIO", "LIMPIEZA:Z1:COMERCIO", valor = "4.25"),
+                usos = contexto.usos + UsoPredio("020101", "COMERCIAL", "TIENDAS", "TIENDA")
+            )
+        val casa = vendedor.copy(id = "dj-10", estado = null, fechaAnulacion = null)
+        val tienda = casa.copy(id = "dj-11", secuenciaUso = "02", claseUso = "COMERCIAL", subClaseUso = "TIENDAS", uso = "TIENDA")
+        val datosDosUsos = PredioArbitrios(predio, listOf(casa, tienda), mapOf("c-1" to "001"), emptyList(), emptyList())
+        val determinacion = Arbitrios.determinar(soloLimpieza, datosDosUsos, "Determinación de prueba", hoy)
+        assertEquals(emptyList<String>(), determinacion.faltan)
+        val existentes = guardadas(hoy, determinacion.cuotas)
+        val m = Consultas.matriz(soloLimpieza, datosDosUsos.copy(existentes = existentes), personas, hoy)
+        val enero = m.filas.single().meses[0]!!
+        assertEquals(BigDecimal("12.75"), enero.monto) // 8.50 (CASA, secuencia 001) + 4.25 (COMERCIO, secuencia 002)
+        assertEquals("TASA_ARBITRIO:LIMPIEZA:Z1:CASA; TASA_ARBITRIO:LIMPIEZA:Z1:COMERCIO", enero.parametroAplicado)
+        assertEquals(existentes.first { it.periodo == 1 && it.secuenciaUso == "001" }.id, enero.id)
+        assertEquals(BigDecimal("153.00"), m.filas.single().total) // 12 months of 12.75
+    }
+
     @Test
     fun `what keeps the rest from being determined is said`() {
         val sinTasa = contexto.copy(parametros = parametros.dropLast(1))

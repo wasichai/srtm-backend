@@ -102,7 +102,14 @@ object Consultas {
             }
         val filas =
             ordenados(servicios).map { servicio ->
-                val meses = Periodo.MESES.map { m -> cuotas.firstOrNull { it.servicio == servicio.id && it.periodo == m }?.let(::celda) }
+                val meses =
+                    Periodo.MESES.map { m ->
+                        cuotas
+                            .filter { it.servicio == servicio.id && it.periodo == m }
+                            .sortedBy { it.secuenciaUso }
+                            .ifEmpty { null }
+                            ?.let(::celda)
+                    }
                 FilaServicio(servicio, meses, suma(meses.mapNotNull { it?.monto }))
             }
         val totalesPorMes = Periodo.MESES.map { m -> suma(filas.mapNotNull { it.meses[m - 1]?.monto }) }
@@ -137,5 +144,21 @@ object Consultas {
     private fun ordenados(servicios: List<ServicioArbitrio>) =
         servicios.sortedWith(compareBy(nullsLast()) { it: ServicioArbitrio -> it.orden }.thenBy { it.codigo })
 
-    private fun celda(c: CuotaArbitrio) = CuotaMes(c.id, c.monto ?: BigDecimal.ZERO, c.contribuyente, c.fechaCalculo, c.parametroAplicado)
+    // one (servicio, mes) cell: the vigente cuotas of every secuencia de uso, summed (the same rounding as suma);
+    // the id is the first one's, by secuencia (a cuota of before the PU por uso has none, and sorts first), and
+    // parametroAplicado joins every cuota's own, so a predio of several usos shows each one's key
+    private fun celda(cs: List<CuotaArbitrio>): CuotaMes {
+        val primera = cs.first()
+        return CuotaMes(
+            primera.id,
+            suma(
+                cs.map {
+                    it.monto ?: BigDecimal.ZERO
+                }
+            ),
+            primera.contribuyente,
+            primera.fechaCalculo,
+            cs.mapNotNull { it.parametroAplicado }.joinToString("; ")
+        )
+    }
 }

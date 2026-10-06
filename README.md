@@ -429,32 +429,46 @@ cambio.
 - **Cada mes a su fecha.** El mes *m* se decide el día 1 de *m* (`Periodo.atribucion`), no el día en que se corre:
   - **Titular:** de las DJ del año que cubren ese día, la del titular principal. Gana el mayor `porcentaje_condominio`;
     en empate, la `fecha_adquisicion` más antigua, luego el `codigo` de contribuyente menor y luego la secuencia de uso
-    menor. Se le cobra íntegro, sin prorrateo.
+    menor. Se le cobra íntegro, sin prorrateo: es el contribuyente de la cuota de cada secuencia ese mes.
   - **Qué días cubre una DJ:** desde el 1 de enero, o desde el día siguiente a su `fecha_adquisicion` si cae en el año;
     hasta el 31 de diciembre, o hasta su `fecha_anulacion` si se anuló (descargo). Una importada sin fechas cubre el
     año. Una venta el 20 de mayo da: vendedor de enero a mayo, comprador de junio a diciembre.
   - **Zona:** la de cada servicio ese día, por `Zonas.de` (ver **Zona por servicio y por ubicación** arriba):
     `zona_arbitrio_ubicacion` por vía y tramo primero, `ARBITRIO_ZONA` del `sector_catastral` del predio como
-    respaldo.
-  - **Uso de arbitrio:** `ARBITRIO_USO` del código de uso de la DJ principal. Ese código es tan preciso como la DJ:
-    `XXYYZZ` con clase, sub clase y uso; `XXYY` sin uso; `XX` con solo la clase. Gana el prefijo más largo.
+    respaldo. Es la del predio: la misma para todas sus secuencias.
+  - **Un PU por uso** (decisión del 2026-10-05): cada secuencia de uso de las DJ que cubren el día se cobra aparte
+    (`porSecuencia`: la de su propio titular principal, para un condómino de esa secuencia), con su propio uso de
+    arbitrio, área, frontis y habitantes. `ARBITRIO_USO` del código de uso de cada DJ (tan preciso como la DJ:
+    `XXYYZZ` con clase, sub clase y uso; `XXYY` sin uso; `XX` con solo la clase; gana el prefijo más largo). Un
+    predio de un solo uso tiene, como antes, una sola secuencia.
   - **Servicios:** cada servicio vigente ese día, salvo que el predio tenga una inafectación suya vigente ese día o
-    que la cuota ya exista. Su monto es la tasa `TASA_ARBITRIO servicio` más una parte por cada `Dimension` de
-    `Servicios.dimensiones` (`zona:uso` por defecto), vigente ese día, tal cual (sin área, prorrateo ni redondeo).
-    `parametro_aplicado` guarda la llave exacta que se leyó. Sin `DIMENSIONES_ARBITRIO`, la llave es la de siempre.
+    que la cuota de esa secuencia ya exista. El monto es `tasa_unitaria × cantidad_base × (1 + (H − P) × V)`
+    (`Calculo.calcular`): `tasa_unitaria` es `TASA_ARBITRIO servicio` más una parte por cada `Dimension` de
+    `Servicios.dimensiones` (`zona:uso` por defecto); `cantidad_base` (`BASE_ARBITRIO` del servicio) es 1 por
+    predio, o el frontis en ml o el área construida en m² de la DJ de la secuencia; el factor de habitantes
+    (`HABITANTES_PROMEDIO`/`HABITANTES_VARIACION` de `servicio:zona:uso`) es 1 sin esas filas, o cuando la DJ no
+    declara `numero_habitantes` (se presume el promedio, H = P). El monto se redondea al final según
+    `REDONDEO_ARBITRIO` (`decimales:modo`, global a la ordenanza); sin `BASE_ARBITRIO`, habitantes ni redondeo es
+    la tasa mensual tal cual, igual que antes de este cálculo. `parametro_aplicado` guarda las llaves exactas que se
+    leyeron, separadas por `;`; sin `DIMENSIONES_ARBITRIO` es solo la de la tasa, la de siempre.
   - **Influencia y afluencia** (`Dimensiones.influencia`/`afluencia`, cuando el servicio las lista): la influencia es
     `ARBITRIO_INFLUENCIA` de la `ubicacion_area_verde` del predio; sin esa ubicación, o sin su fila, falta y el predio
     entero no se determina (todo o nada, igual que una zona o un uso que falta). La afluencia es `ARBITRIO_AFLUENCIA`
     del código de uso, con la misma regla del prefijo más largo que `ARBITRIO_USO`, pero primero por su servicio
     (`servicio:prefijo`, si existe) antes de caer a uno general (`prefijo`).
-- **Meses sin cobro:** un mes sin titular, o sin zona (por sector o por ubicación) o sin uso, no se cobra. Un predio
-  que aparece en julio no debe de enero a junio.
-- **No se puede determinar** un predio sin titular en ningún mes, o sin zona y uso a la vez en ningún mes con
-  titular.
-- **Todo o nada:** si falta un parámetro (una zona, un uso, una tasa, una influencia o una afluencia), no se
-  determina nada de ese predio. `faltan`
+- **Meses sin cobro:** un mes sin titular, o una secuencia sin zona (por sector o por ubicación) o sin uso ese mes, no
+  se cobra. Un predio que aparece en julio no debe de enero a junio.
+- **No se puede determinar** un predio sin titular en ningún mes, o sin zona y uso a la vez en ninguna secuencia de
+  ningún mes con titular. Una secuencia que nunca tuvo uso del catálogo, en ningún mes (aunque otra secuencia del
+  mismo predio sí lo tenga), también hace fallar el predio entero, nombrada con su número cuando hay varias
+  (`uso 002`).
+- **Todo o nada:** si falta un parámetro (una zona, un uso, una tasa, una influencia o una afluencia) de cualquier
+  secuencia, no se determina nada de ese predio. `faltan`
   nombra cada uno una vez (`TASA_ARBITRIO LIMPIEZA:Z1:CASA 2026`).
-- **Reejecutar no duplica:** las cuotas que ya existen no se recalculan.
+- **Reejecutar no duplica:** las cuotas que ya existen, de cada secuencia, no se recalculan.
+- **La clave** de cada cuota es `predio|servicio|anio|periodo|secuencia|version` (ver **Modelo** arriba): un predio
+  de un solo uso tiene, como antes de este cambio, una cuota por servicio y mes; uno de varios usos tiene una por
+  secuencia, con el mismo `monto` y el mismo `parametro_aplicado` de siempre en cada una.
 
 **Escritura.** Las cuotas de un predio se escriben en una transacción: todas o ninguna. Si otra determinación del mismo
 predio escribe alguna entre la lectura y la escritura (la `clave` es única), no queda nada de esta: se lee y se calcula
@@ -530,9 +544,11 @@ plano, sobre la misma maquinaria de lotes de la [emisión masiva](#emisión-masi
 **Anulación** (`POST /api/srtm/arbitrios/cuotas/{id}/anulacion` `{motivo, observacion}` → 201). Así se corrige
 una cuota, en lugar de editarla:
 - se agrega una `anulacion_cuota_arbitrio`, que tampoco se edita ni se borra (409 por cualquier vía);
-- la cuota anulada deja de contar en la matriz, en los totales y en la HLA, y vuelve a quedar pendiente;
+- la cuota anulada deja de contar en la matriz, en los totales y en la HLA, y solo su secuencia vuelve a quedar
+  pendiente: las demás secuencias del mismo servicio y mes no se tocan;
 - la siguiente determinación del predio la escribe de nuevo con la versión siguiente de su `clave`
-  (`…|2`, `…|3`), con la tasa, la zona, el uso y el titular vigentes entonces;
+  (`…|001|2`, `…|001|3`: la misma secuencia, otra versión), con la tasa, la zona, el uso y el titular vigentes
+  entonces;
 - una cuota se anula una sola vez (**409**);
 - `motivo` es obligatorio, y la observación va de 5 a 500 caracteres (**400**);
 - pide creación sobre `anulacion_cuota_arbitrio` (**403**).
