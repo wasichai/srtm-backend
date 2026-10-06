@@ -186,6 +186,56 @@ class ArbitriosRowsTests(unittest.TestCase):
         self.assertIn("TASA_ARBITRIO BARRIDO:Z1", err.getvalue())
         self.assertEqual(core.requests, [])
 
+    def test_the_tipos_the_code_reads_in_llaves_order(self):
+        # srtm.arbitrios.LlavesTest parses this same tuple's text and compares it against Llaves.TIPOS
+        self.assertEqual(ip.TIPOS_ARBITRIO, ("TASA_ARBITRIO", "ARBITRIO_ZONA", "ARBITRIO_USO", "ARBITRIO_VENCIMIENTO",
+                                             "BASE_ARBITRIO", "DIMENSIONES_ARBITRIO", "HABITANTES_PROMEDIO",
+                                             "HABITANTES_VARIACION", "REDONDEO_ARBITRIO"))
+
+    def test_a_base_names_its_servicio_and_a_known_base(self):
+        self.assertEqual(ip.errores([fila("BASE_ARBITRIO", "RRSS", texto="AREA_CONSTRUIDA_M2")]), [])
+        self.assertEqual(len(ip.errores([fila("BASE_ARBITRIO", "", texto="AREA_CONSTRUIDA_M2")])), 1)
+        self.assertEqual(len(ip.errores([fila("BASE_ARBITRIO", "RRSS", texto="OTRA")])), 1)
+        self.assertEqual(len(ip.errores([fila("BASE_ARBITRIO", "RRSS")])), 1)
+
+    def test_dimensiones_are_a_non_empty_list_of_known_names_without_repeats(self):
+        self.assertEqual(ip.errores([fila("DIMENSIONES_ARBITRIO", "PARQUES", texto="ZONA,INFLUENCIA,AFLUENCIA")]), [])
+        self.assertEqual(len(ip.errores([fila("DIMENSIONES_ARBITRIO", "", texto="ZONA,USO")])), 1)
+        self.assertEqual(len(ip.errores([fila("DIMENSIONES_ARBITRIO", "PARQUES")])), 1)
+        self.assertEqual(len(ip.errores([fila("DIMENSIONES_ARBITRIO", "PARQUES", texto="ZONA,OTRA")])), 1)
+        self.assertEqual(len(ip.errores([fila("DIMENSIONES_ARBITRIO", "PARQUES", texto="ZONA,ZONA")])), 1)
+
+    def test_a_tasas_key_has_as_many_partes_as_the_servicios_dimensiones_en_vigor(self):
+        # PARQUES:A:Frente:Baja fits a DIMENSIONES_ARBITRIO PARQUES of 3 names (servicio + one parte per dimension)
+        self.assertEqual(ip.errores([
+            fila("DIMENSIONES_ARBITRIO", "PARQUES", texto="ZONA,INFLUENCIA,AFLUENCIA"),
+            fila("TASA_ARBITRIO", "PARQUES:A:Frente:Baja", valor_numerico="8.50"),
+        ]), [])
+        # without that row, the default is 2 (zona, uso): the same key no longer fits
+        malas = ip.errores([fila("TASA_ARBITRIO", "PARQUES:A:Frente:Baja", valor_numerico="8.50")])
+        self.assertEqual(malas, ["TASA_ARBITRIO PARQUES:A:Frente:Baja: la clave de una tasa de PARQUES tiene 3 "
+                                 "partes después del servicio"])
+
+    def test_habitantes_are_a_positive_figure_of_servicio_zona_uso(self):
+        # the shape/valor motivo returns before the pair check runs, so a lone row is still exactly one error
+        for clave, valor in [("BARRIDO:Z1", "2"), ("BARRIDO:Z1:CASA", "0"), ("BARRIDO:Z1:CASA", "-1"), ("BARRIDO:Z1:CASA", None)]:
+            with self.subTest(clave=clave, valor=valor):
+                self.assertEqual(len(ip.errores([fila("HABITANTES_PROMEDIO", clave, valor_numerico=valor)])), 1)
+
+    def test_habitantes_promedio_and_variacion_come_together(self):
+        self.assertEqual(len(ip.errores([fila("HABITANTES_PROMEDIO", "BARRIDO:Z1:CASA", valor_numerico="2")])), 1)
+        self.assertEqual(len(ip.errores([fila("HABITANTES_VARIACION", "BARRIDO:Z1:CASA", valor_numerico="0.5")])), 1)
+        self.assertEqual(ip.errores([
+            fila("HABITANTES_PROMEDIO", "BARRIDO:Z1:CASA", valor_numerico="2"),
+            fila("HABITANTES_VARIACION", "BARRIDO:Z1:CASA", valor_numerico="0.5"),
+        ]), [])
+
+    def test_redondeo_is_a_global_decimales_modo(self):
+        self.assertEqual(ip.errores([fila("REDONDEO_ARBITRIO", "", texto="2:ABAJO")]), [])
+        self.assertEqual(len(ip.errores([fila("REDONDEO_ARBITRIO", "GLOBAL", texto="2:ABAJO")])), 1)
+        self.assertEqual(len(ip.errores([fila("REDONDEO_ARBITRIO", "", texto="2:MEDIANO")])), 1)
+        self.assertEqual(len(ip.errores([fila("REDONDEO_ARBITRIO", "", texto="ABAJO")])), 1)
+
 
 # the rows of the sanciones and the anuncios (SPEC §4, Parámetros nuevos). FICTITIOUS values, written here only to test
 # their shape: no plazo, feriado or tasa de anuncios of Perené is transcribed and verified yet
