@@ -11,7 +11,7 @@ import wasichai.core.common.FieldViolation
 import wasichai.core.common.ValidationException
 
 // rentas' GRANT INSERT, SELECT on the sanciones: an acta, a notificación, a descargo, a resolución... are only added,
-// and only by srtm's api, which runs their rules (srtm.AlmacenGuardado asks this one before every write). an insert
+// and only by srtm's api, which runs their rules (srtm.GuardiaDeEscritura asks this one before every write). an insert
 // holds its invariantes; an update, a delete or a transition is a 409. the one exception is the CUIS: closing the
 // version in force (vigencia_hasta, once, and clave_vigente emptied) when a new one is added
 @Component

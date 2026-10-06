@@ -18,7 +18,7 @@ import java.util.UUID
 // permissions and validates every write, so nothing here repeats that. a dto carries every field, though, and
 // core refuses a whole write that names a field the caller may not write: writes send only the writable ones.
 // each write carries the mark EscrituraDeSrtm: it is srtm's api, and an object only srtm writes needs it
-// (srtm.AlmacenGuardado)
+// (srtm.GuardiaDeEscritura)
 @Component
 class Registros(
     private val records: RecordService,

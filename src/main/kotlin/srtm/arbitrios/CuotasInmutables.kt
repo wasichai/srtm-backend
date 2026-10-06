@@ -7,7 +7,7 @@ import wasichai.core.common.ConflictException
 import wasichai.core.common.ValidationException
 
 // rentas' GRANT INSERT, SELECT on determinacion_arbitrio: a cuota (and the anulación that corrects one) is never
-// updated nor deleted, by anyone (srtm.AlmacenGuardado asks this rule before every write). an insert of a cuota must
+// updated nor deleted, by anyone (srtm.GuardiaDeEscritura asks this rule before every write). an insert of a cuota must
 // hold its invariantes, whoever sends it (the determination never builds one that breaks them). the generic api may
 // still add them: the arbitrios ask for no mark
 @Component

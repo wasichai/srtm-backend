@@ -319,11 +319,11 @@ Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
   Core no tiene unicidad compuesta; como cada organización tiene su tabla física, la unicidad es por organización.
 - **Inmutable:** una cuota no se edita ni se borra, ni siquiera un ADMIN; una corrección es una anulación que se
   agrega y una versión nueva de la `clave` (ver **Anulación**). Los permisos de Core no pueden decirlo (ADMIN se los salta, y `/admin` usa
-  la misma API), así que lo hace cumplir la regla `CuotasInmutables` de la guardia de escritura (`srtm.AlmacenGuardado`,
+  la misma API), así que lo hace cumplir la regla `CuotasInmutables` de la guardia de escritura (`srtm.GuardiaDeEscritura`,
   ver [Modelo](#modelo)): un PUT o DELETE de una cuota, por cualquier vía, responde **409**. Las cuotas no exigen la
   marca de escritura: la API genérica todavía puede agregarlas, si cumplen sus invariantes.
 - **`periodo` de 1 a 12, `monto` no negativo, `parametro_aplicado` de hasta 120 caracteres, relaciones obligatorias y
-  `clave` coherente:** los revisa el mismo `RecordStore` al insertar, venga la cuota de donde venga; si no, **400**.
+  `clave` coherente:** los revisa la misma guardia al insertar, venga la cuota de donde venga; si no, **400**.
 - **Un valor único repetido** (dos cuotas con la misma `clave`, o cualquier otro campo único del modelo) responde
   **409** y no 500 (`srtm.Duplicados`; Core 0.2.0 lo deja caer como error interno).
 - **Observación de 5 a 500 caracteres:** va en la propia cuota, porque la auditoría de Core no guarda observación.
@@ -1035,9 +1035,11 @@ Las garantías de `rentas` sobre las infracciones y los anuncios, y dónde queda
 - **Largos y rangos:** TEXT y LONG_TEXT no tienen largo en Core; los revisa la regla de escritura (código ≤ 20 en
   mayúsculas, descripción del CUIS ≤ 1000, `porcentaje_uit` mayor que 0 y hasta 10 000, área mayor que 0, lados y cantidad desde 1…).
 
-**Guardia de escritura** (`srtm.AlmacenGuardado`). Toda escritura de un registro pasa por el `RecordStore` de Core, venga
-de la API genérica (`/api/objects/{objeto}/records`), de `/admin` o de un servicio de srtm. `AlmacenGuardado` lo envuelve
-(un solo `@Bean recordStore`; el de Core es `@ConditionalOnMissingBean`) y, antes de escribir, consulta la
+**Guardia de escritura** (`srtm.GuardiaDeEscritura`). Es un `RecordWriteGuard` de wasichai (ADR-040): Core lo llama
+antes de cada escritura de un registro, por cualquier camino (la API genérica `/api/objects/{objeto}/records`, `/admin`,
+un servicio de srtm, un enlace entre registros, una transición, una automatización o la plataforma), en la corrutina de
+quien escribe y después de sus permisos, de `appendOnly` y de revisar que existan los registros a los que apunta (una
+relación a un id que no existe responde **400** antes de llegar a la guardia). La guardia consulta la
 `ReglaDeEscritura` del objeto. Cada módulo tiene la suya, como bean de su paquete (`CuotasInmutables` en
 `srtm.arbitrios`, `ReglaDeSanciones` en `srtm.sanciones`, `ReglaDeAnuncios` en `srtm.anuncios`), y ninguno importa a
 otro:
@@ -1050,14 +1052,11 @@ otro:
   srtm, que corre sus reglas. `Registros` pone la marca `EscrituraDeSrtm` (un elemento del contexto de la corrutina, el
   patrón `EscrituraDeCaja` de caja-backend) alrededor de cada `create` y `replace`; un cliente HTTP no puede ponerla.
   Sin ella, un alta (o el cierre del CUIS) responde **403**, también a un ADMIN, sin tocar la base, y deja una línea
-  WARN `ESCRITURA FUERA DE SRTM RECHAZADA`. Los arbitrios no la exigen.
-- `AlmacenGuardadoTest` falla si una versión nueva de wasichai agrega un método al `RecordStore`: delega por `by`, y un
-  método nuevo de escritura pasaría sin preguntar a ninguna regla.
+  WARN `ESCRITURA FUERA DE SRTM RECHAZADA`. La plataforma y las automatizaciones escriben sin usuario y en su propia
+  corrutina: tampoco llevan la marca. Los arbitrios no la exigen.
 
-Lo que la guardia no ve (límites de wasichai 0.2.0): borrar el objeto entero, un campo o el `unique` de un campo por la
-API de metadatos (`/api/metadata/...`, con `MANAGE_METADATA`); una escritura directa a la base (así escriben sus
-estados la emisión y la determinación masivas, que no son de estos objetos); y un módulo que escriba sin pasar por el
-`RecordStore`.
+Lo que la guardia no ve: una escritura directa a la base (así escriben sus estados los lotes de la emisión y la
+determinación masivas, `srtm.emision.TablasCore`, que no son de estos objetos).
 
 **Parámetros de las infracciones y los anuncios.** Son filas de `parametro_tributario`, con vigencia y doble firma, que
 se cargan con `import_parametros.py --csv <archivo>`; su forma se revisa antes de enviar nada (`TIPOS_SANCIONES`,
@@ -1742,7 +1741,7 @@ yarn format:check           # prettier: yaml y json, model.json incluido
   `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…; las de
   `srtm.sanciones`: `MultasTest`, `NotificacionesTest`, `PlazosTest`, `CuisTest`, `ProcedimientoTest`, `RecursosTest`,
   `OrdenDeLosActosTest`, `ExpedientesTest`, `HojaResolucionTest` y `PanelTest`, con cifras ficticias), la guardia
-  de escritura (`AlmacenGuardadoTest`, `ReglaDeSancionesTest`, `ReglaDeAnunciosTest`, y `AlmacenGuardadoApiTest` en
+  de escritura (`GuardiaDeEscrituraTest`, `ReglaDeSancionesTest`, `ReglaDeAnunciosTest`, y `GuardiaDeEscrituraApiTest` en
   integración), los anuncios (`AnunciosTest`, los casos de `AnuncioYSusActosTest` de rentas, y `AnunciosApiTest` en
   integración: el alta, la idempotencia, diez altas a la vez, dos renovaciones a la vez, los actos, el padrón a un
   corte, la guardia y los permisos), `Records`,
