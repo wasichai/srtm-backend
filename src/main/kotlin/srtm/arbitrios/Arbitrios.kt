@@ -7,6 +7,9 @@ import srtm.rentas.UsoPredio
 import srtm.rentas.secuenciaUso
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
+import java.math.BigDecimal
+import java.math.MathContext
+import java.math.RoundingMode
 import java.time.LocalDate
 
 // what a determination needs that is the same for every predio of the year: read once per determination, and once
@@ -21,14 +24,20 @@ data class ContextoArbitrios(
 )
 
 // one predio's: its declarations of the year (every titular's), its contribuyentes' codes by id, its inafectaciones,
-// the cuotas of the year it already has and the ids of the ones annulled (which count for nothing)
+// the cuotas of the year it already has and the ids of the ones annulled (which count for nothing). anteriores are
+// its vigente cuotas of the year before (Arbitrios.vigentes), every servicio's: what TOPE_ARBITRIO measures the year
+// against. registrado is when the predio entered the registry: the earliest fecha_presentacion of its declaraciones
+// of any year (TOPE_ARBITRIO's cut date is measured against it). ArbitriosService reads both only when the year has a
+// TOPE_ARBITRIO row; without anteriores there is no tope
 data class PredioArbitrios(
     val predio: Predio,
     val declaraciones: List<Declaracion>,
     val codigos: Map<String, String?>,
     val inafectaciones: List<InafectacionArbitrio>,
     val existentes: List<CuotaArbitrio>,
-    val anuladas: Set<String> = emptySet()
+    val anuladas: Set<String> = emptySet(),
+    val anteriores: List<CuotaArbitrio> = emptyList(),
+    val registrado: LocalDate? = null
 ) {
     // the ones that count: not annulled
     val vigentes: List<CuotaArbitrio> get() = existentes.filter { it.id == null || it.id !in anuladas }
@@ -72,7 +81,8 @@ data class Falta(
 // predio, same as a dimension (INFLUENCIA/AFLUENCIA) that does not resolve, or a secuencia without the frontis or
 // the área its base asks for: everything is computed before anything is written, so nothing stays half done. the
 // cuotas that exist are not recomputed, so running it again adds nothing. one annulled is determined again, with
-// the next version of its clave
+// the next version of its clave. last, the predio's tope de incremento (conTope, TOPE_ARBITRIO): without one the
+// cuotas are the ones above, untouched
 object Arbitrios {
     // what the year lacks, before any predio: the ordinance, ratified (D-02b), and the servicios it charges
     fun faltanDelAnio(c: ContextoArbitrios): List<String> {
@@ -120,6 +130,8 @@ object Arbitrios {
         val vigentes = p.vigentes // filtered once, not per month, secuencia and servicio
         var algunMesConTitular = false
         var algunMesConRasgos = false
+        // TOPE_ARBITRIO's group: the uso código of the predio's lowest secuencia, the first month it has one
+        var grupo: Pair<String, LocalDate>? = null
 
         for (periodo in Periodo.MESES) {
             val dia = Periodo.atribucion(c.anio, periodo)
@@ -129,6 +141,7 @@ object Arbitrios {
             // one PU per uso: each secuencia's declaration. a cuota of before the secuencia counts as the lowest's
             val usos = porSecuencia(cubren, p.codigos).map { it to secuenciaUso(it.secuenciaUso) }
             val menor = usos.first().second
+            if (grupo == null) grupo = codigoDeUso(usos.first().first, c.usos)?.let { it to dia }
             val redondeo = Servicios.redondeo(c.parametros, dia)
 
             // the servicios due this month, their inafectaciones filtered out; and for each secuencia, the ones it
@@ -300,8 +313,91 @@ object Arbitrios {
                     falta("Uso del catálogo en la declaración ${c.anio} del predio $nombre" + (if (varios) ", uso $secuencia" else ""), declaracion)
                 }
         }
+        if (faltan.isEmpty()) {
+            val topadas = conTope(c, p, cuotas, grupo)
+            topadas.forEach { q ->
+                val malas = invariantes(q)
+                if (malas.isNotEmpty()) falta("${Llaves.TOPE_ARBITRIO} ${c.anio}: " + malas.joinToString("; ") { "${it.field} ${it.message}" })
+            }
+            if (faltan.isEmpty()) return Determinacion(topadas, emptyList())
+        }
         val detalle = faltan.values.toList()
-        return if (detalle.isEmpty()) Determinacion(cuotas, emptyList()) else Determinacion(emptyList(), detalle.map { it.mensaje }, detalle)
+        return Determinacion(emptyList(), detalle.map { it.mensaje }, detalle)
+    }
+
+    // TOPE_ARBITRIO (#87): what a predio's year may rise over what it paid the year before (anteriores, every
+    // servicio's). its row is its group's: the uso código of its lowest secuencia (Servicios.tope, the longest prefix
+    // or "*"). no tope without that row, without anteriores (or with ones that add up to 0), or when the predio was
+    // registered after the row's cut date (the earliest fecha_presentacion of its declaraciones of any year:
+    // registrado, or this year's when it is earlier or absent). otherwise
+    // límite = anteriores × (1 + tope/100); when the cuotas of the year already written plus the new ones pass it,
+    // only the new ones go down, in proportion, to límite − written (never below 0): each one rounded with its own
+    // redondeo (2:ABAJO when it has none), what the rounding leaves goes to the last ones (in the order they were
+    // determined: month, secuencia, servicio) without any going above what it was, and the target itself is cut
+    // down to the last one's decimales - a tope is a maximum. each new one keeps monto_sin_tope and tope_aplicado
+    private fun conTope(
+        c: ContextoArbitrios,
+        p: PredioArbitrios,
+        nuevas: List<CuotaArbitrio>,
+        grupo: Pair<String, LocalDate>?
+    ): List<CuotaArbitrio> {
+        if (nuevas.isEmpty() || p.anteriores.isEmpty() || grupo == null) return nuevas
+        val tope = Servicios.tope(c.parametros, grupo.first, grupo.second) ?: return nuevas
+        val registrado = listOfNotNull(p.registrado, p.declaraciones.mapNotNull { it.fechaPresentacion }.minOrNull()).minOrNull()
+        if (tope.corte != null && registrado != null && tope.corte.isBefore(registrado)) return nuevas
+        val pagado = suma(p.anteriores)
+        if (pagado.signum() <= 0) return nuevas
+        val limite = pagado.multiply(BigDecimal.ONE + tope.porcentaje.movePointLeft(2))
+        val escritas = suma(p.vigentes.filter { it.anio == c.anio })
+        val debidas = suma(nuevas)
+        if (escritas + debidas <= limite || debidas.signum() <= 0) return nuevas
+
+        val objetivo = (limite - escritas).max(BigDecimal.ZERO).setScale(redondeoDe(nuevas.last()).decimales, RoundingMode.DOWN)
+        val montos =
+            nuevas
+                .map { q -> redondeoDe(q).aplicar(q.monto!!.multiply(objetivo).divide(debidas, MathContext.DECIMAL128)).min(q.monto) }
+                .toMutableList()
+        var resto = objetivo - suma(nuevas.mapIndexed { i, q -> q.copy(monto = montos[i]) })
+        for (i in montos.indices.reversed()) {
+            if (resto.signum() == 0) break
+            val ajuste = if (resto.signum() > 0) resto.min(nuevas[i].monto!! - montos[i]) else resto.max(montos[i].negate())
+            montos[i] += ajuste
+            resto -= ajuste
+        }
+        return nuevas.mapIndexed { i, q ->
+            q.copy(
+                monto = montos[i],
+                montoSinTope = q.monto,
+                topeAplicado = tope.porcentaje,
+                parametroAplicado = "${q.parametroAplicado};${Llaves.TOPE_ARBITRIO}:${tope.clave}"
+            )
+        }
+    }
+
+    // whether the year has a TOPE_ARBITRIO row in force on some month's day: only then does ArbitriosService read a
+    // predio's cuotas of the year before. without one, nothing more is read and nothing changes
+    fun conTope(c: ContextoArbitrios) =
+        c.parametros.any { p ->
+            p.tipo == Llaves.TOPE_ARBITRIO && Periodo.MESES.any { vigente(p.vigenciaDesde, p.vigenciaHasta, Periodo.atribucion(c.anio, it)) }
+        }
+
+    private fun suma(cuotas: List<CuotaArbitrio>) = cuotas.fold(BigDecimal.ZERO) { s, q -> s + (q.monto ?: BigDecimal.ZERO) }
+
+    private fun redondeoDe(q: CuotaArbitrio) = Redondeo.de(q.redondeo) ?: Redondeo(2, RoundingMode.DOWN)
+
+    // the cuotas of a year that count: not annulled, and of each predio, servicio, month and secuencia only the
+    // latest version (a correction replaces the cuota it corrects). in the order they came
+    fun vigentes(
+        cuotas: List<CuotaArbitrio>,
+        anuladas: Set<String>
+    ): List<CuotaArbitrio> {
+        val cuentan = cuotas.filter { it.id == null || it.id !in anuladas }
+        val ultimas =
+            cuentan
+                .groupBy { listOf(it.predio, it.servicio, it.anio, it.periodo, it.secuenciaUso?.let(::secuenciaUso)) }
+                .values
+                .map { cs -> cs.maxBy { versionDe(it.clave) ?: 0 } }
+        return cuentan.filter { q -> ultimas.any { it === q } }
     }
 
     // the secuencia de uso a cuota is of: its own, or, for one written before cuotas had one (one PU per predio, the

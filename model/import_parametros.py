@@ -48,7 +48,10 @@ def read_parametros(path):
 # HABITANTES_VARIACION servicio:zona:uso its average habitantes and their variación, one without the other in the
 # same file is incomplete; REDONDEO_ARBITRIO (clave vacía, global) "decimales:modo" of the rounding to apply;
 # ARBITRIO_INFLUENCIA <ubicacion_area_verde, model.json's enum> its nivel de influencia in texto; ARBITRIO_AFLUENCIA
-# <prefix of a uso_predio code, 2, 4 or 6 digits, alone or as servicio:prefijo> its nivel de afluencia in texto
+# <prefix of a uso_predio code, 2, 4 or 6 digits, alone or as servicio:prefijo> its nivel de afluencia in texto;
+# TOPE_ARBITRIO <prefix of a uso_predio code, 2, 4 or 6 digits, or *> the maximum % a predio's year may rise over
+# what it paid the year before in valor_numerico (above 0), and in texto, empty or YYYY-MM-DD, the cut date of the
+# predio's registration (#87)
 TASA_ARBITRIO = "TASA_ARBITRIO"
 ARBITRIO_ZONA = "ARBITRIO_ZONA"
 ARBITRIO_USO = "ARBITRIO_USO"
@@ -60,8 +63,10 @@ HABITANTES_VARIACION = "HABITANTES_VARIACION"
 REDONDEO_ARBITRIO = "REDONDEO_ARBITRIO"
 ARBITRIO_INFLUENCIA = "ARBITRIO_INFLUENCIA"
 ARBITRIO_AFLUENCIA = "ARBITRIO_AFLUENCIA"
+TOPE_ARBITRIO = "TOPE_ARBITRIO"
 TIPOS_ARBITRIO = (TASA_ARBITRIO, ARBITRIO_ZONA, ARBITRIO_USO, ARBITRIO_VENCIMIENTO, BASE_ARBITRIO, DIMENSIONES_ARBITRIO,
-                  HABITANTES_PROMEDIO, HABITANTES_VARIACION, REDONDEO_ARBITRIO, ARBITRIO_INFLUENCIA, ARBITRIO_AFLUENCIA)
+                  HABITANTES_PROMEDIO, HABITANTES_VARIACION, REDONDEO_ARBITRIO, ARBITRIO_INFLUENCIA, ARBITRIO_AFLUENCIA,
+                  TOPE_ARBITRIO)
 BASES_ARBITRIO = ("PREDIO", "FRONTIS_ML", "AREA_CONSTRUIDA_M2")
 DIMENSIONES_VALIDAS = ("ZONA", "USO", "INFLUENCIA", "AFLUENCIA")
 
@@ -202,6 +207,14 @@ def _error_arbitrio(tipo, clave, texto, p, contexto):
         prefijo = partes[1] if len(partes) == 2 and partes[0].strip() else partes[0] if len(partes) == 1 else None
         if prefijo is None or not re.fullmatch(r"\d{2}|\d{4}|\d{6}", prefijo) or not texto:
             return "una afluencia es un prefijo de código de uso_predio de 2, 4 o 6 dígitos, o servicio:prefijo (clave), y su texto"
+    elif tipo == TOPE_ARBITRIO:
+        if clave != "*" and not re.fullmatch(r"\d{2}|\d{4}|\d{6}", clave):
+            return "la clave de un tope es un prefijo de código de uso_predio de 2, 4 o 6 dígitos, o *"
+        valor = _decimal(p)
+        if valor is None or not valor.is_finite() or valor <= 0:
+            return "un tope es un porcentaje mayor que 0 (valor_numerico)"
+        if texto and _fecha(texto) is None:
+            return "la fecha de corte de un tope (texto) es AAAA-MM-DD, o vacía"
     return None
 
 

@@ -251,6 +251,19 @@ class CalculoTest {
     }
 
     @Test
+    fun `formula con tope - la cuenta termina en el monto sin tope, y luego el tope y lo que queda`() {
+        // 8 % ficticio
+        val c =
+            cuota(Base.FRONTIS_ML, BigDecimal("5.0856"), BigDecimal("10.5"), BigDecimal("48.05"), redondeo = "2:ABAJO")
+                .copy(montoSinTope = BigDecimal("53.39"), topeAplicado = BigDecimal("8.00"))
+        assertEquals("5.0856 S/ por ml × 10.50 ml = 53.39, con tope de 8 %: 48.05", Calculo.formula(c))
+        val predio =
+            cuota(Base.PREDIO, BigDecimal("100.00"), BigDecimal("1"), BigDecimal("90.00"))
+                .copy(montoSinTope = BigDecimal("100.00"), topeAplicado = BigDecimal("8"))
+        assertEquals("100.00 S/ por predio = 100.00, con tope de 8 %: 90.00", Calculo.formula(predio))
+    }
+
+    @Test
     fun `formula de una cuota sin desglose (anterior al PR) es soles(monto)`() {
         val c = cuota(null, monto = BigDecimal("8.50"))
         assertEquals(soles(BigDecimal("8.50")), Calculo.formula(c))

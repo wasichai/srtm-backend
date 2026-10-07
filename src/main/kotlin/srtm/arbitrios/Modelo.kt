@@ -84,6 +84,8 @@ data class CuotaArbitrio(
     val influencia: String? = null,
     val afluencia: String? = null,
     val redondeo: String? = null,
+    val montoSinTope: BigDecimal? = null,
+    val topeAplicado: BigDecimal? = null,
     val fechaCalculo: LocalDate? = null,
     val observacion: String? = null,
     val clave: String? = null
@@ -190,12 +192,27 @@ fun invariantes(c: CuotaArbitrio): List<FieldViolation> {
             malas += FieldViolation("clave", "es predio|servicio|anio|periodo|secuencia|version")
         }
     }
+    malas += topeMalo(c)
     if (c.base != null) malas += desgloseMalo(c)
     return malas
 }
 
+// a cuota lowered by TOPE_ARBITRIO: tope_aplicado (above 0) and monto_sin_tope go together, and its monto never goes
+// above what it was before the tope (nor below 0, checked above)
+private fun topeMalo(c: CuotaArbitrio): List<FieldViolation> {
+    val malas = mutableListOf<FieldViolation>()
+    if (c.topeAplicado != null && c.topeAplicado.signum() <= 0) malas += FieldViolation("tope_aplicado", "es mayor que 0")
+    if (c.topeAplicado == null && c.montoSinTope != null) malas += FieldViolation("tope_aplicado", "va con monto_sin_tope: los dos o ninguno")
+    if (c.topeAplicado != null && c.montoSinTope == null) malas += FieldViolation("monto_sin_tope", "va con tope_aplicado: los dos o ninguno")
+    if (c.topeAplicado != null && c.montoSinTope != null && c.monto != null && c.monto > c.montoSinTope) {
+        malas += FieldViolation("monto", "con tope no supera monto_sin_tope: ${c.montoSinTope}")
+    }
+    return malas
+}
+
 // a cuota with its desglose (base not null): a known base, a positive cantidad, a tasa not negative, P and V
-// together, a known redondeo, and a monto that squares with them (montoDelDesglose)
+// together, a known redondeo, and a monto that squares with them (montoDelDesglose) - monto_sin_tope's, when a tope
+// lowered it
 private fun desgloseMalo(c: CuotaArbitrio): List<FieldViolation> {
     val malas = mutableListOf<FieldViolation>()
     if (Base.entries.none { it.name == c.base }) malas += FieldViolation("base", "es ${Base.entries.joinToString()}")
@@ -208,8 +225,10 @@ private fun desgloseMalo(c: CuotaArbitrio): List<FieldViolation> {
         malas += FieldViolation("redondeo", "es decimales:modo, con modo ${Redondeo.MODOS.keys.joinToString()}")
     }
     val esperado = if (malas.isEmpty()) montoDelDesglose(c) else null
-    if (esperado != null && c.monto != null && c.monto.compareTo(esperado) != 0) {
-        malas += FieldViolation("monto", "es tasa_unitaria × cantidad_base × (1 + (H − P) × V), redondeado: $esperado")
+    val calculado = c.montoSinTope ?: c.monto
+    if (esperado != null && calculado != null && calculado.compareTo(esperado) != 0) {
+        val campo = if (c.montoSinTope != null) "monto_sin_tope" else "monto"
+        malas += FieldViolation(campo, "es tasa_unitaria × cantidad_base × (1 + (H − P) × V), redondeado: $esperado")
     }
     return malas
 }

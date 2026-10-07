@@ -41,6 +41,11 @@ object Llaves {
     // de afluencia (Dimension.AFLUENCIA). the longest prefix wins within each family, same rule as ARBITRIO_USO
     const val ARBITRIO_AFLUENCIA = "ARBITRIO_AFLUENCIA"
 
+    // a prefix of a uso_predio code (2, 4 or 6 digits) or "*" -> valor_numerico, the maximum % a predio's year may rise
+    // over what it paid the year before; texto, empty or the cut date (YYYY-MM-DD) of the predio's registration. the
+    // longest prefix wins, "*" last (Servicios.tope, Arbitrios.determinar, #87)
+    const val TOPE_ARBITRIO = "TOPE_ARBITRIO"
+
     val TIPOS =
         listOf(
             TASA_ARBITRIO,
@@ -53,7 +58,8 @@ object Llaves {
             HABITANTES_VARIACION,
             REDONDEO_ARBITRIO,
             ARBITRIO_INFLUENCIA,
-            ARBITRIO_AFLUENCIA
+            ARBITRIO_AFLUENCIA,
+            TOPE_ARBITRIO
         )
 
     fun tasa(

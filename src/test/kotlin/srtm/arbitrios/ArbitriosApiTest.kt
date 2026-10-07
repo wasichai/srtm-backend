@@ -295,6 +295,82 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         assertEquals(0, BigDecimal("0.1234").compareTo(enero["tasa_unitaria"].decimalValue()))
     }
 
+    // TOPE_ARBITRIO (#87), fictitious 10 %: 120.00 paid the year before caps the escenario's 153.00 at 132.00. a predio
+    // is registered when its first declaración (of any year) was presented, not when this year's was
+    @Test
+    fun `TOPE_ARBITRIO caps the year at what was paid the year before, by the predio's first declaración`() {
+        val e = Escenario()
+        val tope = e.parametro(Llaves.TOPE_ARBITRIO, "0101", valor = "10", texto = "${e.anio - 1}-12-31")
+
+        // registered two years before, paid 120.00 last year, and its DJ of this year presented after the cut
+        val antiguo = predioConTope(e, tope, primeraDj = e.anio - 2)
+        val topadas = tree(send("POST", "/api/srtm/predios/$antiguo/arbitrios", pedido(e.anio), HttpStatus.CREATED))
+        assertEquals(24, topadas.size())
+        assertEquals(0, BigDecimal("132.00").compareTo(lista(topadas) { it["monto"].decimalValue() }.fold(BigDecimal.ZERO, BigDecimal::add)))
+        assertEquals(0, BigDecimal("153.00").compareTo(lista(topadas) { it["monto_sin_tope"].decimalValue() }.fold(BigDecimal.ZERO, BigDecimal::add)))
+        assertTrue(lista(topadas) { it["tope_aplicado"].decimalValue() }.all { it.compareTo(BigDecimal("10")) == 0 }, topadas.toString())
+        // 8.50 and 4.25 × 132 / 153, rounded down (7.33 and 3.66), and the 0.12 left on december's last
+        assertEquals(0, BigDecimal("3.78").compareTo(topadas[23]["monto"].decimalValue()), topadas[23].toString())
+
+        // first registered this year, after the cut: no tope, though it too paid the year before
+        val nuevo = predioConTope(e, tope, primeraDj = e.anio)
+        val enteras = tree(send("POST", "/api/srtm/predios/$nuevo/arbitrios", pedido(e.anio), HttpStatus.CREATED))
+        assertEquals(0, BigDecimal("153.00").compareTo(lista(enteras) { it["monto"].decimalValue() }.fold(BigDecimal.ZERO, BigDecimal::add)))
+        assertTrue(lista(enteras) { it["tope_aplicado"] }.all { it == null || it.isNull }, enteras.toString())
+    }
+
+    // a predio of the escenario's sector with its DJ of the year presented on 1 february, one more DJ of primeraDj
+    // (presented on its 10 march) when that is an earlier year, and 12 cuotas of 10.00 the year before
+    private fun predioConTope(
+        e: Escenario,
+        parametro: String,
+        primeraDj: Int
+    ): String {
+        val predio =
+            post(
+                "/api/srtm/predios",
+                mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO", "sector_catastral" to e.sector)
+            )["id"].asString()
+        val djs = if (primeraDj < e.anio) listOf(primeraDj to "$primeraDj-03-10", e.anio to "${e.anio}-02-01") else listOf(e.anio to "${e.anio}-02-01")
+        for ((anio, presentada) in djs) {
+            crear(
+                "declaracion_predial",
+                mapOf(
+                    "contribuyente" to e.contribuyente,
+                    "predio" to predio,
+                    "anio" to anio,
+                    "secuencia_uso" to "1",
+                    "porcentaje_condominio" to 100,
+                    "clase_uso" to "RESIDENCIAL",
+                    "sub_clase_uso" to "UNIFAMILIAR",
+                    "uso" to "CASA HABITACIÓN",
+                    "fecha_presentacion" to presentada
+                )
+            )
+        }
+        val antes = e.anio - 1
+        for (mes in 1..12) {
+            crear(
+                CUOTA_ARBITRIO,
+                mapOf(
+                    "predio" to predio,
+                    "contribuyente" to e.contribuyente,
+                    "servicio" to e.servicios[0],
+                    "parametro" to parametro,
+                    "anio" to antes,
+                    "periodo" to mes,
+                    "monto" to "10.00",
+                    "parametro_aplicado" to "TASA_ARBITRIO:${e.codigos[0]}:Z1:CASA",
+                    "secuencia_uso" to "001",
+                    "fecha_calculo" to "$antes-01-10",
+                    "observacion" to "Determinado el año anterior",
+                    "clave" to claveDeCuota(predio, e.servicios[0], antes, mes, "001")
+                )
+            )
+        }
+        return predio
+    }
+
     @Test
     fun `the app indexes its cuotas by year and predio, and by year and contribuyente`() {
         val e = Escenario()

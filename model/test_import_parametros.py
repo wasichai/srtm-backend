@@ -193,7 +193,7 @@ class ArbitriosRowsTests(unittest.TestCase):
         self.assertEqual(ip.TIPOS_ARBITRIO, ("TASA_ARBITRIO", "ARBITRIO_ZONA", "ARBITRIO_USO", "ARBITRIO_VENCIMIENTO",
                                              "BASE_ARBITRIO", "DIMENSIONES_ARBITRIO", "HABITANTES_PROMEDIO",
                                              "HABITANTES_VARIACION", "REDONDEO_ARBITRIO", "ARBITRIO_INFLUENCIA",
-                                             "ARBITRIO_AFLUENCIA"))
+                                             "ARBITRIO_AFLUENCIA", "TOPE_ARBITRIO"))
 
     def test_a_base_names_its_servicio_and_a_known_base(self):
         self.assertEqual(ip.errores([fila("BASE_ARBITRIO", "RRSS", texto="AREA_CONSTRUIDA_M2")]), [])
@@ -278,6 +278,18 @@ class ArbitriosRowsTests(unittest.TestCase):
         self.assertEqual(len(ip.errores([fila("ARBITRIO_AFLUENCIA", "PARQUES:01A1", texto="Baja")])), 1)
         self.assertEqual(len(ip.errores([fila("ARBITRIO_AFLUENCIA", "PARQUES:LIMPIEZA:01", texto="Baja")])), 1)
         self.assertEqual(len(ip.errores([fila("ARBITRIO_AFLUENCIA", "01")])), 1)
+
+    def test_un_tope_es_un_porcentaje_de_un_grupo_de_uso_con_su_fecha_de_corte(self):
+        # % ficticios: un prefijo de uso_predio (2, 4 o 6 dígitos) o *, un % mayor que 0 y, si lo trae, la fecha de
+        # corte del registro del predio
+        self.assertEqual(ip.errores([fila("TOPE_ARBITRIO", "0101", valor_numerico="8", texto="2025-12-31")]), [])
+        self.assertEqual(ip.errores([fila("TOPE_ARBITRIO", "*", valor_numerico="18")]), [])
+        self.assertEqual(ip.errores([fila("TOPE_ARBITRIO", "01", valor_numerico="0.5", texto="")]), [])
+        for clave, valor, texto in [("010", "8", None), ("CASA", "8", None), ("", "8", None), ("**", "8", None),
+                                    ("0101", None, None), ("0101", "0", None), ("0101", "-8", None),
+                                    ("0101", "ocho", None), ("0101", "8", "31/12/2025"), ("0101", "8", "2025-13-01")]:
+            with self.subTest(clave=clave, valor=valor, texto=texto):
+                self.assertEqual(len(ip.errores([fila("TOPE_ARBITRIO", clave, valor_numerico=valor, texto=texto)])), 1)
 
 
 # the rows of the sanciones and the anuncios (SPEC §4, Parámetros nuevos). FICTITIOUS values, written here only to test

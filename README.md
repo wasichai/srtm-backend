@@ -310,7 +310,7 @@ la anulación de una cuota.
 | `ordenanza_arbitrio` | La ordenanza de un año (`anio` único) y su ratificación por la provincial (`acuerdo_ratificacion`, `fecha_ratificacion`, `municipalidad_ratificante`). Sin ordenanza ratificada no se determina ni se emite (D-02b). |
 | `servicio_arbitrio` | Un servicio que la ordenanza cobra (barrido, residuos, serenazgo…), con `codigo` único de hasta 20 caracteres y su vigencia. Ningún servicio está escrito en el código. |
 | `inafectacion_arbitrio` | Un predio que no paga un servicio en una vigencia (ambos extremos cuentan), con su motivo, documento y observación. |
-| `cuota_arbitrio` | Lo determinado de un predio, un servicio, un uso (`secuencia_uso`) y un mes: `monto`, `parametro_aplicado` (las llaves leídas, separadas por `;`), `zona` y `uso_arbitrio` usados, su desglose (`base`, `cantidad_base`, `tasa_unitaria`, `habitantes`, `habitantes_presuntos`, `promedio_habitantes`, `variacion_habitante`, `influencia`, `afluencia`, `redondeo`), `fecha_calculo` y `observacion`, más relaciones obligatorias a `predio`, `contribuyente` (el titular principal ese mes), `servicio` y `parametro` (la fila de `parametro_tributario`). |
+| `cuota_arbitrio` | Lo determinado de un predio, un servicio, un uso (`secuencia_uso`) y un mes: `monto`, `parametro_aplicado` (las llaves leídas, separadas por `;`), `zona` y `uso_arbitrio` usados, su desglose (`base`, `cantidad_base`, `tasa_unitaria`, `habitantes`, `habitantes_presuntos`, `promedio_habitantes`, `variacion_habitante`, `influencia`, `afluencia`, `redondeo`), `monto_sin_tope` y `tope_aplicado` (vacíos salvo que el tope de incremento la haya reducido), `fecha_calculo` y `observacion`, más relaciones obligatorias a `predio`, `contribuyente` (el titular principal ese mes), `servicio` y `parametro` (la fila de `parametro_tributario`). |
 | `anulacion_cuota_arbitrio` | La corrección de una cuota: `motivo`, `observacion`, `fecha`, y su `cuota` y `predio`. `clave` única (el id de la cuota): una sola anulación por cuota. |
 | `determinacion_arbitrio_masiva`, `determinacion_arbitrio_lote` | El job de la determinación de un año en segundo plano y sus lotes de predios, gemelos de `emision_masiva` y `emision_lote`. No generan archivo. |
 | `zona_arbitrio_ubicacion` | Una zona por vía, tramo (`numero_inicial`/`numero_final` y `paridad`) y manzana, opcionalmente de un solo `servicio`; más precisa que el sector catastral de `ARBITRIO_ZONA`, y se intenta primero (`Zonas.de`, ver **Zona por servicio y por ubicación**). `clave` única por vía, tramo, manzana, paridad, servicio y vigencia. |
@@ -324,7 +324,8 @@ Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
   la misma API), así que lo hace cumplir la regla `CuotasInmutables` de la guardia de escritura (`srtm.AlmacenGuardado`,
   ver [Modelo](#modelo)): un PUT o DELETE de una cuota, por cualquier vía, responde **409**. Las cuotas no exigen la
   marca de escritura: la API genérica todavía puede agregarlas, si cumplen sus invariantes.
-- **`periodo` de 1 a 12, `monto` no negativo y cuadrado con su desglose, `parametro_aplicado` de hasta 500 caracteres,
+- **`periodo` de 1 a 12, `monto` no negativo y cuadrado con su desglose (el `monto_sin_tope`, cuando un tope la redujo; el
+  `monto` nunca lo supera, y `tope_aplicado` va con él), `parametro_aplicado` de hasta 500 caracteres,
   relaciones obligatorias y `clave` coherente:** los revisa el mismo `RecordStore` al insertar, venga la cuota de donde venga; si no, **400**.
 - **Un valor único repetido** (dos cuotas con la misma `clave`, o cualquier otro campo único del modelo) responde
   **409** y no 500 (`srtm.Duplicados`; Core 0.2.0 lo deja caer como error interno).
@@ -345,13 +346,14 @@ firma, y se cargan con `import_parametros.py --csv <archivo>`:
 | `REDONDEO_ARBITRIO` | vacía (global a la ordenanza) | `texto`: `decimales:modo` (`ABAJO`, `MEDIO` o `ARRIBA`); ej. Miraflores 2026: `2:ABAJO` |
 | `ARBITRIO_INFLUENCIA` | la `ubicacion_area_verde` del predio (enum del modelo: `FRENTE A PARQUE`, `MEDIANAMENTE CERCANO A AREAS VERDES`, `FRENTE A BERMA`, `OTRAS UBICACIONES`) | `texto`: su nivel de influencia; ej. Miraflores 2026: `FRENTE A PARQUE` → `Frente a Parque y/o Área Verde` |
 | `ARBITRIO_AFLUENCIA` | un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos, solo o como `servicio:prefijo` (gana el de su servicio; dentro de cada familia, el más largo) | `texto`: su nivel de afluencia |
+| `TOPE_ARBITRIO` | el grupo de uso: un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos (gana el más largo), o `*` para todos los demás | `valor_numerico`: el % máximo de aumento sobre lo pagado el año anterior, mayor que 0; `texto`: vacío, o la fecha de corte del registro del predio (`AAAA-MM-DD`); ej. Miraflores 2026: 8 % en casa habitación y 18 % en otros usos, para predios registrados al 31/12/2025 (ver **Tope de incremento**) |
 
 `import_parametros.py` revisa la forma de estas filas antes de enviar nada: la llave de la tasa (según las
 `DIMENSIONES_ARBITRIO` vigentes de su servicio), el valor, el mes, la fecha y que `transcribio` y `verifico` sean dos
 personas distintas. Si una no encaja, la nombra y sale con `2`. `BASE_ARBITRIO`, `DIMENSIONES_ARBITRIO`,
-`HABITANTES_PROMEDIO`, `HABITANTES_VARIACION`, `REDONDEO_ARBITRIO`, `ARBITRIO_INFLUENCIA` y `ARBITRIO_AFLUENCIA` son
-opcionales: sin estas filas el cálculo es el
-de siempre (base `PREDIO`, dimensiones `ZONA,USO` y sin redondeo adicional).
+`HABITANTES_PROMEDIO`, `HABITANTES_VARIACION`, `REDONDEO_ARBITRIO`, `ARBITRIO_INFLUENCIA`, `ARBITRIO_AFLUENCIA` y
+`TOPE_ARBITRIO` son opcionales: sin estas filas el cálculo es el
+de siempre (base `PREDIO`, dimensiones `ZONA,USO`, sin redondeo adicional y sin tope).
 
 **Tasas de una ordenanza, de la tabla del informe técnico.** `import_tasas_arbitrio.py` deriva el CSV de arriba
 (el que lee `import_parametros.py --csv`) de la tabla larga de tasas de una ordenanza, una fila por tasa: `servicio,
@@ -536,6 +538,36 @@ cambio.
 - **La clave** de cada cuota es `predio|servicio|anio|periodo|secuencia|version` (ver **Modelo** arriba): un predio
   de un solo uso tiene, como antes de este cambio, una cuota por servicio y mes; uno de varios usos tiene una por
   secuencia, con el mismo `monto` y el mismo `parametro_aplicado` de siempre en cada una.
+
+**Tope de incremento** (`TOPE_ARBITRIO`, #87). Muchas ordenanzas limitan lo que un predio paga en un año a lo que
+pagó el anterior más un porcentaje (Miraflores 2026: 8 % en casa habitación, 18 % en otros usos; la diferencia la
+asume la municipalidad). Al final de `Arbitrios.determinar`, con todas las cuotas del predio ya calculadas:
+- **El grupo** es el código de uso de la secuencia menor del predio (el primer mes que lo tiene): su `TOPE_ARBITRIO`
+  es la fila del prefijo más largo, o la de `*` si ninguno coincide. Sin fila, no hay tope.
+- **Sin tope** también si el predio no tiene cuotas vigentes del año anterior (no anuladas, la última versión de
+  cada una, de todos los servicios), o si esas cuotas suman 0 (no pagó nada: un límite de 0 dejaría todo el año en
+  0), o si se registró después de la fecha de corte (`texto`). **Registrado** es cuando el predio entró al padrón: la
+  `fecha_presentacion` más antigua de sus declaraciones **de cualquier año**, no la de la DJ de este año. Un predio
+  cuya primera DJ es de 2024, que pagó en 2025 y presentó su DJ de 2026 en febrero de 2026, con corte 2025-12-31,
+  tiene tope; uno cuya primera DJ es de enero de 2026, no.
+- **Si no**, `límite = suma del año anterior × (1 + tope / 100)`. Si las cuotas vigentes de este año ya escritas más
+  las nuevas lo superan, **solo las nuevas** bajan en proporción, hasta `límite − ya escritas` (nunca por debajo de
+  0): cada una se redondea con su propio redondeo (`2:ABAJO` si no tiene), la diferencia del redondeo va a la última
+  (en el orden en que se determinaron: mes, secuencia, servicio) sin que ninguna pase de lo que era, y la suma
+  queda exacta. Cada nueva guarda `monto_sin_tope` (lo de antes del tope, que es lo que cuadra con su desglose),
+  `tope_aplicado` (el %) y `TOPE_ARBITRIO:<clave>` en `parametro_aplicado`; `Calculo.formula` termina en
+  `"= 33.33, con tope de 8 %: 29.99"`.
+- **Ejemplo** (cifras ficticias, `TopeTest`): un predio de casa habitación que pagó 1 000.00 en 2025 y debería pagar
+  1 200.00 en 2026 (100.00 al mes en tres servicios: 33.33 + 33.33 + 33.34), con `TOPE_ARBITRIO 0101` de 8 %, paga
+  1 080.00: cada cuota × 1 080 / 1 200, redondeada hacia abajo (29.99, 29.99 y 30.00 al mes, 1 079.76 en el año), y
+  los 0.24 que faltan van a la última de diciembre (30.24). Si los primeros 6 meses ya estaban escritos (600.00),
+  las 18 nuevas suman 480.00.
+- **La última** es la última en el orden en que se determinan las cuotas: por mes, luego por secuencia y luego por
+  servicio (su `orden`); no el orden alfabético de la `clave`, que pondría el mes 9 después del 12.
+- `ArbitriosService` lee las cuotas del año anterior (con sus anulaciones) y la fecha de registro (una sola fila: la
+  `fecha_presentacion` más baja de las declaraciones del predio, `Registros.lowest`) solo cuando el año tiene alguna
+  fila `TOPE_ARBITRIO` vigente: sin ella no hay lecturas nuevas y las cuotas son las de siempre (`monto_sin_tope` y
+  `tope_aplicado` vacíos).
 
 **Escritura.** Las cuotas de un predio se escriben en una transacción: todas o ninguna. Si otra determinación del mismo
 predio escribe alguna entre la lectura y la escritura (la `clave` es única), no queda nada de esta: se lee y se calcula
