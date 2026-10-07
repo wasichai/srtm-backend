@@ -109,10 +109,11 @@ class ImpuestoPredialTest {
         assertEquals(Parametros.uit(2025), liquidar(BigDecimal.ONE, anio = 2025).uit)
     }
 
+    // 2099: a year the csv will never have a UIT for (2027's will come)
     @Test
     fun `a year without its UIT is not liquidated, and no figure is zero`() {
-        val l = liquidar(BigDecimal("50000.00"), anio = 2027)
-        assertEquals(listOf("UIT 2027"), l.faltan)
+        val l = liquidar(BigDecimal("50000.00"), anio = 2099)
+        assertEquals(listOf("UIT 2099"), l.faltan)
         assertNull(l.uit)
         assertNull(l.impuestoCalculado)
         assertNull(l.minimo)
