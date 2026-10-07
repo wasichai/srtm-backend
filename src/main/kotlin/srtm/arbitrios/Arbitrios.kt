@@ -41,17 +41,18 @@ data class Determinacion(
 // atribución (Periodo): its titular (the titular principal of the declarations that cover that day, charged whole)
 // and the predio's rasgos, its uso de arbitrio (ARBITRIO_USO of the declaration's uso) and, per servicio, its zona
 // (Zonas.de: zona_arbitrio_ubicacion by via and tramo, ARBITRIO_ZONA of the sector catastral as a fallback). each
-// servicio in force that day not covered by an inafectación and not yet determined gets
-// a cuota of its tasa (TASA_ARBITRIO servicio:zona:uso) as is: no area, no proration, no rounding.
+// servicio in force that day not covered by an inafectación and not yet determined gets a cuota of its tasa
+// (TASA_ARBITRIO servicio, plus one parte per Dimension of Servicios.dimensiones - zona and uso by default,
+// Dimensiones.valores resolves INFLUENCIA and AFLUENCIA too when listed) as is: no area, no proration, no rounding.
 // a month without a titular is not charged: a predio that appears in july owes nothing before. a predio without a
 // titular in any month cannot be determined. a zona/sector problem (no zona for a servicio, by ubicación or by
 // sector, or an ambiguous one) always fails the whole predio - the sector is a requirement unless some servicio's
 // zona resolves by ubicación instead. a month without a uso código, though, is skipped silently, same as a month
 // without a titular - unless NO month ever has both a zona (by sector or ubicación) and a uso código, in which
-// case the predio cannot be determined at all and it's named. a missing parameter fails the whole predio:
-// everything is computed before anything is written, so nothing stays half done. the cuotas that exist are not
-// recomputed, so running it again adds nothing. one annulled is determined again, with the next version of its
-// clave
+// case the predio cannot be determined at all and it's named. a missing parameter fails the whole predio, same as
+// a dimension (INFLUENCIA/AFLUENCIA) that does not resolve: everything is computed before anything is written, so
+// nothing stays half done. the cuotas that exist are not recomputed, so running it again adds nothing. one
+// annulled is determined again, with the next version of its clave
 object Arbitrios {
     // what the year lacks, before any predio: the ordinance, ratified (D-02b), and the servicios it charges
     fun faltanDelAnio(c: ContextoArbitrios): List<String> {
@@ -144,6 +145,19 @@ object Arbitrios {
                 val servicioId = servicio.id!!
                 val zona = zonas[servicioId] ?: continue
                 val codigoServicio = servicio.codigo!!.trim()
+                val dimensiones = Servicios.dimensiones(c.parametros, codigoServicio, dia)
+                val (valoresDimensiones, faltanDimensiones) =
+                    Dimensiones.valores(
+                        dimensiones,
+                        zona,
+                        uso,
+                        { Dimensiones.influencia(c.parametros, p.predio, nombre, c.anio, dia) },
+                        { Dimensiones.afluencia(c.parametros, codigoServicio, codigoUso!!, c.anio, dia) }
+                    )
+                if (faltanDimensiones.isNotEmpty()) {
+                    faltan += faltanDimensiones
+                    continue
+                }
                 val version =
                     1 +
                         (
@@ -156,7 +170,7 @@ object Arbitrios {
                                 }.maxOrNull()
                                 ?: 0
                         )
-                val claveDeTasa = Llaves.tasa(codigoServicio, zona, uso)
+                val claveDeTasa = Llaves.tasa(codigoServicio, valoresDimensiones)
                 val tasa = enVigor(c.parametros, Llaves.TASA_ARBITRIO, dia) { it.clave?.trim() == claveDeTasa && it.valorNumerico != null }
                 if (tasa == null) {
                     faltan += "${Llaves.TASA_ARBITRIO} $claveDeTasa ${c.anio}"

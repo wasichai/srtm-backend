@@ -190,7 +190,8 @@ class ArbitriosRowsTests(unittest.TestCase):
         # srtm.arbitrios.LlavesTest parses this same tuple's text and compares it against Llaves.TIPOS
         self.assertEqual(ip.TIPOS_ARBITRIO, ("TASA_ARBITRIO", "ARBITRIO_ZONA", "ARBITRIO_USO", "ARBITRIO_VENCIMIENTO",
                                              "BASE_ARBITRIO", "DIMENSIONES_ARBITRIO", "HABITANTES_PROMEDIO",
-                                             "HABITANTES_VARIACION", "REDONDEO_ARBITRIO"))
+                                             "HABITANTES_VARIACION", "REDONDEO_ARBITRIO", "ARBITRIO_INFLUENCIA",
+                                             "ARBITRIO_AFLUENCIA"))
 
     def test_a_base_names_its_servicio_and_a_known_base(self):
         self.assertEqual(ip.errores([fila("BASE_ARBITRIO", "RRSS", texto="AREA_CONSTRUIDA_M2")]), [])
@@ -235,6 +236,19 @@ class ArbitriosRowsTests(unittest.TestCase):
         self.assertEqual(len(ip.errores([fila("REDONDEO_ARBITRIO", "GLOBAL", texto="2:ABAJO")])), 1)
         self.assertEqual(len(ip.errores([fila("REDONDEO_ARBITRIO", "", texto="2:MEDIANO")])), 1)
         self.assertEqual(len(ip.errores([fila("REDONDEO_ARBITRIO", "", texto="ABAJO")])), 1)
+
+    def test_una_influencia_es_una_ubicacion_del_area_verde_del_modelo(self):
+        self.assertEqual(ip.errores([fila("ARBITRIO_INFLUENCIA", "FRENTE A PARQUE", texto="Frente a Parque y/o Área Verde")]), [])
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_INFLUENCIA", "OTRA COSA", texto="Alta")])), 1)
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_INFLUENCIA", "FRENTE A PARQUE")])), 1)
+
+    def test_una_afluencia_es_un_prefijo_de_uso_predio_solo_o_por_servicio(self):
+        self.assertEqual(ip.errores([fila("ARBITRIO_AFLUENCIA", "01", texto="Baja")]), [])
+        self.assertEqual(ip.errores([fila("ARBITRIO_AFLUENCIA", "PARQUES:0101", texto="Alta")]), [])
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_AFLUENCIA", "010", texto="Baja")])), 1)
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_AFLUENCIA", "PARQUES:01A1", texto="Baja")])), 1)
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_AFLUENCIA", "PARQUES:LIMPIEZA:01", texto="Baja")])), 1)
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_AFLUENCIA", "01")])), 1)
 
 
 # the rows of the sanciones and the anuncios (SPEC §4, Parámetros nuevos). FICTITIOUS values, written here only to test

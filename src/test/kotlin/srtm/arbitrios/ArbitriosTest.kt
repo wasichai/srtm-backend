@@ -373,6 +373,75 @@ class ArbitriosTest {
         assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
     }
 
+    // PARQUES' tasa by zona, influencia y afluencia (wasichai/srtm-backend#83): the figures 85.9875 and 61.0535 are
+    // real, from Miraflores 2026 Ord. 665/MM, Cuadro 20 (El Peruano 20/12/2025) - the zona, influencia and afluencia
+    // names and mappings around them are fictitious, built only to exercise the key
+    @Test
+    fun `PARQUES por zona, influencia y afluencia - Miraflores 2026, Ord 665-MM Cuadro 20`() {
+        val dimensiones = param(Llaves.DIMENSIONES_ARBITRIO, "PARQUES", texto = "ZONA,INFLUENCIA,AFLUENCIA")
+        val zonaDeParques = param(Llaves.ARBITRIO_ZONA, "PARQUES:S-01", texto = "A")
+        val influencia = param(Llaves.ARBITRIO_INFLUENCIA, "FRENTE A PARQUE", texto = "Frente a Parque y/o Área Verde")
+        val afluencia = param(Llaves.ARBITRIO_AFLUENCIA, "01", texto = "Baja")
+        val tasaDeParques = tasa("PARQUES:A:Frente a Parque y/o Área Verde:Baja", "85.9875")
+        val c = contexto(parametros = tasas + mapeos + listOf(dimensiones, zonaDeParques, influencia, afluencia, tasaDeParques))
+        val d = determinar(c, p = del(predio = predio.copy(ubicacionAreaVerde = "FRENTE A PARQUE")))
+        assertEquals(emptyList<String>(), d.faltan)
+        val parques = d.cuotas.filter { it.servicio == "srv-PARQUES" }
+        assertEquals(12, parques.size)
+        assertTrue(parques.all { it.monto!!.compareTo(BigDecimal("85.9875")) == 0 })
+        assertTrue(parques.all { it.zona == "A" })
+        assertTrue(parques.all { it.parametroAplicado == "TASA_ARBITRIO:PARQUES:A:Frente a Parque y/o Área Verde:Baja" })
+        // LIMPIEZA and SERENAZGO have no DIMENSIONES_ARBITRIO: their key stays zona:uso, same as before this feature
+        assertTrue(d.cuotas.filter { it.servicio != "srv-PARQUES" }.all { it.parametroAplicado!!.endsWith(":Z1:CASA") })
+    }
+
+    @Test
+    fun `PARQUES zona D, OTRAS UBICACIONES y Muy alta - Miraflores 2026, Ord 665-MM Cuadro 20`() {
+        val sectorD = predio.copy(sectorCatastral = "S-02", ubicacionAreaVerde = "OTRAS UBICACIONES")
+        val mapeosDeD = listOf(param(Llaves.ARBITRIO_ZONA, "S-02", texto = "Z1"), param(Llaves.ARBITRIO_USO, "0101", texto = "CASA"))
+        val dimensiones = param(Llaves.DIMENSIONES_ARBITRIO, "PARQUES", texto = "ZONA,INFLUENCIA,AFLUENCIA")
+        val zonaDeParques = param(Llaves.ARBITRIO_ZONA, "PARQUES:S-02", texto = "D")
+        val influencia = param(Llaves.ARBITRIO_INFLUENCIA, "OTRAS UBICACIONES", texto = "Otras Ubicaciones")
+        val afluencia = param(Llaves.ARBITRIO_AFLUENCIA, "01", texto = "Muy alta")
+        val tasaDeParques = tasa("PARQUES:D:Otras Ubicaciones:Muy alta", "61.0535")
+        val c = contexto(parametros = tasas + mapeosDeD + listOf(dimensiones, zonaDeParques, influencia, afluencia, tasaDeParques))
+        val d = determinar(c, p = del(predio = sectorD))
+        assertEquals(emptyList<String>(), d.faltan)
+        val parques = d.cuotas.filter { it.servicio == "srv-PARQUES" }
+        assertEquals(12, parques.size)
+        assertTrue(parques.all { it.monto!!.compareTo(BigDecimal("61.0535")) == 0 })
+        assertTrue(parques.all { it.zona == "D" })
+    }
+
+    // the 150.30 figure is real too, del manual SRTM web M02 «Determinación de Deuda», págs. 17-18; zona, influencia
+    // y afluencia son ficticias, igual que arriba
+    @Test
+    fun `PARQUES periferia, parque y baja - manual SRTM web M02, Determinación de Deuda, pág 17-18`() {
+        val sectorPeriferia = predio.copy(sectorCatastral = "S-03", ubicacionAreaVerde = "FRENTE A PARQUE")
+        val mapeosDePeriferia = listOf(param(Llaves.ARBITRIO_ZONA, "S-03", texto = "Z1"), param(Llaves.ARBITRIO_USO, "0101", texto = "CASA"))
+        val dimensiones = param(Llaves.DIMENSIONES_ARBITRIO, "PARQUES", texto = "ZONA,INFLUENCIA,AFLUENCIA")
+        val zonaDeParques = param(Llaves.ARBITRIO_ZONA, "PARQUES:S-03", texto = "Periferia")
+        val influencia = param(Llaves.ARBITRIO_INFLUENCIA, "FRENTE A PARQUE", texto = "Parque")
+        val afluencia = param(Llaves.ARBITRIO_AFLUENCIA, "01", texto = "Baja")
+        val tasaDeParques = tasa("PARQUES:Periferia:Parque:Baja", "150.30")
+        val c = contexto(parametros = tasas + mapeosDePeriferia + listOf(dimensiones, zonaDeParques, influencia, afluencia, tasaDeParques))
+        val d = determinar(c, p = del(predio = sectorPeriferia))
+        assertEquals(emptyList<String>(), d.faltan)
+        val parques = d.cuotas.filter { it.servicio == "srv-PARQUES" }
+        assertEquals(12, parques.size)
+        assertTrue(parques.all { it.monto!!.compareTo(BigDecimal("150.30")) == 0 })
+    }
+
+    @Test
+    fun `sin ubicación de área verde del predio, PARQUES con INFLUENCIA falla todo el predio (todo o nada)`() {
+        val dimensiones = param(Llaves.DIMENSIONES_ARBITRIO, "PARQUES", texto = "ZONA,INFLUENCIA,AFLUENCIA")
+        val afluencia = param(Llaves.ARBITRIO_AFLUENCIA, "01", texto = "Baja") // so only INFLUENCIA is the one missing
+        val c = contexto(parametros = tasas + mapeos + listOf(dimensiones, afluencia))
+        val d = determinar(c, p = del(predio = predio.copy(ubicacionAreaVerde = null)))
+        assertEquals(listOf("Ubicación respecto del área verde del predio 01-01-0001"), d.faltan)
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas) // todo o nada: ni LIMPIEZA ni SERENAZGO se escriben
+    }
+
     private fun ordenanza(anio: Int) =
         OrdenanzaArbitrio(
             id = "ord-$anio",
