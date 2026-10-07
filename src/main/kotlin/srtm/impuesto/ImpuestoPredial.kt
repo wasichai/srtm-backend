@@ -1,5 +1,6 @@
 package srtm.impuesto
 
+import srtm.vigente
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import java.math.BigDecimal
@@ -23,6 +24,17 @@ data class ParametroTributario(
     val transcribio: String? = null,
     val verifico: String? = null
 )
+
+// in force on `dia` (srtm.vigente)
+fun ParametroTributario.vigenteEl(dia: LocalDate): Boolean = vigente(vigenciaDesde, vigenciaHasta, dia)
+
+// the row of `tipo` in force on `dia` that `coincide` accepts, the latest by vigencia_desde when several are: how a
+// module reads its parámetro (the predial's UIT and tramos, the anuncios' tasa, the sanciones' plazos and UIT)
+fun List<ParametroTributario>.enVigor(
+    tipo: String,
+    dia: LocalDate,
+    coincide: (ParametroTributario) -> Boolean = { true }
+): ParametroTributario? = filter { it.tipo == tipo && it.vigenteEl(dia) && coincide(it) }.maxByOrNull { it.vigenciaDesde!! }
 
 // a tramo of the scale, in soles: the part of the base between desde and hasta (open in the last one) pays its
 // alícuota (in %)
@@ -81,10 +93,7 @@ object ImpuestoPredial {
             tipo: String,
             clave: String? = null
         ): BigDecimal? {
-            val vigente =
-                parametros
-                    .filter { it.tipo == tipo && it.clave?.ifBlank { null } == clave && it.valorNumerico != null && vigenteEl(it, primeroDeEnero) }
-                    .maxByOrNull { it.vigenciaDesde!! }
+            val vigente = parametros.enVigor(tipo, primeroDeEnero) { it.clave?.ifBlank { null } == clave && it.valorNumerico != null }
             if (vigente == null) faltan += listOfNotNull(tipo, clave, anio.toString()).joinToString(" ")
             return vigente?.valorNumerico
         }
@@ -122,11 +131,6 @@ object ImpuestoPredial {
         val montos = List(3) { cuarto } + anual.subtract(cuarto.multiply(BigDecimal(3)))
         return Vencimientos.predial(anio).mapIndexed { i, vence -> Cuota(i + 1, montos[i], vence) }
     }
-
-    private fun vigenteEl(
-        p: ParametroTributario,
-        dia: LocalDate
-    ) = p.vigenciaDesde != null && !p.vigenciaDesde.isAfter(dia) && (p.vigenciaHasta == null || !p.vigenciaHasta.isBefore(dia))
 
     // a % of an amount, to the centimo (half up)
     private fun porcentaje(

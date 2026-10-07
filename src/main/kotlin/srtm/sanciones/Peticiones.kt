@@ -1,29 +1,12 @@
 package srtm.sanciones
 
-import org.springframework.core.Ordered
-import org.springframework.core.annotation.Order
-import org.springframework.http.ProblemDetail
-import org.springframework.stereotype.Component
-import org.springframework.web.bind.annotation.ExceptionHandler
-import org.springframework.web.bind.annotation.RestControllerAdvice
-import wasichai.core.common.Actions
+import srtm.ParametroInvalido
 import wasichai.core.common.FieldViolation
-import wasichai.core.common.ForbiddenException
 import wasichai.core.common.PageRequest
 import wasichai.core.common.ValidationException
 import wasichai.core.data.RecordCriterion
-import wasichai.core.identity.CurrentUser
-import wasichai.core.metadata.MetadataService
-import wasichai.core.platform.WasichaiWebProperties
 import java.time.LocalDate
 import java.util.UUID
-
-// a query parameter an endpoint cannot serve, or cannot read: a 422 that names it (rentas#541), never a filter
-// silently dropped. srtm.arbitrios has its twin: the modules do not import each other
-class ParametroInvalido(
-    nombre: String,
-    razon: String
-) : NoProcede("El parámetro '$nombre' $razon", listOf(FieldViolation(nombre, razon)))
 
 // the query parameters of the sanciones' endpoints. a blank value is no value (a form's empty field)
 object Filtros {
@@ -117,34 +100,4 @@ fun relacion(
     val texto = valor?.trim()?.ifEmpty { null } ?: return null
     return runCatching { UUID.fromString(texto).toString() }.getOrNull()
         ?: throw ValidationException("El $campo no es un id", listOf(FieldViolation(campo, "es el id de un $campo")))
-}
-
-// the permission an act needs, asked before anything is read: who may not create the act's record gets a 403 that
-// names the object, not a computation they cannot write
-@Component
-class Permisos(
-    private val currentUser: CurrentUser,
-    private val metadata: MetadataService
-) {
-    suspend fun exigirCrear(
-        objeto: String,
-        acto: String
-    ) {
-        val usuario = currentUser.require()
-        try {
-            currentUser.requirePermission(usuario, Actions.CREATE, metadata.definitionOf(objeto).obj.id)
-        } catch (_: ForbiddenException) {
-            throw ForbiddenException("${acto.replaceFirstChar { it.uppercase() }} exige permiso de creación sobre $objeto")
-        }
-    }
-}
-
-// the 422 with `faltan` of every endpoint of the sanciones, before core's handler (which would drop the faltan)
-@RestControllerAdvice(basePackageClasses = [Permisos::class])
-@Order(Ordered.HIGHEST_PRECEDENCE)
-class ErroresDeSanciones(
-    private val web: WasichaiWebProperties
-) {
-    @ExceptionHandler(FaltanSanciones::class)
-    fun faltan(ex: FaltanSanciones): ProblemDetail = problemaFaltan(ex, web)
 }
