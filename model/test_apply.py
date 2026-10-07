@@ -226,7 +226,7 @@ class ObjectRulesTests(ApplyCliTestCase):
         self.assertEqual(object_puts(self.core), APPEND_ONLY_PUTS)
         self.assertIn("update object cuota_arbitrio (appendOnly, indexes)", out)
         self.assertIn("update object anulacion_cuota_arbitrio (appendOnly)", out)
-        self.assertIn("done: 0 created, 2 updated, 81 skipped", out)
+        self.assertIn("done: 0 created, 2 updated, 82 skipped", out)
         self.assertEqual({n: r for n, r in self.core.object_rules.items() if r.get("appendOnly")},
                          {n: {"appendOnly": True, **({"indexes": CUOTA_INDEXES} if n == "cuota_arbitrio" else {})}
                           for n in APPEND_ONLY})
@@ -235,7 +235,7 @@ class ObjectRulesTests(ApplyCliTestCase):
         code, out, err = self.run_cli([])
         self.assertEqual(code, 0, msg=err)
         self.assertEqual(object_puts(self.core), [])
-        self.assertIn("done: 0 created, 0 updated, 81 skipped", out)
+        self.assertIn("done: 0 created, 0 updated, 82 skipped", out)
 
     def test_indexes_core_has_and_the_model_lacks_are_dropped(self):
         # model.json is the source of the indexes: one only Core has goes
@@ -656,7 +656,7 @@ class DropTests(ApplyCliTestCase):
         last_put = max(i for i, r in enumerate(self.core.requests) if r[0] == "PUT")
         self.assertLess(last_put, first_delete)
         self.assertIn("update object cuota_arbitrio (appendOnly, indexes)", out)
-        self.assertIn("done: 81 deleted, 0 skipped", out)
+        self.assertIn("done: 82 deleted, 0 skipped", out)
 
     def test_drop_dry_run_makes_no_requests(self):
         code, out, err = self.run_cli(["--drop", "--dry-run"])
