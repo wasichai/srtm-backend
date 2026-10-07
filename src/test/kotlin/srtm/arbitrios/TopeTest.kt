@@ -225,7 +225,7 @@ class TopeTest {
         assertTrue(sinGrupo.cuotas.all { it.topeAplicado == null })
     }
 
-    // before the year of one PU per uso (#80) the predio pays the PU of its titular principal's lowest secuencia: the
+    // before the year of one PU per uso (#80) the predio pays the PU of the secuencia of its titular principal's DJ: the
     // tope measures that one's cuotas, and its uso is the group. the tienda (001): 1 800.00 a year, over 1 000.00 paid
     // × 1.18 (*) = 1 180.00. the casa (0101, 8 %) is neither charged nor the group
     @Test

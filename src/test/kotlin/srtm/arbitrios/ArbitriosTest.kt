@@ -657,10 +657,10 @@ class ArbitriosTest {
     }
 
     // before the year ARBITRIO_PU_POR_USO rules (#80), one PU per predio as before #84: each month, only the
-    // titular principal's declaration (its lowest secuencia), with its uso, área and frontis. the cuota keeps its
+    // secuencia of the titular principal's DJ, with its uso, área and frontis. the cuota keeps its
     // secuencia in the clave of 6 parts
     @Test
-    fun `without ARBITRIO_PU_POR_USO a predio of two usos pays one PU - its titular principal's lowest secuencia`() {
+    fun `without ARBITRIO_PU_POR_USO a predio of two usos pays one PU - the secuencia of its titular principal's DJ`() {
         val d = determinar(contexto(parametros = tarifasPorArea), del(declaraciones = listOf(tienda, casa)))
         assertEquals(emptyList<String>(), d.faltan)
         assertEquals(36, d.cuotas.size) // 3 servicios x 12 months, one uso
@@ -727,6 +727,50 @@ class ArbitriosTest {
         assertEquals(emptyList<String>(), d.faltan)
         assertEquals(36, d.cuotas.size)
         assertTrue(d.cuotas.all { it.secuenciaUso == "002" && it.usoArbitrio == "COMERCIO" && it.contribuyente == "c-200" })
+    }
+
+    // one PU per predio blocks on any cuota of the servicio and month, as before #84, whatever its secuencia: when the
+    // titular principal's DJ changes after the month was determined (a share or an acquisition rectified), the
+    // secuencia now charged is not pending - the predio would pay two PUs that month. the matriz and the HLA agree
+    @Test
+    fun `before the year of one PU per uso a month already charged stays charged though the titular principal's DJ changes`() {
+        val escritas =
+            determinar(contexto(parametros = tarifasPorArea), del(declaraciones = listOf(casa, tienda))).cuotas.mapIndexed {
+                i,
+                c
+                ->
+                c.copy(id = "q$i")
+            }
+        assertEquals(setOf("001"), escritas.map { it.secuenciaUso }.toSet())
+        // the casa's share is rectified to 50 %: the tienda's DJ (100 %) is now the titular principal's
+        val despues = listOf(casa.copy(porcentajeCondominio = BigDecimal("50")), tienda)
+        assertEquals("dj-2", titularPrincipal(despues, mapOf("c-200" to "00000200"))?.id)
+        val datos = del(declaraciones = despues, existentes = escritas)
+        assertEquals(Determinacion(emptyList(), emptyList()), determinar(contexto(parametros = tarifasPorArea), datos))
+
+        val m = Consultas.matriz(contexto(parametros = tarifasPorArea), datos, emptyMap(), hoy, soloDe = "c-200")
+        assertEquals(0, m.pendientes)
+        val hla = ArbitriosContribuyente(2026, Consultas.persona("c-200", null), listOf(m), m.total, m.fechaCalculo)
+        assertEquals(emptyList<String>(), faltanDeLaHla(contexto(parametros = tarifasPorArea), hla))
+
+        // an annulled one comes back as the DJ charged now, the next version of its own secuencia
+        val anulada = escritas.single { it.servicio == "srv-PARQUES" && it.periodo == 7 }
+        val otra = determinar(contexto(parametros = tarifasPorArea), datos.copy(anuladas = setOf(anulada.id!!)))
+        assertEquals(listOf("predio-100|srv-PARQUES|2026|7|002|1"), otra.cuotas.map { it.clave })
+    }
+
+    // a predio of one uso, alone or with condóminos, has the same cuotas with and without ARBITRIO_PU_POR_USO
+    @Test
+    fun `a predio of one uso gets the same cuotas with and without ARBITRIO_PU_POR_USO, condóminos too`() {
+        val casa30 = casa.copy(porcentajeCondominio = BigDecimal("30"))
+        val casa70 = declaracion("dj-3", "c-201").copy(secuenciaUso = "001", porcentajeCondominio = BigDecimal("70"), areaConstruida = BigDecimal("150"))
+        for (declaraciones in listOf(listOf(casa), listOf(casa30, casa70))) {
+            val unPu = determinar(contexto(parametros = tarifasPorArea), del(declaraciones = declaraciones))
+            val porUso = determinar(contexto(parametros = porArea), del(declaraciones = declaraciones))
+            assertEquals(emptyList<String>(), unPu.faltan)
+            assertEquals(36, unPu.cuotas.size)
+            assertEquals(unPu, porUso)
+        }
     }
 
     // a year determined before #84: one cuota per servicio and month, without secuencia_uso and with a clave of 5

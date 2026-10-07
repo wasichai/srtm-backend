@@ -53,8 +53,8 @@ def read_parametros(path):
 # what it paid the year before in valor_numerico (above 0), and in texto, empty or YYYY-MM-DD, the cut date of the
 # predio's registration (#87); ARBITRIO_PU_POR_USO (clave vacía, global) valor_numerico 1, in force from the 1 January
 # of the first year a predio pays one PU per uso: a year is per uso when a row rules its 1 January (any other
-# vigencia_desde would leave its year ambiguous); without one, one cuota per servicio and month, the titular
-# principal's lowest secuencia (#80)
+# vigencia_desde would leave its year ambiguous); without one, one cuota per servicio and month, the secuencia of
+# the titular principal's DJ (#80)
 TASA_ARBITRIO = "TASA_ARBITRIO"
 ARBITRIO_ZONA = "ARBITRIO_ZONA"
 ARBITRIO_USO = "ARBITRIO_USO"

@@ -80,9 +80,9 @@ enum class Enlace { DECLARACION, PREDIO }
 // (the titular principal of the declarations that cover that day, charged whole, every secuencia's cuotas included),
 // and each secuencia de uso of those declarations apart (porSecuencia: the declaration of its own titular principal),
 // with its own uso de arbitrio (ARBITRIO_USO of the declaration's uso), área, frontis and habitantes. a year before
-// that one (or without the row) pays one PU per predio, as before #84: each month only the titular principal's own
-// declaration (its lowest secuencia, titularPrincipal), the other secuencias ignored, its cuotas still with the
-// secuencia in their clave. per servicio, its zona is the predio's (Zonas.de:
+// that one (or without the row) pays one PU per predio, as before #84: each month only the secuencia of the
+// titular principal's DJ (titularPrincipal), the other secuencias ignored, its cuotas still with the secuencia in
+// their clave; any cuota of the servicio and month, of whatever secuencia, means the month is charged. per servicio, its zona is the predio's (Zonas.de:
 // zona_arbitrio_ubicacion by via and tramo, ARBITRIO_ZONA of the sector catastral as a fallback). each servicio in
 // force that day not covered by an inafectación and not yet determined for that secuencia gets a cuota: its tasa
 // (TASA_ARBITRIO servicio, plus one parte per Dimension of Servicios.dimensiones - zona and uso by default,
@@ -153,7 +153,7 @@ object Arbitrios {
         // and month
         val ubicaciones = c.porVia.delPredio(p.predio)
         // TOPE_ARBITRIO's group: the uso código of the predio's lowest secuencia (before the year of one PU per uso,
-        // the one charged), the first month it has one
+        // the secuencia of the titular principal's DJ, the one charged), the first month it has one
         var grupo: Pair<String, LocalDate>? = null
 
         for (periodo in Periodo.MESES) {
@@ -169,7 +169,8 @@ object Arbitrios {
             val redondeo = Servicios.redondeo(c.parametros, dia)
 
             // the servicios due this month, their inafectaciones filtered out; and for each secuencia, the ones it
-            // has no cuota of yet
+            // has no cuota of yet. before the year of one PU per uso, any cuota of the servicio and month counts, as
+            // before #84: when the titular principal's DJ changed since, the predio still pays one PU that month
             val debidos =
                 serviciosDelDia(c.servicios, dia).filter { servicio ->
                     !p.inafectaciones.any { it.servicio == servicio.id && vigente(it.vigenciaDesde, it.vigenciaHasta, dia) }
@@ -180,7 +181,10 @@ object Arbitrios {
                         d,
                         secuencia,
                         debidos.filter { servicio ->
-                            vigentes.none { it.servicio == servicio.id && it.anio == c.anio && it.periodo == periodo && secuenciaDe(it, menor) == secuencia }
+                            vigentes.none {
+                                it.servicio == servicio.id && it.anio == c.anio && it.periodo == periodo &&
+                                    (!c.puPorUso || secuenciaDe(it, menor) == secuencia)
+                            }
                         }
                     )
                 }
@@ -372,8 +376,9 @@ object Arbitrios {
     }
 
     // TOPE_ARBITRIO (#87): what a predio's year may rise over what it paid the year before (anteriores, every
-    // servicio's). its row is its group's: the uso código of its lowest secuencia (Servicios.tope, the longest prefix
-    // or "*"). no tope without that row, without anteriores (or with ones that add up to 0), or when the predio was
+    // servicio's). its row is its group's: the uso código of its lowest secuencia (before the year of one PU per uso,
+    // the secuencia of the titular principal's DJ, the one charged), the first month it has one (Servicios.tope, the
+    // longest prefix or "*"). no tope without that row, without anteriores (or with ones that add up to 0), or when the predio was
     // registered after the row's cut date (the earliest of its declaraciones of any year, each by its
     // fecha_presentacion or, without one, 1 January of its anio: registrado, or this year's when it is earlier or
     // absent). otherwise
@@ -467,7 +472,8 @@ object Arbitrios {
     }
 
     // the secuencia de uso a cuota is of: its own, or, for one written before cuotas had one (one PU per predio, the
-    // lowest secuencia's), the first of the month's: the lowest, or before the year of one PU per uso the one charged
+    // lowest secuencia's), the first of the month's: the lowest, or before the year of one PU per uso the secuencia of
+    // the titular principal's DJ
     private fun secuenciaDe(
         cuota: CuotaArbitrio,
         menor: String

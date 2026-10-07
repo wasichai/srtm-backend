@@ -48,7 +48,7 @@ object Llaves {
 
     // the global key (clave empty) -> valor_numerico 1, in force from the 1 January of the first year a predio pays
     // one PU per uso: a year is per uso when a row rules its 1 January (ContextoArbitrios.puPorUso). before it, or
-    // without one, one PU per predio: each month only its titular principal's declaration, its lowest secuencia (#80)
+    // without one, one PU per predio: each month only the secuencia of its titular principal's DJ (#80)
     const val ARBITRIO_PU_POR_USO = "ARBITRIO_PU_POR_USO"
 
     val TIPOS =

@@ -72,7 +72,7 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
     }
 
     // a predio of two usos (#80). before the year of one PU per uso (no ARBITRIO_PU_POR_USO in force on its 1
-    // January) it pays its titular principal's lowest secuencia alone: nothing stays pending and its HLA is made.
+    // January) it pays the secuencia of its titular principal's DJ alone: nothing stays pending and its HLA is made.
     // with the row loaded for the year, the 002's are pending and the POST adds them
     @Test
     fun `a predio of two usos pays one PU until the year of ARBITRIO_PU_POR_USO, then one per uso`() {
