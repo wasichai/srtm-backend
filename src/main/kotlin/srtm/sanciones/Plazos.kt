@@ -2,6 +2,7 @@ package srtm.sanciones
 
 import srtm.impuesto.ParametroTributario
 import srtm.impuesto.Vencimientos
+import srtm.impuesto.enVigor
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import java.time.LocalDate
@@ -204,8 +205,4 @@ internal fun vigente(
     tipo: String,
     clave: String?,
     dia: LocalDate
-): ParametroTributario? =
-    parametros
-        .filter { it.tipo == tipo && it.clave?.trim()?.ifEmpty { null } == clave?.ifEmpty { null } }
-        .filter { it.vigenciaDesde != null && it.vigenciaDesde <= dia && (it.vigenciaHasta == null || it.vigenciaHasta >= dia) }
-        .maxByOrNull { it.vigenciaDesde!! }
+): ParametroTributario? = parametros.enVigor(tipo, dia) { it.clave?.trim()?.ifEmpty { null } == clave?.ifEmpty { null } }
