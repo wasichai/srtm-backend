@@ -9,6 +9,7 @@ import org.springframework.transaction.reactive.TransactionalOperator
 import org.springframework.transaction.reactive.executeAndAwait
 import srtm.Candado
 import srtm.Candados
+import srtm.Permisos
 import srtm.emision.CabeceraDocumento
 import srtm.emision.Documento
 import srtm.emision.PdfRenderer
