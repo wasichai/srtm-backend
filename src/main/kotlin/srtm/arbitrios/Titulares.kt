@@ -2,6 +2,7 @@ package srtm.arbitrios
 
 import srtm.rentas.Declaracion
 import srtm.rentas.UsoPredio
+import srtm.rentas.secuenciaUso
 import srtm.rentas.vigente
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -29,8 +30,8 @@ fun cubre(
 
 // rentas' titular principal: the arbitrio is charged whole to one titular, the one with the largest share. ties go to
 // the earliest acquisition, then to the lowest contribuyente code (then its id), then to the lowest secuencia de uso:
-// a total order, so two runs never charge different people. the winning declaration also gives the predio's uso that
-// day: with several secuencias, the first. codigos: each contribuyente's code by id
+// a total order, so two runs never charge different people. each secuencia's uso, área and frontis come from its own
+// declaration instead (porSecuencia). codigos: each contribuyente's code by id
 fun titularPrincipal(
     declaraciones: List<Declaracion>,
     codigos: Map<String, String?>
@@ -43,6 +44,18 @@ fun titularPrincipal(
             .thenBy(nullsLast()) { it.secuenciaUso }
             .thenBy(nullsLast()) { it.id }
     )
+
+// one PU per uso, as the SRTM: the declaration of each secuencia de uso (its titular principal's, so condóminos of a
+// secuencia give one), in the order of the secuencia, read the way the padrón numbers it ("1" is "001")
+fun porSecuencia(
+    declaraciones: List<Declaracion>,
+    codigos: Map<String, String?>
+): List<Declaracion> =
+    declaraciones
+        .groupBy { secuenciaUso(it.secuenciaUso) }
+        .toSortedMap()
+        .values
+        .mapNotNull { titularPrincipal(it, codigos) }
 
 // the uso_predio code of a declaration's uso, as precise as the declaration: XXYYZZ with clase, sub clase and uso,
 // XXYY with clase and sub clase, XX with the clase alone (the padrón's other groups). null without a clase, or when the

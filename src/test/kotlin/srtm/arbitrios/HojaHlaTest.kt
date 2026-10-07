@@ -75,6 +75,25 @@ class HojaHlaTest {
         assertEquals("01/04/2026 10:30", h.emitido)
     }
 
+    // un PU por uso (#84): a predio of two secuencias has one zona (the predio's) but two usos, one per secuencia -
+    // DocumentosArbitrios.zonasYUsos collects them from every cuota, not one per servicio and mes
+    @Test
+    fun `a predio of two usos prints both, joined`() {
+        val h =
+            hojaHla(
+                Cabecera("MUNICIPALIDAD DE PRUEBA"),
+                Contribuyente(id = "c1", codigo = "000001", nombreCompleto = "ANA"),
+                ArbitriosContribuyente(2026, Persona("c1", "000001", "ANA"), listOf(matriz), BigDecimal("63.75"), LocalDate.of(2026, 3, 15)),
+                ordenanza,
+                (1..12).associateWith { LocalDate.of(2026, it, 28) },
+                mapOf("p1" to (listOf("Z1") to listOf("CASA", "COMERCIO"))),
+                LocalDateTime.of(2026, 4, 1, 10, 30)
+            )
+        val p = h.predios.single()
+        assertEquals("Z1", p.zona)
+        assertEquals("CASA / COMERCIO", p.uso)
+    }
+
     @Test
     fun `each month's cuota with its due date`() {
         val cuotas = hoja().cuotas

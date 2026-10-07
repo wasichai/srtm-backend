@@ -181,13 +181,22 @@ class ShippedModelTests(unittest.TestCase):
                                         "required": True})
 
     def test_the_arbitrios_objects_carry_rentas_guarantees(self):
-        # determinacion_arbitrio of rentas, carried over: one cuota per predio, servicio, year and month (the unique
-        # clave), every relation required, the amount, period and key required. periodo 1..12, monto >= 0 and the
-        # 120 characters of parametro_aplicado are kotlin's; immutability is the RecordStore's (README, Arbitrios)
+        # determinacion_arbitrio of rentas, carried over: one cuota per predio, servicio, year, month and secuencia de
+        # uso (the unique clave, one PU per uso), every relation required, the amount, period and key required. periodo
+        # 1..12, monto >= 0, monto squaring with its desglose and the 500 characters of parametro_aplicado are
+        # kotlin's; immutability is the RecordStore's (README, Arbitrios)
         objetos = {o["name"]: o for o in self.model["objects"]}
         cuota = {f["name"]: f for f in objetos["cuota_arbitrio"]["fields"]}
-        self.assertEqual(list(cuota), ["anio", "periodo", "monto", "parametro_aplicado", "zona", "uso_arbitrio", "fecha_calculo",
-                                       "observacion", "clave"])
+        self.assertEqual(list(cuota), ["anio", "periodo", "monto", "parametro_aplicado", "zona", "uso_arbitrio", "secuencia_uso",
+                                       "base", "cantidad_base", "tasa_unitaria", "habitantes", "habitantes_presuntos",
+                                       "promedio_habitantes", "variacion_habitante", "influencia", "afluencia", "redondeo",
+                                       "fecha_calculo", "observacion", "clave"])
+        desglose = {n: cuota[n]["type"] for n in list(cuota)[6:17]}
+        self.assertEqual(desglose, {"secuencia_uso": "TEXT", "base": "ENUM", "cantidad_base": "DECIMAL", "tasa_unitaria": "DECIMAL",
+                                    "habitantes": "INTEGER", "habitantes_presuntos": "BOOLEAN", "promedio_habitantes": "DECIMAL",
+                                    "variacion_habitante": "DECIMAL", "influencia": "TEXT", "afluencia": "TEXT", "redondeo": "TEXT"})
+        # kotlin's Base, in its order (CuotaArbitrioTest reads it back)
+        self.assertEqual(self.model["enums"][cuota["base"]["enum"]], ["PREDIO", "FRONTIS_ML", "AREA_CONSTRUIDA_M2"])
         self.assertEqual({n for n, f in cuota.items() if f.get("required")},
                          {"anio", "periodo", "monto", "parametro_aplicado", "fecha_calculo", "observacion", "clave"})
         self.assertEqual({n for n, f in cuota.items() if f.get("unique")}, {"clave"})

@@ -15,6 +15,7 @@ import srtm.emision.IdentidadEmision
 import srtm.rentas.SrtmApiTest
 import tools.jackson.databind.JsonNode
 import wasichai.core.common.ValidationException
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.Base64
 import java.util.UUID
@@ -117,7 +118,7 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         val cuota = tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))[0]
         send("POST", "/api/objects/$CUOTA_ARBITRIO/records", mapOf("attributes" to atributos(cuota)), HttpStatus.CONFLICT)
 
-        val clave = "${e.predio}|${e.servicios[0]}|${e.anio}|13|1"
+        val clave = claveDeCuota(e.predio, e.servicios[0], e.anio, 13, "001")
         rejected("POST", "/api/objects/$CUOTA_ARBITRIO/records", mapOf("attributes" to atributos(cuota) + mapOf("periodo" to 13, "clave" to clave)), "periodo")
     }
 
@@ -232,6 +233,55 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
             assertTrue(delServicio.all { it["zona"].asString() == zonas[i] }, porServicio.toString())
             assertTrue(delServicio.all { it["monto"].asDouble() == montos[i].toDouble() }, porServicio.toString())
         }
+    }
+
+    // Core stores a DECIMAL exactly, with no implicit rounding: tasa_unitaria (4 decimales) × cantidad_base (2
+    // decimales) leaves monto with 6, and CuotasInmutables' invariantes (which recompute the monto on insert) accept
+    // it unchanged - the write guard's recomputation must not force a scale the ordinance never asked for
+    @Test
+    fun `without REDONDEO_ARBITRIO, monto equals tasa times área exactly - Core keeps every decimal`() {
+        val e = Escenario()
+        val sector = "S${uniqueDocumento()}"
+        val servicio = e.codigos[0]
+        e.parametro("ARBITRIO_ZONA", sector, texto = "ZD")
+        e.parametro(Llaves.BASE_ARBITRIO, servicio, texto = "AREA_CONSTRUIDA_M2")
+        e.parametro("TASA_ARBITRIO", "$servicio:ZD:CASA", valor = "0.1234")
+        val predio =
+            post(
+                "/api/srtm/predios",
+                mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO", "sector_catastral" to sector)
+            )["id"].asString()
+        crear(
+            INAFECTACION_ARBITRIO,
+            mapOf(
+                "predio" to predio,
+                "servicio" to e.servicios[1],
+                "vigencia_desde" to "${e.anio}-01-01",
+                "motivo" to "SIN SERVICIO",
+                "observacion" to "De prueba"
+            )
+        )
+        crear(
+            "declaracion_predial",
+            mapOf(
+                "contribuyente" to e.contribuyente,
+                "predio" to predio,
+                "anio" to e.anio,
+                "secuencia_uso" to "1",
+                "porcentaje_condominio" to 100,
+                "clase_uso" to "RESIDENCIAL",
+                "sub_clase_uso" to "UNIFAMILIAR",
+                "uso" to "CASA HABITACIÓN",
+                "area_construida" to 12.34
+            )
+        )
+        val cuotas = tree(send("POST", "/api/srtm/predios/$predio/arbitrios", pedido(e.anio), HttpStatus.CREATED))
+        assertEquals(12, cuotas.size()) // one servicio alone (the other is inafecto here), 12 months
+        val enero = tree(send("GET", "/api/objects/$CUOTA_ARBITRIO/records/${cuotas[0]["id"].asString()}", null, HttpStatus.OK))["attributes"]
+        assertEquals(0, BigDecimal("1.522756").compareTo(enero["monto"].decimalValue())) // 0.1234 x 12.34, unrounded
+        assertEquals("AREA_CONSTRUIDA_M2", enero["base"].asString())
+        assertEquals(0, BigDecimal("12.34").compareTo(enero["cantidad_base"].decimalValue()))
+        assertEquals(0, BigDecimal("0.1234").compareTo(enero["tasa_unitaria"].decimalValue()))
     }
 
     @Test
