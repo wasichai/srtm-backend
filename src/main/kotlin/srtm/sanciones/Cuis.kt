@@ -1,6 +1,7 @@
 package srtm.sanciones
 
 import srtm.legible
+import srtm.vigente
 import wasichai.core.common.ConflictException
 import wasichai.core.common.FieldViolation
 import java.time.LocalDate
@@ -12,11 +13,11 @@ object Cuis {
     // a code as typed: trimmed and upper-cased
     fun normalizar(codigo: String): String = codigo.trim().uppercase(Locale.ROOT)
 
-    // in force on `fecha`: both ends count
+    // in force on `fecha`: both ends count (srtm.vigente)
     fun rigeEn(
         c: CodigoInfraccion,
         fecha: LocalDate
-    ): Boolean = c.vigenciaDesde != null && c.vigenciaDesde <= fecha && (c.vigenciaHasta == null || c.vigenciaHasta >= fecha)
+    ): Boolean = vigente(c.vigenciaDesde, c.vigenciaHasta, fecha)
 
     // among the versions of one code, the one in force on `fecha` (not the latest)
     fun vigenteA(

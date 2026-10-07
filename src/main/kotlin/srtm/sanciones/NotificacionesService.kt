@@ -10,6 +10,8 @@ import org.springframework.transaction.reactive.executeAndAwait
 import srtm.Candado
 import srtm.Candados
 import srtm.Observacion
+import srtm.Permisos
+import srtm.pagina
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
 import srtm.rentas.PREDIO
@@ -140,8 +142,7 @@ class NotificacionesService(
                 .map { derivar(it, corte, hechos) }
                 .filter { it.vencida && it.subsanada == null && it.acta == null }
                 .sortedWith(compareBy({ it.vencimiento }, { it.registro.numero }))
-        val filas = vencidas.drop(page * size).take(size).map { it.copy(corte = corte) }
-        return PageResponse.of(filas, page, size, vencidas.size.toLong())
+        return vencidas.map { it.copy(corte = corte) }.pagina(page, size)
     }
 
     // GET /infracciones/notificaciones/por-contribuyente: every one of the contribuyente (404 when it does not exist)

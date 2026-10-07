@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.r2dbc.core.awaitRowsUpdated
+import org.springframework.test.web.reactive.server.WebTestClient
 import srtm.impuesto.ConParametrosApiTest
 import srtm.impuesto.Parametros
 import tools.jackson.databind.JsonNode
@@ -187,12 +188,16 @@ abstract class ConEscenarioApiTest : ConParametrosApiTest() {
         return r.cuerpo
     }
 
+    // the test client buffers a body up to 256 KB: a zip or pdf of several hr and pu, with their fonts, can be more
+    protected val descargas: WebTestClient
+        get() = client.mutate().codecs { it.defaultCodecs().maxInMemorySize(16 * 1024 * 1024) }.build()
+
     protected fun bajar(
         path: String,
         token: String = this.token
     ): Respuesta {
         val result =
-            client
+            descargas
                 .get()
                 .uri(path)
                 .header(HttpHeaders.AUTHORIZATION, token)

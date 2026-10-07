@@ -20,6 +20,7 @@ import srtm.rentas.PREDIO
 import srtm.rentas.SrtmApiTest
 import tools.jackson.databind.JsonNode
 import wasichai.core.common.ValidationException
+import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.Base64
 import java.util.UUID
@@ -71,6 +72,11 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         assertEquals(LocalDate.now().toString(), m["fecha_calculo"].asString())
         assertEquals(0, m["pendientes"].asInt())
         assertEquals(List(12) { e.contribuyente }, lista(m["titulares"]) { it["titular"]["id"].asString() })
+        // the cell's desglose: one entry, base PREDIO (no BASE_ARBITRIO row), no redondeo - the formula does not
+        // repeat the monto (Calculo.formula)
+        val enero = m["filas"][0]["meses"][0]
+        assertEquals(1, enero["desglose"].size())
+        assertEquals("8.50 S/ por predio", enero["desglose"][0]["formula"].asString())
     }
 
     @Test
@@ -80,6 +86,12 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         val otro = e.predioDeclarado(inscribir(), sinZona)
         val problema = tree(send("POST", "/api/srtm/predios/$otro/arbitrios", pedido(e.anio), HttpStatus.UNPROCESSABLE_CONTENT))
         assertEquals(listOf("ARBITRIO_ZONA $sinZona ${e.anio}"), lista(problema["faltan"]) { it.asString() })
+        assertEquals(1, problema["faltan_detalle"].size())
+        assertEquals("ARBITRIO_ZONA $sinZona ${e.anio}", problema["faltan_detalle"][0]["mensaje"].asString())
+        assertEquals(otro, problema["faltan_detalle"][0]["predio"].asString())
+        // a row of the ordinance: nowhere in the portal fixes it, though it names the predio (enlace, wasichai/srtm-ui#94)
+        assertTrue(problema["faltan_detalle"][0].has("enlace"), problema.toString())
+        assertTrue(problema["faltan_detalle"][0]["enlace"].isNull, problema.toString())
         assertEquals(0, pagina("anio=${e.anio}&predio=$otro")["totalElements"].asInt())
     }
 
@@ -148,7 +160,7 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         val cuota = tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))[0]
         send("POST", "/api/objects/$CUOTA_ARBITRIO/records", mapOf("attributes" to atributos(cuota)), HttpStatus.CONFLICT)
 
-        val clave = "${e.predio}|${e.servicios[0]}|${e.anio}|13|1"
+        val clave = claveDeCuota(e.predio, e.servicios[0], e.anio, 13, "001")
         rejected("POST", "/api/objects/$CUOTA_ARBITRIO/records", mapOf("attributes" to atributos(cuota) + mapOf("periodo" to 13, "clave" to clave)), "periodo")
     }
 
@@ -197,6 +209,9 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         val codigo = tree(send("GET", "/api/srtm/predios/$otro/arbitrios?anio=${e.anio}", null, HttpStatus.OK))["predio"]["codigo"].asString()
         val problema = tree(send("POST", "/api/srtm/contribuyentes/${e.contribuyente}/arbitrios", pedido(e.anio), HttpStatus.UNPROCESSABLE_CONTENT))
         assertTrue(lista(problema["faltan"]) { it.asString() }.all { it.startsWith("Predio $codigo: ") }, problema.toString())
+        // faltan_detalle: the same messages, each still naming its own predio (not the contribuyente's)
+        assertEquals(lista(problema["faltan"]) { it.asString() }, lista(problema["faltan_detalle"]) { it["mensaje"].asString() })
+        assertTrue(lista(problema["faltan_detalle"]) { it["predio"].asString() }.all { it == otro }, problema.toString())
         assertEquals(0, pagina("anio=${e.anio}&contribuyente=${e.contribuyente}")["totalElements"].asInt())
     }
 
@@ -228,6 +243,176 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
             }
         assertTrue(escritas.exceptionOrNull() is ValidationException, escritas.toString())
         assertEquals(0, pagina("anio=${e.anio}&predio=${e.predio}")["totalElements"].asInt())
+    }
+
+    @Test
+    fun `each servicio's zona can come from its own zona_arbitrio_ubicacion row, one row per servicio`() {
+        val e = Escenario()
+        val via = "JR UBICACION ${uniqueDocumento()}"
+        val predio = e.predioDeclarado(e.contribuyente, via = via, numero = "100")
+        val zonas = listOf("ZU1", "ZU2")
+        val montos = listOf("7.00", "3.00")
+        e.codigos.forEachIndexed { i, codigo ->
+            // the tasa of each servicio's own zona: the escenario only has Z1's, the sector's
+            e.parametro("TASA_ARBITRIO", "$codigo:${zonas[i]}:CASA", valor = montos[i])
+            crear(
+                ZONA_ARBITRIO_UBICACION,
+                mapOf(
+                    "servicio" to codigo,
+                    "via" to via,
+                    "numero_inicial" to 1,
+                    "numero_final" to 999,
+                    "paridad" to "AMBOS",
+                    "zona" to zonas[i],
+                    "vigencia_desde" to "${e.anio}-01-01",
+                    "vigencia_hasta" to "${e.anio}-12-31",
+                    "clave" to "ZU-${uniqueDocumento()}"
+                )
+            )
+        }
+        val cuotas = tree(send("POST", "/api/srtm/predios/$predio/arbitrios", pedido(e.anio), HttpStatus.CREATED))
+        val porServicio = lista(cuotas) { it }.groupBy { it["servicio"].asString() }
+        for (i in e.servicios.indices) {
+            val delServicio = porServicio[e.servicios[i]]!!
+            assertEquals(12, delServicio.size, porServicio.toString())
+            assertTrue(delServicio.all { it["zona"].asString() == zonas[i] }, porServicio.toString())
+            assertTrue(delServicio.all { it["monto"].asDouble() == montos[i].toDouble() }, porServicio.toString())
+        }
+    }
+
+    // Core stores a DECIMAL exactly, with no implicit rounding: tasa_unitaria (4 decimales) × cantidad_base (2
+    // decimales) leaves monto with 6, and ReglaDeArbitrios' invariantes (which recompute the monto on insert) accept
+    // it unchanged - the write guard's recomputation must not force a scale the ordinance never asked for
+    @Test
+    fun `without REDONDEO_ARBITRIO, monto equals tasa times área exactly - Core keeps every decimal`() {
+        val e = Escenario()
+        val sector = "S${uniqueDocumento()}"
+        val servicio = e.codigos[0]
+        e.parametro("ARBITRIO_ZONA", sector, texto = "ZD")
+        e.parametro(Llaves.BASE_ARBITRIO, servicio, texto = "AREA_CONSTRUIDA_M2")
+        e.parametro("TASA_ARBITRIO", "$servicio:ZD:CASA", valor = "0.1234")
+        val predio =
+            post(
+                "/api/srtm/predios",
+                mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO", "sector_catastral" to sector)
+            )["id"].asString()
+        crear(
+            INAFECTACION_ARBITRIO,
+            mapOf(
+                "predio" to predio,
+                "servicio" to e.servicios[1],
+                "vigencia_desde" to "${e.anio}-01-01",
+                "motivo" to "SIN SERVICIO",
+                "observacion" to "De prueba"
+            )
+        )
+        crear(
+            "declaracion_predial",
+            mapOf(
+                "contribuyente" to e.contribuyente,
+                "predio" to predio,
+                "anio" to e.anio,
+                "secuencia_uso" to "1",
+                "porcentaje_condominio" to 100,
+                "clase_uso" to "RESIDENCIAL",
+                "sub_clase_uso" to "UNIFAMILIAR",
+                "uso" to "CASA HABITACIÓN",
+                "area_construida" to 12.34
+            )
+        )
+        val cuotas = tree(send("POST", "/api/srtm/predios/$predio/arbitrios", pedido(e.anio), HttpStatus.CREATED))
+        assertEquals(12, cuotas.size()) // one servicio alone (the other is inafecto here), 12 months
+        val enero = tree(send("GET", "/api/objects/$CUOTA_ARBITRIO/records/${cuotas[0]["id"].asString()}", null, HttpStatus.OK))["attributes"]
+        assertEquals(0, BigDecimal("1.522756").compareTo(enero["monto"].decimalValue())) // 0.1234 x 12.34, unrounded
+        assertEquals("AREA_CONSTRUIDA_M2", enero["base"].asString())
+        assertEquals(0, BigDecimal("12.34").compareTo(enero["cantidad_base"].decimalValue()))
+        assertEquals(0, BigDecimal("0.1234").compareTo(enero["tasa_unitaria"].decimalValue()))
+    }
+
+    // TOPE_ARBITRIO (#87), fictitious 10 %: 120.00 paid the year before caps the escenario's 153.00 at 132.00. a predio
+    // is registered when its first declaración (of any year) was presented, not when this year's was; a migrated one
+    // without fecha_presentacion counts from 1 January of its year
+    @Test
+    fun `TOPE_ARBITRIO caps the year at what was paid the year before, by the predio's first declaración`() {
+        val e = Escenario()
+        val tope = e.parametro(Llaves.TOPE_ARBITRIO, "0101", valor = "10", texto = "${e.anio - 1}-12-31")
+
+        // registered two years before, paid 120.00 last year, and its DJ of this year presented after the cut
+        val antiguo = predioConTope(e, tope, primeraDj = e.anio - 2)
+        val topadas = tree(send("POST", "/api/srtm/predios/$antiguo/arbitrios", pedido(e.anio), HttpStatus.CREATED))
+        assertEquals(24, topadas.size())
+        assertEquals(0, BigDecimal("132.00").compareTo(lista(topadas) { it["monto"].decimalValue() }.fold(BigDecimal.ZERO, BigDecimal::add)))
+        assertEquals(0, BigDecimal("153.00").compareTo(lista(topadas) { it["monto_sin_tope"].decimalValue() }.fold(BigDecimal.ZERO, BigDecimal::add)))
+        assertTrue(lista(topadas) { it["tope_aplicado"].decimalValue() }.all { it.compareTo(BigDecimal("10")) == 0 }, topadas.toString())
+        // 8.50 and 4.25 × 132 / 153, rounded down (7.33 and 3.66), and the 0.12 left on december's last
+        assertEquals(0, BigDecimal("3.78").compareTo(topadas[23]["monto"].decimalValue()), topadas[23].toString())
+
+        // first registered this year, after the cut: no tope, though it too paid the year before
+        val nuevo = predioConTope(e, tope, primeraDj = e.anio)
+        val enteras = tree(send("POST", "/api/srtm/predios/$nuevo/arbitrios", pedido(e.anio), HttpStatus.CREATED))
+        assertEquals(0, BigDecimal("153.00").compareTo(lista(enteras) { it["monto"].decimalValue() }.fold(BigDecimal.ZERO, BigDecimal::add)))
+        assertTrue(lista(enteras) { it["tope_aplicado"] }.all { it == null || it.isNull }, enteras.toString())
+
+        // migrated DJs of the 6 years before, without fecha_presentacion, and this year's presented after the cut: it
+        // was registered on 1 January of the first of them, before the cut, so it keeps its tope (#87)
+        val migrado = predioConTope(e, tope, primeraDj = e.anio, migradas = (e.anio - 6)..(e.anio - 1))
+        val conTope = tree(send("POST", "/api/srtm/predios/$migrado/arbitrios", pedido(e.anio), HttpStatus.CREATED))
+        assertEquals(0, BigDecimal("132.00").compareTo(lista(conTope) { it["monto"].decimalValue() }.fold(BigDecimal.ZERO, BigDecimal::add)))
+        assertTrue(lista(conTope) { it["tope_aplicado"].decimalValue() }.all { it.compareTo(BigDecimal("10")) == 0 }, conTope.toString())
+    }
+
+    // a predio of the escenario's sector with its DJ of the year presented on 1 february, one more DJ of primeraDj
+    // (presented on its 10 march) when that is an earlier year, one without fecha_presentacion (migrated) for each
+    // year of migradas, and 12 cuotas of 10.00 the year before
+    private fun predioConTope(
+        e: Escenario,
+        parametro: String,
+        primeraDj: Int,
+        migradas: IntRange = IntRange.EMPTY
+    ): String {
+        val predio =
+            post(
+                "/api/srtm/predios",
+                mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO", "sector_catastral" to e.sector)
+            )["id"].asString()
+        val fechadas = if (primeraDj < e.anio) listOf(primeraDj to "$primeraDj-03-10", e.anio to "${e.anio}-02-01") else listOf(e.anio to "${e.anio}-02-01")
+        val djs: List<Pair<Int, String?>> = migradas.map { it to null } + fechadas
+        for ((anio, presentada) in djs) {
+            crear(
+                "declaracion_predial",
+                mapOf(
+                    "contribuyente" to e.contribuyente,
+                    "predio" to predio,
+                    "anio" to anio,
+                    "secuencia_uso" to "1",
+                    "porcentaje_condominio" to 100,
+                    "clase_uso" to "RESIDENCIAL",
+                    "sub_clase_uso" to "UNIFAMILIAR",
+                    "uso" to "CASA HABITACIÓN"
+                ) + listOfNotNull(presentada?.let { "fecha_presentacion" to it })
+            )
+        }
+        val antes = e.anio - 1
+        for (mes in 1..12) {
+            crear(
+                CUOTA_ARBITRIO,
+                mapOf(
+                    "predio" to predio,
+                    "contribuyente" to e.contribuyente,
+                    "servicio" to e.servicios[0],
+                    "parametro" to parametro,
+                    "anio" to antes,
+                    "periodo" to mes,
+                    "monto" to "10.00",
+                    "parametro_aplicado" to "TASA_ARBITRIO:${e.codigos[0]}:Z1:CASA",
+                    "secuencia_uso" to "001",
+                    "fecha_calculo" to "$antes-01-10",
+                    "observacion" to "Determinado el año anterior",
+                    "clave" to claveDeCuota(predio, e.servicios[0], antes, mes, "001")
+                )
+            )
+        }
+        return predio
     }
 
     @Test

@@ -46,10 +46,13 @@ data class PedidoAnulacion(
     val observacion: String? = null
 )
 
-// what keeps a year or a predio from being determined: a 422 that names each missing thing
+// what keeps a year or a predio from being determined: a 422 that names each missing thing. detalle is the same,
+// each with its predio, its declaración and where it gets fixed (Falta.enlace, what the portal links to); empty
+// for a caller that has none (DocumentosArbitrios, DeterminacionMasivaService), same as faltan would be without this
 class FaltanArbitrios(
     anio: Int,
-    val faltan: List<String>
+    val faltan: List<String>,
+    val detalle: List<Falta> = emptyList()
 ) : WasichaiException(HttpStatus.UNPROCESSABLE_CONTENT, "No se pueden determinar los arbitrios de $anio: ${faltan.joinToString("; ")}")
 
 // a query parameter the endpoint cannot serve, or one it cannot read: a 422 that names it (rentas#541), never a filter
@@ -71,31 +74,54 @@ class ArbitriosService(
 ) {
     private val transaccion = TransactionalOperator.create(transacciones)
 
-    // the year's ordinance, servicios, parameters and uso catalog: read once per determination
+    // the year's ordinance, servicios, parameters, uso catalog and zona_arbitrio_ubicacion rows: read once per
+    // determination
     suspend fun contexto(anio: Int) =
         ContextoArbitrios(
             anio,
             registros.all(ORDENANZA_ARBITRIO, OrdenanzaArbitrio::class.java, filters = mapOf("anio" to "$anio")).firstOrNull(),
             registros.all(SERVICIO_ARBITRIO, ServicioArbitrio::class.java),
             parametrosTributarios.todos(),
-            registros.all(USO_PREDIO, UsoPredio::class.java)
+            registros.all(USO_PREDIO, UsoPredio::class.java),
+            registros.all(ZONA_ARBITRIO_UBICACION, ZonaUbicacion::class.java)
         )
 
-    // a predio's declarations of the year, its contribuyentes' codes, its inafectaciones and its cuotas of the year
+    // a predio's declarations of the year, its contribuyentes' codes, its inafectaciones and its cuotas of the year;
+    // with conAnteriores (Arbitrios.conTope: the year has a TOPE_ARBITRIO), its vigente cuotas of the year before and
+    // the date it was registered (Arbitrios.registrado, of its declaraciones of any year: the earliest
+    // fecha_presentacion and the lowest anio of one without it, one row each) too
     suspend fun delPredio(
         predio: Predio,
-        anio: Int
+        anio: Int,
+        conAnteriores: Boolean = false
     ): PredioArbitrios {
         val id = requireNotNull(predio.id)
         val declaraciones = registros.all(DECLARACION, Declaracion::class.java, filters = mapOf("predio" to id, "anio" to "$anio"))
         val codigos = personas(declaraciones.mapNotNull { it.contribuyente }).mapValues { it.value.codigo }
         val inafectaciones = registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java, filters = mapOf("predio" to id))
+        val (existentes, anuladas) = delAnio(id, anio)
+        if (!conAnteriores) return PredioArbitrios(predio, declaraciones, codigos, inafectaciones, existentes, anuladas)
+        val anteriores = delAnio(id, anio - 1).let { (cs, anuladasAntes) -> Arbitrios.vigentes(cs, anuladasAntes) }
+        val delPredio = mapOf("predio" to id)
+        val registrado =
+            Arbitrios.registrado(
+                registros.lowest(DECLARACION, "fecha_presentacion", delPredio)?.let { LocalDate.parse(it.take(10)) },
+                registros.lowest(DECLARACION, "anio", delPredio, vacio = "fecha_presentacion")?.toBigDecimalOrNull()?.toInt()
+            )
+        return PredioArbitrios(predio, declaraciones, codigos, inafectaciones, existentes, anuladas, anteriores, registrado)
+    }
+
+    // a predio's cuotas of a year and the ids of the annulled ones
+    private suspend fun delAnio(
+        predio: String,
+        anio: Int
+    ): Pair<List<CuotaArbitrio>, Set<String>> {
         val anuladas =
             registros
-                .all(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, filters = mapOf("predio" to id, "anio" to "$anio"))
+                .all(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, filters = mapOf("predio" to predio, "anio" to "$anio"))
                 .mapNotNull { it.cuota }
                 .toSet()
-        return PredioArbitrios(predio, declaraciones, codigos, inafectaciones, cuotas(mapOf("predio" to id, "anio" to "$anio")), anuladas)
+        return cuotas(mapOf("predio" to predio, "anio" to "$anio")) to anuladas
     }
 
     // POST /predios/{id}/arbitrios: the cuotas it wrote; none when nothing was pending
@@ -122,9 +148,22 @@ class ArbitriosService(
         val contexto = contexto(anio)
         val hoy = LocalDate.now()
         val predios = prediosDe(id, anio, conCuotas = false)
-        val calculadas = predios.map { it to Arbitrios.determinar(contexto, delPredio(it, anio), observacion, hoy) }
-        val faltan = calculadas.flatMap { (p, d) -> d.faltan.map { f -> if (p.codigo != null && p.codigo in f) f else "Predio ${p.codigo}: $f" } }.distinct()
-        if (faltan.isNotEmpty()) throw FaltanArbitrios(anio, faltan)
+        val conTope = Arbitrios.conTope(contexto)
+        val calculadas = predios.map { it to Arbitrios.determinar(contexto, delPredio(it, anio, conTope), observacion, hoy) }
+        val detalle =
+            calculadas
+                .flatMap { (p, d) ->
+                    d.detalle.map { f ->
+                        if (p.codigo != null &&
+                            p.codigo in f.mensaje
+                        ) {
+                            f
+                        } else {
+                            f.copy(mensaje = "Predio ${p.codigo}: ${f.mensaje}")
+                        }
+                    }
+                }.distinctBy { it.mensaje }
+        if (detalle.isNotEmpty()) throw FaltanArbitrios(anio, detalle.map { it.mensaje }, detalle)
         return calculadas.flatMap { (p, d) -> escribir(contexto, p, observacion, hoy, d) }
     }
 
@@ -252,11 +291,12 @@ class ArbitriosService(
         hoy: LocalDate,
         calculada: Determinacion? = null
     ): List<CuotaArbitrio> {
-        val primera = calculada ?: Arbitrios.determinar(contexto, delPredio(predio, contexto.anio), observacion, hoy)
+        val conTope = Arbitrios.conTope(contexto)
+        val primera = calculada ?: Arbitrios.determinar(contexto, delPredio(predio, contexto.anio, conTope), observacion, hoy)
         return try {
             guardar(contexto.anio, primera)
         } catch (_: DuplicateKeyException) {
-            guardar(contexto.anio, Arbitrios.determinar(contexto, delPredio(predio, contexto.anio), observacion, hoy))
+            guardar(contexto.anio, Arbitrios.determinar(contexto, delPredio(predio, contexto.anio, conTope), observacion, hoy))
         }
     }
 
@@ -265,7 +305,7 @@ class ArbitriosService(
         anio: Int,
         d: Determinacion
     ): List<CuotaArbitrio> {
-        if (d.faltan.isNotEmpty()) throw FaltanArbitrios(anio, d.faltan)
+        if (d.faltan.isNotEmpty()) throw FaltanArbitrios(anio, d.faltan, d.detalle)
         if (d.cuotas.isEmpty()) return emptyList()
         return transaccion.executeAndAwait { d.cuotas.map { registros.create(CUOTA_ARBITRIO, CuotaArbitrio::class.java, Records.attributes(it)) } }
     }

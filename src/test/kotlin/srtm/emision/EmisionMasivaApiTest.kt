@@ -464,7 +464,7 @@ class EmisionMasivaApiTest : ConEscenarioApiTest() {
         pedido: String?
     ): Rango {
         val result =
-            client
+            descargas
                 .get()
                 .uri("/api/srtm/emisiones/$id/archivo")
                 .header(HttpHeaders.AUTHORIZATION, token)

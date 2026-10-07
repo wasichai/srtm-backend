@@ -27,7 +27,8 @@ class AnulacionApiTest : ConArbitriosApiTest() {
 
         val otra = tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))
         assertEquals(1, otra.size())
-        assertEquals(cuota["clave"].asString().removeSuffix("|1") + "|2", otra[0]["clave"].asString())
+        assertEquals("001", cuota["secuencia_uso"].asString())
+        assertEquals(claveDeCuota(e.predio, cuota["servicio"].asString(), e.anio, cuota["periodo"].asInt(), "001", 2), otra[0]["clave"].asString())
         assertEquals(153.0, matriz(e)["total"].asDouble())
     }
 

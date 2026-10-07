@@ -76,8 +76,8 @@ Con el servidor corriendo:
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
 python3 apply.py --diff            # lee la base y dice qué escribiría ("would PUT …"), sin escribir nada
-python3 apply.py                   # done: 81 created, 2 updated, 0 skipped  (39 objetos + 42 relaciones; 2 appendOnly)
-python3 apply.py                   # idempotente: done: 0 created, 0 updated, 81 skipped
+python3 apply.py                   # done: 82 created, 2 updated, 0 skipped  (40 objetos + 42 relaciones; 2 appendOnly)
+python3 apply.py                   # idempotente: done: 0 created, 0 updated, 82 skipped
 python3 apply.py --drop            # apaga appendOnly y lo borra, en orden inverso (¡borra también los datos!)
 ```
 
@@ -334,12 +334,14 @@ la anulación de una cuota.
 | `ordenanza_arbitrio` | La ordenanza de un año (`anio` único) y su ratificación por la provincial (`acuerdo_ratificacion`, `fecha_ratificacion`, `municipalidad_ratificante`). Sin ordenanza ratificada no se determina ni se emite (D-02b). |
 | `servicio_arbitrio` | Un servicio que la ordenanza cobra (barrido, residuos, serenazgo…), con `codigo` único de hasta 20 caracteres y su vigencia. Ningún servicio está escrito en el código. |
 | `inafectacion_arbitrio` | Un predio que no paga un servicio en una vigencia (ambos extremos cuentan), con su motivo, documento y observación. |
-| `cuota_arbitrio` | Lo determinado de un predio, un servicio y un mes: `monto`, `parametro_aplicado` (la llave leída), `zona` y `uso_arbitrio` usados, `fecha_calculo` y `observacion`, más relaciones obligatorias a `predio`, `contribuyente` (el titular principal ese mes), `servicio` y `parametro` (la fila de `parametro_tributario`). |
+| `cuota_arbitrio` | Lo determinado de un predio, un servicio, un uso (`secuencia_uso`) y un mes: `monto`, `parametro_aplicado` (las llaves leídas, separadas por `;`), `zona` y `uso_arbitrio` usados, su desglose (`base`, `cantidad_base`, `tasa_unitaria`, `habitantes`, `habitantes_presuntos`, `promedio_habitantes`, `variacion_habitante`, `influencia`, `afluencia`, `redondeo`), `monto_sin_tope` y `tope_aplicado` (vacíos salvo que el tope de incremento la haya reducido), `fecha_calculo` y `observacion`, más relaciones obligatorias a `predio`, `contribuyente` (el titular principal ese mes), `servicio` y `parametro` (la fila de `parametro_tributario`). |
 | `anulacion_cuota_arbitrio` | La corrección de una cuota: `motivo`, `observacion`, `fecha`, y su `cuota` y `predio`. `clave` única (el id de la cuota): una sola anulación por cuota. |
 | `determinacion_arbitrio_masiva`, `determinacion_arbitrio_lote` | El job de la determinación de un año en segundo plano y sus lotes de predios, gemelos de `emision_masiva` y `emision_lote`. No generan archivo. |
+| `zona_arbitrio_ubicacion` | Una zona por vía, tramo (`numero_inicial`/`numero_final` y `paridad`) y manzana, opcionalmente de un solo `servicio`; más precisa que el sector catastral de `ARBITRIO_ZONA`, y se intenta primero (`Zonas.de`, ver **Zona por servicio y por ubicación**). `clave` única por vía, tramo, manzana, paridad, servicio y vigencia. |
 
 Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
-- **Una cuota por predio, servicio, año y mes:** `cuota_arbitrio.clave` es única y vale `predio|servicio|anio|periodo|version`.
+- **Una cuota por predio, servicio, año, mes y secuencia de uso:** `cuota_arbitrio.clave` es única y vale
+  `predio|servicio|anio|periodo|secuencia|version` (las cuotas anteriores al PU por uso, `predio|servicio|anio|periodo|version`).
   Core no tiene unicidad compuesta; como cada organización tiene su tabla física, la unicidad es por organización.
 - **Inmutable:** una cuota no se edita ni se borra, ni siquiera un ADMIN; una corrección es una anulación que se
   agrega y una versión nueva de la `clave` (ver **Anulación**). `cuota_arbitrio` y `anulacion_cuota_arbitrio` son
@@ -347,9 +349,10 @@ Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
   cualquiera, antes de la guardia de escritura. También responde **409** al borrar un predio, contribuyente, servicio o
   parámetro al que apunta una cuota. Las cuotas no exigen la marca de escritura: la API genérica todavía puede
   agregarlas, si cumplen sus invariantes.
-- **`periodo` de 1 a 12, `monto` no negativo, `parametro_aplicado` de hasta 120 caracteres, relaciones obligatorias y
-  `clave` coherente:** los revisa la regla `ReglaDeArbitrios` de la guardia de escritura (`srtm.GuardiaDeEscritura`, ver
-  [Modelo](#modelo)) al insertar, venga la cuota de donde venga; si no, **400**.
+- **`periodo` de 1 a 12, `monto` no negativo y cuadrado con su desglose (el `monto_sin_tope`, cuando un tope la redujo; el
+  `monto` nunca lo supera, y `tope_aplicado` va con él), `parametro_aplicado` de hasta 500 caracteres,
+  relaciones obligatorias y `clave` coherente:** los revisa la regla `ReglaDeArbitrios` de la guardia de escritura
+  (`srtm.GuardiaDeEscritura`, ver [Modelo](#modelo)) al insertar, venga la cuota de donde venga; si no, **400**.
 - **Un valor único repetido** (dos cuotas con la misma `clave`, o cualquier otro campo único del modelo) responde
   **409** y no 500 (`srtm.Duplicados`; Core 0.3 también responde 409, con `errors[].field`, pero en inglés; srtm lo
   sobrescribe para dar el mensaje en castellano, y pierde el campo).
@@ -360,13 +363,119 @@ firma, y se cargan con `import_parametros.py --csv <archivo>`:
 
 | `tipo` | `clave` | Valor |
 |---|---|---|
-| `TASA_ARBITRIO` | `servicio:zona:uso` | `valor_numerico`: la tasa mensual en soles, no negativa |
+| `TASA_ARBITRIO` | `servicio` y una parte por cada Dimension del servicio (`zona:uso` por defecto); su parte de zona puede ir vacía cuando la primera Dimension del servicio es `ZONA` (`servicio::uso`): significa "esta tasa rige en toda zona del servicio" (una tarifa que no varía por zona, dentro de un servicio cuyas demás tasas sí varían — ver `import_tasas_arbitrio.py`, debajo); `Arbitrios.determinar` prueba primero la llave exacta de la zona del predio y, si no existe, esta; la exacta gana siempre que exista | `valor_numerico`: la tasa mensual en soles, no negativa |
 | `ARBITRIO_ZONA` | el sector catastral | `texto`: su zona según la ordenanza |
 | `ARBITRIO_USO` | un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos (gana el más largo) | `texto`: su uso de arbitrio |
 | `ARBITRIO_VENCIMIENTO` | el mes, de 1 a 12 | `texto`: su vencimiento, `AAAA-MM-DD` |
+| `BASE_ARBITRIO` | el servicio | `texto`: su Base (`PREDIO`, `FRONTIS_ML` o `AREA_CONSTRUIDA_M2`); ej. Miraflores 2026, RRSS: `AREA_CONSTRUIDA_M2` |
+| `DIMENSIONES_ARBITRIO` | el servicio | `texto`: sus Dimension separadas por comas, sin repetir (`ZONA`, `USO`, `INFLUENCIA`, `AFLUENCIA`); ej. Miraflores 2026, PARQUES: `ZONA,INFLUENCIA,AFLUENCIA` |
+| `HABITANTES_PROMEDIO` / `HABITANTES_VARIACION` | `servicio:zona:uso` | `valor_numerico`: sus habitantes promedio y su variación, mayor que 0 (una sin la otra en el archivo no cuenta); ej. Miraflores 2026: P=2, V=0.5 |
+| `REDONDEO_ARBITRIO` | vacía (global a la ordenanza) | `texto`: `decimales:modo` (`ABAJO`, `MEDIO` o `ARRIBA`); ej. Miraflores 2026: `2:ABAJO` |
+| `ARBITRIO_INFLUENCIA` | la `ubicacion_area_verde` del predio (enum del modelo: `FRENTE A PARQUE`, `MEDIANAMENTE CERCANO A AREAS VERDES`, `FRENTE A BERMA`, `OTRAS UBICACIONES`) | `texto`: su nivel de influencia; ej. Miraflores 2026: `FRENTE A PARQUE` → `Frente a Parque y/o Área Verde` |
+| `ARBITRIO_AFLUENCIA` | un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos, solo o como `servicio:prefijo` (gana el de su servicio; dentro de cada familia, el más largo) | `texto`: su nivel de afluencia |
+| `TOPE_ARBITRIO` | el grupo de uso: un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos (gana el más largo), o `*` para todos los demás | `valor_numerico`: el % máximo de aumento sobre lo pagado el año anterior, mayor que 0; `texto`: vacío, o la fecha de corte del registro del predio (`AAAA-MM-DD`); ej. Miraflores 2026: 8 % en casa habitación y 18 % en otros usos, para predios registrados al 31/12/2025 (ver **Tope de incremento**) |
 
-`import_parametros.py` revisa la forma de estas filas antes de enviar nada: la llave de la tasa, el valor, el mes, la
-fecha y que `transcribio` y `verifico` sean dos personas distintas. Si una no encaja, la nombra y sale con `2`.
+`import_parametros.py` revisa la forma de estas filas antes de enviar nada: la llave de la tasa (según las
+`DIMENSIONES_ARBITRIO` vigentes de su servicio), el valor, el mes, la fecha y que `transcribio` y `verifico` sean dos
+personas distintas. Si una no encaja, la nombra y sale con `2`. `BASE_ARBITRIO`, `DIMENSIONES_ARBITRIO`,
+`HABITANTES_PROMEDIO`, `HABITANTES_VARIACION`, `REDONDEO_ARBITRIO`, `ARBITRIO_INFLUENCIA`, `ARBITRIO_AFLUENCIA` y
+`TOPE_ARBITRIO` son opcionales: sin estas filas el cálculo es el
+de siempre (base `PREDIO`, dimensiones `ZONA,USO`, sin redondeo adicional y sin tope).
+
+**Tasas de una ordenanza, de la tabla del informe técnico.** `import_tasas_arbitrio.py` deriva el CSV de arriba
+(el que lee `import_parametros.py --csv`) de la tabla larga de tasas de una ordenanza, una fila por tasa: `servicio,
+zona, uso_codigo, uso, ubicacion, nivel_afluencia, base, tasa_mensual`, con una cabecera `#` que cita la fuente (la
+forma de `arbitrios-miraflores-2026.csv`, #86). No carga nada a Core: solo escribe el archivo, y para eso llama
+`import_parametros.errores` antes de escribir.
+
+```bash
+cd model
+python3 import_tasas_arbitrio.py --tasas tasas.csv --servicios BARRIDO_CALLES=BAR,RECOLECCION_RESIDUOS=RRS \
+    --usos usos.csv --influencias influencias.csv --vigencia-desde 2026-01-01 --norma "Ordenanza N.° 665/MM" \
+    --fuente "El Peruano, 20/12/2025" --transcribio "ANA, 2026-01-05" --verifico "BETO, 2026-01-09" \
+    --redondeo 2:ABAJO --habitantes RECOLECCION_RESIDUOS=2:0.5 \
+    --vencimientos 2026-02-28,2026-05-30,2026-08-29,2026-11-30 --dry-run   # cuenta por tipo, no escribe
+python3 import_tasas_arbitrio.py ... --salida parametros-2026.csv          # sin --dry-run, escribe el archivo
+```
+
+Por cada servicio escribe `BASE_ARBITRIO` (de su columna `base`: «ml» → `FRONTIS_ML`, «m2»/«m²» → `AREA_CONSTRUIDA_M2`,
+«predio» → `PREDIO`) y `DIMENSIONES_ARBITRIO` (`ZONA` si alguna fila del servicio trae zona, `USO` si alguna trae
+`uso_codigo`, `INFLUENCIA`/`AFLUENCIA` igual, en ese orden); una `TASA_ARBITRIO` por fila, siempre (zona y
+`nivel_afluencia` normalizados sin acentos, en mayúsculas y con `_`; `uso_codigo` y `ubicacion` verbatim). Una fila
+sin zona en un servicio cuyas demás filas sí la traen no se descarta ni se rechaza: su parte de zona queda vacía
+(«esta tasa rige en toda zona del servicio», la tarifa de «otros usos» de Miraflores que no varía por zona, a
+diferencia de la de casa habitación del mismo servicio). `--usos` (`prefijo,uso`) y `--influencias` (`enum,etiqueta`)
+pasan verbatim a `ARBITRIO_USO`/`ARBITRIO_INFLUENCIA`; toda tasa cuyo `uso_codigo`/`ubicacion` no esté en esas
+columnas no encaja. `--habitantes SERVICIO=P:V` (repetible) escribe `HABITANTES_PROMEDIO`/`HABITANTES_VARIACION` por
+cada `servicio:zona:uso` de casa habitación presente para ese servicio (su columna `uso` contiene «casa
+habitación», sin acentos); una fila de casa habitación sin zona no tiene cómo repartirse "en toda zona del
+servicio", así que no encaja. `--redondeo` escribe la fila global; `--vencimientos` escribe las 12
+`ARBITRIO_VENCIMIENTO` a partir de 12 fechas (una por mes) o 4 (trimestral: cada una cubre sus 3 meses).
+`--dry-run` imprime la cantidad por tipo y no escribe nada: `--salida` es obligatorio sin `--dry-run`, y no hace
+falta con él. Los códigos de salida no cambian con `--dry-run`.
+
+`ARBITRIO_AFLUENCIA` **no se deriva aquí a propósito**: mapea el uso propio de un predio a su nivel de afluencia —
+dato del predio, no de la ordenanza — y esta tabla no lo trae.
+
+Sale con `2` (nada escrito) si un servicio de una fila no está en `--servicios`, una base no se reconoce, una tasa
+se repite, un uso o una ubicación no tienen mapeo, una fila de casa habitación no tiene zona bajo `--habitantes`,
+`--vencimientos` no trae 12 ni 4 fechas, o el CSV construido no pasa `import_parametros.errores`.
+
+**Cuidado al cargar `ARBITRIO_ZONA`, `zona_arbitrio_ubicacion` y `ARBITRIO_AFLUENCIA` aparte.** Estos tres no los
+escribe `import_tasas_arbitrio.py` (zona y ubicación son del predio, no de la tabla de tasas); quien los carga
+—a mano o con `import_zonas_arbitrio.py`— **debe escribir el mismo texto normalizado que las `TASA_ARBITRIO`
+usan en su clave**: sin acentos, en mayúsculas, lo que no es letra ni número vuelto `_` («Zona 1» → `ZONA_1`,
+«Área 0» → `AREA_0`, «Muy alta» → `MUY_ALTA`). Una zona o una afluencia escrita como la ordenanza la imprime
+(«Zona 1», «Muy alta») no calza con la clave de ninguna `TASA_ARBITRIO`, y el predio entero falla con un
+`TASA_ARBITRIO` en `faltan` — sin ningún otro aviso.
+
+`model/data/arbitrios/ficticio-parametros.csv` es exactamente lo que `import_tasas_arbitrio.py` produce de
+`ficticio-tasas.csv`, `ficticio-usos.csv` y `ficticio-influencias.csv` (un contrato cruzado: `ArbitriosTest.kt`
+lee este mismo archivo, y `test_import_tasas_arbitrio.py` lo regenera y compara byte a byte). Para regenerarlo:
+
+```bash
+cd model
+python3 import_tasas_arbitrio.py --tasas data/arbitrios/ficticio-tasas.csv \
+    --servicios BARRIDO_CALLES=BAR,RECOLECCION_RESIDUOS=RRS,PARQUES_JARDINES=PYJ,SERENAZGO=SER \
+    --usos data/arbitrios/ficticio-usos.csv --influencias data/arbitrios/ficticio-influencias.csv \
+    --vigencia-desde 2041-01-01 --norma "Ordenanza ficticia 000-2041-MDP" --fuente test \
+    --transcribio "ANA, 2041-01-05" --verifico "BETO, 2041-01-09" --redondeo 2:ABAJO \
+    --habitantes RECOLECCION_RESIDUOS=4:0.3 --vencimientos 2041-02-28,2041-05-30,2041-08-29,2041-11-30 \
+    --salida data/arbitrios/ficticio-parametros.csv
+```
+
+**Tasas reajustadas por IPC, sin ordenanza con cuadro** (art. 69-B del TUO de la Ley de Tributación Municipal;
+art. 8 de la Ord. 2386-MML, #88). Muchas ordenanzas que reajustan sus tasas del año anterior por el IPC no
+publican ningún cuadro, solo el porcentaje (a veces ni eso: Arequipa 2026 no lo dice). `derivar_ipc_arbitrio.py`
+deriva el CSV del año siguiente desde el del año base, sin teclear ninguna cifra:
+
+```bash
+cd model
+python3 derivar_ipc_arbitrio.py --csv parametros-2026.csv --desde 2026 --ipc 2.10 \
+    --norma "OM 012-2027-MDP" --redondeo 4:MEDIO \
+    --transcribio "CARLA, 2027-01-05" --verifico "DIEGO, 2027-01-09" --salida parametros-2027.csv
+```
+
+Toma, de `--csv`, la fila de cada `(tipo, clave)` de `TIPOS_ARBITRIO` con la `vigencia_desde` más reciente que no
+pase el 31/12 de `--desde`, entre las que siguen vigentes ese día (una fila que empieza después de esa fecha, o
+cuya `vigencia_hasta` es anterior, se ignora), y escribe cada una para el año siguiente, con `vigencia_desde` el 01/01 de ese año:
+- `TASA_ARBITRIO`: su `valor_numerico` × (1 + `--ipc` / 100), redondeado con `--redondeo` (`decimales:modo`, el
+  mismo `ABAJO`/`MEDIO`/`ARRIBA` de `REDONDEO_ARBITRIO`); su `texto` queda `DERIVADA IPC <ipc>% de <clave> <año
+  base>`. Ejemplo de Miraflores 2026 con IPC 2,10 % y `4:MEDIO`: `2.5428` → `2.5962` (`2.5428 × 1.021 =
+  2.5961988`).
+- Toda otra fila (`ARBITRIO_ZONA`, `ARBITRIO_USO`, `ARBITRIO_INFLUENCIA`, `ARBITRIO_AFLUENCIA`, `BASE_ARBITRIO`,
+  `DIMENSIONES_ARBITRIO`, `HABITANTES_PROMEDIO`/`HABITANTES_VARIACION`, `REDONDEO_ARBITRIO`, `TOPE_ARBITRIO`) se
+  copia tal cual (mismo `valor_numerico` y `texto`), salvo el `texto` de `ARBITRIO_VENCIMIENTO` y el de
+  `TOPE_ARBITRIO` cuando es una fecha: ambos se corren un año (29 de febrero → 28 de febrero si el año siguiente
+  no es bisiesto). `REDONDEO_ARBITRIO` se copia con su propio modo; `--redondeo` solo redondea las tasas de este
+  reajuste, no la reemplaza.
+- Toda fila derivada cita la fila base (su `clave` y el año base, en `fuente`) y lleva la `norma`, `transcribio`
+  y `verifico` del propio reajuste, no los de la fila base: dos firmas distintas por fila, exigidas por
+  `import_parametros.errores`.
+
+`--redondeo` es **obligatorio**: ninguna de las ordenanzas revisadas publica cómo redondea un reajuste por IPC.
+Sale con `2` (nada escrito) si falta `--redondeo` o no es `decimales:modo`, si `--ipc` no es un número, o si el
+CSV construido no pasa `import_parametros.errores`.
 
 **La ordenanza, los servicios y las inafectaciones** se cargan con `import_arbitrios.py`, desde un JSON:
 
@@ -392,28 +501,140 @@ python3 import_arbitrios.py --archivo arbitrios-2026.json
   servicio y `vigencia_desde`; actualiza en su lugar lo que cambió y no borra nada;
 - sale con `0` si todo va bien, `1` si Core rechaza algo y `2` si el archivo no encaja (sin escribir nada).
 
+**Zona por servicio y por ubicación.** La zona de un servicio, cada día, la decide `srtm.arbitrios.Zonas.de` en seis
+niveles, de más a menos preciso; gana el primero con alguna fila vigente que coincida (varias filas de ese nivel que
+coincidan en la zona la ganan igual; si no coinciden, la zona es ambigua y el predio entero falla, nombrada en
+`faltan`):
+1. `zona_arbitrio_ubicacion` del servicio, con la manzana del predio.
+2. `zona_arbitrio_ubicacion` del servicio, sin manzana (vacía).
+3. `zona_arbitrio_ubicacion` de todos los servicios (`servicio` vacío), con la manzana del predio.
+4. `zona_arbitrio_ubicacion` de todos los servicios, sin manzana.
+5. `ARBITRIO_ZONA servicio:sector_catastral`.
+6. `ARBITRIO_ZONA sector_catastral`.
+
+Una fila de `zona_arbitrio_ubicacion` coincide cuando está vigente ese día, su `via` es la del predio (sin distinguir
+mayúsculas ni tildes), su `tipo_via` está vacío o es el del predio (comparado igual que la vía), el número del predio cae en su tramo
+(`numero_inicial`/`numero_final`, extremos vacíos abiertos) y su `paridad` es `AMBOS`, vacía o la del número. Sin
+ninguna fila que coincida en los cuatro niveles de ubicación, cae al sector catastral (niveles 5 y 6); sin sector
+catastral tampoco, la zona de ese servicio no se resuelve, falta «Sector catastral del predio …» y **el predio entero
+no se determina** (todo o nada), aunque otros servicios del predio sí resuelvan por ubicación. Un predio sin sector
+se determina solo cuando cada uno de sus servicios resuelve su zona por ubicación.
+
+Se carga con `import_zonas_arbitrio.py`, desde un CSV con las columnas
+`servicio,tipo_via,via,manzana,numero_inicial,numero_final,paridad,zona,vigencia_desde,vigencia_hasta,norma,observacion`
+y una cabecera `#` con la fuente; `servicio` vacío aplica a todos, `manzana` vacía no filtra por manzana, `tipo_via`
+vacío no filtra por tipo de vía y `vigencia_hasta` vacía sigue vigente. **La columna `zona` debe traer el mismo
+texto normalizado que las `TASA_ARBITRIO` de ese servicio** (ver la advertencia de arriba, en **Tasas de una
+ordenanza**): `import_zonas_arbitrio.py` no normaliza nada, solo lo versiona tal cual se le da.
+
+```bash
+cd model
+python3 import_zonas_arbitrio.py --csv zonas-2026.csv --dry-run   # lee Core y dice qué haría, sin escribir
+python3 import_zonas_arbitrio.py --csv zonas-2026.csv
+```
+
+`import_zonas_arbitrio.py`:
+- la clave natural es `servicio|tipo_via|via|manzana|numero_inicial|numero_final|paridad|vigencia_desde` (la misma
+  fórmula de `claveDeZonaUbicacion`, trasladada a Python); cambiar cualquiera de esos campos es un tramo nuevo, no
+  una fila reemplazada;
+- antes de la primera escritura revisa el archivo: campos obligatorios, `numero_inicial` y `numero_final` enteros
+  con `numero_inicial <= numero_final`, `paridad` del enum, fechas ISO, y que dos filas que un mismo predio podría
+  encontrar en el mismo nivel no tengan distinta zona con vigencias que se cruzan (la ambigüedad que `Zonas.de`
+  encontraría al calcular): mismo servicio (o ambas de todos), misma manzana (o ambas sin manzana), la misma vía y
+  un `tipo_via` igual o vacío en alguna (las dos comparadas como `Zonas`: sin espacios en los extremos, sin
+  distinguir mayúsculas ni tildes), paridades iguales o alguna `AMBOS`, y tramos que se solapan. `AV LIMA` y
+  `JR LIMA` no chocan; `PAR 200-298` y `AMBOS 200-298`, o `AV X` y `Av x`, sí;
+- es idempotente: crea lo que falta, actualiza en su lugar `zona`, `vigencia_hasta`, `norma` y `observacion` (lo que
+  no es parte de la clave) y no borra nada;
+- sale con `0` si todo va bien, `1` si Core rechaza algo y `2` si el archivo no encaja (sin escribir nada).
+
+**Compatibilidad.** Sin ninguna fila de `zona_arbitrio_ubicacion`, los cuatro primeros niveles no tienen candidatas y
+`Zonas.de` cae directo al sector catastral: un predio de un solo uso determina las mismas cuotas que antes de este
+cambio.
+
 **Cálculo** (`Arbitrios.determinar`, de un predio y un año):
 - **Del año:** hace falta la ordenanza del año ratificada (acuerdo y fecha) y al menos un servicio vigente. Si no,
   `faltan` lo dice y no se determina ningún predio.
 - **Cada mes a su fecha.** El mes *m* se decide el día 1 de *m* (`Periodo.atribucion`), no el día en que se corre:
   - **Titular:** de las DJ del año que cubren ese día, la del titular principal. Gana el mayor `porcentaje_condominio`;
     en empate, la `fecha_adquisicion` más antigua, luego el `codigo` de contribuyente menor y luego la secuencia de uso
-    menor. Se le cobra íntegro, sin prorrateo.
+    menor. Se le cobra íntegro, sin prorrateo: es el contribuyente de la cuota de cada secuencia ese mes.
   - **Qué días cubre una DJ:** desde el 1 de enero, o desde el día siguiente a su `fecha_adquisicion` si cae en el año;
     hasta el 31 de diciembre, o hasta su `fecha_anulacion` si se anuló (descargo). Una importada sin fechas cubre el
     año. Una venta el 20 de mayo da: vendedor de enero a mayo, comprador de junio a diciembre.
-  - **Zona:** `ARBITRIO_ZONA` del `sector_catastral` del predio.
-  - **Uso de arbitrio:** `ARBITRIO_USO` del código de uso de la DJ principal. Ese código es tan preciso como la DJ:
-    `XXYYZZ` con clase, sub clase y uso; `XXYY` sin uso; `XX` con solo la clase. Gana el prefijo más largo.
+  - **Zona:** la de cada servicio ese día, por `Zonas.de` (ver **Zona por servicio y por ubicación** arriba):
+    `zona_arbitrio_ubicacion` por vía y tramo primero, `ARBITRIO_ZONA` del `sector_catastral` del predio como
+    respaldo. Es la del predio: la misma para todas sus secuencias.
+  - **Un PU por uso** (decisión del 2026-10-05): cada secuencia de uso de las DJ que cubren el día se cobra aparte
+    (`porSecuencia`: la de su propio titular principal, para un condómino de esa secuencia), con su propio uso de
+    arbitrio, área, frontis y habitantes. `ARBITRIO_USO` del código de uso de cada DJ (tan preciso como la DJ:
+    `XXYYZZ` con clase, sub clase y uso; `XXYY` sin uso; `XX` con solo la clase; gana el prefijo más largo). Un
+    predio de un solo uso tiene, como antes, una sola secuencia.
   - **Servicios:** cada servicio vigente ese día, salvo que el predio tenga una inafectación suya vigente ese día o
-    que la cuota ya exista. Su monto es la tasa `TASA_ARBITRIO servicio:zona:uso` vigente ese día, tal cual (sin
-    área, prorrateo ni redondeo). `parametro_aplicado` guarda la llave exacta que se leyó.
-- **Meses sin cobro:** un mes sin titular, o sin sector o uso, no se cobra. Un predio que aparece en julio no debe de
-  enero a junio.
-- **No se puede determinar** un predio sin titular en ningún mes, o sin sector o uso en todos los meses con titular.
-- **Todo o nada:** si falta un parámetro (una zona, un uso, una tasa), no se determina nada de ese predio. `faltan`
+    que la cuota de esa secuencia ya exista. El monto es `tasa_unitaria × cantidad_base × (1 + (H − P) × V)`
+    (`Calculo.calcular`): `tasa_unitaria` es `TASA_ARBITRIO servicio` más una parte por cada `Dimension` de
+    `Servicios.dimensiones` (`zona:uso` por defecto); `cantidad_base` (`BASE_ARBITRIO` del servicio) es 1 por
+    predio, o el frontis en ml o el área construida en m² de la DJ de la secuencia; el factor de habitantes
+    (`HABITANTES_PROMEDIO`/`HABITANTES_VARIACION` de `servicio:zona:uso`) es 1 sin esas filas, o cuando la DJ no
+    declara `numero_habitantes` (se presume el promedio, H = P). El monto se redondea al final según
+    `REDONDEO_ARBITRIO` (`decimales:modo`, global a la ordenanza); sin `BASE_ARBITRIO`, habitantes ni redondeo es
+    la tasa mensual tal cual, igual que antes de este cálculo. `parametro_aplicado` guarda las llaves exactas que se
+    leyeron, separadas por `;`; sin `DIMENSIONES_ARBITRIO` es solo la de la tasa, la de siempre. `Calculo.formula`
+    imprime la misma cuenta en texto, como la ordenanza la lee: `"5.0856 S/ por ml × 10.50 ml = 53.39"`,
+    `"0.0514 S/ por m² × 100.00 m² × (1 + (4 − 2) × 0.50) = 10.28"` o, por predio, `"85.9875 S/ por predio"` (con
+    `= monto` solo si hubo redondeo); una cuota de antes del desglose (`base` null) es solo su `monto`.
+  - **Influencia y afluencia** (`Dimensiones.influencia`/`afluencia`, cuando el servicio las lista): la influencia es
+    `ARBITRIO_INFLUENCIA` de la `ubicacion_area_verde` del predio; sin esa ubicación, o sin su fila, falta y el predio
+    entero no se determina (todo o nada, igual que una zona o un uso que falta). La afluencia es `ARBITRIO_AFLUENCIA`
+    del código de uso, con la misma regla del prefijo más largo que `ARBITRIO_USO`, pero primero por su servicio
+    (`servicio:prefijo`, si existe) antes de caer a uno general (`prefijo`).
+- **Meses sin cobro:** un mes sin titular, o una secuencia sin zona (por sector o por ubicación) o sin uso ese mes, no
+  se cobra. Un predio que aparece en julio no debe de enero a junio.
+- **No se puede determinar** un predio sin titular en ningún mes, o sin zona y uso a la vez en ninguna secuencia de
+  ningún mes con titular. Una secuencia que nunca tuvo uso del catálogo, en ningún mes (aunque otra secuencia del
+  mismo predio sí lo tenga), también hace fallar el predio entero, nombrada con su número cuando hay varias
+  (`uso 002`).
+- **Todo o nada:** si falta un parámetro (una zona, un uso, una tasa, una influencia o una afluencia) de cualquier
+  secuencia, no se determina nada de ese predio. `faltan`
   nombra cada uno una vez (`TASA_ARBITRIO LIMPIEZA:Z1:CASA 2026`).
-- **Reejecutar no duplica:** las cuotas que ya existen no se recalculan.
+- **Reejecutar no duplica:** las cuotas que ya existen, de cada secuencia, no se recalculan.
+- **La clave** de cada cuota es `predio|servicio|anio|periodo|secuencia|version` (ver **Modelo** arriba): un predio
+  de un solo uso tiene, como antes de este cambio, una cuota por servicio y mes, con el mismo `monto` y el mismo
+  `parametro_aplicado` de siempre; uno de varios usos tiene una por secuencia, y cada una se calcula con su propio
+  uso de arbitrio, su base y su tasa, así que tiene su propio `monto` y su propio `parametro_aplicado`.
+
+**Tope de incremento** (`TOPE_ARBITRIO`, #87). Muchas ordenanzas limitan lo que un predio paga en un año a lo que
+pagó el anterior más un porcentaje (Miraflores 2026: 8 % en casa habitación, 18 % en otros usos; la diferencia la
+asume la municipalidad). Al final de `Arbitrios.determinar`, con todas las cuotas del predio ya calculadas:
+- **El grupo** es el código de uso de la secuencia menor del predio (el primer mes que lo tiene): su `TOPE_ARBITRIO`
+  es la fila del prefijo más largo, o la de `*` si ninguno coincide. Sin fila, no hay tope.
+- **Sin tope** también si el predio no tiene cuotas vigentes del año anterior (no anuladas, la última versión de
+  cada una, de todos los servicios), o si esas cuotas suman 0 (no pagó nada: un límite de 0 dejaría todo el año en
+  0), o si se registró después de la fecha de corte (`texto`). **Registrado** es cuando el predio entró al padrón: la
+  fecha más antigua de sus declaraciones **de cualquier año**, no la de la DJ de este año; cada DJ cuenta con su
+  `fecha_presentacion` o, si no la tiene (una DJ migrada), con el 1 de enero de su `anio`. Un predio cuya primera DJ
+  es de 2024, que pagó en 2025 y presentó su DJ de 2026 en febrero de 2026, con corte 2025-12-31, tiene tope; uno
+  con DJ migradas de 2020 a 2025 sin fecha y la de 2026 presentada el 1 de febrero, también (registrado el
+  2020-01-01); uno cuya primera DJ es de enero de 2026, no.
+- **Si no**, `límite = suma del año anterior × (1 + tope / 100)`. Si las cuotas vigentes de este año ya escritas más
+  las nuevas lo superan, **solo las nuevas** bajan en proporción, hasta `límite − ya escritas` (nunca por debajo de
+  0): cada una se redondea con su propio redondeo (`2:ABAJO` si no tiene), la diferencia del redondeo va a la última
+  (en el orden en que se determinaron: mes, secuencia, servicio) sin que ninguna pase de lo que era, y la suma
+  queda exacta. Cada nueva guarda `monto_sin_tope` (lo de antes del tope, que es lo que cuadra con su desglose),
+  `tope_aplicado` (el %) y `TOPE_ARBITRIO:<clave>` en `parametro_aplicado`; `Calculo.formula` termina en
+  `"= 33.33, con tope de 8 %: 29.99"`.
+- **Ejemplo** (cifras ficticias, `TopeTest`): un predio de casa habitación que pagó 1 000.00 en 2025 y debería pagar
+  1 200.00 en 2026 (100.00 al mes en tres servicios: 33.33 + 33.33 + 33.34), con `TOPE_ARBITRIO 0101` de 8 %, paga
+  1 080.00: cada cuota × 1 080 / 1 200, redondeada hacia abajo (29.99, 29.99 y 30.00 al mes, 1 079.76 en el año), y
+  los 0.24 que faltan van a la última de diciembre (30.24). Si los primeros 6 meses ya estaban escritos (600.00),
+  las 18 nuevas suman 480.00.
+- **La última** es la última en el orden en que se determinan las cuotas: por mes, luego por secuencia y luego por
+  servicio (su `orden`); no el orden alfabético de la `clave`, que pondría el mes 9 después del 12.
+- `ArbitriosService` lee las cuotas del año anterior (con sus anulaciones) y la fecha de registro (dos filas,
+  `Registros.lowest`: la `fecha_presentacion` más baja de las declaraciones del predio y el `anio` más bajo de las que
+  no la tienen; `Arbitrios.registrado` toma la menor) solo cuando el año tiene alguna
+  fila `TOPE_ARBITRIO` vigente: sin ella no hay lecturas nuevas y las cuotas son las de siempre (`monto_sin_tope` y
+  `tope_aplicado` vacíos).
 
 **Escritura.** Las cuotas de un predio se escriben en una transacción: todas o ninguna. Si otra determinación del mismo
 predio escribe alguna entre la lectura y la escritura (la `clave` es única), no queda nada de esta: se lee y se calcula
@@ -431,10 +652,10 @@ cuotas. El modelo declara dos índices en `cuota_arbitrio` (`indexes` de `model/
 | GET | `/arbitrios/servicios?anio` | Los servicios vigentes algún día del año, en su orden. |
 | GET | `/arbitrios/parametros?anio` | La ordenanza, los servicios y las filas de la ordenanza vigentes en el año, con `faltan`. Siempre 200. |
 | GET | `/arbitrios?anio&predio&contribuyente&servicio&page&size` | Una página de cuotas. Un parámetro desconocido o mal formado es **422** y lo nombra en `errors` (nunca un filtro ignorado). |
-| GET | `/predios/{id}/arbitrios?anio` | La matriz servicio × mes, el titular de cada mes según la regla, los totales por servicio, por mes y del año, la `fecha_calculo` de la última cuota, cuántas cuotas agregaría determinar ahora (`pendientes`) y qué falta para hacerlo (`faltan`). |
+| GET | `/predios/{id}/arbitrios?anio` | La matriz servicio × mes, el titular de cada mes según la regla, los totales por servicio, por mes y del año, la `fecha_calculo` de la última cuota, cuántas cuotas agregaría determinar ahora (`pendientes`) y qué falta para hacerlo (`faltan`, y lo mismo con su predio, su declaración cuando la tiene y dónde se arregla: `faltan_detalle: [{mensaje, predio, declaracion, enlace}]`; `enlace` es `"DECLARACION"` cuando lo arregla la DJ —su uso, frontis o área construida—, `"PREDIO"` cuando lo arregla la ubicación del predio —su sector catastral, una zona por ubicación ausente o ambigua, su ubicación respecto del área verde— y `null` cuando no lo arregla ninguna de las dos: una fila de la ordenanza aunque nombre el sector o el uso del predio —`TASA_ARBITRIO`, `ARBITRIO_ZONA`, `ARBITRIO_USO`, `ARBITRIO_INFLUENCIA`, `ARBITRIO_AFLUENCIA`, `TOPE_ARBITRIO`—, un titular que ninguna DJ cubre, un factor de habitantes negativo o una invariante). Cada celda lleva su `desglose`, una entrada por secuencia de uso (`secuencia_uso`) con `id`, `monto`, `base`, `cantidad_base`, `tasa_unitaria`, `habitantes`, `promedio_habitantes`, `variacion_habitante`, `habitantes_presuntos`, `zona`, `uso_arbitrio`, `influencia`, `afluencia` y `formula`, la cuenta legible (`Calculo.formula`): `"0.0514 S/ por m² × 100.00 m² × (1 + (4 − 2) × 0.50) = 10.28"`, `"5.0856 S/ por ml × 10.50 ml = 53.39"` o, por predio, `"85.9875 S/ por predio"`; una cuota de antes del desglose (`base` null) solo trae `soles(monto)`. |
 | GET | `/contribuyentes/{id}/arbitrios?anio` | Lo mismo por cada predio de sus DJ del año (o del que tiene cuotas), solo con las cuotas a su nombre, y su total. |
-| POST | `/predios/{id}/arbitrios` `{anio, observacion}` | **201** con las cuotas escritas; **200** con `[]` si no había nada pendiente; **422** con `faltan`; **400** si la observación no tiene de 5 a 500 caracteres; **403** sin permiso de creación sobre `cuota_arbitrio`. |
-| POST | `/contribuyentes/{id}/arbitrios` `{anio, observacion}` | Determina cada predio de sus DJ del año (también una anulada: puede cubrir los meses previos a una venta). Calcula todos antes de escribir: si uno no se puede determinar, **422** que lo nombra (`Predio <código>: …`) y no escribe ninguno. |
+| POST | `/predios/{id}/arbitrios` `{anio, observacion}` | **201** con las cuotas escritas; **200** con `[]` si no había nada pendiente; **422** con `faltan` y `faltan_detalle`; **400** si la observación no tiene de 5 a 500 caracteres; **403** sin permiso de creación sobre `cuota_arbitrio`. |
+| POST | `/contribuyentes/{id}/arbitrios` `{anio, observacion}` | Determina cada predio de sus DJ del año (también una anulada: puede cubrir los meses previos a una venta). Calcula todos antes de escribir: si uno no se puede determinar, **422** que lo nombra (`Predio <código>: …`, también en `faltan_detalle`) y no escribe ninguno. |
 
 **Determinación masiva** (`/api/srtm/arbitrios/determinaciones`). Determina todos los predios de un año en segundo
 plano, sobre la misma maquinaria de lotes de la [emisión masiva](#emisión-masiva):
@@ -464,10 +685,30 @@ plano, sobre la misma maquinaria de lotes de la [emisión masiva](#emisión-masi
 - **GET** lista (`?anio`) y **GET** `/{id}` devuelven el job. **DELETE** `/{id}` cancela sus lotes y lo borra (204);
   las cuotas que escribió quedan, porque una cuota no se borra.
 
+**Al desplegar** (un PU por uso, #84; **decisión abierta**). Antes de este cambio, un predio de varios usos tenía una
+cuota por servicio y mes, calculada con su secuencia menor; ahora tiene una por secuencia. Las cuotas que ya existen
+(sin `secuencia_uso`) cuentan como de la secuencia menor del mes, así que no se duplican. Pero las secuencias 002 en
+adelante de esos predios quedan **pendientes en todos los meses** de un año ya determinado:
+- volver a determinar ese año (la masiva, el POST de un predio o de un contribuyente, o los `pendientes` de la matriz)
+  **agrega** sus cuotas: un cobro nuevo sobre un año ya emitido;
+- si no se vuelve a determinar, la matriz de esos predios muestra `pendientes` y la HLA de sus contribuyentes responde
+  **422** («Predio …: N cuotas de arbitrios por determinar»).
+
+Un predio de un solo uso no cambia en nada. **Antes de desplegar**, conviene contar los predios de varios usos que ya
+tienen cuotas del año en curso (los que tienen DJ del año con más de una `secuencia_uso` y alguna `cuota_arbitrio` del
+año) y decidir qué hacer con ellos: volver a determinar el año y emitir lo nuevo, o desplegar después del cierre del
+año. El código no lo decide: es una decisión de la municipalidad.
+
 **HLA** (hoja de liquidación de arbitrios, `GET /api/srtm/contribuyentes/{id}/hla?anio`, PDF inline como la HR).
 - **Qué imprime:** las cuotas a nombre del contribuyente tal como se determinaron, con las mismas cifras que
   `GET /contribuyentes/{id}/arbitrios`:
   - por predio, la zona y el uso, los meses con cuota por servicio y sus totales;
+  - por predio, el cálculo (`PredioHla.calculos`): una línea por secuencia de uso, servicio y `Calculo.formula`
+    distintos del año, con el rango de meses en que rigió (abreviado a 3 letras, `ene`, `feb`… `dic`; un solo mes
+    va solo, `mar`, y un rango junta los dos extremos con un guion en, `ene–dic`), por ejemplo
+    `"Recolección (uso 001), ene–dic: 0.0514 S/ por m² × 100.00 m² × (1 + (4 − 2) × 0.50) = 10.28"`. La misma
+    fórmula que vuelve a aparecer sin ser contigua (una tasa que cambió y volvió) imprime una línea por tramo. Una
+    cuota de antes del desglose (`base` null) no aporta ninguna línea: la HLA se ve como antes de este cálculo;
   - las cuotas mensuales con su vencimiento (`ARBITRIO_VENCIMIENTO` de cada mes, vigente al día 1);
   - el total del año, la fecha de cálculo y la ordenanza con su ratificación.
 - **Usa** la cabecera de los documentos (`templates/emision/hla.html`).
@@ -489,9 +730,11 @@ plano, sobre la misma maquinaria de lotes de la [emisión masiva](#emisión-masi
 **Anulación** (`POST /api/srtm/arbitrios/cuotas/{id}/anulacion` `{motivo, observacion}` → 201). Así se corrige
 una cuota, en lugar de editarla:
 - se agrega una `anulacion_cuota_arbitrio`, que tampoco se edita ni se borra (409 por cualquier vía);
-- la cuota anulada deja de contar en la matriz, en los totales y en la HLA, y vuelve a quedar pendiente;
+- la cuota anulada deja de contar en la matriz, en los totales y en la HLA, y solo su secuencia vuelve a quedar
+  pendiente: las demás secuencias del mismo servicio y mes no se tocan;
 - la siguiente determinación del predio la escribe de nuevo con la versión siguiente de su `clave`
-  (`…|2`, `…|3`), con la tasa, la zona, el uso y el titular vigentes entonces;
+  (`…|001|2`, `…|001|3`: la misma secuencia, otra versión), con la tasa, la zona, el uso y el titular vigentes
+  entonces;
 - una cuota se anula una sola vez (**409**);
 - `motivo` es obligatorio, y la observación va de 5 a 500 caracteres (**400**);
 - pide creación sobre `anulacion_cuota_arbitrio` (**403**).

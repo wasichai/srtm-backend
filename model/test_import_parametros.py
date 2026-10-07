@@ -153,8 +153,10 @@ class ArbitriosRowsTests(unittest.TestCase):
         self.assertEqual(ip.errores(ip.read_parametros(SHIPPED)), [])
 
     def test_a_tasa_is_a_non_negative_figure_of_servicio_zona_uso(self):
-        for clave, valor in [("BARRIDO:Z1", "8.50"), ("BARRIDO::CASA", "8.50"), ("BARRIDO:Z1:CASA", None), ("BARRIDO:Z1:CASA", "-1"),
-                             ("BARRIDO:Z1:CASA", "ocho")]:
+        # BARRIDO::CASA (zona vacía) encaja: BARRIDO no trae DIMENSIONES_ARBITRIO, su default (ZONA, USO) empieza
+        # en ZONA, y esa parte puede ir vacía ("en toda zona del servicio") - test_una_tasa_... lo prueba aparte
+        for clave, valor in [("BARRIDO:Z1", "8.50"), ("BARRIDO:Z1:", "8.50"), ("BARRIDO:Z1:CASA", None),
+                             ("BARRIDO:Z1:CASA", "-1"), ("BARRIDO:Z1:CASA", "ocho")]:
             with self.subTest(clave=clave, valor=valor):
                 self.assertEqual(len(ip.errores([fila("TASA_ARBITRIO", clave, valor_numerico=valor)])), 1)
 
@@ -185,6 +187,109 @@ class ArbitriosRowsTests(unittest.TestCase):
         self.assertEqual(code, 2, err.getvalue())
         self.assertIn("TASA_ARBITRIO BARRIDO:Z1", err.getvalue())
         self.assertEqual(core.requests, [])
+
+    def test_the_tipos_the_code_reads_in_llaves_order(self):
+        # srtm.arbitrios.LlavesTest parses this same tuple's text and compares it against Llaves.TIPOS
+        self.assertEqual(ip.TIPOS_ARBITRIO, ("TASA_ARBITRIO", "ARBITRIO_ZONA", "ARBITRIO_USO", "ARBITRIO_VENCIMIENTO",
+                                             "BASE_ARBITRIO", "DIMENSIONES_ARBITRIO", "HABITANTES_PROMEDIO",
+                                             "HABITANTES_VARIACION", "REDONDEO_ARBITRIO", "ARBITRIO_INFLUENCIA",
+                                             "ARBITRIO_AFLUENCIA", "TOPE_ARBITRIO"))
+
+    def test_a_base_names_its_servicio_and_a_known_base(self):
+        self.assertEqual(ip.errores([fila("BASE_ARBITRIO", "RRSS", texto="AREA_CONSTRUIDA_M2")]), [])
+        self.assertEqual(len(ip.errores([fila("BASE_ARBITRIO", "", texto="AREA_CONSTRUIDA_M2")])), 1)
+        self.assertEqual(len(ip.errores([fila("BASE_ARBITRIO", "RRSS", texto="OTRA")])), 1)
+        self.assertEqual(len(ip.errores([fila("BASE_ARBITRIO", "RRSS")])), 1)
+
+    def test_dimensiones_are_a_non_empty_list_of_known_names_without_repeats(self):
+        self.assertEqual(ip.errores([fila("DIMENSIONES_ARBITRIO", "PARQUES", texto="ZONA,INFLUENCIA,AFLUENCIA")]), [])
+        self.assertEqual(len(ip.errores([fila("DIMENSIONES_ARBITRIO", "", texto="ZONA,USO")])), 1)
+        self.assertEqual(len(ip.errores([fila("DIMENSIONES_ARBITRIO", "PARQUES")])), 1)
+        self.assertEqual(len(ip.errores([fila("DIMENSIONES_ARBITRIO", "PARQUES", texto="ZONA,OTRA")])), 1)
+        self.assertEqual(len(ip.errores([fila("DIMENSIONES_ARBITRIO", "PARQUES", texto="ZONA,ZONA")])), 1)
+
+    def test_a_tasas_key_has_as_many_partes_as_the_servicios_dimensiones_en_vigor(self):
+        # PARQUES:A:Frente:Baja fits a DIMENSIONES_ARBITRIO PARQUES of 3 names (servicio + one parte per dimension)
+        self.assertEqual(ip.errores([
+            fila("DIMENSIONES_ARBITRIO", "PARQUES", texto="ZONA,INFLUENCIA,AFLUENCIA"),
+            fila("TASA_ARBITRIO", "PARQUES:A:Frente:Baja", valor_numerico="8.50"),
+        ]), [])
+        # without that row, the default is 2 (zona, uso): the same key no longer fits
+        malas = ip.errores([fila("TASA_ARBITRIO", "PARQUES:A:Frente:Baja", valor_numerico="8.50")])
+        self.assertEqual(malas, ["TASA_ARBITRIO PARQUES:A:Frente:Baja: la clave de una tasa de PARQUES tiene 3 "
+                                 "partes después del servicio"])
+
+    def test_una_tasa_puede_tener_la_zona_vacia_cuando_el_servicio_empieza_en_zona(self):
+        # BASURA no trae DIMENSIONES_ARBITRIO: su default (ZONA, USO) empieza en ZONA, así que "BASURA::9" (zona
+        # vacía) encaja - "esta tasa rige en toda zona del servicio" (import_tasas_arbitrio.py, #86)
+        self.assertEqual(ip.errores([fila("TASA_ARBITRIO", "BASURA::9", valor_numerico="8.50")]), [])
+        # con DIMENSIONES_ARBITRIO explícito que también empieza en ZONA, igual
+        self.assertEqual(ip.errores([
+            fila("DIMENSIONES_ARBITRIO", "PARQUES", texto="ZONA,INFLUENCIA,AFLUENCIA"),
+            fila("TASA_ARBITRIO", "PARQUES::Frente:Baja", valor_numerico="8.50"),
+        ]), [])
+        # pero no en la parte de uso (ni ninguna otra que no sea la primera, zona)
+        self.assertEqual(len(ip.errores([fila("TASA_ARBITRIO", "BASURA:Z1:", valor_numerico="8.50")])), 1)
+        self.assertEqual(len(ip.errores([
+            fila("DIMENSIONES_ARBITRIO", "PARQUES", texto="ZONA,INFLUENCIA,AFLUENCIA"),
+            fila("TASA_ARBITRIO", "PARQUES:A::Baja", valor_numerico="8.50"),
+        ])), 1)
+
+    def test_una_tasa_con_la_zona_vacia_rechazada_cuando_el_servicio_no_empieza_en_zona(self):
+        # un servicio cuyas DIMENSIONES_ARBITRIO no empiezan en ZONA (aquí, solo USO) no admite una parte vacía
+        self.assertEqual(len(ip.errores([
+            fila("DIMENSIONES_ARBITRIO", "RRS", texto="USO"),
+            fila("TASA_ARBITRIO", "RRS:", valor_numerico="8.50"),
+        ])), 1)
+        self.assertEqual(ip.errores([
+            fila("DIMENSIONES_ARBITRIO", "RRS", texto="USO"),
+            fila("TASA_ARBITRIO", "RRS:9", valor_numerico="8.50"),
+        ]), [])
+
+    def test_habitantes_are_a_positive_figure_of_servicio_zona_uso(self):
+        # the shape/valor motivo returns before the pair check runs, so a lone row is still exactly one error
+        for clave, valor in [("BARRIDO:Z1", "2"), ("BARRIDO:Z1:CASA", "0"), ("BARRIDO:Z1:CASA", "-1"), ("BARRIDO:Z1:CASA", None)]:
+            with self.subTest(clave=clave, valor=valor):
+                self.assertEqual(len(ip.errores([fila("HABITANTES_PROMEDIO", clave, valor_numerico=valor)])), 1)
+
+    def test_habitantes_promedio_and_variacion_come_together(self):
+        self.assertEqual(len(ip.errores([fila("HABITANTES_PROMEDIO", "BARRIDO:Z1:CASA", valor_numerico="2")])), 1)
+        self.assertEqual(len(ip.errores([fila("HABITANTES_VARIACION", "BARRIDO:Z1:CASA", valor_numerico="0.5")])), 1)
+        self.assertEqual(ip.errores([
+            fila("HABITANTES_PROMEDIO", "BARRIDO:Z1:CASA", valor_numerico="2"),
+            fila("HABITANTES_VARIACION", "BARRIDO:Z1:CASA", valor_numerico="0.5"),
+        ]), [])
+
+    def test_redondeo_is_a_global_decimales_modo(self):
+        self.assertEqual(ip.errores([fila("REDONDEO_ARBITRIO", "", texto="2:ABAJO")]), [])
+        self.assertEqual(len(ip.errores([fila("REDONDEO_ARBITRIO", "GLOBAL", texto="2:ABAJO")])), 1)
+        self.assertEqual(len(ip.errores([fila("REDONDEO_ARBITRIO", "", texto="2:MEDIANO")])), 1)
+        self.assertEqual(len(ip.errores([fila("REDONDEO_ARBITRIO", "", texto="ABAJO")])), 1)
+
+    def test_una_influencia_es_una_ubicacion_del_area_verde_del_modelo(self):
+        self.assertEqual(ip.errores([fila("ARBITRIO_INFLUENCIA", "FRENTE A PARQUE", texto="Frente a Parque y/o Área Verde")]), [])
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_INFLUENCIA", "OTRA COSA", texto="Alta")])), 1)
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_INFLUENCIA", "FRENTE A PARQUE")])), 1)
+
+    def test_una_afluencia_es_un_prefijo_de_uso_predio_solo_o_por_servicio(self):
+        self.assertEqual(ip.errores([fila("ARBITRIO_AFLUENCIA", "01", texto="Baja")]), [])
+        self.assertEqual(ip.errores([fila("ARBITRIO_AFLUENCIA", "PARQUES:0101", texto="Alta")]), [])
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_AFLUENCIA", "010", texto="Baja")])), 1)
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_AFLUENCIA", "PARQUES:01A1", texto="Baja")])), 1)
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_AFLUENCIA", "PARQUES:LIMPIEZA:01", texto="Baja")])), 1)
+        self.assertEqual(len(ip.errores([fila("ARBITRIO_AFLUENCIA", "01")])), 1)
+
+    def test_un_tope_es_un_porcentaje_de_un_grupo_de_uso_con_su_fecha_de_corte(self):
+        # % ficticios: un prefijo de uso_predio (2, 4 o 6 dígitos) o *, un % mayor que 0 y, si lo trae, la fecha de
+        # corte del registro del predio
+        self.assertEqual(ip.errores([fila("TOPE_ARBITRIO", "0101", valor_numerico="8", texto="2025-12-31")]), [])
+        self.assertEqual(ip.errores([fila("TOPE_ARBITRIO", "*", valor_numerico="18")]), [])
+        self.assertEqual(ip.errores([fila("TOPE_ARBITRIO", "01", valor_numerico="0.5", texto="")]), [])
+        for clave, valor, texto in [("010", "8", None), ("CASA", "8", None), ("", "8", None), ("**", "8", None),
+                                    ("0101", None, None), ("0101", "0", None), ("0101", "-8", None),
+                                    ("0101", "ocho", None), ("0101", "8", "31/12/2025"), ("0101", "8", "2025-13-01")]:
+            with self.subTest(clave=clave, valor=valor, texto=texto):
+                self.assertEqual(len(ip.errores([fila("TOPE_ARBITRIO", clave, valor_numerico=valor, texto=texto)])), 1)
 
 
 # the rows of the sanciones and the anuncios (SPEC §4, Parámetros nuevos). FICTITIOUS values, written here only to test

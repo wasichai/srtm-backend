@@ -39,14 +39,36 @@ def read_parametros(path):
 
 
 # the ordinance's rows the arbitrios read (srtm.arbitrios.Llaves names the same tipos; its test compares both lists):
-# TASA_ARBITRIO servicio:zona:uso the monthly tasa in soles; ARBITRIO_ZONA <sector catastral> its zona in texto;
-# ARBITRIO_USO <prefix of a uso_predio code, 2, 4 or 6 digits> its uso de arbitrio in texto; ARBITRIO_VENCIMIENTO
-# <month> its due date in texto (YYYY-MM-DD)
+# TASA_ARBITRIO servicio:zona:uso (or more partes, see BASE_ARBITRIO/DIMENSIONES_ARBITRIO below) the monthly tasa in
+# soles; ARBITRIO_ZONA <sector catastral> its zona in texto; ARBITRIO_USO <prefix of a uso_predio code, 2, 4 or 6
+# digits> its uso de arbitrio in texto; ARBITRIO_VENCIMIENTO <month> its due date in texto (YYYY-MM-DD); BASE_ARBITRIO
+# <servicio> its Base's name in texto (PREDIO, FRONTIS_ML or AREA_CONSTRUIDA_M2); DIMENSIONES_ARBITRIO <servicio> its
+# Dimension names in texto, comma-separated and without repeats (ZONA, USO, INFLUENCIA, AFLUENCIA) — a TASA_ARBITRIO
+# of that servicio keys on servicio plus one parte per dimension, in that order; HABITANTES_PROMEDIO/
+# HABITANTES_VARIACION servicio:zona:uso its average habitantes and their variación, one without the other in the
+# same file is incomplete; REDONDEO_ARBITRIO (clave vacía, global) "decimales:modo" of the rounding to apply;
+# ARBITRIO_INFLUENCIA <ubicacion_area_verde, model.json's enum> its nivel de influencia in texto; ARBITRIO_AFLUENCIA
+# <prefix of a uso_predio code, 2, 4 or 6 digits, alone or as servicio:prefijo> its nivel de afluencia in texto;
+# TOPE_ARBITRIO <prefix of a uso_predio code, 2, 4 or 6 digits, or *> the maximum % a predio's year may rise over
+# what it paid the year before in valor_numerico (above 0), and in texto, empty or YYYY-MM-DD, the cut date of the
+# predio's registration (#87)
 TASA_ARBITRIO = "TASA_ARBITRIO"
 ARBITRIO_ZONA = "ARBITRIO_ZONA"
 ARBITRIO_USO = "ARBITRIO_USO"
 ARBITRIO_VENCIMIENTO = "ARBITRIO_VENCIMIENTO"
-TIPOS_ARBITRIO = (TASA_ARBITRIO, ARBITRIO_ZONA, ARBITRIO_USO, ARBITRIO_VENCIMIENTO)
+BASE_ARBITRIO = "BASE_ARBITRIO"
+DIMENSIONES_ARBITRIO = "DIMENSIONES_ARBITRIO"
+HABITANTES_PROMEDIO = "HABITANTES_PROMEDIO"
+HABITANTES_VARIACION = "HABITANTES_VARIACION"
+REDONDEO_ARBITRIO = "REDONDEO_ARBITRIO"
+ARBITRIO_INFLUENCIA = "ARBITRIO_INFLUENCIA"
+ARBITRIO_AFLUENCIA = "ARBITRIO_AFLUENCIA"
+TOPE_ARBITRIO = "TOPE_ARBITRIO"
+TIPOS_ARBITRIO = (TASA_ARBITRIO, ARBITRIO_ZONA, ARBITRIO_USO, ARBITRIO_VENCIMIENTO, BASE_ARBITRIO, DIMENSIONES_ARBITRIO,
+                  HABITANTES_PROMEDIO, HABITANTES_VARIACION, REDONDEO_ARBITRIO, ARBITRIO_INFLUENCIA, ARBITRIO_AFLUENCIA,
+                  TOPE_ARBITRIO)
+BASES_ARBITRIO = ("PREDIO", "FRONTIS_ML", "AREA_CONSTRUIDA_M2")
+DIMENSIONES_VALIDAS = ("ZONA", "USO", "INFLUENCIA", "AFLUENCIA")
 
 
 # the rows the sanciones read (srtm.sanciones.Llaves names the same tipos): PLAZO DESCARGO_PAPELETA or RG_RECURSO its
@@ -75,6 +97,12 @@ def _clases_de_anuncio():
         return tuple(json.load(f)["enums"]["clase_anuncio"])
 
 
+def _ubicaciones_area_verde():
+    """model.json's ubicacion_area_verde: an ARBITRIO_INFLUENCIA's clave is one of them."""
+    with open(os.path.join(HERE, "model.json"), encoding="utf-8") as f:
+        return tuple(json.load(f)["enums"]["ubicacion_area_verde"])
+
+
 def _firmante(firma):
     """'ANA, 2026-01-05' -> 'ANA': normativa's signature is a name and a date."""
     return (firma or "").split(",")[0].strip().upper()
@@ -94,11 +122,40 @@ def _fecha(texto):
         return None
 
 
-def _error_arbitrio(tipo, clave, texto, p):
+def _dimensiones_de(filas_dimensiones, servicio, dia):
+    """The names of the servicio's DIMENSIONES_ARBITRIO row in force on dia (the tasa's own vigencia_desde), in
+    order; (ZONA, USO) when the file brings none for it. A TASA_ARBITRIO key has one parte per name, after the
+    servicio."""
+    vigentes = []
+    for f in filas_dimensiones:
+        if (f.get("clave") or "").strip() != servicio:
+            continue
+        desde = _fecha(f.get("vigencia_desde"))
+        hasta = _fecha(f.get("vigencia_hasta")) if f.get("vigencia_hasta") else None
+        if desde is None or desde > dia or (hasta is not None and hasta < dia):
+            continue
+        vigentes.append((desde, f))
+    if not vigentes:
+        return ("ZONA", "USO")
+    fila = max(vigentes, key=lambda par: par[0])[1]
+    return tuple(x.strip() for x in (fila.get("texto") or "").split(",") if x.strip())
+
+
+def _error_arbitrio(tipo, clave, texto, p, contexto):
     if tipo == TASA_ARBITRIO:
         partes = clave.split(":")
-        if len(partes) != 3 or not all(x.strip() for x in partes):
-            return "la clave de una tasa es servicio:zona:uso"
+        servicio = partes[0].strip() if partes else ""
+        dia = _fecha(p.get("vigencia_desde"))
+        nombres = _dimensiones_de(contexto["dimensiones"], servicio, dia) if dia else ("ZONA", "USO")
+        n = len(nombres)
+        # a servicio whose first dimension is ZONA may have a TASA_ARBITRIO with that parte empty: "every zona of
+        # the servicio" (import_tasas_arbitrio.py, #86). Arbitrios.determinar tries the exact key first, this one
+        # second
+        permite_zona_vacia = nombres[:1] == ("ZONA",)
+        valores = partes[1:]
+        vacia_sin_permiso = any(not v.strip() and not (i == 0 and permite_zona_vacia) for i, v in enumerate(valores))
+        if not servicio or len(partes) != n + 1 or vacia_sin_permiso:
+            return f"la clave de una tasa de {servicio} tiene {len(partes) - 1} partes después del servicio"
         valor = _decimal(p)
         if valor is None:
             return "una tasa necesita su valor_numerico"
@@ -115,6 +172,49 @@ def _error_arbitrio(tipo, clave, texto, p):
             return "un vencimiento es de un mes, de 1 a 12"
         if _fecha(texto) is None:
             return "un vencimiento es una fecha AAAA-MM-DD en texto"
+    elif tipo == BASE_ARBITRIO:
+        if not clave:
+            return "una base necesita el servicio (clave)"
+        if texto not in BASES_ARBITRIO:
+            return f"una base es {', '.join(BASES_ARBITRIO)} (texto)"
+    elif tipo == DIMENSIONES_ARBITRIO:
+        if not clave:
+            return "las dimensiones necesitan el servicio (clave)"
+        nombres = [x.strip() for x in texto.split(",")] if texto else []
+        if not nombres or any(n not in DIMENSIONES_VALIDAS for n in nombres) or len(nombres) != len(set(nombres)):
+            return f"las dimensiones son una lista sin repetir de {', '.join(DIMENSIONES_VALIDAS)} (texto)"
+    elif tipo in (HABITANTES_PROMEDIO, HABITANTES_VARIACION):
+        partes = clave.split(":")
+        if len(partes) != 3 or not all(x.strip() for x in partes):
+            return "la clave de los habitantes es servicio:zona:uso"
+        valor = _decimal(p)
+        if valor is None or valor <= 0:
+            return "los habitantes son mayores que 0 (valor_numerico)"
+        par = HABITANTES_VARIACION if tipo == HABITANTES_PROMEDIO else HABITANTES_PROMEDIO
+        otras = contexto["variacion"] if tipo == HABITANTES_PROMEDIO else contexto["promedio"]
+        if (clave, p.get("vigencia_desde")) not in otras:
+            return f"necesita su {par} con la misma clave y vigencia_desde en el mismo archivo"
+    elif tipo == REDONDEO_ARBITRIO:
+        if clave:
+            return "la clave del redondeo es global (vacía)"
+        if not re.fullmatch(r"\d:(ABAJO|MEDIO|ARRIBA)", texto):
+            return "el redondeo es decimales:modo (ABAJO, MEDIO o ARRIBA) en texto"
+    elif tipo == ARBITRIO_INFLUENCIA:
+        if clave not in _ubicaciones_area_verde() or not texto:
+            return f"la clave de una influencia es una ubicación del área verde ({', '.join(_ubicaciones_area_verde())}) y su texto"
+    elif tipo == ARBITRIO_AFLUENCIA:
+        partes = clave.split(":")
+        prefijo = partes[1] if len(partes) == 2 and partes[0].strip() else partes[0] if len(partes) == 1 else None
+        if prefijo is None or not re.fullmatch(r"\d{2}|\d{4}|\d{6}", prefijo) or not texto:
+            return "una afluencia es un prefijo de código de uso_predio de 2, 4 o 6 dígitos, o servicio:prefijo (clave), y su texto"
+    elif tipo == TOPE_ARBITRIO:
+        if clave != "*" and not re.fullmatch(r"\d{2}|\d{4}|\d{6}", clave):
+            return "la clave de un tope es un prefijo de código de uso_predio de 2, 4 o 6 dígitos, o *"
+        valor = _decimal(p)
+        if valor is None or not valor.is_finite() or valor <= 0:
+            return "un tope es un porcentaje mayor que 0 (valor_numerico)"
+        if texto and _fecha(texto) is None:
+            return "la fecha de corte de un tope (texto) es AAAA-MM-DD, o vacía"
     return None
 
 
@@ -149,7 +249,7 @@ def _error_anuncio(tipo, clave, texto, p):
     return None
 
 
-def _error(p):
+def _error(p, contexto):
     """Why a row of an ordinance does not fit, or None. A figure is never invented: a tasa is never negative (nor zero
     for an anuncio), a mapping names its value, and every row is signed by two different people (normativa's double
     signature)."""
@@ -159,18 +259,33 @@ def _error(p):
     if _firmante(p.get("transcribio")) == _firmante(p.get("verifico")):
         return "transcribio y verifico son la misma persona"
     if tipo in TIPOS_ARBITRIO:
-        return _error_arbitrio(tipo, clave, texto, p)
+        return _error_arbitrio(tipo, clave, texto, p, contexto)
     if tipo in TIPOS_SANCIONES:
         return _error_sanciones(tipo, clave, texto, p)
     return _error_anuncio(tipo, clave, texto, p)
 
 
+def _contexto_arbitrios(parametros):
+    """What a lone row's rule cannot see by itself: the file's DIMENSIONES_ARBITRIO rows (a TASA_ARBITRIO's key needs
+    its servicio's vigente one) and the (clave, vigencia_desde) pairs of HABITANTES_PROMEDIO and HABITANTES_VARIACION
+    (one needs the other's)."""
+    def claves(tipo):
+        return {((p.get("clave") or "").strip(), p.get("vigencia_desde")) for p in parametros if p.get("tipo") == tipo}
+
+    return {
+        "dimensiones": [p for p in parametros if p.get("tipo") == DIMENSIONES_ARBITRIO],
+        "promedio": claves(HABITANTES_PROMEDIO),
+        "variacion": claves(HABITANTES_VARIACION),
+    }
+
+
 def errores(parametros):
     """The rows of an ordinance that do not fit, as '<tipo> <clave>: why'. The predial's are not checked here."""
+    contexto = _contexto_arbitrios(parametros)
     malas = []
     for p in parametros:
         if p.get("tipo") in VALIDADOS:
-            motivo = _error(p)
+            motivo = _error(p, contexto)
             if motivo:
                 malas.append(f"{p['tipo']} {p.get('clave') or ''}: {motivo}")
     return malas

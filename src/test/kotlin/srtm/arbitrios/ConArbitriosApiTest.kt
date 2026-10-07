@@ -66,12 +66,21 @@ abstract class ConArbitriosApiTest : SrtmApiTest() {
 
         fun predioDeclarado(
             contribuyente: String,
-            sector: String = this.sector
+            sector: String = this.sector,
+            via: String? = null,
+            numero: String? = null
         ): String {
             val predio =
                 post(
                     "/api/srtm/predios",
-                    mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO", "sector_catastral" to sector)
+                    mapOf(
+                        "codigo" to "T-${uniqueDocumento()}",
+                        "direccion" to "JR. LIMA 123",
+                        "tipo_predio" to "PREDIO URBANO",
+                        "sector_catastral" to sector,
+                        "via" to via,
+                        "numero" to numero
+                    ).filterValues { it != null }
                 )["id"].asString()
             crear(
                 "declaracion_predial",
@@ -89,7 +98,8 @@ abstract class ConArbitriosApiTest : SrtmApiTest() {
             return predio
         }
 
-        private fun parametro(
+        // a row of parametro_tributario in force the whole year, as the ordinance's transcription
+        fun parametro(
             tipo: String,
             clave: String,
             valor: String? = null,

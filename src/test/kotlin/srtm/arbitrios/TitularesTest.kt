@@ -61,6 +61,20 @@ class TitularesTest {
     }
 
     @Test
+    fun `one PU per uso - each secuencia's declaration, its titular principal's, in the order of its secuencia`() {
+        val djs =
+            listOf(
+                dj("3", "c-502", secuencia = "2"),
+                dj("1", "c-501", "30", secuencia = "001"),
+                dj("2", "c-503", "70", secuencia = "1"), // the same secuencia as "001", written as typed
+                dj("4", "c-500", secuencia = "010")
+            )
+        assertEquals(listOf("2", "3", "4"), porSecuencia(djs, codigos).map { it.id })
+        assertEquals(listOf("2", "3", "4"), porSecuencia(djs.reversed(), codigos).map { it.id })
+        assertEquals(emptyList<Declaracion>(), porSecuencia(emptyList(), codigos))
+    }
+
+    @Test
     fun `a predio without a titular gives no one, and it is not an error`() {
         assertNull(titularPrincipal(emptyList(), codigos))
     }

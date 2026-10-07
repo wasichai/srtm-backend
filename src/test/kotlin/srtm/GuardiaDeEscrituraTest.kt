@@ -188,9 +188,10 @@ class GuardiaDeEscrituraTest {
                 "periodo" to 1,
                 "monto" to "10",
                 "parametro_aplicado" to "TASA_ARBITRIO:LIMPIEZA:Z1:CASA",
+                "secuencia_uso" to "001",
                 "fecha_calculo" to "2026-03-01",
                 "observacion" to "Se determina para la prueba",
-                "clave" to "p|s|2026|1|1"
+                "clave" to "p|s|2026|1|001|1"
             )
     }
 }
