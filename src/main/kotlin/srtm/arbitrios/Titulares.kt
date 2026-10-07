@@ -29,9 +29,10 @@ fun cubre(
 }
 
 // rentas' titular principal: the arbitrio is charged whole to one titular, the one with the largest share. ties go to
-// the earliest acquisition, then to the lowest contribuyente code (then its id), then to the lowest secuencia de uso:
-// a total order, so two runs never charge different people. each secuencia's uso, área and frontis come from its own
-// declaration instead (porSecuencia). codigos: each contribuyente's code by id
+// the earliest acquisition, then to the lowest contribuyente code (then its id), then to the lowest secuencia de uso
+// (read the way the padrón numbers it: "1" is "001"): a total order, so two runs never charge different people. in a
+// year of one PU per uso each secuencia's uso, área and frontis come from its own declaration instead (porSecuencia);
+// before it, from this one's (#80). codigos: each contribuyente's code by id
 fun titularPrincipal(
     declaraciones: List<Declaracion>,
     codigos: Map<String, String?>
@@ -41,7 +42,7 @@ fun titularPrincipal(
             .thenBy(nullsLast()) { it.fechaAdquisicion }
             .thenBy(nullsLast()) { it.contribuyente?.let { id -> codigos[id] } }
             .thenBy(nullsLast()) { it.contribuyente }
-            .thenBy(nullsLast()) { it.secuenciaUso }
+            .thenBy { secuenciaUso(it.secuenciaUso) }
             .thenBy(nullsLast()) { it.id }
     )
 

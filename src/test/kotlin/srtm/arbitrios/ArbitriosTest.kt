@@ -508,11 +508,14 @@ class ArbitriosTest {
     }
 
     // un PU por uso (wasichai/srtm-backend#84): each secuencia de uso of the declarations that cover the month is
-    // determined apart, with its own uso, área, frontis and habitantes. every figure here is fictitious
-    private val porArea =
+    // determined apart, with its own uso, área, frontis and habitantes - from the year ARBITRIO_PU_POR_USO rules on
+    // its 1 January (#80). every figure here is fictitious
+    private val puPorUso = param(Llaves.ARBITRIO_PU_POR_USO, "", valor = "1")
+    private val tarifasPorArea =
         mapeos + param(Llaves.ARBITRIO_USO, "02", texto = "COMERCIO") +
             servicios.map { param(Llaves.BASE_ARBITRIO, it.codigo!!, texto = "AREA_CONSTRUIDA_M2") } +
             servicios.flatMap { listOf(tasa("${it.codigo}:Z1:CASA", "0.10"), tasa("${it.codigo}:Z1:COMERCIO", "0.25")) }
+    private val porArea = tarifasPorArea + puPorUso
     private val casa = dj.copy(secuenciaUso = "1", areaConstruida = BigDecimal("120"))
     private val tienda =
         declaracion("dj-2", "c-200").copy(
@@ -638,9 +641,11 @@ class ArbitriosTest {
             }
         assertEquals(Determinacion(emptyList(), emptyList()), determinar(p = del(existentes = antiguas)))
 
-        // a second uso declared later is the only one determined
+        // a second uso declared later is the only one determined, from the year of one PU per uso
         val comercio = listOf(param(Llaves.ARBITRIO_USO, "02", texto = "COMERCIO")) + servicios.map { tasa("${it.codigo}:Z1:COMERCIO", "4.25") }
-        val conTienda = determinar(contexto(parametros = tasas + mapeos + comercio), del(declaraciones = listOf(dj, tienda), existentes = antiguas))
+        val unPu = determinar(contexto(parametros = tasas + mapeos + comercio), del(declaraciones = listOf(dj, tienda), existentes = antiguas))
+        assertEquals(Determinacion(emptyList(), emptyList()), unPu) // before it, one PU per predio: nothing is pending
+        val conTienda = determinar(contexto(parametros = tasas + mapeos + comercio + puPorUso), del(declaraciones = listOf(dj, tienda), existentes = antiguas))
         assertEquals(emptyList<String>(), conTienda.faltan)
         assertEquals(setOf("002"), conTienda.cuotas.map { it.secuenciaUso }.toSet())
         assertEquals(36, conTienda.cuotas.size)
@@ -649,6 +654,110 @@ class ArbitriosTest {
         val anulada = antiguas.single { it.servicio == "srv-PARQUES" && it.periodo == 7 }
         val otra = determinar(p = del(existentes = antiguas).copy(anuladas = setOf(anulada.id!!)))
         assertEquals(listOf("predio-100|srv-PARQUES|2026|7|001|2"), otra.cuotas.map { it.clave })
+    }
+
+    // before the year ARBITRIO_PU_POR_USO rules (#80), one PU per predio as before #84: each month, only the
+    // titular principal's declaration (its lowest secuencia), with its uso, área and frontis. the cuota keeps its
+    // secuencia in the clave of 6 parts
+    @Test
+    fun `without ARBITRIO_PU_POR_USO a predio of two usos pays one PU - its titular principal's lowest secuencia`() {
+        val d = determinar(contexto(parametros = tarifasPorArea), del(declaraciones = listOf(tienda, casa)))
+        assertEquals(emptyList<String>(), d.faltan)
+        assertEquals(36, d.cuotas.size) // 3 servicios x 12 months, one uso
+        assertTrue(d.cuotas.all { it.secuenciaUso == "001" && it.usoArbitrio == "CASA" && it.cantidadBase == BigDecimal("120") })
+        val enero = d.cuotas.first()
+        assertEquals("12.00", enero.monto!!.toPlainString())
+        assertEquals("predio-100|srv-LIMPIEZA|2026|1|001|1", enero.clave)
+        assertTrue(d.cuotas.all { invariantes(it).isEmpty() })
+        // running it again adds nothing: the secuencia 002 is not pending
+        assertEquals(
+            Determinacion(emptyList(), emptyList()),
+            determinar(contexto(parametros = tarifasPorArea), del(declaraciones = listOf(tienda, casa), existentes = d.cuotas))
+        )
+    }
+
+    @Test
+    fun `with ARBITRIO_PU_POR_USO in force on 1 January every secuencia pays its PU, otherwise one PU per predio`() {
+        fun cuotas(fila: ParametroTributario) = determinar(contexto(parametros = tarifasPorArea + fila), del(declaraciones = listOf(casa, tienda))).cuotas
+        assertEquals(72, cuotas(puPorUso).size)
+        assertEquals(setOf("001", "002"), cuotas(puPorUso).map { it.secuenciaUso }.toSet())
+        // not in force on 1 January: from july, ended in 2025, or a valor other than 1
+        assertEquals(36, cuotas(puPorUso.copy(vigenciaDesde = LocalDate.of(2026, 7, 1))).size)
+        assertEquals(36, cuotas(puPorUso.copy(vigenciaDesde = LocalDate.of(2025, 1, 1), vigenciaHasta = LocalDate.of(2025, 12, 31))).size)
+        assertEquals(36, cuotas(puPorUso.copy(valorNumerico = BigDecimal("2"))).size)
+        // in force since an earlier year, it still rules
+        assertEquals(72, cuotas(puPorUso.copy(vigenciaDesde = LocalDate.of(2024, 1, 1))).size)
+    }
+
+    @Test
+    fun `a row from 2027 - 2026 pays one PU per predio, 2027 one per uso`() {
+        val desde2027 = puPorUso.copy(vigenciaDesde = LocalDate.of(2027, 1, 1))
+        val de2026 = determinar(contexto(parametros = tarifasPorArea + desde2027), del(declaraciones = listOf(casa, tienda)))
+        assertEquals(emptyList<String>(), de2026.faltan)
+        assertEquals(setOf("001"), de2026.cuotas.map { it.secuenciaUso }.toSet())
+        assertEquals(36, de2026.cuotas.size)
+
+        val de2027 =
+            determinar(contexto(anio = 2027, parametros = tarifasPorArea + desde2027), del(declaraciones = listOf(casa, tienda).map { it.copy(anio = 2027) }))
+        assertEquals(emptyList<String>(), de2027.faltan)
+        assertEquals(setOf("001", "002"), de2027.cuotas.map { it.secuenciaUso }.toSet())
+        assertEquals(72, de2027.cuotas.size)
+        assertEquals("predio-100|srv-LIMPIEZA|2027|1|002|1", de2027.cuotas.first { it.secuenciaUso == "002" }.clave)
+    }
+
+    @Test
+    fun `before the year of one PU per uso a secuencia without a uso código is ignored, not named`() {
+        val sinClase = tienda.copy(claseUso = null, subClaseUso = null, uso = null)
+        val d = determinar(contexto(parametros = tarifasPorArea), del(declaraciones = listOf(casa, sinClase)))
+        assertEquals(emptyList<String>(), d.faltan)
+        assertEquals(setOf("001"), d.cuotas.map { it.secuenciaUso }.toSet())
+        // and the lowest secuencia without one fails it as before #84, once no month has one: without naming a uso
+        val sinNinguno =
+            determinar(contexto(parametros = tarifasPorArea), del(declaraciones = listOf(casa.copy(claseUso = null, subClaseUso = null, uso = null), tienda)))
+        assertEquals(listOf("Uso del catálogo en la declaración 2026 del predio 01-01-0001"), sinNinguno.faltan)
+    }
+
+    // as before #84, the declaration is the titular principal's (titularPrincipal): its largest share wins over its
+    // lowest secuencia. c-200 has 30 % of the 001 and 100 % of the 002: the 002 is charged, whole, to c-200
+    @Test
+    fun `before the year of one PU per uso the declaration is the titular principal's, as before #84`() {
+        val casa30 = casa.copy(porcentajeCondominio = BigDecimal("30"))
+        val casa70 = declaracion("dj-3", "c-201").copy(secuenciaUso = "001", porcentajeCondominio = BigDecimal("70"), areaConstruida = BigDecimal("150"))
+        val d = determinar(contexto(parametros = tarifasPorArea), del(declaraciones = listOf(casa30, casa70, tienda)))
+        assertEquals(emptyList<String>(), d.faltan)
+        assertEquals(36, d.cuotas.size)
+        assertTrue(d.cuotas.all { it.secuenciaUso == "002" && it.usoArbitrio == "COMERCIO" && it.contribuyente == "c-200" })
+    }
+
+    // a year determined before #84: one cuota per servicio and month, without secuencia_uso and with a clave of 5
+    // parts. before the year of one PU per uso nothing of a predio of two usos is pending; from it, the 002's are
+    @Test
+    fun `a predio of two usos determined before #84 has nothing pending until the year of one PU per uso`() {
+        val antiguas =
+            determinar(contexto(parametros = tarifasPorArea), del(declaraciones = listOf(casa, tienda))).cuotas.mapIndexed { i, c ->
+                c.copy(
+                    id = "q$i",
+                    secuenciaUso = null,
+                    clave = "predio-100|${c.servicio}|2026|${c.periodo}|1",
+                    base = null,
+                    cantidadBase = null,
+                    tasaUnitaria = null
+                )
+            }
+        val nada = Determinacion(emptyList(), emptyList())
+        assertEquals(nada, determinar(contexto(parametros = tarifasPorArea), del(declaraciones = listOf(casa, tienda), existentes = antiguas)))
+        // an annulled one comes back alone, the next version of the secuencia charged
+        val anulada = antiguas.single { it.servicio == "srv-PARQUES" && it.periodo == 7 }
+        val otra =
+            determinar(
+                contexto(parametros = tarifasPorArea),
+                del(declaraciones = listOf(casa, tienda), existentes = antiguas).copy(anuladas = setOf(anulada.id!!))
+            )
+        assertEquals(listOf("predio-100|srv-PARQUES|2026|7|001|2"), otra.cuotas.map { it.clave })
+
+        val porUso = determinar(contexto(parametros = porArea), del(declaraciones = listOf(casa, tienda), existentes = antiguas))
+        assertEquals(36, porUso.cuotas.size)
+        assertEquals(setOf("002"), porUso.cuotas.map { it.secuenciaUso }.toSet())
     }
 
     // the example of the manual SRTM web M02 «Determinación de Deuda», págs. 17-18 (global-constraints.md): barrido

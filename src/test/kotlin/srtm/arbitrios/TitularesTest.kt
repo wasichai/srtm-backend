@@ -60,6 +60,15 @@ class TitularesTest {
         assertEquals("01", titularPrincipal(djs, codigos)?.secuenciaUso)
     }
 
+    // before the year of one PU per uso (#80) the titular principal's declaration is the one charged: its lowest
+    // secuencia, read the way the padrón numbers it, so "1" (001) goes before "002" whatever their width
+    @Test
+    fun `with several secuencias de uso, the lowest as the padrón numbers it - 1 before 002`() {
+        val djs = listOf(dj("2", "c-501", secuencia = "002"), dj("1", "c-501", secuencia = "1"))
+        assertEquals("1", titularPrincipal(djs, codigos)?.id)
+        assertEquals("1", titularPrincipal(djs.reversed(), codigos)?.id)
+    }
+
     @Test
     fun `one PU per uso - each secuencia's declaration, its titular principal's, in the order of its secuencia`() {
         val djs =

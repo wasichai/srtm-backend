@@ -142,7 +142,8 @@ class ConsultasTest {
         val soloLimpieza =
             contexto.copy(
                 servicios = listOf(servicios[1]), // LIMPIEZA alone, to keep the fixture small
-                parametros = parametros + param("ARBITRIO_USO", "02", texto = "COMERCIO") + param("TASA_ARBITRIO", "LIMPIEZA:Z1:COMERCIO", valor = "4.25"),
+                parametros =
+                    parametros + param("ARBITRIO_USO", "02", texto = "COMERCIO") + param("TASA_ARBITRIO", "LIMPIEZA:Z1:COMERCIO", valor = "4.25") + puPorUso,
                 usos = contexto.usos + UsoPredio("020101", "COMERCIAL", "TIENDAS", "TIENDA")
             )
         val casa = vendedor.copy(id = "dj-10", estado = null, fechaAnulacion = null)
@@ -162,6 +163,47 @@ class ConsultasTest {
         assertEquals(listOf("8.50 S/ por predio", "4.25 S/ por predio"), enero.desglose.map { it.formula })
     }
 
+    // a predio of two usos whose 2026 was determined before the year of one PU per uso (#80): its cuotas are the
+    // lowest secuencia's - written before #84 (no secuencia_uso, a clave of 5 parts) or after it (001). nothing is
+    // pending in its matriz, and nothing keeps its titular's HLA (faltanDeLaHla: no 422). from the year of one PU per
+    // uso, the 002's would be
+    @Test
+    fun `a predio of two usos determined with one PU per predio has nothing pending, and its HLA nothing missing`() {
+        val dosUsos =
+            contexto.copy(
+                parametros =
+                    parametros + param("ARBITRIO_USO", "02", texto = "COMERCIO") + param("TASA_ARBITRIO", "LIMPIEZA:Z1:COMERCIO", valor = "4.25") +
+                        param("TASA_ARBITRIO", "SERENAZGO:Z1:COMERCIO", valor = "2.00"),
+                usos = contexto.usos + UsoPredio("020101", "COMERCIAL", "TIENDAS", "TIENDA")
+            )
+        val casa = vendedor.copy(id = "dj-10", estado = null, fechaAnulacion = null)
+        val tienda = casa.copy(id = "dj-11", secuenciaUso = "02", claseUso = "COMERCIAL", subClaseUso = "TIENDAS", uso = "TIENDA")
+        val sinCuotas = PredioArbitrios(predio, listOf(casa, tienda), mapOf("c-1" to "001"), emptyList(), emptyList())
+        val unPu = Arbitrios.determinar(dosUsos, sinCuotas, "Determinación de prueba", hoy).cuotas
+        assertEquals(24, unPu.size) // LIMPIEZA and SERENAZGO x 12 months, the casa's
+        val antesDe84 = unPu.map { it.copy(secuenciaUso = null, clave = "p|${it.servicio}|2026|${it.periodo}|1") }
+
+        for (existentes in listOf(guardadas(hoy, unPu), guardadas(hoy, antesDe84))) {
+            val datos = sinCuotas.copy(existentes = existentes)
+            val m = Consultas.matriz(dosUsos, datos, personas, hoy)
+            assertEquals(0, m.pendientes)
+            assertEquals(emptyList<String>(), m.faltan)
+            assertEquals(BigDecimal("153.00"), m.total) // 12 x (8.50 + 4.25): the casa's alone
+            val delTitular = Consultas.matriz(dosUsos, datos, personas, hoy, soloDe = "c-1")
+            val hla = ArbitriosContribuyente(2026, Consultas.persona("c-1", personas["c-1"]), listOf(delTitular), delTitular.total, delTitular.fechaCalculo)
+            assertEquals(emptyList<String>(), faltanDeLaHla(dosUsos, hla))
+
+            // from the year of one PU per uso the tienda's are pending, and the HLA says so
+            val porUso = dosUsos.copy(parametros = dosUsos.parametros + puPorUso)
+            assertEquals(24, Consultas.matriz(porUso, datos, personas, hoy).pendientes)
+            val pendiente = Consultas.matriz(porUso, datos, personas, hoy, soloDe = "c-1")
+            assertEquals(
+                listOf("Predio 01-01-0001: 24 cuotas de arbitrios por determinar"),
+                faltanDeLaHla(porUso, hla.copy(predios = listOf(pendiente)))
+            )
+        }
+    }
+
     @Test
     fun `what keeps the rest from being determined is said`() {
         val sinTasa = contexto.copy(parametros = parametros.dropLast(1))
@@ -171,6 +213,9 @@ class ConsultasTest {
         assertEquals(m.faltan, m.faltanDetalle.map { it.mensaje }) // faltan_detalle: the same, with predio and declaración
         assertEquals(predio.id, m.faltanDetalle[0].predio)
     }
+
+    // the year from which a predio pays one PU per uso (#80)
+    private val puPorUso = param("ARBITRIO_PU_POR_USO", "", valor = "1")
 
     private fun param(
         tipo: String,
