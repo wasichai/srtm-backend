@@ -1,20 +1,18 @@
 package srtm.sanciones
 
 import org.springframework.http.HttpStatus
-import org.springframework.http.ProblemDetail
+import srtm.Faltan
 import srtm.legible
 import wasichai.core.common.FieldViolation
 import wasichai.core.common.WasichaiException
-import wasichai.core.platform.WasichaiWebProperties
-import java.net.URI
 import java.time.LocalDate
 
 // what keeps an act of the sanciones from being written: a 422 that names each missing thing (UIT 2026, PLAZO
-// DESCARGO_PAPELETA 2026, FERIADOS 2026, CUIS A-042 porcentaje_uit_segunda). the twin of srtm.arbitrios.FaltanArbitrios
+// DESCARGO_PAPELETA 2026, FERIADOS 2026, CUIS A-042 porcentaje_uit_segunda). srtm.Faltan, like the other modules'
 class FaltanSanciones(
     acto: String,
-    val faltan: List<String>
-) : WasichaiException(HttpStatus.UNPROCESSABLE_CONTENT, "No se puede $acto: ${faltan.joinToString("; ")}")
+    faltan: List<String>
+) : Faltan("No se puede $acto: ${faltan.joinToString("; ")}", faltan)
 
 // an act the rules do not admit as asked: a 422, corrected by changing the request (an SE_REDUCE, a RECURSO without
 // its descargo, a fase that is not one). a state the act cannot change is a ConflictException (409) instead
@@ -46,14 +44,3 @@ data class Resultado<T>(
         fun <T> faltando(faltan: List<String>): Resultado<T> = Resultado(null, faltan.distinct())
     }
 }
-
-// the problem core's handler would write for a FaltanSanciones, plus what is missing (as srtm.arbitrios.problemaFaltan)
-fun problemaFaltan(
-    ex: FaltanSanciones,
-    web: WasichaiWebProperties
-): ProblemDetail =
-    ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.message).apply {
-        type = URI.create("${web.problemBaseUri.trimEnd('/')}/${HttpStatus.UNPROCESSABLE_CONTENT.value()}")
-        title = HttpStatus.UNPROCESSABLE_CONTENT.reasonPhrase
-        setProperty("faltan", ex.faltan)
-    }
