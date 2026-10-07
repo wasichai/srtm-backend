@@ -118,8 +118,9 @@ def _fecha(texto):
 
 
 def _dimensiones_de(filas_dimensiones, servicio, dia):
-    """How many partes follow the servicio in a TASA_ARBITRIO key: the length of the servicio's DIMENSIONES_ARBITRIO
-    row in force on dia (the tasa's own vigencia_desde), or 2 (zona, uso) when the file brings none for it."""
+    """The names of the servicio's DIMENSIONES_ARBITRIO row in force on dia (the tasa's own vigencia_desde), in
+    order; (ZONA, USO) when the file brings none for it. A TASA_ARBITRIO key has one parte per name, after the
+    servicio."""
     vigentes = []
     for f in filas_dimensiones:
         if (f.get("clave") or "").strip() != servicio:
@@ -130,9 +131,9 @@ def _dimensiones_de(filas_dimensiones, servicio, dia):
             continue
         vigentes.append((desde, f))
     if not vigentes:
-        return 2
+        return ("ZONA", "USO")
     fila = max(vigentes, key=lambda par: par[0])[1]
-    return len([x.strip() for x in (fila.get("texto") or "").split(",") if x.strip()])
+    return tuple(x.strip() for x in (fila.get("texto") or "").split(",") if x.strip())
 
 
 def _error_arbitrio(tipo, clave, texto, p, contexto):
@@ -140,8 +141,15 @@ def _error_arbitrio(tipo, clave, texto, p, contexto):
         partes = clave.split(":")
         servicio = partes[0].strip() if partes else ""
         dia = _fecha(p.get("vigencia_desde"))
-        n = _dimensiones_de(contexto["dimensiones"], servicio, dia) if dia else 2
-        if not servicio or len(partes) != n + 1 or not all(x.strip() for x in partes):
+        nombres = _dimensiones_de(contexto["dimensiones"], servicio, dia) if dia else ("ZONA", "USO")
+        n = len(nombres)
+        # a servicio whose first dimension is ZONA may have a TASA_ARBITRIO with that parte empty: "every zona of
+        # the servicio" (import_tasas_arbitrio.py, #86). Arbitrios.determinar tries the exact key first, this one
+        # second
+        permite_zona_vacia = nombres[:1] == ("ZONA",)
+        valores = partes[1:]
+        vacia_sin_permiso = any(not v.strip() and not (i == 0 and permite_zona_vacia) for i, v in enumerate(valores))
+        if not servicio or len(partes) != n + 1 or vacia_sin_permiso:
             return f"la clave de una tasa de {servicio} tiene {len(partes) - 1} partes después del servicio"
         valor = _decimal(p)
         if valor is None:
