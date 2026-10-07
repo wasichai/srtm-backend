@@ -1,7 +1,9 @@
 package srtm.anuncios
 
 import org.springframework.http.HttpStatus
+import srtm.Faltan
 import srtm.impuesto.ParametroTributario
+import srtm.impuesto.enVigor
 import srtm.legible
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
@@ -22,10 +24,10 @@ val ESTADOS = listOf(VIGENTE, VENCIDO, CESADO, RETIRADO)
 val CLASES = listOf("LETRERO", "PANEL", "TOLDO", "BANDEROLA", "PANTALLA_DIGITAL", "GLOBO_AEROSTATICO")
 val TIPOS_DE_ANUNCIO = listOf("AVISO_SIMPLE", "AVISO_LUMINOSO", "AVISO_ILUMINADO", "AVISO_ELECTRONICO")
 
-// what keeps an act from accruing: a 422 that names each missing parámetro (TASA_ANUNCIO PANEL 2026)
+// what keeps an act from accruing: a 422 that names each missing parámetro (TASA_ANUNCIO PANEL 2026; srtm.Faltan)
 class FaltanAnuncios(
-    val faltan: List<String>
-) : WasichaiException(HttpStatus.UNPROCESSABLE_CONTENT, "No hay tasa que devengar: falta ${faltan.joinToString("; ")}")
+    faltan: List<String>
+) : Faltan("No hay tasa que devengar: falta ${faltan.joinToString("; ")}", faltan)
 
 // an act the anuncio does not admit (cesado, out of order, several ejercicios...): a 422 that says why
 class ActoNoAdmitido(
@@ -115,10 +117,7 @@ object Anuncios {
         clase: String,
         dia: LocalDate
     ): ParametroTributario? =
-        parametros
-            .filter { it.tipo == Llaves.TASA_ANUNCIO && it.clave == clase && vigente(it, dia) }
-            .filter { it.valorNumerico != null && it.valorNumerico.signum() > 0 && it.id != null }
-            .maxByOrNull { it.vigenciaDesde!! }
+        parametros.enVigor(Llaves.TASA_ANUNCIO, dia) { it.clave == clase && it.valorNumerico != null && it.valorNumerico.signum() > 0 && it.id != null }
 
     // a clase's tasa of an ejercicio, as GET /anuncios/tasas shows it: the row in force on January 1 (the one a renewal
     // of that ejercicio reads), else the first one that starts within the year. null: the year does not charge it
@@ -233,9 +232,4 @@ object Anuncios {
                 }
         )
     }
-
-    private fun vigente(
-        p: ParametroTributario,
-        dia: LocalDate
-    ) = p.vigenciaDesde != null && p.vigenciaDesde <= dia && (p.vigenciaHasta == null || p.vigenciaHasta >= dia)
 }
