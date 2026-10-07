@@ -30,7 +30,29 @@ data class CuotaMes(
     val monto: BigDecimal,
     val contribuyente: String?,
     val fechaCalculo: LocalDate?,
-    val parametroAplicado: String?
+    val parametroAplicado: String?,
+    val desglose: List<DesgloseCuota>
+)
+
+// one secuencia de uso's cuota, within a cell: its own desglose plus formula, the readable version of the same
+// arithmetic (Calculo.formula) - a cuota written before the desglose (base null) just carries soles(monto)
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class DesgloseCuota(
+    val id: String?,
+    val secuenciaUso: String?,
+    val monto: BigDecimal?,
+    val base: String?,
+    val cantidadBase: BigDecimal?,
+    val tasaUnitaria: BigDecimal?,
+    val habitantes: Int?,
+    val promedioHabitantes: BigDecimal?,
+    val variacionHabitante: BigDecimal?,
+    val habitantesPresuntos: Boolean?,
+    val zona: String?,
+    val usoArbitrio: String?,
+    val influencia: String?,
+    val afluencia: String?,
+    val formula: String
 )
 
 // one servicio's twelve months: null where there is no cuota
@@ -60,7 +82,8 @@ data class MatrizArbitrios(
     val total: BigDecimal,
     val fechaCalculo: LocalDate?,
     val pendientes: Int,
-    val faltan: List<String>
+    val faltan: List<String>,
+    val faltanDetalle: List<Falta>
 )
 
 // a contribuyente's year: each predio with the cuotas charged to it, and its total
@@ -129,7 +152,8 @@ object Consultas {
             suma(totalesPorMes),
             cuotas.mapNotNull { it.fechaCalculo }.maxOrNull(),
             pendiente.cuotas.size,
-            pendiente.faltan
+            pendiente.faltan,
+            pendiente.detalle
         )
     }
 
@@ -146,7 +170,8 @@ object Consultas {
 
     // one (servicio, mes) cell: the vigente cuotas of every secuencia de uso, summed (the same rounding as suma);
     // the id is the first one's, by secuencia (a cuota of before the PU por uso has none, and sorts first), and
-    // parametroAplicado joins every cuota's own, so a predio of several usos shows each one's key
+    // parametroAplicado joins every cuota's own, so a predio of several usos shows each one's key. desglose keeps
+    // each cuota apart, by secuencia (cs arrives sorted that way), for the portal to show the formula of each uso
     private fun celda(cs: List<CuotaArbitrio>): CuotaMes {
         val primera = cs.first()
         return CuotaMes(
@@ -158,7 +183,27 @@ object Consultas {
             ),
             primera.contribuyente,
             primera.fechaCalculo,
-            cs.mapNotNull { it.parametroAplicado }.joinToString("; ")
+            cs.mapNotNull { it.parametroAplicado }.joinToString("; "),
+            cs.map(::desglose)
         )
     }
+
+    private fun desglose(c: CuotaArbitrio) =
+        DesgloseCuota(
+            c.id,
+            c.secuenciaUso,
+            c.monto,
+            c.base,
+            c.cantidadBase,
+            c.tasaUnitaria,
+            c.habitantes,
+            c.promedioHabitantes,
+            c.variacionHabitante,
+            c.habitantesPresuntos,
+            c.zona,
+            c.usoArbitrio,
+            c.influencia,
+            c.afluencia,
+            Calculo.formula(c)
+        )
 }

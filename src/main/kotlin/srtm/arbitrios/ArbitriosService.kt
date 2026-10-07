@@ -46,10 +46,13 @@ data class PedidoAnulacion(
     val observacion: String? = null
 )
 
-// what keeps a year or a predio from being determined: a 422 that names each missing thing
+// what keeps a year or a predio from being determined: a 422 that names each missing thing. detalle is the same,
+// with the predio and declaración to fix when it is theirs (the portal links to them); empty for a caller that has
+// none (DocumentosArbitrios, DeterminacionMasivaService), same as faltan would be without this
 class FaltanArbitrios(
     anio: Int,
-    val faltan: List<String>
+    val faltan: List<String>,
+    val detalle: List<Falta> = emptyList()
 ) : WasichaiException(HttpStatus.UNPROCESSABLE_CONTENT, "No se pueden determinar los arbitrios de $anio: ${faltan.joinToString("; ")}")
 
 // a query parameter the endpoint cannot serve, or one it cannot read: a 422 that names it (rentas#541), never a filter
@@ -126,8 +129,20 @@ class ArbitriosService(
         val hoy = LocalDate.now()
         val predios = prediosDe(id, anio, conCuotas = false)
         val calculadas = predios.map { it to Arbitrios.determinar(contexto, delPredio(it, anio), observacion, hoy) }
-        val faltan = calculadas.flatMap { (p, d) -> d.faltan.map { f -> if (p.codigo != null && p.codigo in f) f else "Predio ${p.codigo}: $f" } }.distinct()
-        if (faltan.isNotEmpty()) throw FaltanArbitrios(anio, faltan)
+        val detalle =
+            calculadas
+                .flatMap { (p, d) ->
+                    d.detalle.map { f ->
+                        if (p.codigo != null &&
+                            p.codigo in f.mensaje
+                        ) {
+                            f
+                        } else {
+                            f.copy(mensaje = "Predio ${p.codigo}: ${f.mensaje}")
+                        }
+                    }
+                }.distinctBy { it.mensaje }
+        if (detalle.isNotEmpty()) throw FaltanArbitrios(anio, detalle.map { it.mensaje }, detalle)
         return calculadas.flatMap { (p, d) -> escribir(contexto, p, observacion, hoy, d) }
     }
 
@@ -270,7 +285,7 @@ class ArbitriosService(
         anio: Int,
         d: Determinacion
     ): List<CuotaArbitrio> {
-        if (d.faltan.isNotEmpty()) throw FaltanArbitrios(anio, d.faltan)
+        if (d.faltan.isNotEmpty()) throw FaltanArbitrios(anio, d.faltan, d.detalle)
         if (d.cuotas.isEmpty()) return emptyList()
         return transaccion.executeAndAwait { d.cuotas.map { registros.create(CUOTA_ARBITRIO, CuotaArbitrio::class.java, Records.attributes(it)) } }
     }

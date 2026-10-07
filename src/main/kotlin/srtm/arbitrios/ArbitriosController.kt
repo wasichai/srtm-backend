@@ -126,4 +126,5 @@ internal fun problemaFaltan(
         type = URI.create("${web.problemBaseUri.trimEnd('/')}/${HttpStatus.UNPROCESSABLE_CONTENT.value()}")
         title = HttpStatus.UNPROCESSABLE_CONTENT.reasonPhrase
         setProperty("faltan", ex.faltan)
+        setProperty("faltan_detalle", ex.detalle)
     }

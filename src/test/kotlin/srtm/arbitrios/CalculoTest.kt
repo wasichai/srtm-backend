@@ -3,6 +3,7 @@ package srtm.arbitrios
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import srtm.emision.soles
 import srtm.rentas.Declaracion
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -190,5 +191,68 @@ class CalculoTest {
         val desglose = (calculado as Calculado.Es).desglose
         assertEquals(tasa, desglose.monto)
         assertEquals(tasa.scale(), desglose.monto.scale())
+    }
+
+    // Calculo.formula: the human readable formula a DesgloseCuota shows. tasa con los decimales de la norma
+    // (toPlainString), cantidad siempre con 2 decimales (aunque venga con otra escala), H entero y P/V como se
+    // guardaron. las dos cifras con fuente de global-constraints.md: Miraflores 2026, Ord. 665/MM
+    private fun cuota(
+        base: Base?,
+        tasaUnitaria: BigDecimal? = null,
+        cantidadBase: BigDecimal? = null,
+        monto: BigDecimal? = null,
+        habitantes: Int? = null,
+        promedioHabitantes: BigDecimal? = null,
+        variacionHabitante: BigDecimal? = null,
+        redondeo: String? = null
+    ) = CuotaArbitrio(
+        base = base?.name,
+        tasaUnitaria = tasaUnitaria,
+        cantidadBase = cantidadBase,
+        monto = monto,
+        habitantes = habitantes,
+        promedioHabitantes = promedioHabitantes,
+        variacionHabitante = variacionHabitante,
+        redondeo = redondeo
+    )
+
+    @Test
+    fun `formula de FRONTIS_ML, cantidad con 2 decimales aunque venga con otra escala - Miraflores Ord 665-MM 2026`() {
+        val c = cuota(Base.FRONTIS_ML, BigDecimal("5.0856"), BigDecimal("10.5"), BigDecimal("53.39"), redondeo = "2:ABAJO")
+        assertEquals("5.0856 S/ por ml × 10.50 ml = 53.39", Calculo.formula(c))
+    }
+
+    @Test
+    fun `formula de AREA_CONSTRUIDA_M2, con el factor de habitantes - Miraflores Ord 665-MM 2026`() {
+        val c =
+            cuota(
+                Base.AREA_CONSTRUIDA_M2,
+                BigDecimal("0.0514"),
+                BigDecimal("100.00"),
+                BigDecimal("10.28"),
+                habitantes = 4,
+                promedioHabitantes = BigDecimal("2"),
+                variacionHabitante = BigDecimal("0.50"),
+                redondeo = "2:ABAJO"
+            )
+        assertEquals("0.0514 S/ por m² × 100.00 m² × (1 + (4 − 2) × 0.50) = 10.28", Calculo.formula(c))
+    }
+
+    @Test
+    fun `formula de PREDIO con redondeo termina en el monto`() {
+        val c = cuota(Base.PREDIO, BigDecimal("85.9875"), BigDecimal("1"), BigDecimal("85.99"), redondeo = "2:ABAJO")
+        assertEquals("85.9875 S/ por predio = 85.99", Calculo.formula(c))
+    }
+
+    @Test
+    fun `formula de PREDIO sin redondeo no repite el monto`() {
+        val c = cuota(Base.PREDIO, BigDecimal("85.9875"), BigDecimal("1"), BigDecimal("85.9875"))
+        assertEquals("85.9875 S/ por predio", Calculo.formula(c))
+    }
+
+    @Test
+    fun `formula de una cuota sin desglose (anterior al PR) es soles(monto)`() {
+        val c = cuota(null, monto = BigDecimal("8.50"))
+        assertEquals(soles(BigDecimal("8.50")), Calculo.formula(c))
     }
 }

@@ -82,6 +82,7 @@ class ConsultasTest {
         assertNull(m.fechaCalculo)
         assertEquals(24, m.pendientes)
         assertEquals(emptyList<String>(), m.faltan)
+        assertEquals(emptyList<Falta>(), m.faltanDetalle)
     }
 
     @Test
@@ -95,7 +96,12 @@ class ConsultasTest {
         assertEquals(BigDecimal("89.25"), m.total)
         assertEquals(LocalDate.of(2026, 3, 1), m.fechaCalculo)
         assertEquals(10, m.pendientes)
-        assertEquals("TASA_ARBITRIO:LIMPIEZA:Z1:CASA", m.filas[0].meses[0]!!.parametroAplicado)
+        val enero = m.filas[0].meses[0]!!
+        assertEquals("TASA_ARBITRIO:LIMPIEZA:Z1:CASA", enero.parametroAplicado)
+        // the cell's desglose: one entry, base PREDIO (no BASE_ARBITRIO row in this fixture), no redondeo -> the
+        // formula does not repeat the monto (Calculo.formula)
+        assertEquals(1, enero.desglose.size)
+        assertEquals("8.50 S/ por predio", enero.desglose[0].formula)
     }
 
     @Test
@@ -151,6 +157,9 @@ class ConsultasTest {
         assertEquals("TASA_ARBITRIO:LIMPIEZA:Z1:CASA; TASA_ARBITRIO:LIMPIEZA:Z1:COMERCIO", enero.parametroAplicado)
         assertEquals(existentes.first { it.periodo == 1 && it.secuenciaUso == "001" }.id, enero.id)
         assertEquals(BigDecimal("153.00"), m.filas.single().total) // 12 months of 12.75
+        // the cell's desglose keeps the two secuencias apart, in order, each with its own formula
+        assertEquals(listOf("001", "002"), enero.desglose.map { it.secuenciaUso })
+        assertEquals(listOf("8.50 S/ por predio", "4.25 S/ por predio"), enero.desglose.map { it.formula })
     }
 
     @Test
@@ -159,6 +168,8 @@ class ConsultasTest {
         val m = Consultas.matriz(sinTasa, datos(emptyList()), personas, hoy)
         assertEquals(0, m.pendientes)
         assertEquals(listOf("TASA_ARBITRIO SERENAZGO:Z1:CASA 2026"), m.faltan)
+        assertEquals(m.faltan, m.faltanDetalle.map { it.mensaje }) // faltan_detalle: the same, with predio and declaración
+        assertEquals(predio.id, m.faltanDetalle[0].predio)
     }
 
     private fun param(

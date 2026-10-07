@@ -450,7 +450,10 @@ cambio.
     declara `numero_habitantes` (se presume el promedio, H = P). El monto se redondea al final según
     `REDONDEO_ARBITRIO` (`decimales:modo`, global a la ordenanza); sin `BASE_ARBITRIO`, habitantes ni redondeo es
     la tasa mensual tal cual, igual que antes de este cálculo. `parametro_aplicado` guarda las llaves exactas que se
-    leyeron, separadas por `;`; sin `DIMENSIONES_ARBITRIO` es solo la de la tasa, la de siempre.
+    leyeron, separadas por `;`; sin `DIMENSIONES_ARBITRIO` es solo la de la tasa, la de siempre. `Calculo.formula`
+    imprime la misma cuenta en texto, como la ordenanza la lee: `"5.0856 S/ por ml × 10.50 ml = 53.39"`,
+    `"0.0514 S/ por m² × 100.00 m² × (1 + (4 − 2) × 0.50) = 10.28"` o, por predio, `"85.9875 S/ por predio"` (con
+    `= monto` solo si hubo redondeo); una cuota de antes del desglose (`base` null) es solo su `monto`.
   - **Influencia y afluencia** (`Dimensiones.influencia`/`afluencia`, cuando el servicio las lista): la influencia es
     `ARBITRIO_INFLUENCIA` de la `ubicacion_area_verde` del predio; sin esa ubicación, o sin su fila, falta y el predio
     entero no se determina (todo o nada, igual que una zona o un uso que falta). La afluencia es `ARBITRIO_AFLUENCIA`
@@ -486,10 +489,10 @@ en su primer uso (`IndicesArbitrios`). Medido en el CI sobre 505 000 filas: list
 | GET | `/arbitrios/servicios?anio` | Los servicios vigentes algún día del año, en su orden. |
 | GET | `/arbitrios/parametros?anio` | La ordenanza, los servicios y las filas de la ordenanza vigentes en el año, con `faltan`. Siempre 200. |
 | GET | `/arbitrios?anio&predio&contribuyente&servicio&page&size` | Una página de cuotas. Un parámetro desconocido o mal formado es **422** y lo nombra en `errors` (nunca un filtro ignorado). |
-| GET | `/predios/{id}/arbitrios?anio` | La matriz servicio × mes, el titular de cada mes según la regla, los totales por servicio, por mes y del año, la `fecha_calculo` de la última cuota, cuántas cuotas agregaría determinar ahora (`pendientes`) y qué falta para hacerlo (`faltan`). |
+| GET | `/predios/{id}/arbitrios?anio` | La matriz servicio × mes, el titular de cada mes según la regla, los totales por servicio, por mes y del año, la `fecha_calculo` de la última cuota, cuántas cuotas agregaría determinar ahora (`pendientes`) y qué falta para hacerlo (`faltan`, y lo mismo con el predio y la declaración que lo arregla cuando la tiene: `faltan_detalle: [{mensaje, predio, declaracion}]`). Cada celda lleva su `desglose`, una entrada por secuencia de uso (`secuencia_uso`) con `id`, `monto`, `base`, `cantidad_base`, `tasa_unitaria`, `habitantes`, `promedio_habitantes`, `variacion_habitante`, `habitantes_presuntos`, `zona`, `uso_arbitrio`, `influencia`, `afluencia` y `formula`, la cuenta legible (`Calculo.formula`): `"0.0514 S/ por m² × 100.00 m² × (1 + (4 − 2) × 0.50) = 10.28"`, `"5.0856 S/ por ml × 10.50 ml = 53.39"` o, por predio, `"85.9875 S/ por predio"`; una cuota de antes del desglose (`base` null) solo trae `soles(monto)`. |
 | GET | `/contribuyentes/{id}/arbitrios?anio` | Lo mismo por cada predio de sus DJ del año (o del que tiene cuotas), solo con las cuotas a su nombre, y su total. |
-| POST | `/predios/{id}/arbitrios` `{anio, observacion}` | **201** con las cuotas escritas; **200** con `[]` si no había nada pendiente; **422** con `faltan`; **400** si la observación no tiene de 5 a 500 caracteres; **403** sin permiso de creación sobre `cuota_arbitrio`. |
-| POST | `/contribuyentes/{id}/arbitrios` `{anio, observacion}` | Determina cada predio de sus DJ del año (también una anulada: puede cubrir los meses previos a una venta). Calcula todos antes de escribir: si uno no se puede determinar, **422** que lo nombra (`Predio <código>: …`) y no escribe ninguno. |
+| POST | `/predios/{id}/arbitrios` `{anio, observacion}` | **201** con las cuotas escritas; **200** con `[]` si no había nada pendiente; **422** con `faltan` y `faltan_detalle`; **400** si la observación no tiene de 5 a 500 caracteres; **403** sin permiso de creación sobre `cuota_arbitrio`. |
+| POST | `/contribuyentes/{id}/arbitrios` `{anio, observacion}` | Determina cada predio de sus DJ del año (también una anulada: puede cubrir los meses previos a una venta). Calcula todos antes de escribir: si uno no se puede determinar, **422** que lo nombra (`Predio <código>: …`, también en `faltan_detalle`) y no escribe ninguno. |
 
 **Determinación masiva** (`/api/srtm/arbitrios/determinaciones`). Determina todos los predios de un año en segundo
 plano, sobre la misma maquinaria de lotes de la [emisión masiva](#emisión-masiva):
@@ -523,6 +526,12 @@ plano, sobre la misma maquinaria de lotes de la [emisión masiva](#emisión-masi
 - **Qué imprime:** las cuotas a nombre del contribuyente tal como se determinaron, con las mismas cifras que
   `GET /contribuyentes/{id}/arbitrios`:
   - por predio, la zona y el uso, los meses con cuota por servicio y sus totales;
+  - por predio, el cálculo (`PredioHla.calculos`): una línea por secuencia de uso, servicio y `Calculo.formula`
+    distintos del año, con el rango de meses en que rigió (abreviado a 3 letras, `ene`, `feb`… `dic`; un solo mes
+    va solo, `mar`, y un rango junta los dos extremos con un guion en, `ene–dic`), por ejemplo
+    `"Recolección (uso 001), ene–dic: 0.0514 S/ por m² × 100.00 m² × (1 + (4 − 2) × 0.50) = 10.28"`. La misma
+    fórmula que vuelve a aparecer sin ser contigua (una tasa que cambió y volvió) imprime una línea por tramo. Una
+    cuota de antes del desglose (`base` null) no aporta ninguna línea: la HLA se ve como antes de este cálculo;
   - las cuotas mensuales con su vencimiento (`ARBITRIO_VENCIMIENTO` de cada mes, vigente al día 1);
   - el total del año, la fecha de cálculo y la ordenanza con su ratificación.
 - **Usa** la cabecera de los documentos (`templates/emision/hla.html`).
