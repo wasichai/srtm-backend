@@ -116,6 +116,38 @@ class ArbitriosTest {
     }
 
     @Test
+    fun `sector and uso código both missing are both named, before any mapping is even checked`() {
+        val d =
+            determinar(
+                p =
+                    del(
+                        predio = predio.copy(sectorCatastral = " "),
+                        declaraciones = listOf(dj.copy(claseUso = null, subClaseUso = null, uso = null))
+                    )
+            )
+        assertEquals(
+            listOf("Sector catastral del predio 01-01-0001", "Uso del catálogo en la declaración 2026 del predio 01-01-0001"),
+            d.faltan
+        )
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
+    }
+
+    @Test
+    fun `a missing sector alone stops the uso mapping from being checked at all that month`() {
+        val sinMapeoUso = mapeos.filterNot { it.tipo == Llaves.ARBITRIO_USO } // the uso código resolves, its mapping doesn't exist
+        val d = determinar(contexto(parametros = tasas + sinMapeoUso), p = del(predio = predio.copy(sectorCatastral = " ")))
+        assertEquals(listOf("Sector catastral del predio 01-01-0001"), d.faltan) // not ARBITRIO_USO too: never reached
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
+    }
+
+    @Test
+    fun `a sector present, a missing zona and a missing uso mapping are both named`() {
+        val d = determinar(contexto(parametros = tasas))
+        assertEquals(listOf("${Llaves.ARBITRIO_ZONA} S-01 2026", "${Llaves.ARBITRIO_USO} 010101 2026"), d.faltan)
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
+    }
+
+    @Test
     fun `without a tasa it fails naming it, and determines nothing`() {
         val d = determinar(contexto(parametros = tasas.drop(1) + mapeos))
         assertEquals(listOf("TASA_ARBITRIO LIMPIEZA:Z1:CASA 2026"), d.faltan)
@@ -163,6 +195,18 @@ class ArbitriosTest {
                 .map { it.periodo }
                 .toSet()
         )
+    }
+
+    @Test
+    fun `a buyer without uso info is silently skipped, same as today, while the seller's months still count`() {
+        val venta = LocalDate.of(2026, 5, 20)
+        val vendedor = dj.copy(estado = ANULADA, fechaAnulacion = venta)
+        val comprador = declaracion("dj-2", "c-201").copy(fechaAdquisicion = venta, claseUso = null, subClaseUso = null, uso = null)
+        val d = determinar(p = del(declaraciones = listOf(vendedor, comprador)))
+        assertEquals(emptyList<String>(), d.faltan)
+        assertEquals((1..5).toSet(), d.cuotas.map { it.periodo }.toSet())
+        assertEquals(15, d.cuotas.size) // enero a mayo, tres servicios
+        assertTrue(d.cuotas.all { it.contribuyente == "c-200" })
     }
 
     @Test
@@ -242,6 +286,86 @@ class ArbitriosTest {
     }
 
     @Test
+    fun `each servicio's zona can come from its own ubicación, the other falling back to the sector`() {
+        val conVia = predio.copy(via = "AV. X", numero = "100")
+        val ubicaciones =
+            listOf(
+                ubicacion(servicio = "LIMPIEZA", zona = "Z9"),
+                ubicacion(servicio = "PARQUES", zona = "Z8")
+            )
+        val tasasPorZona = listOf(tasa("LIMPIEZA:Z9:CASA", "8.50"), tasa("PARQUES:Z8:CASA", "8.50"), tasa("SERENAZGO:Z1:CASA", "8.50"))
+        val c = contexto(parametros = tasasPorZona + mapeos).copy(ubicaciones = ubicaciones)
+        val d = determinar(c, p = del(predio = conVia))
+        assertEquals(emptyList<String>(), d.faltan)
+        assertEquals(
+            setOf("Z9"),
+            d.cuotas
+                .filter { it.servicio == "srv-LIMPIEZA" }
+                .map { it.zona }
+                .toSet()
+        )
+        assertEquals(
+            setOf("Z8"),
+            d.cuotas
+                .filter { it.servicio == "srv-PARQUES" }
+                .map { it.zona }
+                .toSet()
+        )
+        assertEquals(
+            setOf("Z1"),
+            d.cuotas
+                .filter { it.servicio == "srv-SERENAZGO" }
+                .map { it.zona }
+                .toSet()
+        )
+    }
+
+    @Test
+    fun `an ambiguous zona is named, and does not block the other servicios`() {
+        val conVia = predio.copy(via = "AV. X", numero = "100")
+        val ubicaciones =
+            listOf(
+                ubicacion(servicio = "LIMPIEZA", zona = "Z9"),
+                ubicacion(servicio = "LIMPIEZA", zona = "Z10")
+            )
+        val c = contexto(parametros = tasas + mapeos).copy(ubicaciones = ubicaciones)
+        val d = determinar(c, p = del(predio = conVia))
+        assertEquals(listOf("Zona ambigua de LIMPIEZA para AV. X 100: Z9, Z10"), d.faltan)
+    }
+
+    @Test
+    fun `without a sector, ubicación resolving every servicio still produces every cuota`() {
+        val conVia = predio.copy(sectorCatastral = null, via = "AV. X", numero = "100")
+        val ubicaciones = servicios.map { ubicacion(servicio = it.codigo, zona = "Z9") }
+        val tasasPorZona = servicios.map { tasa("${it.codigo}:Z9:CASA", "8.50") }
+        val c = contexto(parametros = tasasPorZona + mapeos).copy(ubicaciones = ubicaciones)
+        val d = determinar(c, p = del(predio = conVia))
+        assertEquals(emptyList<String>(), d.faltan)
+        assertEquals(36, d.cuotas.size)
+        assertTrue(d.cuotas.all { it.zona == "Z9" })
+    }
+
+    @Test
+    fun `without a sector, a servicio ubicación does not resolve fails the whole predio (todo o nada)`() {
+        val conVia = predio.copy(sectorCatastral = null, via = "AV. X", numero = "100")
+        val ubicaciones = listOf(ubicacion(servicio = "LIMPIEZA", zona = "Z9"))
+        val c = contexto(parametros = tasas + mapeos + listOf(tasa("LIMPIEZA:Z9:CASA", "8.50"))).copy(ubicaciones = ubicaciones)
+        val d = determinar(c, p = del(predio = conVia))
+        assertEquals(listOf("Sector catastral del predio 01-01-0001"), d.faltan)
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
+    }
+
+    @Test
+    fun `without a sector, an ubicación starting mid-year does not rescue the earlier months (todo o nada)`() {
+        val conVia = predio.copy(sectorCatastral = null, via = "AV. X", numero = "100")
+        val ubicaciones = listOf(ubicacion(servicio = "LIMPIEZA", zona = "Z9", desde = LocalDate.of(2026, 7, 1)))
+        val c = contexto(parametros = tasas + mapeos + listOf(tasa("LIMPIEZA:Z9:CASA", "8.50"))).copy(ubicaciones = ubicaciones)
+        val d = determinar(c, p = del(predio = conVia))
+        assertEquals(listOf("Sector catastral del predio 01-01-0001"), d.faltan)
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
+    }
+
+    @Test
     fun `a negative tasa is not a cuota`() {
         val negativa = listOf(tasa("LIMPIEZA:Z1:CASA", "-1")) + tasas.drop(1)
         val d = determinar(contexto(parametros = negativa + mapeos))
@@ -284,6 +408,13 @@ class ArbitriosTest {
         valor: String,
         desde: LocalDate = LocalDate.of(2026, 1, 1)
     ) = param(Llaves.TASA_ARBITRIO, clave, valor = valor, desde = desde)
+
+    private fun ubicacion(
+        servicio: String? = null,
+        via: String = "AV. X",
+        zona: String,
+        desde: LocalDate = LocalDate.of(2026, 1, 1)
+    ) = ZonaUbicacion(id = "u-$servicio-$zona", servicio = servicio, via = via, zona = zona, vigenciaDesde = desde, norma = "Ordenanza ficticia de prueba")
 
     private fun declaracion(
         id: String,

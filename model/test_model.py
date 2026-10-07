@@ -98,7 +98,7 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 39)
+        self.assertEqual(len(names), 40)
         self.assertEqual(len(self.model["relationships"]), 42)
 
     def test_the_municipalidad_holds_the_documents_header(self):
@@ -205,6 +205,24 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(relaciones[("inafectacion_arbitrio", "servicio")]["target"], "servicio_arbitrio")
         self.assertEqual(relaciones[("inafectacion_arbitrio", "predio")]["target"], "predio")
 
+    def test_zona_arbitrio_ubicacion_is_a_zona_by_via_tramo_and_manzana(self):
+        # no relación (es editable por la api genérica, como parametro_tributario): servicio es un código de texto,
+        # no un apuntador a servicio_arbitrio, igual que en TASA_ARBITRIO
+        objetos = {o["name"]: o for o in self.model["objects"]}
+        campos = {f["name"]: f for f in objetos["zona_arbitrio_ubicacion"]["fields"]}
+        self.assertEqual(list(campos),
+                          ["servicio", "tipo_via", "via", "manzana", "numero_inicial", "numero_final", "paridad", "zona",
+                           "vigencia_desde", "vigencia_hasta", "norma", "observacion", "clave"])
+        self.assertEqual({n for n, f in campos.items() if f.get("required")},
+                         {"via", "numero_inicial", "numero_final", "paridad", "zona", "vigencia_desde", "clave"})
+        self.assertEqual({n for n, f in campos.items() if f.get("unique")}, {"clave"})
+        self.assertEqual(campos["numero_inicial"]["type"], "INTEGER")
+        self.assertEqual(campos["numero_final"]["type"], "INTEGER")
+        self.assertEqual(campos["paridad"]["type"], "ENUM")
+        self.assertEqual(campos["paridad"]["enum"], "paridad_numeracion")
+        self.assertEqual(self.model["enums"]["paridad_numeracion"], ["PAR", "IMPAR", "AMBOS"])
+        self.assertEqual([r for r in self.model["relationships"] if r["source"] == "zona_arbitrio_ubicacion"], [])
+
     def test_an_anulacion_is_added_once_per_cuota(self):
         # decision 5 of the plan: a cuota is corrected by an anulación added to it, never by an update; its clave (the
         # cuota's id) is unique, so a cuota is annulled once
@@ -237,7 +255,7 @@ class ShippedModelTests(unittest.TestCase):
     def test_the_sanciones_and_anuncios_objects_in_order(self):
         # after the arbitrios, each one after the objects it points at
         names = [o["name"] for o in self.model["objects"]]
-        self.assertEqual(names[29:], list(OBJETOS))
+        self.assertEqual(names[29:39], list(OBJETOS))
 
     def test_each_new_object_has_its_fields_required_and_unique(self):
         # SPEC §4, field by field: the order, what is required and what is unique. the lengths and ranges are kotlin's
@@ -270,7 +288,7 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(self.campos("descargo_papeleta")["en_plazo"]["type"], "BOOLEAN")
         self.assertEqual((self.campos("anuncio")["area"]["type"], self.campos("movimiento_anuncio")["tasa"]["type"]),
                          ("DECIMAL", "DECIMAL"))
-        enums = {(o["name"], f["name"]): f["enum"] for o in self.model["objects"][29:] for f in o["fields"] if f["type"] == "ENUM"}
+        enums = {(o["name"], f["name"]): f["enum"] for o in self.model["objects"][29:39] for f in o["fields"] if f["type"] == "ENUM"}
         self.assertEqual(enums, {
             ("codigo_infraccion", "familia"): "familia_infraccion", ("papeleta", "familia"): "familia_infraccion",
             ("papeleta", "reincidencia"): "grado_reincidencia", ("descargo_papeleta", "tipo_recurso"): "tipo_recurso",

@@ -72,14 +72,16 @@ class ArbitriosService(
 ) {
     private val transaccion = TransactionalOperator.create(transacciones)
 
-    // the year's ordinance, servicios, parameters and uso catalog: read once per determination
+    // the year's ordinance, servicios, parameters, uso catalog and zona_arbitrio_ubicacion rows: read once per
+    // determination
     suspend fun contexto(anio: Int) =
         ContextoArbitrios(
             anio,
             registros.all(ORDENANZA_ARBITRIO, OrdenanzaArbitrio::class.java, filters = mapOf("anio" to "$anio")).firstOrNull(),
             registros.all(SERVICIO_ARBITRIO, ServicioArbitrio::class.java),
             parametrosTributarios.todos(),
-            registros.all(USO_PREDIO, UsoPredio::class.java)
+            registros.all(USO_PREDIO, UsoPredio::class.java),
+            registros.all(ZONA_ARBITRIO_UBICACION, ZonaUbicacion::class.java)
         )
 
     // a predio's declarations of the year, its contribuyentes' codes, its inafectaciones and its cuotas of the year

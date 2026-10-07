@@ -75,8 +75,8 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 81 created, 0 updated, 0 skipped  (39 objetos + 42 relaciones)
-python3 apply.py                   # idempotente: done: 0 created, 0 updated, 81 skipped
+python3 apply.py                   # done: 82 created, 0 updated, 0 skipped  (40 objetos + 42 relaciones)
+python3 apply.py                   # idempotente: done: 0 created, 0 updated, 82 skipped
 python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
 ```
 
@@ -313,6 +313,7 @@ la anulación de una cuota.
 | `cuota_arbitrio` | Lo determinado de un predio, un servicio y un mes: `monto`, `parametro_aplicado` (la llave leída), `zona` y `uso_arbitrio` usados, `fecha_calculo` y `observacion`, más relaciones obligatorias a `predio`, `contribuyente` (el titular principal ese mes), `servicio` y `parametro` (la fila de `parametro_tributario`). |
 | `anulacion_cuota_arbitrio` | La corrección de una cuota: `motivo`, `observacion`, `fecha`, y su `cuota` y `predio`. `clave` única (el id de la cuota): una sola anulación por cuota. |
 | `determinacion_arbitrio_masiva`, `determinacion_arbitrio_lote` | El job de la determinación de un año en segundo plano y sus lotes de predios, gemelos de `emision_masiva` y `emision_lote`. No generan archivo. |
+| `zona_arbitrio_ubicacion` | Una zona por vía, tramo (`numero_inicial`/`numero_final` y `paridad`) y manzana, opcionalmente de un solo `servicio`; más precisa que el sector catastral de `ARBITRIO_ZONA`, y se intenta primero (`Zonas.de`, ver **Zona por servicio y por ubicación**). `clave` única por vía, tramo, manzana, paridad, servicio y vigencia. |
 
 Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
 - **Una cuota por predio, servicio, año y mes:** `cuota_arbitrio.clave` es única y vale `predio|servicio|anio|periodo|version`.
@@ -372,6 +373,52 @@ python3 import_arbitrios.py --archivo arbitrios-2026.json
   servicio y `vigencia_desde`; actualiza en su lugar lo que cambió y no borra nada;
 - sale con `0` si todo va bien, `1` si Core rechaza algo y `2` si el archivo no encaja (sin escribir nada).
 
+**Zona por servicio y por ubicación.** La zona de un servicio, cada día, la decide `srtm.arbitrios.Zonas.de` en seis
+niveles, de más a menos preciso; gana el primero con alguna fila vigente que coincida (varias filas de ese nivel que
+coincidan en la zona la ganan igual; si no coinciden, la zona es ambigua y el predio entero falla, nombrada en
+`faltan`):
+1. `zona_arbitrio_ubicacion` del servicio, con la manzana del predio.
+2. `zona_arbitrio_ubicacion` del servicio, sin manzana (vacía).
+3. `zona_arbitrio_ubicacion` de todos los servicios (`servicio` vacío), con la manzana del predio.
+4. `zona_arbitrio_ubicacion` de todos los servicios, sin manzana.
+5. `ARBITRIO_ZONA servicio:sector_catastral`.
+6. `ARBITRIO_ZONA sector_catastral`.
+
+Una fila de `zona_arbitrio_ubicacion` coincide cuando está vigente ese día, su `via` es la del predio (sin distinguir
+mayúsculas ni tildes), su `tipo_via` está vacío o es el del predio, el número del predio cae en su tramo
+(`numero_inicial`/`numero_final`, extremos vacíos abiertos) y su `paridad` es `AMBOS`, vacía o la del número. Sin
+ninguna fila que coincida en los cuatro niveles de ubicación, cae al sector catastral (niveles 5 y 6); sin sector
+catastral tampoco, la zona de ese servicio no se resuelve — a menos que algún otro servicio del predio sí resuelva
+por ubicación, en cuyo caso el sector deja de exigirse ese mes y el predio se determina igual, con la zona que cada
+servicio tenga.
+
+Se carga con `import_zonas_arbitrio.py`, desde un CSV con las columnas
+`servicio,tipo_via,via,manzana,numero_inicial,numero_final,paridad,zona,vigencia_desde,vigencia_hasta,norma,observacion`
+y una cabecera `#` con la fuente; `servicio` vacío aplica a todos, `manzana` vacía no filtra por manzana, `tipo_via`
+vacío no filtra por tipo de vía y `vigencia_hasta` vacía sigue vigente:
+
+```bash
+cd model
+python3 import_zonas_arbitrio.py --csv zonas-2026.csv --dry-run   # lee Core y dice qué haría, sin escribir
+python3 import_zonas_arbitrio.py --csv zonas-2026.csv
+```
+
+`import_zonas_arbitrio.py`:
+- la clave natural es `servicio|tipo_via|via|manzana|numero_inicial|numero_final|paridad|vigencia_desde` (la misma
+  fórmula de `claveDeZonaUbicacion`, trasladada a Python); cambiar cualquiera de esos campos es un tramo nuevo, no
+  una fila reemplazada;
+- antes de la primera escritura revisa el archivo: campos obligatorios, `numero_inicial` y `numero_final` enteros
+  con `numero_inicial <= numero_final`, `paridad` del enum, fechas ISO, y que dos filas del mismo servicio, vía,
+  manzana y paridad no tengan tramos que se solapen con distinta zona y vigencias que se cruzan (la ambigüedad que
+  `Zonas.de` encontraría al calcular);
+- es idempotente: crea lo que falta, actualiza en su lugar `zona`, `vigencia_hasta`, `norma` y `observacion` (lo que
+  no es parte de la clave) y no borra nada;
+- sale con `0` si todo va bien, `1` si Core rechaza algo y `2` si el archivo no encaja (sin escribir nada).
+
+**Compatibilidad.** Sin ninguna fila de `zona_arbitrio_ubicacion`, los cuatro primeros niveles no tienen candidatas y
+`Zonas.de` cae directo al sector catastral: un predio de un solo uso determina las mismas cuotas que antes de este
+cambio.
+
 **Cálculo** (`Arbitrios.determinar`, de un predio y un año):
 - **Del año:** hace falta la ordenanza del año ratificada (acuerdo y fecha) y al menos un servicio vigente. Si no,
   `faltan` lo dice y no se determina ningún predio.
@@ -382,15 +429,18 @@ python3 import_arbitrios.py --archivo arbitrios-2026.json
   - **Qué días cubre una DJ:** desde el 1 de enero, o desde el día siguiente a su `fecha_adquisicion` si cae en el año;
     hasta el 31 de diciembre, o hasta su `fecha_anulacion` si se anuló (descargo). Una importada sin fechas cubre el
     año. Una venta el 20 de mayo da: vendedor de enero a mayo, comprador de junio a diciembre.
-  - **Zona:** `ARBITRIO_ZONA` del `sector_catastral` del predio.
+  - **Zona:** la de cada servicio ese día, por `Zonas.de` (ver **Zona por servicio y por ubicación** arriba):
+    `zona_arbitrio_ubicacion` por vía y tramo primero, `ARBITRIO_ZONA` del `sector_catastral` del predio como
+    respaldo.
   - **Uso de arbitrio:** `ARBITRIO_USO` del código de uso de la DJ principal. Ese código es tan preciso como la DJ:
     `XXYYZZ` con clase, sub clase y uso; `XXYY` sin uso; `XX` con solo la clase. Gana el prefijo más largo.
   - **Servicios:** cada servicio vigente ese día, salvo que el predio tenga una inafectación suya vigente ese día o
     que la cuota ya exista. Su monto es la tasa `TASA_ARBITRIO servicio:zona:uso` vigente ese día, tal cual (sin
     área, prorrateo ni redondeo). `parametro_aplicado` guarda la llave exacta que se leyó.
-- **Meses sin cobro:** un mes sin titular, o sin sector o uso, no se cobra. Un predio que aparece en julio no debe de
-  enero a junio.
-- **No se puede determinar** un predio sin titular en ningún mes, o sin sector o uso en todos los meses con titular.
+- **Meses sin cobro:** un mes sin titular, o sin zona (por sector o por ubicación) o sin uso, no se cobra. Un predio
+  que aparece en julio no debe de enero a junio.
+- **No se puede determinar** un predio sin titular en ningún mes, o sin zona y uso a la vez en ningún mes con
+  titular.
 - **Todo o nada:** si falta un parámetro (una zona, un uso, una tasa), no se determina nada de ese predio. `faltan`
   nombra cada uno una vez (`TASA_ARBITRIO LIMPIEZA:Z1:CASA 2026`).
 - **Reejecutar no duplica:** las cuotas que ya existen no se recalculan.

@@ -200,6 +200,41 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
     }
 
     @Test
+    fun `each servicio's zona can come from its own zona_arbitrio_ubicacion row, one row per servicio`() {
+        val e = Escenario()
+        val via = "JR UBICACION ${uniqueDocumento()}"
+        val predio = e.predioDeclarado(e.contribuyente, via = via, numero = "100")
+        val zonas = listOf("ZU1", "ZU2")
+        val montos = listOf("7.00", "3.00")
+        e.codigos.forEachIndexed { i, codigo ->
+            // the tasa of each servicio's own zona: the escenario only has Z1's, the sector's
+            e.parametro("TASA_ARBITRIO", "$codigo:${zonas[i]}:CASA", valor = montos[i])
+            crear(
+                ZONA_ARBITRIO_UBICACION,
+                mapOf(
+                    "servicio" to codigo,
+                    "via" to via,
+                    "numero_inicial" to 1,
+                    "numero_final" to 999,
+                    "paridad" to "AMBOS",
+                    "zona" to zonas[i],
+                    "vigencia_desde" to "${e.anio}-01-01",
+                    "vigencia_hasta" to "${e.anio}-12-31",
+                    "clave" to "ZU-${uniqueDocumento()}"
+                )
+            )
+        }
+        val cuotas = tree(send("POST", "/api/srtm/predios/$predio/arbitrios", pedido(e.anio), HttpStatus.CREATED))
+        val porServicio = lista(cuotas) { it }.groupBy { it["servicio"].asString() }
+        for (i in e.servicios.indices) {
+            val delServicio = porServicio[e.servicios[i]]!!
+            assertEquals(12, delServicio.size, porServicio.toString())
+            assertTrue(delServicio.all { it["zona"].asString() == zonas[i] }, porServicio.toString())
+            assertTrue(delServicio.all { it["monto"].asDouble() == montos[i].toDouble() }, porServicio.toString())
+        }
+    }
+
+    @Test
     fun `the app indexes its cuotas by year and predio, and by year and contribuyente`() {
         val e = Escenario()
         send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED)
