@@ -150,6 +150,21 @@ class VigentesAl31DicTests(unittest.TestCase):
         filas = [fila("TASA_ARBITRIO", "SOLO_FUTURA", vigencia_desde="2042-01-01", valor_numerico="5")]
         self.assertEqual(di.vigentes_al_31_12(filas, 2041), [])
 
+    def test_una_fila_cerrada_antes_del_corte_no_se_deriva(self):
+        filas = [fila("TASA_ARBITRIO", "CERRADA", vigencia_desde="2041-01-01", valor_numerico="5"),
+                 fila("TASA_ARBITRIO", "HASTA_EL_CORTE", vigencia_desde="2041-01-01", valor_numerico="6")]
+        filas[0]["vigencia_hasta"] = "2041-06-30"
+        filas[1]["vigencia_hasta"] = "2041-12-31"
+        vigentes = di.vigentes_al_31_12(filas, 2041)
+        self.assertEqual([f["clave"] for f in vigentes], ["HASTA_EL_CORTE"])
+
+    def test_una_fila_cerrada_no_tapa_a_la_abierta_anterior_de_su_misma_clave(self):
+        filas = [fila("TASA_ARBITRIO", "BAR:ZONA_1", vigencia_desde="2041-01-01", valor_numerico="10"),
+                 fila("TASA_ARBITRIO", "BAR:ZONA_1", vigencia_desde="2041-03-01", valor_numerico="12")]
+        filas[1]["vigencia_hasta"] = "2041-06-30"
+        vigentes = di.vigentes_al_31_12(filas, 2041)
+        self.assertEqual([f["valor_numerico"] for f in vigentes], ["10"])
+
 
 class MainTests(unittest.TestCase):
     def run_main(self, csv_path=FICTICIO_PARAMETROS, extra=(), redondeo="4:MEDIO", ipc="2.10"):

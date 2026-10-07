@@ -9,6 +9,7 @@ import srtm.rentas.ANULADA
 import srtm.rentas.Declaracion
 import srtm.rentas.Predio
 import srtm.rentas.UsoPredio
+import tools.jackson.databind.json.JsonMapper
 import java.io.File
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -173,6 +174,46 @@ class ArbitriosTest {
         val d = determinar(contexto(parametros = tasas.drop(1) + mapeos))
         assertEquals(listOf("TASA_ARBITRIO LIMPIEZA:Z1:CASA 2026"), d.faltan)
         assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
+    }
+
+    // enlace (wasichai/srtm-ui#94): where a falta gets fixed. the DJ, for what its declaración lacks; the predio's
+    // ubicación, for what the predio lacks; nowhere the portal can fix it, for a row of the ordinance, a titular or
+    // an invariant - though every one still names its predio
+    @Test
+    fun `a falta of the ordinance links nowhere, one of the predio to its ubicación, one of the DJ to the DJ`() {
+        val sinTasa = determinar(contexto(parametros = tasas.drop(1) + mapeos))
+        assertEquals(listOf(Falta("TASA_ARBITRIO LIMPIEZA:Z1:CASA 2026", "predio-100", null, enlace = null)), sinTasa.detalle)
+
+        val sinSector = determinar(p = del(predio = predio.copy(sectorCatastral = " ")))
+        assertEquals(listOf(Falta("Sector catastral del predio 01-01-0001", "predio-100", null, Enlace.PREDIO)), sinSector.detalle)
+
+        val sinUso = determinar(p = del(declaraciones = listOf(dj.copy(claseUso = null, subClaseUso = null, uso = null))))
+        assertEquals(
+            listOf(Falta("Uso del catálogo en la declaración 2026 del predio 01-01-0001", "predio-100", "dj-1", Enlace.DECLARACION)),
+            sinUso.detalle
+        )
+
+        // a mapping row is the ordinance's, even when it names the predio's sector or uso
+        val sinMapeos = determinar(contexto(parametros = tasas))
+        assertEquals(listOf("${Llaves.ARBITRIO_ZONA} S-01 2026", "${Llaves.ARBITRIO_USO} 010101 2026"), sinMapeos.faltan)
+        assertEquals(listOf(null, null), sinMapeos.detalle.map { it.enlace })
+
+        val sinTitular = determinar(p = del(declaraciones = emptyList()))
+        assertEquals(listOf(null), sinTitular.detalle.map { it.enlace })
+
+        val sinOrdenanza = determinar(contexto(ordenanza = null))
+        assertTrue(sinOrdenanza.detalle.isNotEmpty())
+        assertTrue(sinOrdenanza.detalle.all { it.enlace == null })
+    }
+
+    @Test
+    fun `a falta is snake_case JSON, its enlace a name or null`() {
+        val json = JsonMapper.builder().build()
+        assertEquals(
+            """{"mensaje":"Frontis","predio":"p-1","declaracion":"dj-1","enlace":"DECLARACION"}""",
+            json.writeValueAsString(Falta("Frontis", "p-1", "dj-1", Enlace.DECLARACION))
+        )
+        assertEquals("""{"mensaje":"TASA","predio":"p-1","declaracion":null,"enlace":null}""", json.writeValueAsString(Falta("TASA", "p-1")))
     }
 
     @Test
@@ -342,7 +383,7 @@ class ArbitriosTest {
     }
 
     @Test
-    fun `an ambiguous zona is named, and does not block the other servicios`() {
+    fun `an ambiguous zona is named alone, and the whole predio gets no cuota`() {
         val conVia = predio.copy(via = "AV. X", numero = "100")
         val ubicaciones =
             listOf(
@@ -352,6 +393,8 @@ class ArbitriosTest {
         val c = contexto(parametros = tasas + mapeos).copy(ubicaciones = ubicaciones)
         val d = determinar(c, p = del(predio = conVia))
         assertEquals(listOf("Zona ambigua de LIMPIEZA para AV. X 100: Z9, Z10"), d.faltan)
+        assertEquals(listOf(Enlace.PREDIO), d.detalle.map { it.enlace }) // the predio's via and número
+        assertEquals(emptyList<CuotaArbitrio>(), d.cuotas) // todo o nada: the servicios with a zona get none either
     }
 
     @Test
@@ -460,6 +503,7 @@ class ArbitriosTest {
         val c = contexto(parametros = tasas + mapeos + listOf(dimensiones, afluencia))
         val d = determinar(c, p = del(predio = predio.copy(ubicacionAreaVerde = null)))
         assertEquals(listOf("Ubicación respecto del área verde del predio 01-01-0001"), d.faltan)
+        assertEquals(listOf(Enlace.PREDIO), d.detalle.map { it.enlace })
         assertEquals(emptyList<CuotaArbitrio>(), d.cuotas) // todo o nada: ni LIMPIEZA ni SERENAZGO se escriben
     }
 
@@ -511,7 +555,7 @@ class ArbitriosTest {
         val d = determinar(contexto(parametros = porArea), del(declaraciones = listOf(casa, sinArea)))
         val mensaje = "Área construida del predio 01-01-0001, uso 002, declaración 2026"
         assertEquals(listOf(mensaje), d.faltan) // once, not once per month and servicio
-        assertEquals(listOf(Falta(mensaje, "predio-100", "dj-2")), d.detalle)
+        assertEquals(listOf(Falta(mensaje, "predio-100", "dj-2", Enlace.DECLARACION)), d.detalle)
         assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
     }
 
@@ -521,7 +565,7 @@ class ArbitriosTest {
         val d = determinar(contexto(parametros = porArea), del(declaraciones = listOf(casa, sinClase)))
         val mensaje = "Uso del catálogo en la declaración 2026 del predio 01-01-0001, uso 002"
         assertEquals(listOf(mensaje), d.faltan)
-        assertEquals(listOf(Falta(mensaje, "predio-100", "dj-2")), d.detalle)
+        assertEquals(listOf(Falta(mensaje, "predio-100", "dj-2", Enlace.DECLARACION)), d.detalle)
         assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
     }
 
@@ -534,6 +578,26 @@ class ArbitriosTest {
         assertEquals(emptyList<String>(), d.faltan)
         assertEquals((1..5).toList(), d.cuotas.filter { it.servicio == "srv-LIMPIEZA" && it.secuenciaUso == "002" }.map { it.periodo })
         assertEquals((1..12).toList(), d.cuotas.filter { it.servicio == "srv-LIMPIEZA" && it.secuenciaUso == "001" }.map { it.periodo })
+    }
+
+    // a predio without a sector, every servicio's zona by ubicación, determined for the whole year; then its
+    // secuencia 002 loses its uso from june on (a sale registered later). running it again has nothing pending: it
+    // writes nothing and names nothing, the same as with a sector - not a 422 for the months without a uso
+    @Test
+    fun `without a sector, running it again with nothing pending adds nothing though a secuencia lost its uso since`() {
+        val sinSector = predio.copy(sectorCatastral = null, via = "AV. X", numero = "100")
+        val c = contexto(parametros = porArea).copy(ubicaciones = servicios.map { ubicacion(servicio = it.codigo, zona = "Z1") })
+        val primera = determinar(c, del(declaraciones = listOf(casa, tienda), predio = sinSector))
+        assertEquals(emptyList<String>(), primera.faltan)
+        assertEquals(72, primera.cuotas.size)
+
+        val cambio = LocalDate.of(2026, 5, 20)
+        val conUso = tienda.copy(estado = ANULADA, fechaAnulacion = cambio)
+        val sinUso = declaracion("dj-4", "c-200").copy(secuenciaUso = "002", fechaAdquisicion = cambio, claseUso = null, subClaseUso = null, uso = null)
+        val despues = listOf(casa, conUso, sinUso)
+        val nada = Determinacion(emptyList(), emptyList())
+        assertEquals(nada, determinar(contexto(parametros = porArea), del(declaraciones = despues, existentes = primera.cuotas)))
+        assertEquals(nada, determinar(c, del(declaraciones = despues, predio = sinSector, existentes = primera.cuotas)))
     }
 
     @Test
@@ -817,6 +881,7 @@ class ArbitriosTest {
         val pronunciada = filasMiraflores.map { if (it.tipo == Llaves.HABITANTES_VARIACION) it.copy(valorNumerico = BigDecimal("0.8")) else it }
         val d = determinar(contexto(servicios = miraflores, parametros = pronunciada), del(declaraciones = listOf(djMiraflores.copy(numeroHabitantes = 0))))
         assertEquals(listOf("Factor de habitantes negativo en 01-01-0001, uso 001, declaración 2026: 1 + (H − P) × V = -0.6"), d.faltan)
+        assertEquals(listOf(null), d.detalle.map { it.enlace })
         assertEquals(emptyList<CuotaArbitrio>(), d.cuotas)
     }
 

@@ -13,7 +13,8 @@ import java.math.RoundingMode
 import java.time.LocalDate
 
 // what a determination needs that is the same for every predio of the year: read once per determination, and once
-// per lote in the masiva. ordenanza is the year's (null when there is none)
+// per lote in the masiva. ordenanza is the year's (null when there is none). porVia is ubicaciones grouped by their
+// normalized via, built the first time a predio needs it and kept for every other predio of the contexto (#82)
 data class ContextoArbitrios(
     val anio: Int,
     val ordenanza: OrdenanzaArbitrio?,
@@ -21,13 +22,16 @@ data class ContextoArbitrios(
     val parametros: List<ParametroTributario>,
     val usos: List<UsoPredio>,
     val ubicaciones: List<ZonaUbicacion> = emptyList()
-)
+) {
+    val porVia: UbicacionesPorVia by lazy { UbicacionesPorVia(ubicaciones) }
+}
 
 // one predio's: its declarations of the year (every titular's), its contribuyentes' codes by id, its inafectaciones,
 // the cuotas of the year it already has and the ids of the ones annulled (which count for nothing). anteriores are
 // its vigente cuotas of the year before (Arbitrios.vigentes), every servicio's: what TOPE_ARBITRIO measures the year
-// against. registrado is when the predio entered the registry: the earliest fecha_presentacion of its declaraciones
-// of any year (TOPE_ARBITRIO's cut date is measured against it). ArbitriosService reads both only when the year has a
+// against. registrado is when the predio entered the registry: the earliest of its declaraciones of any year, each
+// by its fecha_presentacion or, for a migrated one without it, 1 January of its anio (Arbitrios.registrado;
+// TOPE_ARBITRIO's cut date is measured against it). ArbitriosService reads both only when the year has a
 // TOPE_ARBITRIO row; without anteriores there is no tope
 data class PredioArbitrios(
     val predio: Predio,
@@ -44,21 +48,30 @@ data class PredioArbitrios(
 }
 
 // the cuotas to write, or what is missing to write any: never both. faltan names each missing thing once; detalle
-// is the same, each with the predio and the declaración to fix when it is theirs (the portal links to them)
+// is the same, each with its predio, its declaración when it is one's, and where it gets fixed (Falta.enlace: the
+// portal links to it)
 data class Determinacion(
     val cuotas: List<CuotaArbitrio>,
     val faltan: List<String>,
     val detalle: List<Falta> = emptyList()
 )
 
-// one missing thing: its mensaje (what faltan lists), the predio it was found on and the declaración that lacks it,
-// when a declaración can fix it (an área, a frontis, a uso)
+// one missing thing: its mensaje (what faltan lists), the predio it was found on, the declaración that lacks it (an
+// área, a frontis, a uso) and where it gets fixed (enlace): the declaración (DECLARACION), the predio's ubicación
+// (PREDIO), or neither (null: a row of the ordinance, even one that names the predio's sector or uso, a titular no
+// declaración covers, an invariant). predio and declaracion identify the case; enlace is what the portal links to
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class Falta(
     val mensaje: String,
     val predio: String? = null,
-    val declaracion: String? = null
+    val declaracion: String? = null,
+    val enlace: Enlace? = null
 )
+
+// where a Falta gets fixed: DECLARACION, the declaración's own data (its uso, frontis, área construida);
+// PREDIO, the predio's ubicación (its sector catastral, its via and número for a zona by ubicación, its ubicación
+// respecto del área verde)
+enum class Enlace { DECLARACION, PREDIO }
 
 // rentas' DeterminarArbitrios, without the writing (rentas#31), one PU per uso as the SRTM web (#84). each month of
 // the year is decided on its day of atribución (Periodo): its titular (the titular principal of the declarations that
@@ -122,14 +135,18 @@ object Arbitrios {
 
         fun falta(
             mensaje: String,
-            declaracion: String? = null
+            declaracion: String? = null,
+            enlace: Enlace? = null
         ) {
-            faltan.putIfAbsent(mensaje, Falta(mensaje, predioId, declaracion))
+            faltan.putIfAbsent(mensaje, Falta(mensaje, predioId, declaracion, enlace))
         }
         val cuotas = mutableListOf<CuotaArbitrio>()
         val vigentes = p.vigentes // filtered once, not per month, secuencia and servicio
         var algunMesConTitular = false
         var algunMesConRasgos = false
+        // the predio's zona_arbitrio_ubicacion rows (its via's, tramo's and paridad's), narrowed once, not per servicio
+        // and month
+        val ubicaciones = c.porVia.delPredio(p.predio)
         // TOPE_ARBITRIO's group: the uso código of the predio's lowest secuencia, the first month it has one
         var grupo: Pair<String, LocalDate>? = null
 
@@ -167,22 +184,39 @@ object Arbitrios {
             // problem always fails the whole predio: it never gets silently skipped. a resolved or ambiguous zona
             // (by ubicación, without a sector) lifts the sector requirement for the whole month: the uso mapping is
             // only worth checking then, same as when the sector itself is present. the zona is the predio's: the
-            // same for every secuencia
+            // same for every secuencia. whether the month has a zona does not depend on what is pending: a due
+            // servicio already determined is tried too, until one resolves, only to decide it (its problems are not
+            // named, there is nothing of it to write) - so a run with nothing pending checks the usos the same as
+            // the first one did, with or without a sector
             var rasgosPorUbicacion = false
             val zonas = mutableMapOf<String, String>()
-            for (servicio in servicios) {
+            for (servicio in debidos) {
+                val pendiente = servicio in servicios
+                if (!pendiente && (sector != null || rasgosPorUbicacion)) continue
                 val codigoServicio = servicio.codigo!!.trim()
-                when (val resuelta = Zonas.de(c.ubicaciones, c.parametros, codigoServicio, p.predio, dia)) {
+                when (val resuelta = Zonas.de(ubicaciones, c.parametros, codigoServicio, p.predio, dia)) {
                     is ZonaResuelta.Es -> {
-                        zonas[servicio.id!!] = resuelta.zona
+                        if (pendiente) zonas[servicio.id!!] = resuelta.zona
                         if (sector == null) rasgosPorUbicacion = true
                     }
                     is ZonaResuelta.Ambigua -> {
                         if (sector == null) rasgosPorUbicacion = true
-                        falta("Zona ambigua de $codigoServicio para ${p.predio.via} ${p.predio.numero}: ${resuelta.zonas.joinToString()}")
+                        if (pendiente) {
+                            falta(
+                                "Zona ambigua de $codigoServicio para ${p.predio.via} ${p.predio.numero}: ${resuelta.zonas.joinToString()}",
+                                enlace = Enlace.PREDIO
+                            )
+                        }
                     }
+                    // with a sector, its ARBITRIO_ZONA row is the ordinance's; without one, the predio lacks it
                     ZonaResuelta.Ninguna ->
-                        falta(if (sector != null) "${Llaves.ARBITRIO_ZONA} $sector ${c.anio}" else "Sector catastral del predio $nombre")
+                        if (pendiente) {
+                            if (sector != null) {
+                                falta("${Llaves.ARBITRIO_ZONA} $sector ${c.anio}")
+                            } else {
+                                falta("Sector catastral del predio $nombre", enlace = Enlace.PREDIO)
+                            }
+                        }
                 }
             }
             val rasgos = sector != null || rasgosPorUbicacion
@@ -219,7 +253,7 @@ object Arbitrios {
                             { Dimensiones.afluencia(c.parametros, codigoServicio, codigoUso, c.anio, dia) }
                         )
                     if (faltanDimensiones.isNotEmpty()) {
-                        faltanDimensiones.forEach { falta(it) }
+                        faltanDimensiones.forEach { falta(it.mensaje, enlace = it.enlace) }
                         continue
                     }
                     val claveDeTasa = Llaves.tasa(codigoServicio, valoresDimensiones)
@@ -238,7 +272,7 @@ object Arbitrios {
                     val desglose =
                         when (val calculado = Calculo.calcular(baseLeida ?: Base.PREDIO, tasa.valorNumerico!!, d, habitantes, redondeo, quien)) {
                             is Calculado.Falta -> {
-                                falta(calculado.mensaje, d.id)
+                                falta(calculado.mensaje, d.id, calculado.enlace)
                                 continue
                             }
                             is Calculado.Es -> calculado.desglose
@@ -310,7 +344,11 @@ object Arbitrios {
             sinUso
                 .filterKeys { !algunMesConRasgos || it !in conUso }
                 .forEach { (secuencia, declaracion) ->
-                    falta("Uso del catálogo en la declaración ${c.anio} del predio $nombre" + (if (varios) ", uso $secuencia" else ""), declaracion)
+                    falta(
+                        "Uso del catálogo en la declaración ${c.anio} del predio $nombre" + (if (varios) ", uso $secuencia" else ""),
+                        declaracion,
+                        Enlace.DECLARACION
+                    )
                 }
         }
         if (faltan.isEmpty()) {
@@ -328,8 +366,9 @@ object Arbitrios {
     // TOPE_ARBITRIO (#87): what a predio's year may rise over what it paid the year before (anteriores, every
     // servicio's). its row is its group's: the uso código of its lowest secuencia (Servicios.tope, the longest prefix
     // or "*"). no tope without that row, without anteriores (or with ones that add up to 0), or when the predio was
-    // registered after the row's cut date (the earliest fecha_presentacion of its declaraciones of any year:
-    // registrado, or this year's when it is earlier or absent). otherwise
+    // registered after the row's cut date (the earliest of its declaraciones of any year, each by its
+    // fecha_presentacion or, without one, 1 January of its anio: registrado, or this year's when it is earlier or
+    // absent). otherwise
     // límite = anteriores × (1 + tope/100); when the cuotas of the year already written plus the new ones pass it,
     // only the new ones go down, in proportion, to límite − written (never below 0): each one rounded with its own
     // redondeo (2:ABAJO when it has none), what the rounding leaves goes to the last ones (in the order they were
@@ -343,7 +382,8 @@ object Arbitrios {
     ): List<CuotaArbitrio> {
         if (nuevas.isEmpty() || p.anteriores.isEmpty() || grupo == null) return nuevas
         val tope = Servicios.tope(c.parametros, grupo.first, grupo.second) ?: return nuevas
-        val registrado = listOfNotNull(p.registrado, p.declaraciones.mapNotNull { it.fechaPresentacion }.minOrNull()).minOrNull()
+        val deEsteAnio = p.declaraciones.mapNotNull { it.fechaPresentacion ?: it.anio?.let { anio -> LocalDate.of(anio, 1, 1) } }
+        val registrado = listOfNotNull(p.registrado, deEsteAnio.minOrNull()).minOrNull()
         if (tope.corte != null && registrado != null && tope.corte.isBefore(registrado)) return nuevas
         val pagado = suma(p.anteriores)
         if (pagado.signum() <= 0) return nuevas
@@ -373,6 +413,15 @@ object Arbitrios {
             )
         }
     }
+
+    // when a predio entered the registry, for TOPE_ARBITRIO's cut date (#87): the earliest, over its declaraciones of
+    // any year, of each one's fecha_presentacion or, for one without it (migrated), 1 January of its anio. that is
+    // the earlier of the first fecha_presentacion and 1 January of the lowest anio among those without one: the two
+    // rows ArbitriosService reads. null when there is neither
+    fun registrado(
+        primeraPresentacion: LocalDate?,
+        primerAnioSinFecha: Int?
+    ) = listOfNotNull(primeraPresentacion, primerAnioSinFecha?.let { LocalDate.of(it, 1, 1) }).minOrNull()
 
     // whether the year has a TOPE_ARBITRIO row in force on some month's day: only then does ArbitriosService read a
     // predio's cuotas of the year before. without one, nothing more is read and nothing changes
@@ -433,13 +482,6 @@ object Arbitrios {
     ) = servicios
         .filter { it.id != null && !it.codigo.isNullOrBlank() && vigente(it.vigenciaDesde, it.vigenciaHasta, dia) }
         .sortedWith(compareBy(nullsLast()) { it: ServicioArbitrio -> it.orden }.thenBy { it.codigo })
-
-    // the zona of a sector catastral that day
-    fun zonaDe(
-        parametros: List<ParametroTributario>,
-        sector: String,
-        dia: LocalDate
-    ) = enVigor(parametros, Llaves.ARBITRIO_ZONA, dia) { it.clave?.trim() == sector && !it.texto.isNullOrBlank() }?.texto?.trim()
 
     // the uso de arbitrio of a uso_predio code that day: the mapping of its longest prefix
     fun usoDe(

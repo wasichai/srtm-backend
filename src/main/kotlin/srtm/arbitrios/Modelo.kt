@@ -211,7 +211,7 @@ private fun topeMalo(c: CuotaArbitrio): List<FieldViolation> {
 }
 
 // a cuota with its desglose (base not null): a known base, a positive cantidad, a tasa not negative, P and V
-// together, a known redondeo, and a monto that squares with them (montoDelDesglose) - monto_sin_tope's, when a tope
+// together (and both when H is declared: Calculo.formula prints its factor with them), a known redondeo, and a monto that squares with them (montoDelDesglose) - monto_sin_tope's, when a tope
 // lowered it
 private fun desgloseMalo(c: CuotaArbitrio): List<FieldViolation> {
     val malas = mutableListOf<FieldViolation>()
@@ -220,6 +220,9 @@ private fun desgloseMalo(c: CuotaArbitrio): List<FieldViolation> {
     if (c.tasaUnitaria == null || c.tasaUnitaria.signum() < 0) malas += FieldViolation("tasa_unitaria", "no es negativa")
     if ((c.promedioHabitantes == null) != (c.variacionHabitante == null)) {
         malas += FieldViolation("variacion_habitante", "va con promedio_habitantes: las dos o ninguna")
+    }
+    if (c.habitantes != null && c.promedioHabitantes == null && c.variacionHabitante == null) {
+        malas += FieldViolation("habitantes", "van con promedio_habitantes y variacion_habitante")
     }
     if (!c.redondeo.isNullOrBlank() && Redondeo.de(c.redondeo) == null) {
         malas += FieldViolation("redondeo", "es decimales:modo, con modo ${Redondeo.MODOS.keys.joinToString()}")

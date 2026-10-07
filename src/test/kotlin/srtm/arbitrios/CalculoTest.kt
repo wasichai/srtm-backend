@@ -141,7 +141,8 @@ class CalculoTest {
         val habitantes = Habitantes(BigDecimal("2"), BigDecimal("0.8"))
         val calculado = Calculo.calcular(Base.PREDIO, BigDecimal("10.00"), d, habitantes, null, quien)
         assertEquals(
-            Calculado.Falta("Factor de habitantes negativo en $quien: 1 + (H − P) × V = -0.6"),
+            // no enlace: P and V are the ordinance's, H the declaración's - neither alone is where it is fixed
+            Calculado.Falta("Factor de habitantes negativo en $quien: 1 + (H − P) × V = -0.6", enlace = null),
             calculado
         )
     }
@@ -150,7 +151,7 @@ class CalculoTest {
     fun `frontis nulo falla, por nombre`() {
         val d = declaracion(longitudFrente = null)
         assertEquals(
-            Calculado.Falta("Frontis del predio $quien"),
+            Calculado.Falta("Frontis del predio $quien", Enlace.DECLARACION),
             Calculo.calcular(Base.FRONTIS_ML, BigDecimal("3.37"), d, null, null, quien)
         )
     }
@@ -160,11 +161,11 @@ class CalculoTest {
         val cero = declaracion(longitudFrente = BigDecimal.ZERO)
         val negativo = declaracion(longitudFrente = BigDecimal("-1"))
         assertEquals(
-            Calculado.Falta("Frontis del predio $quien"),
+            Calculado.Falta("Frontis del predio $quien", Enlace.DECLARACION),
             Calculo.calcular(Base.FRONTIS_ML, BigDecimal("3.37"), cero, null, null, quien)
         )
         assertEquals(
-            Calculado.Falta("Frontis del predio $quien"),
+            Calculado.Falta("Frontis del predio $quien", Enlace.DECLARACION),
             Calculo.calcular(Base.FRONTIS_ML, BigDecimal("3.37"), negativo, null, null, quien)
         )
     }
@@ -174,11 +175,11 @@ class CalculoTest {
         val nula = declaracion(areaConstruida = null)
         val negativa = declaracion(areaConstruida = BigDecimal("-10"))
         assertEquals(
-            Calculado.Falta("Área construida del predio $quien"),
+            Calculado.Falta("Área construida del predio $quien", Enlace.DECLARACION),
             Calculo.calcular(Base.AREA_CONSTRUIDA_M2, BigDecimal("0.12"), nula, null, null, quien)
         )
         assertEquals(
-            Calculado.Falta("Área construida del predio $quien"),
+            Calculado.Falta("Área construida del predio $quien", Enlace.DECLARACION),
             Calculo.calcular(Base.AREA_CONSTRUIDA_M2, BigDecimal("0.12"), negativa, null, null, quien)
         )
     }

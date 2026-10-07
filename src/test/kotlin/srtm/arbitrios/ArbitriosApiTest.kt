@@ -81,6 +81,9 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         assertEquals(1, problema["faltan_detalle"].size())
         assertEquals("ARBITRIO_ZONA $sinZona ${e.anio}", problema["faltan_detalle"][0]["mensaje"].asString())
         assertEquals(otro, problema["faltan_detalle"][0]["predio"].asString())
+        // a row of the ordinance: nowhere in the portal fixes it, though it names the predio (enlace, wasichai/srtm-ui#94)
+        assertTrue(problema["faltan_detalle"][0].has("enlace"), problema.toString())
+        assertTrue(problema["faltan_detalle"][0]["enlace"].isNull, problema.toString())
         assertEquals(0, pagina("anio=${e.anio}&predio=$otro")["totalElements"].asInt())
     }
 
@@ -296,7 +299,8 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
     }
 
     // TOPE_ARBITRIO (#87), fictitious 10 %: 120.00 paid the year before caps the escenario's 153.00 at 132.00. a predio
-    // is registered when its first declaración (of any year) was presented, not when this year's was
+    // is registered when its first declaración (of any year) was presented, not when this year's was; a migrated one
+    // without fecha_presentacion counts from 1 January of its year
     @Test
     fun `TOPE_ARBITRIO caps the year at what was paid the year before, by the predio's first declaración`() {
         val e = Escenario()
@@ -317,21 +321,31 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         val enteras = tree(send("POST", "/api/srtm/predios/$nuevo/arbitrios", pedido(e.anio), HttpStatus.CREATED))
         assertEquals(0, BigDecimal("153.00").compareTo(lista(enteras) { it["monto"].decimalValue() }.fold(BigDecimal.ZERO, BigDecimal::add)))
         assertTrue(lista(enteras) { it["tope_aplicado"] }.all { it == null || it.isNull }, enteras.toString())
+
+        // migrated DJs of the 6 years before, without fecha_presentacion, and this year's presented after the cut: it
+        // was registered on 1 January of the first of them, before the cut, so it keeps its tope (#87)
+        val migrado = predioConTope(e, tope, primeraDj = e.anio, migradas = (e.anio - 6)..(e.anio - 1))
+        val conTope = tree(send("POST", "/api/srtm/predios/$migrado/arbitrios", pedido(e.anio), HttpStatus.CREATED))
+        assertEquals(0, BigDecimal("132.00").compareTo(lista(conTope) { it["monto"].decimalValue() }.fold(BigDecimal.ZERO, BigDecimal::add)))
+        assertTrue(lista(conTope) { it["tope_aplicado"].decimalValue() }.all { it.compareTo(BigDecimal("10")) == 0 }, conTope.toString())
     }
 
     // a predio of the escenario's sector with its DJ of the year presented on 1 february, one more DJ of primeraDj
-    // (presented on its 10 march) when that is an earlier year, and 12 cuotas of 10.00 the year before
+    // (presented on its 10 march) when that is an earlier year, one without fecha_presentacion (migrated) for each
+    // year of migradas, and 12 cuotas of 10.00 the year before
     private fun predioConTope(
         e: Escenario,
         parametro: String,
-        primeraDj: Int
+        primeraDj: Int,
+        migradas: IntRange = IntRange.EMPTY
     ): String {
         val predio =
             post(
                 "/api/srtm/predios",
                 mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO", "sector_catastral" to e.sector)
             )["id"].asString()
-        val djs = if (primeraDj < e.anio) listOf(primeraDj to "$primeraDj-03-10", e.anio to "${e.anio}-02-01") else listOf(e.anio to "${e.anio}-02-01")
+        val fechadas = if (primeraDj < e.anio) listOf(primeraDj to "$primeraDj-03-10", e.anio to "${e.anio}-02-01") else listOf(e.anio to "${e.anio}-02-01")
+        val djs: List<Pair<Int, String?>> = migradas.map { it to null } + fechadas
         for ((anio, presentada) in djs) {
             crear(
                 "declaracion_predial",
@@ -343,9 +357,8 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
                     "porcentaje_condominio" to 100,
                     "clase_uso" to "RESIDENCIAL",
                     "sub_clase_uso" to "UNIFAMILIAR",
-                    "uso" to "CASA HABITACIÓN",
-                    "fecha_presentacion" to presentada
-                )
+                    "uso" to "CASA HABITACIÓN"
+                ) + listOfNotNull(presentada?.let { "fecha_presentacion" to it })
             )
         }
         val antes = e.anio - 1

@@ -4,7 +4,8 @@ Ley de Tributación Municipal; art. 8 of Ord. 2386-MML) of a base year's arbitri
 by hand (#88).
 
 Of the base --csv, it takes every TIPOS_ARBITRIO row vigente al 31/12 of --desde (the row of each (tipo, clave)
-with the latest vigencia_desde <= that 31/12; a row that starts later is ignored). Each one becomes a row for the
+with the latest vigencia_desde <= that 31/12; a row that starts later, or one whose vigencia_hasta is before that
+31/12, is ignored). Each one becomes a row for the
 year after --desde, with vigencia_desde = 01/01 of that year:
 - TASA_ARBITRIO: valor_numerico x (1 + --ipc/100), rounded per --redondeo (mirrors srtm.arbitrios.Servicios'
   ABAJO/MEDIO/ARRIBA: DOWN/HALF_UP/UP); texto = "DERIVADA IPC <ipc>% de <clave> <anio>" (anio is --desde).
@@ -66,9 +67,10 @@ def parse_redondeo(valor):
 
 
 def vigentes_al_31_12(filas, anio):
-    """One row per (tipo, clave) of TIPOS_ARBITRIO: the one with the latest vigencia_desde <= AAAA-12-31 of `anio`,
-    in the order its group first appears in `filas`. A row that starts later, or whose vigencia_desde does not
-    parse, is ignored."""
+    """One row per (tipo, clave) of TIPOS_ARBITRIO: the one with the latest vigencia_desde <= AAAA-12-31 of `anio`
+    among those still in force that day, in the order its group first appears in `filas`. A row that starts later,
+    one closed before that day (vigencia_hasta < AAAA-12-31), or one whose vigencia_desde does not parse, is
+    ignored: a closed row neither is derived nor hides an earlier open one of its (tipo, clave)."""
     corte = date(anio, 12, 31)
     mejor, orden = {}, []
     for f in filas:
@@ -76,6 +78,9 @@ def vigentes_al_31_12(filas, anio):
             continue
         desde = _fecha(f.get("vigencia_desde"))
         if desde is None or desde > corte:
+            continue
+        hasta = _fecha(f.get("vigencia_hasta"))
+        if hasta is not None and hasta < corte:
             continue
         llave = (f["tipo"], f.get("clave") or "")
         if llave not in mejor:

@@ -155,16 +155,26 @@ class Registros(
             ?.toString()
     }
 
-    // the lowest value a field holds among the records that match `filters`, nulls left out: one row read, not all of
-    // them (the date a predio's first declaración was presented, for TOPE_ARBITRIO)
+    // the lowest value a field holds among the records that match `filters`, nulls left out, and only among those
+    // where `vacio` (another field) is null when it is given: one row read, not all of them (when a predio's first
+    // declaración was presented, and the first year of one without that date, for TOPE_ARBITRIO)
     suspend fun lowest(
         objectName: String,
         field: String,
-        filters: Map<String, String> = emptyMap()
+        filters: Map<String, String> = emptyMap(),
+        vacio: String? = null
     ): String? {
-        val criterion = RecordCriterion { definition, _ -> "${definition.fields.first { it.name == field }.columnName} IS NOT NULL" }
+        fun columna(
+            definition: ObjectDefinition,
+            nombre: String
+        ) = definition.fields.first { it.name == nombre }.columnName
+        val criteria =
+            listOfNotNull(
+                RecordCriterion { definition, _ -> "${columna(definition, field)} IS NOT NULL" },
+                vacio?.let { RecordCriterion { definition, _ -> "${columna(definition, it)} IS NULL" } }
+            )
         return records
-            .list(objectName, RecordQuery(page = PageRequest.of(0, 1), sort = field, filters = filters, criteria = listOf(criterion)))
+            .list(objectName, RecordQuery(page = PageRequest.of(0, 1), sort = field, filters = filters, criteria = criteria))
             .content
             .firstOrNull()
             ?.attributes

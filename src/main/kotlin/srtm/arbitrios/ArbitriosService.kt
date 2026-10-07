@@ -47,8 +47,8 @@ data class PedidoAnulacion(
 )
 
 // what keeps a year or a predio from being determined: a 422 that names each missing thing. detalle is the same,
-// with the predio and declaración to fix when it is theirs (the portal links to them); empty for a caller that has
-// none (DocumentosArbitrios, DeterminacionMasivaService), same as faltan would be without this
+// each with its predio, its declaración and where it gets fixed (Falta.enlace, what the portal links to); empty
+// for a caller that has none (DocumentosArbitrios, DeterminacionMasivaService), same as faltan would be without this
 class FaltanArbitrios(
     anio: Int,
     val faltan: List<String>,
@@ -89,7 +89,8 @@ class ArbitriosService(
 
     // a predio's declarations of the year, its contribuyentes' codes, its inafectaciones and its cuotas of the year;
     // with conAnteriores (Arbitrios.conTope: the year has a TOPE_ARBITRIO), its vigente cuotas of the year before and
-    // the date it was registered (its first declaración's fecha_presentacion, of any year: one row) too
+    // the date it was registered (Arbitrios.registrado, of its declaraciones of any year: the earliest
+    // fecha_presentacion and the lowest anio of one without it, one row each) too
     suspend fun delPredio(
         predio: Predio,
         anio: Int,
@@ -102,7 +103,12 @@ class ArbitriosService(
         val (existentes, anuladas) = delAnio(id, anio)
         if (!conAnteriores) return PredioArbitrios(predio, declaraciones, codigos, inafectaciones, existentes, anuladas)
         val anteriores = delAnio(id, anio - 1).let { (cs, anuladasAntes) -> Arbitrios.vigentes(cs, anuladasAntes) }
-        val registrado = registros.lowest(DECLARACION, "fecha_presentacion", mapOf("predio" to id))?.let { LocalDate.parse(it.take(10)) }
+        val delPredio = mapOf("predio" to id)
+        val registrado =
+            Arbitrios.registrado(
+                registros.lowest(DECLARACION, "fecha_presentacion", delPredio)?.let { LocalDate.parse(it.take(10)) },
+                registros.lowest(DECLARACION, "anio", delPredio, vacio = "fecha_presentacion")?.toBigDecimalOrNull()?.toInt()
+            )
         return PredioArbitrios(predio, declaraciones, codigos, inafectaciones, existentes, anuladas, anteriores, registrado)
     }
 

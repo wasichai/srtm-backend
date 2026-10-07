@@ -15,6 +15,7 @@ import srtm.emision.TablasCore
 import srtm.emision.TrabajadoresEmision
 import tools.jackson.databind.JsonNode
 import wasichai.core.platform.WasichaiSchemas
+import java.math.BigDecimal
 import java.nio.file.Files
 import java.time.Duration
 import java.util.Base64
@@ -105,6 +106,165 @@ class DeterminacionMasivaApiTest : ConArbitriosApiTest() {
         assertEquals(24, fin["generadas"].asInt())
         assertEquals(listOf(codigo), lista(fin["errores"]) { it["predio"].asString() })
         assertEquals("ARBITRIO_ZONA $sinZona ${e.anio}", fin["errores"][0]["mensaje"].asString())
+    }
+
+    // the masiva and the POST of one predio determine the same (#84): three predios, each made twice, the first of
+    // each pair determined by its POST and the second by the masiva - the same cuotas, servicio by servicio, month by
+    // month and secuencia by secuencia, with the same monto, parametro_aplicado and desglose. one is the example of
+    // the manual SRTM web M02 «Determinación de Deuda», págs. 17-18 (global-constraints.md: 40.44 + 108.00 + 150.30 +
+    // 6.61 = 305.35 a month, recolección by AREA_CONSTRUIDA_M2 with habitantes); one has two usos (a casa and a
+    // tienda, secuencias 001 and 002); one is a casa without habitantes declared. the comercio's tasas, the other
+    // predios' figures and every name of zona, uso, influencia and afluencia are fictitious
+    @Test
+    fun `the masiva determines each predio exactly as its POST does - one of two usos and the manual M02 example`() {
+        val anio = anioLibre()
+        val sector = "S${uniqueDocumento()}"
+        val ordenanza =
+            crear(
+                ORDENANZA_ARBITRIO,
+                mapOf(
+                    "anio" to anio,
+                    "numero" to "000-$anio (ficticia)",
+                    "acuerdo_ratificacion" to "Acuerdo 000 (ficticio)",
+                    "fecha_ratificacion" to "$anio-01-01"
+                )
+            )
+        val (barrido, recoleccion, parques, serenazgo) = List(4) { "M${uniqueDocumento()}" }
+        listOf(barrido, recoleccion, parques, serenazgo).forEachIndexed { i, codigo ->
+            crear(
+                SERVICIO_ARBITRIO,
+                mapOf(
+                    "codigo" to codigo,
+                    "nombre" to "Servicio $codigo",
+                    "orden" to i + 1,
+                    "vigencia_desde" to "$anio-01-01",
+                    "vigencia_hasta" to "$anio-12-31",
+                    "ordenanza" to ordenanza
+                )
+            )
+        }
+
+        fun parametro(
+            tipo: String,
+            clave: String,
+            valor: String? = null,
+            texto: String? = null
+        ) = crear(
+            "parametro_tributario",
+            mapOf(
+                "tipo" to tipo,
+                "clave" to clave,
+                "vigencia_desde" to "$anio-01-01",
+                "vigencia_hasta" to "$anio-12-31",
+                "valor_numerico" to valor,
+                "texto" to texto,
+                "norma" to "Ordenanza ficticia de prueba",
+                "fuente" to "DeterminacionMasivaApiTest",
+                "transcribio" to "TEST A",
+                "verifico" to "TEST B"
+            ).filterValues { it != null }
+        )
+        usoCasa()
+        usoTienda()
+        parametro(Llaves.ARBITRIO_ZONA, sector, texto = "Z1")
+        parametro(Llaves.ARBITRIO_USO, "0101", texto = "CASA")
+        parametro(Llaves.ARBITRIO_USO, "02", texto = "COMERCIO")
+        parametro(Llaves.BASE_ARBITRIO, barrido, texto = "FRONTIS_ML")
+        parametro(Llaves.BASE_ARBITRIO, recoleccion, texto = "AREA_CONSTRUIDA_M2")
+        parametro(Llaves.HABITANTES_PROMEDIO, "$recoleccion:Z1:CASA", valor = "1")
+        parametro(Llaves.HABITANTES_VARIACION, "$recoleccion:Z1:CASA", valor = "1")
+        parametro(Llaves.DIMENSIONES_ARBITRIO, parques, texto = "ZONA,INFLUENCIA,AFLUENCIA")
+        parametro(Llaves.ARBITRIO_ZONA, "$parques:$sector", texto = "Periferia")
+        parametro(Llaves.ARBITRIO_INFLUENCIA, "FRENTE A PARQUE", texto = "Parque")
+        parametro(Llaves.ARBITRIO_AFLUENCIA, "01", texto = "Baja")
+        parametro(Llaves.ARBITRIO_AFLUENCIA, "02", texto = "Alta")
+        // the manual M02's
+        parametro(Llaves.TASA_ARBITRIO, "$barrido:Z1:CASA", valor = "3.37")
+        parametro(Llaves.TASA_ARBITRIO, "$recoleccion:Z1:CASA", valor = "0.12")
+        parametro(Llaves.TASA_ARBITRIO, "$parques:Periferia:Parque:Baja", valor = "150.30")
+        parametro(Llaves.TASA_ARBITRIO, "$serenazgo:Z1:CASA", valor = "6.61")
+        // the comercio's, fictitious
+        parametro(Llaves.TASA_ARBITRIO, "$barrido:Z1:COMERCIO", valor = "5.00")
+        parametro(Llaves.TASA_ARBITRIO, "$recoleccion:Z1:COMERCIO", valor = "0.30")
+        parametro(Llaves.TASA_ARBITRIO, "$parques:Periferia:Parque:Alta", valor = "200.00")
+        parametro(Llaves.TASA_ARBITRIO, "$serenazgo:Z1:COMERCIO", valor = "9.00")
+
+        val contribuyente = inscribir()
+
+        fun predio(vararg usos: Map<String, Any>): String {
+            val id =
+                post(
+                    "/api/srtm/predios",
+                    mapOf(
+                        "codigo" to "T-${uniqueDocumento()}",
+                        "direccion" to "JR. LIMA 123",
+                        "tipo_predio" to "PREDIO URBANO",
+                        "sector_catastral" to sector,
+                        "ubicacion_area_verde" to "FRENTE A PARQUE"
+                    )
+                )["id"].asString()
+            for (uso in usos) {
+                crear("declaracion_predial", mapOf("contribuyente" to contribuyente, "predio" to id, "anio" to anio, "porcentaje_condominio" to 100) + uso)
+            }
+            return id
+        }
+        val casa = mapOf("clase_uso" to "RESIDENCIAL", "sub_clase_uso" to "UNIFAMILIAR", "uso" to "CASA HABITACIÓN")
+        val m02 = casa + mapOf("secuencia_uso" to "1", "longitud_frente" to 12, "area_construida" to 180, "numero_habitantes" to 5)
+        val dosUsos =
+            listOf(
+                casa + mapOf("secuencia_uso" to "1", "longitud_frente" to 8, "area_construida" to 90, "numero_habitantes" to 3),
+                mapOf(
+                    "secuencia_uso" to "2",
+                    "clase_uso" to "COMERCIAL",
+                    "sub_clase_uso" to "TIENDAS",
+                    "uso" to "TIENDA MÚLTIPLE DE DIFERENTE RUBRO",
+                    "longitud_frente" to 4,
+                    "area_construida" to 40
+                )
+            )
+        val sinHabitantes = casa + mapOf("secuencia_uso" to "1", "longitud_frente" to 10, "area_construida" to 100)
+        val casos = listOf(listOf(m02), dosUsos, listOf(sinHabitantes))
+
+        // the first of each pair by its POST, before the masiva: the masiva adds nothing to it
+        val porPost = casos.map { usos -> predio(*usos.toTypedArray()) }
+        porPost.forEach { send("POST", "/api/srtm/predios/$it/arbitrios", pedido(anio), HttpStatus.CREATED) }
+        val porMasiva = casos.map { usos -> predio(*usos.toTypedArray()) }
+        grupo("instancia-a")
+        val fin = esperar(lanzar(anio)) { it["estado"].asString() == "TERMINADA" }
+        assertEquals(0, fin["errores"].size(), fin.toString())
+        assertEquals(6, fin["procesados"].asInt())
+        assertEquals(48 + 96 + 48, fin["generadas"].asInt()) // the masiva's three: 4 servicios x 12 months, x 2 usos
+
+        // each cuota by servicio, month and secuencia: what it was determined with, with no id, predio or clave
+        fun cuotas(predio: String): Map<List<String>, List<String?>> =
+            lista(pagina("anio=$anio&predio=$predio&size=200")["content"]) { it }.associate { q ->
+                fun texto(campo: String) = q[campo]?.takeUnless { it.isNull }?.asString()
+
+                fun numero(campo: String) =
+                    q[campo]
+                        ?.takeUnless { it.isNull }
+                        ?.decimalValue()
+                        ?.stripTrailingZeros()
+                        ?.toPlainString()
+
+                fun logico(campo: String) = q[campo]?.takeUnless { it.isNull }?.asBoolean()?.toString()
+                listOf(texto("servicio")!!, numero("periodo")!!, texto("secuencia_uso")!!) to
+                    listOf(numero("monto"), texto("parametro_aplicado"), texto("parametro"), texto("zona"), texto("uso_arbitrio")) +
+                    listOf(texto("base"), numero("cantidad_base"), numero("tasa_unitaria"), numero("habitantes"), logico("habitantes_presuntos")) +
+                    listOf(numero("promedio_habitantes"), numero("variacion_habitante"), texto("influencia"), texto("afluencia"), texto("redondeo"))
+            }
+        for ((post, masiva) in porPost.zip(porMasiva)) {
+            val esperadas = cuotas(post)
+            assertTrue(esperadas.isNotEmpty())
+            assertEquals(esperadas, cuotas(masiva), "predio $masiva (masiva) frente a $post (POST)")
+        }
+        val (m02Post, dosUsosPost) = porPost.map(::cuotas)
+        assertEquals(48, m02Post.size)
+        val enero = m02Post.filterKeys { it[1] == "1" }.values.map { BigDecimal(it[0]) }
+        assertEquals(listOf("6.61", "40.44", "108", "150.3"), enero.sorted().map { it.toPlainString() }) // serenazgo, barrido, recolección, parques
+        assertEquals(0, BigDecimal("305.35").compareTo(enero.fold(BigDecimal.ZERO, BigDecimal::add)))
+        assertEquals(96, dosUsosPost.size)
+        assertEquals(setOf("001", "002"), dosUsosPost.keys.map { it[2] }.toSet())
     }
 
     @Test
@@ -198,6 +358,12 @@ class DeterminacionMasivaApiTest : ConArbitriosApiTest() {
         send("DELETE", "$MASIVAS/$id", null, HttpStatus.NO_CONTENT)
         send("GET", "$MASIVAS/$id", null, HttpStatus.NOT_FOUND)
         assertEquals(0, lotesDe(id).size)
+    }
+
+    // the srtm's tienda múltiple, a uso of the clase COMERCIAL, once in the shared db
+    private fun usoTienda() {
+        if (tree(send("GET", "/api/objects/uso_predio/records?codigo=020326", null, HttpStatus.OK))["totalElements"].asInt() > 0) return
+        crear("uso_predio", mapOf("codigo" to "020326", "clase" to "COMERCIAL", "sub_clase" to "TIENDAS", "uso" to "TIENDA MÚLTIPLE DE DIFERENTE RUBRO"))
     }
 
     private fun lanzar(anio: Int): String = tree(send("POST", MASIVAS, pedido(anio), HttpStatus.ACCEPTED))["id"].asString()

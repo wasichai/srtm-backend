@@ -32,7 +32,7 @@ class DimensionesTest {
     fun `influencia without ubicacion de area verde is faltan, naming the predio`() {
         val predio = Predio(id = "p-1", codigo = "01-01-0001", ubicacionAreaVerde = null)
         assertEquals(
-            ValorDimension.Falta("Ubicación respecto del área verde del predio 01-01-0001"),
+            ValorDimension.Falta("Ubicación respecto del área verde del predio 01-01-0001", Enlace.PREDIO),
             Dimensiones.influencia(emptyList(), predio, "01-01-0001", anio, dia)
         )
     }
@@ -41,7 +41,7 @@ class DimensionesTest {
     fun `influencia without its mapping is faltan, naming the ubicacion`() {
         val predio = Predio(id = "p-1", codigo = "01-01-0001", ubicacionAreaVerde = "FRENTE A PARQUE")
         assertEquals(
-            ValorDimension.Falta("${Llaves.ARBITRIO_INFLUENCIA} FRENTE A PARQUE 2026"),
+            ValorDimension.Falta("${Llaves.ARBITRIO_INFLUENCIA} FRENTE A PARQUE 2026", enlace = null), // a row of the ordinance
             Dimensiones.influencia(emptyList(), predio, "01-01-0001", anio, dia)
         )
     }
@@ -98,7 +98,7 @@ class DimensionesTest {
                 { error("no debería llamarse") }
             )
         assertEquals(listOf("CASA", "A"), valores)
-        assertEquals(emptyList<String>(), faltan)
+        assertEquals(emptyList<ValorDimension.Falta>(), faltan)
     }
 
     @Test
@@ -112,7 +112,7 @@ class DimensionesTest {
                 { ValorDimension.Es("Baja") }
             )
         assertEquals(listOf("A", "Frente a Parque y/o Área Verde", "Baja"), valores)
-        assertEquals(emptyList<String>(), faltan)
+        assertEquals(emptyList<ValorDimension.Falta>(), faltan)
     }
 
     @Test
@@ -122,10 +122,11 @@ class DimensionesTest {
                 listOf(Dimension.ZONA, Dimension.INFLUENCIA, Dimension.AFLUENCIA),
                 "A",
                 "CASA",
-                { ValorDimension.Falta("falta influencia") },
+                { ValorDimension.Falta("falta influencia", Enlace.PREDIO) },
                 { ValorDimension.Falta("falta afluencia") }
             )
         assertEquals(listOf("A"), valores) // ZONA still resolves; the caller discards it anyway since faltan is not empty
-        assertEquals(listOf("falta influencia", "falta afluencia"), faltan)
+        // each with its enlace, for Arbitrios.determinar to keep
+        assertEquals(listOf(ValorDimension.Falta("falta influencia", Enlace.PREDIO), ValorDimension.Falta("falta afluencia")), faltan)
     }
 }

@@ -1,9 +1,13 @@
 package srtm.arbitrios
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import srtm.emision.Cabecera
+import srtm.emision.PdfRenderer
+import srtm.emision.texto
 import srtm.impuesto.ParametroTributario
 import srtm.rentas.Contribuyente
 import java.math.BigDecimal
@@ -200,6 +204,44 @@ class HojaHlaTest {
         val p = h.predios.single()
         assertEquals("Z1", p.zona)
         assertEquals("CASA / COMERCIO", p.uso)
+    }
+
+    // the template (#85): a predio with calculos prints its «Cálculo» block and its lines; one without (cuotas of
+    // before the desglose) prints none, as the HLA was before
+    @Test
+    fun `the HLA prints the Calculo block of a predio with calculos, and none for one without`() {
+        val formula = "0.0514 S/ por m² × 100.00 m² × (1 + (4 − 2) × 0.50) = 10.28"
+        val conCalculo =
+            matrizDe(FilaServicio(servicios[0], List(12) { if (it < 5) cuotaDesglose(desglose("001", formula)) else null }, BigDecimal.ZERO))
+                .copy(predio = PredioResumen("p2", "01-01-0002", "JR. CUZCO 456"))
+
+        fun pdf(matrices: List<MatrizArbitrios>) =
+            texto(
+                PdfRenderer().render(
+                    "hla",
+                    mapOf(
+                        "hla" to
+                            hojaHla(
+                                Cabecera("MUNICIPALIDAD DE PRUEBA"),
+                                Contribuyente(id = "c1", codigo = "000001", nombreCompleto = "ANA"),
+                                ArbitriosContribuyente(2026, Persona("c1", "000001", "ANA"), matrices, BigDecimal("63.75"), LocalDate.of(2026, 3, 15)),
+                                ordenanza,
+                                (1..12).associateWith { LocalDate.of(2026, it, 28) },
+                                mapOf("p1" to (listOf("Z1") to listOf("CASA")), "p2" to (listOf("Z1") to listOf("CASA"))),
+                                LocalDateTime.of(2026, 4, 1, 10, 30)
+                            )
+                    )
+                )
+            ).replace(Regex("\\s+"), " ")
+
+        val sinCalculo = pdf(listOf(matriz))
+        assertFalse("Cálculo" in sinCalculo, sinCalculo)
+        assertFalse("S/ por" in sinCalculo, sinCalculo)
+
+        val ambos = pdf(listOf(matriz, conCalculo))
+        assertEquals(1, Regex("Cálculo").findAll(ambos).count(), ambos) // the second predio's, not the first's
+        assertTrue("Limpieza pública (uso 001), ene–may: $formula" in ambos, ambos)
+        assertTrue(ambos.indexOf("01-01-0002") < ambos.indexOf("Cálculo"), ambos)
     }
 
     @Test
