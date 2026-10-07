@@ -49,13 +49,14 @@ class LiquidacionApiTest : ConParametrosApiTest() {
         assertTrue(lista(l["faltan"]).isEmpty())
     }
 
+    // 2099: a year no UIT row reaches, in the csv or in another test's data (2027's will come)
     @Test
     fun `a year without its parameters says which are missing and no figure`() {
         val a = inscribir()
-        declarar(a, predio(), autoavaluo = "60000.00", anio = 2027)
+        declarar(a, predio(), autoavaluo = "60000.00", anio = 2099)
 
-        val l = liquidacion(a, 2027)
-        assertEquals(listOf("UIT 2027"), lista(l["faltan"]).map { it.asString() })
+        val l = liquidacion(a, 2099)
+        assertEquals(listOf("UIT 2099"), lista(l["faltan"]).map { it.asString() })
         assertEquals(BigDecimal("60000.00"), l["base"].let(::dec))
         for (campo in listOf("uit", "impuestoCalculado", "minimo", "minimoAplicado", "impuestoAnual")) {
             assertTrue(l.has(campo) && l[campo].isNull, "$campo: $l")

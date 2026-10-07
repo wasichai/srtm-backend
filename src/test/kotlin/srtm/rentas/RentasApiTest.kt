@@ -55,7 +55,8 @@ class RentasApiTest : SrtmApiTest() {
             .expectBody()
             .jsonPath("$[0].contribuyente.numero_documento")
             .isEqualTo(documento)
-        get("/api/srtm/predios/$predioId")
+        // the year of the declaración, not the current one: without anio the ficha counts this year's titulares
+        get("/api/srtm/predios/$predioId?anio=2026")
             .expectBody()
             .jsonPath("$.titulares")
             .isEqualTo(1)
@@ -308,7 +309,11 @@ class RentasApiTest : SrtmApiTest() {
         val second =
             post(
                 "/api/srtm/contribuyentes/$otro/declaraciones-juradas",
-                mapOf("declaracion" to mapOf("condicion_propiedad" to "CONDOMINO", "porcentaje_condominio" to 50), "predio_id" to dj["predio"]["id"].asString())
+                mapOf(
+                    // presented in 2026 like the first, so it joins that condominio whatever year the test runs in
+                    "declaracion" to mapOf("condicion_propiedad" to "CONDOMINO", "porcentaje_condominio" to 50, "fecha_presentacion" to "2026-09-25"),
+                    "predio_id" to dj["predio"]["id"].asString()
+                )
             )
         assertEquals(dj["predio"]["id"].asString(), second["predio"]["id"].asString())
         assertEquals(declaracion["numero_declaracion"].asInt() + 1, second["declaracion"]["numero_declaracion"].asInt())
