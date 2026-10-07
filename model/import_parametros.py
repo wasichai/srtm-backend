@@ -51,7 +51,10 @@ def read_parametros(path):
 # <prefix of a uso_predio code, 2, 4 or 6 digits, alone or as servicio:prefijo> its nivel de afluencia in texto;
 # TOPE_ARBITRIO <prefix of a uso_predio code, 2, 4 or 6 digits, or *> the maximum % a predio's year may rise over
 # what it paid the year before in valor_numerico (above 0), and in texto, empty or YYYY-MM-DD, the cut date of the
-# predio's registration (#87)
+# predio's registration (#87); ARBITRIO_PU_POR_USO (clave vacía, global) valor_numerico 1, in force from the 1 January
+# of the first year a predio pays one PU per uso: a year is per uso when a row rules its 1 January (any other
+# vigencia_desde would leave its year ambiguous); without one, one cuota per servicio and month, the titular
+# principal's lowest secuencia (#80)
 TASA_ARBITRIO = "TASA_ARBITRIO"
 ARBITRIO_ZONA = "ARBITRIO_ZONA"
 ARBITRIO_USO = "ARBITRIO_USO"
@@ -64,9 +67,10 @@ REDONDEO_ARBITRIO = "REDONDEO_ARBITRIO"
 ARBITRIO_INFLUENCIA = "ARBITRIO_INFLUENCIA"
 ARBITRIO_AFLUENCIA = "ARBITRIO_AFLUENCIA"
 TOPE_ARBITRIO = "TOPE_ARBITRIO"
+ARBITRIO_PU_POR_USO = "ARBITRIO_PU_POR_USO"
 TIPOS_ARBITRIO = (TASA_ARBITRIO, ARBITRIO_ZONA, ARBITRIO_USO, ARBITRIO_VENCIMIENTO, BASE_ARBITRIO, DIMENSIONES_ARBITRIO,
                   HABITANTES_PROMEDIO, HABITANTES_VARIACION, REDONDEO_ARBITRIO, ARBITRIO_INFLUENCIA, ARBITRIO_AFLUENCIA,
-                  TOPE_ARBITRIO)
+                  TOPE_ARBITRIO, ARBITRIO_PU_POR_USO)
 BASES_ARBITRIO = ("PREDIO", "FRONTIS_ML", "AREA_CONSTRUIDA_M2")
 DIMENSIONES_VALIDAS = ("ZONA", "USO", "INFLUENCIA", "AFLUENCIA")
 
@@ -215,6 +219,14 @@ def _error_arbitrio(tipo, clave, texto, p, contexto):
             return "un tope es un porcentaje mayor que 0 (valor_numerico)"
         if texto and _fecha(texto) is None:
             return "la fecha de corte de un tope (texto) es AAAA-MM-DD, o vacía"
+    elif tipo == ARBITRIO_PU_POR_USO:
+        if clave:
+            return "la clave de un PU por uso es global (vacía)"
+        if _decimal(p) != 1:
+            return "un PU por uso tiene valor_numerico 1"
+        desde = _fecha(p.get("vigencia_desde"))
+        if desde is None or (desde.month, desde.day) != (1, 1):
+            return "un PU por uso rige desde el 1 de enero de un año (vigencia_desde AAAA-01-01)"
     return None
 
 
