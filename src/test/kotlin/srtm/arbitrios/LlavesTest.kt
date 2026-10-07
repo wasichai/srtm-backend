@@ -26,4 +26,9 @@ class LlavesTest {
         assertEquals("LIMPIEZA:Z1:CASA", Llaves.tasa("LIMPIEZA", "Z1", "CASA"))
         assertEquals("TASA_ARBITRIO:LIMPIEZA:Z1:CASA", Llaves.aplicado("LIMPIEZA:Z1:CASA"))
     }
+
+    @Test
+    fun `a tasa's key can take any number of valores, in order`() {
+        assertEquals("P:A:Frente:Baja", Llaves.tasa("P", listOf("A", "Frente", "Baja")))
+    }
 }

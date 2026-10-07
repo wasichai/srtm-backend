@@ -181,14 +181,4 @@ object Arbitrios {
         }.maxWithOrNull(compareBy<ParametroTributario> { it.clave!!.trim().length }.thenBy { it.vigenciaDesde })
         ?.texto
         ?.trim()
-
-    // the row of a tipo in force that day that matches; the latest one when several do
-    private fun enVigor(
-        parametros: List<ParametroTributario>,
-        tipo: String,
-        dia: LocalDate,
-        coincide: (ParametroTributario) -> Boolean
-    ) = parametros
-        .filter { it.tipo == tipo && vigente(it.vigenciaDesde, it.vigenciaHasta, dia) && coincide(it) }
-        .maxByOrNull { it.vigenciaDesde!! }
 }

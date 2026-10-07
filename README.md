@@ -333,13 +333,20 @@ firma, y se cargan con `import_parametros.py --csv <archivo>`:
 
 | `tipo` | `clave` | Valor |
 |---|---|---|
-| `TASA_ARBITRIO` | `servicio:zona:uso` | `valor_numerico`: la tasa mensual en soles, no negativa |
+| `TASA_ARBITRIO` | `servicio` y una parte por cada Dimension del servicio (`zona:uso` por defecto) | `valor_numerico`: la tasa mensual en soles, no negativa |
 | `ARBITRIO_ZONA` | el sector catastral | `texto`: su zona según la ordenanza |
 | `ARBITRIO_USO` | un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos (gana el más largo) | `texto`: su uso de arbitrio |
 | `ARBITRIO_VENCIMIENTO` | el mes, de 1 a 12 | `texto`: su vencimiento, `AAAA-MM-DD` |
+| `BASE_ARBITRIO` | el servicio | `texto`: su Base (`PREDIO`, `FRONTIS_ML` o `AREA_CONSTRUIDA_M2`); ej. Miraflores 2026, RRSS: `AREA_CONSTRUIDA_M2` |
+| `DIMENSIONES_ARBITRIO` | el servicio | `texto`: sus Dimension separadas por comas, sin repetir (`ZONA`, `USO`, `INFLUENCIA`, `AFLUENCIA`); ej. Miraflores 2026, PARQUES: `ZONA,INFLUENCIA,AFLUENCIA` |
+| `HABITANTES_PROMEDIO` / `HABITANTES_VARIACION` | `servicio:zona:uso` | `valor_numerico`: sus habitantes promedio y su variación, mayor que 0 (una sin la otra en el archivo no cuenta); ej. Miraflores 2026: P=2, V=0.5 |
+| `REDONDEO_ARBITRIO` | vacía (global a la ordenanza) | `texto`: `decimales:modo` (`ABAJO`, `MEDIO` o `ARRIBA`); ej. Miraflores 2026: `2:ABAJO` |
 
-`import_parametros.py` revisa la forma de estas filas antes de enviar nada: la llave de la tasa, el valor, el mes, la
-fecha y que `transcribio` y `verifico` sean dos personas distintas. Si una no encaja, la nombra y sale con `2`.
+`import_parametros.py` revisa la forma de estas filas antes de enviar nada: la llave de la tasa (según las
+`DIMENSIONES_ARBITRIO` vigentes de su servicio), el valor, el mes, la fecha y que `transcribio` y `verifico` sean dos
+personas distintas. Si una no encaja, la nombra y sale con `2`. `BASE_ARBITRIO`, `DIMENSIONES_ARBITRIO`,
+`HABITANTES_PROMEDIO`, `HABITANTES_VARIACION` y `REDONDEO_ARBITRIO` son opcionales: sin estas filas el cálculo es el
+de siempre (base `PREDIO`, dimensiones `ZONA,USO` y sin redondeo adicional).
 
 **La ordenanza, los servicios y las inafectaciones** se cargan con `import_arbitrios.py`, desde un JSON:
 
