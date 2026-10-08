@@ -81,6 +81,15 @@ object Zonas {
         servicio: String,
         predio: Predio,
         dia: LocalDate
+    ) = de(ubicaciones, IndiceParametros(parametros), servicio, predio, dia)
+
+    // the same, with the contexto's rows indexed (ContextoArbitrios.indice): what a determination uses
+    fun de(
+        ubicaciones: UbicacionesDelPredio,
+        parametros: IndiceParametros,
+        servicio: String,
+        predio: Predio,
+        dia: LocalDate
     ): ZonaResuelta {
         val candidatas = ubicaciones.filas.filter { vigente(it.vigenciaDesde, it.vigenciaHasta, dia) }
         val niveles =
@@ -96,9 +105,11 @@ object Zonas {
 
         val sector = predio.sectorCatastral?.trim()?.ifEmpty { null } ?: return ZonaResuelta.Ninguna
         val porServicio = "$servicio:$sector"
-        enVigor(parametros, Llaves.ARBITRIO_ZONA, dia) { it.clave?.trim() == porServicio && !it.texto.isNullOrBlank() }
+        parametros
+            .enVigor(Llaves.ARBITRIO_ZONA, porServicio, dia) { !it.texto.isNullOrBlank() }
             ?.let { return ZonaResuelta.Es(it.texto!!.trim(), "${Llaves.ARBITRIO_ZONA}:$porServicio") }
-        enVigor(parametros, Llaves.ARBITRIO_ZONA, dia) { it.clave?.trim() == sector && !it.texto.isNullOrBlank() }
+        parametros
+            .enVigor(Llaves.ARBITRIO_ZONA, sector, dia) { !it.texto.isNullOrBlank() }
             ?.let { return ZonaResuelta.Es(it.texto!!.trim(), "${Llaves.ARBITRIO_ZONA}:$sector") }
         return ZonaResuelta.Ninguna
     }

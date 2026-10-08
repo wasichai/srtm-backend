@@ -11,11 +11,14 @@ import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
 import java.time.LocalDate
+import java.util.IdentityHashMap
 
 // what a determination needs that is the same for every predio of the year: read once per determination, and once
 // per lote in the masiva. ordenanza is the year's (null when there is none). porVia is ubicaciones grouped by their
 // normalized via, built the first time a predio needs it and kept for every other predio of the contexto (#82).
-// puPorUso, whether the year pays one PU per uso (Arbitrios.puPorUso), is decided once too
+// indice is parametros grouped by tipo and clave (IndiceParametros), built the same way: every lookup of a predio's
+// determination reads it instead of the whole list. puPorUso, whether the year pays one PU per uso
+// (Arbitrios.puPorUso), and what the year lacks (Arbitrios.faltanDelAnio) are decided once too
 data class ContextoArbitrios(
     val anio: Int,
     val ordenanza: OrdenanzaArbitrio?,
@@ -25,7 +28,9 @@ data class ContextoArbitrios(
     val ubicaciones: List<ZonaUbicacion> = emptyList()
 ) {
     val porVia: UbicacionesPorVia by lazy { UbicacionesPorVia(ubicaciones) }
-    val puPorUso: Boolean by lazy { Arbitrios.puPorUso(parametros, anio) }
+    val indice: IndiceParametros by lazy { IndiceParametros(parametros) }
+    val puPorUso: Boolean by lazy { Arbitrios.puPorUso(indice, anio) }
+    internal val faltanDelAnio: List<String> by lazy { Arbitrios.faltanDelAnio(this) }
 }
 
 // one predio's: its declarations of the year (every titular's), its contribuyentes' codes by id, its inafectaciones,
@@ -123,7 +128,7 @@ object Arbitrios {
         observacion: String,
         hoy: LocalDate
     ): Determinacion {
-        val delAnio = faltanDelAnio(c)
+        val delAnio = c.faltanDelAnio
         if (delAnio.isNotEmpty()) return Determinacion(emptyList(), delAnio, delAnio.map { Falta(it) })
 
         val predioId = requireNotNull(p.predio.id) { "El predio no tiene id" }
@@ -147,6 +152,11 @@ object Arbitrios {
         }
         val cuotas = mutableListOf<CuotaArbitrio>()
         val vigentes = p.vigentes // filtered once, not per month, secuencia and servicio
+        val parametros = c.indice
+        // each declaración's uso código, read from the catalog once, not on every month it covers
+        val codigos = IdentityHashMap<Declaracion, String?>()
+
+        fun codigoDe(d: Declaracion) = codigos.getOrPut(d) { codigoDeUso(d, c.usos) }
         var algunMesConTitular = false
         var algunMesConRasgos = false
         // the predio's zona_arbitrio_ubicacion rows (its via's, tramo's and paridad's), narrowed once, not per servicio
@@ -165,8 +175,12 @@ object Arbitrios {
             // before the secuencia counts as the first one's
             val usos = (if (c.puPorUso) porSecuencia(cubren, p.codigos) else listOf(titular)).map { it to secuenciaUso(it.secuenciaUso) }
             val menor = usos.first().second
-            if (grupo == null) grupo = codigoDeUso(usos.first().first, c.usos)?.let { it to dia }
-            val redondeo = Servicios.redondeo(c.parametros, dia)
+            if (grupo == null) grupo = codigoDe(usos.first().first)?.let { it to dia }
+            val redondeo = Servicios.redondeo(parametros, dia)
+            // what does not depend on the secuencia: the predio's nivel de influencia, and each servicio's dimensiones
+            // and base, read once per month
+            val influencia by lazy(LazyThreadSafetyMode.NONE) { Dimensiones.influencia(parametros, p.predio, nombre, c.anio, dia) }
+            val reglas = HashMap<String, Pair<List<Dimension>, Base?>>()
 
             // the servicios due this month, their inafectaciones filtered out; and for each secuencia, the ones it
             // has no cuota of yet. before the year of one PU per uso, any cuota of the servicio and month counts, as
@@ -205,7 +219,7 @@ object Arbitrios {
                 val pendiente = servicio in servicios
                 if (!pendiente && (sector != null || rasgosPorUbicacion)) continue
                 val codigoServicio = servicio.codigo!!.trim()
-                when (val resuelta = Zonas.de(ubicaciones, c.parametros, codigoServicio, p.predio, dia)) {
+                when (val resuelta = Zonas.de(ubicaciones, parametros, codigoServicio, p.predio, dia)) {
                     is ZonaResuelta.Es -> {
                         if (pendiente) zonas[servicio.id!!] = resuelta.zona
                         if (sector == null) rasgosPorUbicacion = true
@@ -237,7 +251,7 @@ object Arbitrios {
                 // servicio without one) and the secuencia's declaración has a uso código. same as today: a month
                 // missing either (unlike a zona/sector problem) is just skipped - it only fails the predio when the
                 // secuencia never has a uso código, or NO month and secuencia ever has both (see the end)
-                val codigoUso = codigoDeUso(d, c.usos)
+                val codigoUso = codigoDe(d)
                 if (codigoUso == null) {
                     sinUso.putIfAbsent(secuencia, d.id)
                 } else {
@@ -245,7 +259,7 @@ object Arbitrios {
                     if (rasgos) algunMesConRasgos = true
                 }
 
-                val uso = if (rasgos && codigoUso != null) usoDe(c.parametros, codigoUso, dia) else null
+                val uso = if (rasgos && codigoUso != null) usoDe(parametros, codigoUso, dia) else null
                 if (rasgos && codigoUso != null && uso == null) falta("${Llaves.ARBITRIO_USO} $codigoUso ${c.anio}")
                 if (!rasgos || codigoUso == null || uso == null) continue
 
@@ -254,14 +268,17 @@ object Arbitrios {
                     val servicioId = servicio.id!!
                     val zona = zonas[servicioId] ?: continue
                     val codigoServicio = servicio.codigo!!.trim()
-                    val dimensiones = Servicios.dimensiones(c.parametros, codigoServicio, dia)
+                    val (dimensiones, baseLeida) =
+                        reglas.getOrPut(codigoServicio) {
+                            Servicios.dimensiones(parametros, codigoServicio, dia) to Servicios.baseLeida(parametros, codigoServicio, dia)
+                        }
                     val (valoresDimensiones, faltanDimensiones) =
                         Dimensiones.valores(
                             dimensiones,
                             zona,
                             uso,
-                            { Dimensiones.influencia(c.parametros, p.predio, nombre, c.anio, dia) },
-                            { Dimensiones.afluencia(c.parametros, codigoServicio, codigoUso, c.anio, dia) }
+                            { influencia },
+                            { Dimensiones.afluencia(parametros, codigoServicio, codigoUso, c.anio, dia) }
                         )
                     if (faltanDimensiones.isNotEmpty()) {
                         faltanDimensiones.forEach { falta(it.mensaje, enlace = it.enlace) }
@@ -270,7 +287,7 @@ object Arbitrios {
                     val claveDeTasa = Llaves.tasa(codigoServicio, valoresDimensiones)
                     val claveDeTasaSinZona = Llaves.tasaSinZona(codigoServicio, valoresDimensiones, dimensiones.firstOrNull() == Dimension.ZONA)
 
-                    fun tasaDe(clave: String) = enVigor(c.parametros, Llaves.TASA_ARBITRIO, dia) { it.clave?.trim() == clave && it.valorNumerico != null }
+                    fun tasaDe(clave: String) = parametros.enVigor(Llaves.TASA_ARBITRIO, clave, dia) { it.valorNumerico != null }
                     // the exact key always wins; the empty-zona one (when the servicio's first dimension is ZONA)
                     // is tried only when it does not exist (import_tasas_arbitrio.py, #86)
                     val tasa = tasaDe(claveDeTasa) ?: claveDeTasaSinZona?.let(::tasaDe)
@@ -278,8 +295,7 @@ object Arbitrios {
                         falta("${Llaves.TASA_ARBITRIO} $claveDeTasa ${c.anio}")
                         continue
                     }
-                    val baseLeida = Servicios.baseLeida(c.parametros, codigoServicio, dia)
-                    val habitantes = Servicios.habitantes(c.parametros, codigoServicio, zona, uso, dia)
+                    val habitantes = Servicios.habitantes(parametros, codigoServicio, zona, uso, dia)
                     val desglose =
                         when (val calculado = Calculo.calcular(baseLeida ?: Base.PREDIO, tasa.valorNumerico!!, d, habitantes, redondeo, quien)) {
                             is Calculado.Falta -> {
@@ -394,7 +410,7 @@ object Arbitrios {
         grupo: Pair<String, LocalDate>?
     ): List<CuotaArbitrio> {
         if (nuevas.isEmpty() || p.anteriores.isEmpty() || grupo == null) return nuevas
-        val tope = Servicios.tope(c.parametros, grupo.first, grupo.second) ?: return nuevas
+        val tope = Servicios.tope(c.indice, grupo.first, grupo.second) ?: return nuevas
         val deEsteAnio = p.declaraciones.mapNotNull { it.fechaPresentacion ?: it.anio?.let { anio -> LocalDate.of(anio, 1, 1) } }
         val registrado = listOfNotNull(p.registrado, deEsteAnio.minOrNull()).minOrNull()
         if (tope.corte != null && registrado != null && tope.corte.isBefore(registrado)) return nuevas
@@ -439,8 +455,8 @@ object Arbitrios {
     // whether the year has a TOPE_ARBITRIO row in force on some month's day: only then does ArbitriosService read a
     // predio's cuotas of the year before. without one, nothing more is read and nothing changes
     fun conTope(c: ContextoArbitrios) =
-        c.parametros.any { p ->
-            p.tipo == Llaves.TOPE_ARBITRIO && Periodo.MESES.any { vigente(p.vigenciaDesde, p.vigenciaHasta, Periodo.atribucion(c.anio, it)) }
+        c.indice.deTipo(Llaves.TOPE_ARBITRIO).any { p ->
+            Periodo.MESES.any { vigente(p.vigenciaDesde, p.vigenciaHasta, Periodo.atribucion(c.anio, it)) }
         }
 
     // whether a year pays one PU per uso (#80): an ARBITRIO_PU_POR_USO row, global (clave empty) and of valor 1, in
@@ -448,7 +464,12 @@ object Arbitrios {
     fun puPorUso(
         parametros: List<ParametroTributario>,
         anio: Int
-    ) = enVigor(parametros, Llaves.ARBITRIO_PU_POR_USO, LocalDate.of(anio, 1, 1)) {
+    ) = puPorUso(IndiceParametros(parametros), anio)
+
+    fun puPorUso(
+        parametros: IndiceParametros,
+        anio: Int
+    ) = parametros.enVigor(Llaves.ARBITRIO_PU_POR_USO, LocalDate.of(anio, 1, 1)) {
         it.clave?.trim().isNullOrEmpty() && it.valorNumerico?.compareTo(BigDecimal.ONE) == 0
     } != null
 
@@ -511,10 +532,17 @@ object Arbitrios {
         parametros: List<ParametroTributario>,
         codigoUso: String,
         dia: LocalDate
+    ) = usoDe(IndiceParametros(parametros), codigoUso, dia)
+
+    fun usoDe(
+        parametros: IndiceParametros,
+        codigoUso: String,
+        dia: LocalDate
     ) = parametros
+        .deTipo(Llaves.ARBITRIO_USO)
         .filter {
             val prefijo = it.clave?.trim()
-            it.tipo == Llaves.ARBITRIO_USO && !prefijo.isNullOrEmpty() && codigoUso.startsWith(prefijo) && !it.texto.isNullOrBlank() &&
+            !prefijo.isNullOrEmpty() && codigoUso.startsWith(prefijo) && !it.texto.isNullOrBlank() &&
                 vigente(it.vigenciaDesde, it.vigenciaHasta, dia)
         }.maxWithOrNull(compareBy<ParametroTributario> { it.clave!!.trim().length }.thenBy { it.vigenciaDesde })
         ?.texto

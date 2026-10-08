@@ -307,7 +307,7 @@ class ArbitriosService(
     ): List<CuotaArbitrio> {
         if (d.faltan.isNotEmpty()) throw FaltanArbitrios(anio, d.faltan, d.detalle)
         if (d.cuotas.isEmpty()) return emptyList()
-        return transaccion.executeAndAwait { d.cuotas.map { registros.create(CUOTA_ARBITRIO, CuotaArbitrio::class.java, Records.attributes(it)) } }
+        return transaccion.executeAndAwait { registros.createAll(CUOTA_ARBITRIO, CuotaArbitrio::class.java, d.cuotas.map(Records::attributes)) }
     }
 
     // the cuotas of the year charged to a contribuyente
