@@ -71,6 +71,42 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         assertEquals("8.50 S/ por predio", enero["desglose"][0]["formula"].asString())
     }
 
+    // a predio of two usos (#80). before the year of one PU per uso (no ARBITRIO_PU_POR_USO in force on its 1
+    // January) it pays the secuencia of its titular principal's DJ alone: nothing stays pending and its HLA is made.
+    // with the row loaded for the year, the 002's are pending and the POST adds them
+    @Test
+    fun `a predio of two usos pays one PU until the year of ARBITRIO_PU_POR_USO, then one per uso`() {
+        val e = Escenario(vencimientos = true)
+        crear(
+            "declaracion_predial",
+            mapOf(
+                "contribuyente" to e.contribuyente,
+                "predio" to e.predio,
+                "anio" to e.anio,
+                "secuencia_uso" to "2",
+                "porcentaje_condominio" to 100,
+                "clase_uso" to "RESIDENCIAL",
+                "sub_clase_uso" to "UNIFAMILIAR",
+                "uso" to "CASA HABITACIÓN"
+            )
+        )
+        val unPu = tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))
+        assertEquals(24, unPu.size()) // 2 servicios x 12 months, one uso
+        assertEquals(setOf("001"), lista(unPu) { it["secuencia_uso"].asString() }.toSet())
+        assertEquals(0, matriz(e)["pendientes"].asInt())
+        send("GET", "/api/srtm/contribuyentes/${e.contribuyente}/hla?anio=${e.anio}", null, HttpStatus.OK)
+
+        e.parametro(Llaves.ARBITRIO_PU_POR_USO, null, valor = "1")
+        assertEquals(24, matriz(e)["pendientes"].asInt())
+        send("GET", "/api/srtm/contribuyentes/${e.contribuyente}/hla?anio=${e.anio}", null, HttpStatus.UNPROCESSABLE_CONTENT)
+        val porUso = tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))
+        assertEquals(24, porUso.size())
+        assertEquals(setOf("002"), lista(porUso) { it["secuencia_uso"].asString() }.toSet())
+        val m = matriz(e)
+        assertEquals(0, m["pendientes"].asInt())
+        assertEquals(306.0, m["total"].asDouble()) // 12 x (8.50 + 4.25), twice
+    }
+
     @Test
     fun `what is missing is a 422 that names it, and nothing is written`() {
         val e = Escenario()

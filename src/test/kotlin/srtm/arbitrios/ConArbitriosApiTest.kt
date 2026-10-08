@@ -107,10 +107,11 @@ abstract class ConArbitriosApiTest : SrtmApiTest() {
             return predio
         }
 
-        // a row of parametro_tributario in force the whole year, as the ordinance's transcription
+        // a row of parametro_tributario in force the whole year, as the ordinance's transcription; a global one
+        // (REDONDEO_ARBITRIO, ARBITRIO_PU_POR_USO) without clave
         fun parametro(
             tipo: String,
-            clave: String,
+            clave: String?,
             valor: String? = null,
             texto: String? = null
         ) = crear(

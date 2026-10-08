@@ -14,7 +14,8 @@ import java.time.LocalDate
 
 // what a determination needs that is the same for every predio of the year: read once per determination, and once
 // per lote in the masiva. ordenanza is the year's (null when there is none). porVia is ubicaciones grouped by their
-// normalized via, built the first time a predio needs it and kept for every other predio of the contexto (#82)
+// normalized via, built the first time a predio needs it and kept for every other predio of the contexto (#82).
+// puPorUso, whether the year pays one PU per uso (Arbitrios.puPorUso), is decided once too
 data class ContextoArbitrios(
     val anio: Int,
     val ordenanza: OrdenanzaArbitrio?,
@@ -24,6 +25,7 @@ data class ContextoArbitrios(
     val ubicaciones: List<ZonaUbicacion> = emptyList()
 ) {
     val porVia: UbicacionesPorVia by lazy { UbicacionesPorVia(ubicaciones) }
+    val puPorUso: Boolean by lazy { Arbitrios.puPorUso(parametros, anio) }
 }
 
 // one predio's: its declarations of the year (every titular's), its contribuyentes' codes by id, its inafectaciones,
@@ -73,11 +75,14 @@ data class Falta(
 // respecto del área verde)
 enum class Enlace { DECLARACION, PREDIO }
 
-// rentas' DeterminarArbitrios, without the writing (rentas#31), one PU per uso as the SRTM web (#84). each month of
-// the year is decided on its day of atribución (Periodo): its titular (the titular principal of the declarations that
-// cover that day, charged whole, every secuencia's cuotas included), and each secuencia de uso of those declarations
-// apart (porSecuencia: the declaration of its own titular principal), with its own uso de arbitrio (ARBITRIO_USO of the
-// declaration's uso), área, frontis and habitantes. per servicio, its zona is the predio's (Zonas.de:
+// rentas' DeterminarArbitrios, without the writing (rentas#31), one PU per uso as the SRTM web (#84) from the year
+// ARBITRIO_PU_POR_USO rules (#80). each month of the year is decided on its day of atribución (Periodo): its titular
+// (the titular principal of the declarations that cover that day, charged whole, every secuencia's cuotas included),
+// and each secuencia de uso of those declarations apart (porSecuencia: the declaration of its own titular principal),
+// with its own uso de arbitrio (ARBITRIO_USO of the declaration's uso), área, frontis and habitantes. a year before
+// that one (or without the row) pays one PU per predio, as before #84: each month only the secuencia of the
+// titular principal's DJ (titularPrincipal), the other secuencias ignored, its cuotas still with the secuencia in
+// their clave; any cuota of the servicio and month, of whatever secuencia, means the month is charged. per servicio, its zona is the predio's (Zonas.de:
 // zona_arbitrio_ubicacion by via and tramo, ARBITRIO_ZONA of the sector catastral as a fallback). each servicio in
 // force that day not covered by an inafectación and not yet determined for that secuencia gets a cuota: its tasa
 // (TASA_ARBITRIO servicio, plus one parte per Dimension of Servicios.dimensiones - zona and uso by default,
@@ -89,13 +94,13 @@ enum class Enlace { DECLARACION, PREDIO }
 // sector, or an ambiguous one) always fails the whole predio - the sector is a requirement unless every servicio's
 // zona resolves by ubicación instead. a secuencia's month without a uso código, though, is skipped silently, same as
 // a month without a titular, once that secuencia had one some month - a secuencia that never had one fails the
-// predio, named. and when NO month and secuencia ever has both a zona (by sector or ubicación) and a uso código, the
-// predio cannot be determined at all and each one without it is named. a missing parameter fails the whole
-// predio, same as a dimension (INFLUENCIA/AFLUENCIA) that does not resolve, or a secuencia without the frontis or
-// the área its base asks for: everything is computed before anything is written, so nothing stays half done. the
-// cuotas that exist are not recomputed, so running it again adds nothing. one annulled is determined again, with
-// the next version of its clave. last, the predio's tope de incremento (conTope, TOPE_ARBITRIO): without one the
-// cuotas are the ones above, untouched
+// predio, named (in a year of one PU per uso; before it only the next rule applies). and when NO month and secuencia
+// ever has both a zona (by sector or ubicación) and a uso código, the predio cannot be determined at all and each one
+// without it is named. a missing parameter fails the whole predio, same as a dimension (INFLUENCIA/AFLUENCIA) that
+// does not resolve, or a secuencia without the frontis or the área its base asks for: everything is computed before
+// anything is written, so nothing stays half done. the cuotas that exist are not recomputed, so running it again adds
+// nothing. one annulled is determined again, with the next version of its clave. last, the predio's tope de
+// incremento (conTope, TOPE_ARBITRIO): without one the cuotas are the ones above, untouched
 object Arbitrios {
     // what the year lacks, before any predio: the ordinance, ratified (D-02b), and the servicios it charges
     fun faltanDelAnio(c: ContextoArbitrios): List<String> {
@@ -147,7 +152,8 @@ object Arbitrios {
         // the predio's zona_arbitrio_ubicacion rows (its via's, tramo's and paridad's), narrowed once, not per servicio
         // and month
         val ubicaciones = c.porVia.delPredio(p.predio)
-        // TOPE_ARBITRIO's group: the uso código of the predio's lowest secuencia, the first month it has one
+        // TOPE_ARBITRIO's group: the uso código of the predio's lowest secuencia (before the year of one PU per uso,
+        // the secuencia of the titular principal's DJ, the one charged), the first month it has one
         var grupo: Pair<String, LocalDate>? = null
 
         for (periodo in Periodo.MESES) {
@@ -155,14 +161,16 @@ object Arbitrios {
             val cubren = p.declaraciones.filter { cubre(it, dia) }
             val titular = titularPrincipal(cubren, p.codigos) ?: continue
             algunMesConTitular = true
-            // one PU per uso: each secuencia's declaration. a cuota of before the secuencia counts as the lowest's
-            val usos = porSecuencia(cubren, p.codigos).map { it to secuenciaUso(it.secuenciaUso) }
+            // one PU per uso: each secuencia's declaration; before its year, the titular principal's alone. a cuota of
+            // before the secuencia counts as the first one's
+            val usos = (if (c.puPorUso) porSecuencia(cubren, p.codigos) else listOf(titular)).map { it to secuenciaUso(it.secuenciaUso) }
             val menor = usos.first().second
             if (grupo == null) grupo = codigoDeUso(usos.first().first, c.usos)?.let { it to dia }
             val redondeo = Servicios.redondeo(c.parametros, dia)
 
             // the servicios due this month, their inafectaciones filtered out; and for each secuencia, the ones it
-            // has no cuota of yet
+            // has no cuota of yet. before the year of one PU per uso, any cuota of the servicio and month counts, as
+            // before #84: when the titular principal's DJ changed since, the predio still pays one PU that month
             val debidos =
                 serviciosDelDia(c.servicios, dia).filter { servicio ->
                     !p.inafectaciones.any { it.servicio == servicio.id && vigente(it.vigenciaDesde, it.vigenciaHasta, dia) }
@@ -173,7 +181,10 @@ object Arbitrios {
                         d,
                         secuencia,
                         debidos.filter { servicio ->
-                            vigentes.none { it.servicio == servicio.id && it.anio == c.anio && it.periodo == periodo && secuenciaDe(it, menor) == secuencia }
+                            vigentes.none {
+                                it.servicio == servicio.id && it.anio == c.anio && it.periodo == periodo &&
+                                    (!c.puPorUso || secuenciaDe(it, menor) == secuencia)
+                            }
                         }
                     )
                 }
@@ -339,10 +350,11 @@ object Arbitrios {
         } else {
             // a secuencia's months without a uso código are skipped silently once it had one some month (a sale to a
             // buyer without it); one that never had one fails the predio, named when the predio has several. when no
-            // month and secuencia ever had complete rasgos, every one without it is named, same as before
-            val varios = (sinUso.keys + conUso).size > 1
+            // month and secuencia ever had complete rasgos, every one without it is named, same as before. before the
+            // year of one PU per uso, only that last rule, without naming a secuencia, as before #84
+            val varios = c.puPorUso && (sinUso.keys + conUso).size > 1
             sinUso
-                .filterKeys { !algunMesConRasgos || it !in conUso }
+                .filterKeys { !algunMesConRasgos || (c.puPorUso && it !in conUso) }
                 .forEach { (secuencia, declaracion) ->
                     falta(
                         "Uso del catálogo en la declaración ${c.anio} del predio $nombre" + (if (varios) ", uso $secuencia" else ""),
@@ -364,8 +376,9 @@ object Arbitrios {
     }
 
     // TOPE_ARBITRIO (#87): what a predio's year may rise over what it paid the year before (anteriores, every
-    // servicio's). its row is its group's: the uso código of its lowest secuencia (Servicios.tope, the longest prefix
-    // or "*"). no tope without that row, without anteriores (or with ones that add up to 0), or when the predio was
+    // servicio's). its row is its group's: the uso código of its lowest secuencia (before the year of one PU per uso,
+    // the secuencia of the titular principal's DJ, the one charged), the first month it has one (Servicios.tope, the
+    // longest prefix or "*"). no tope without that row, without anteriores (or with ones that add up to 0), or when the predio was
     // registered after the row's cut date (the earliest of its declaraciones of any year, each by its
     // fecha_presentacion or, without one, 1 January of its anio: registrado, or this year's when it is earlier or
     // absent). otherwise
@@ -430,6 +443,15 @@ object Arbitrios {
             p.tipo == Llaves.TOPE_ARBITRIO && Periodo.MESES.any { vigente(p.vigenciaDesde, p.vigenciaHasta, Periodo.atribucion(c.anio, it)) }
         }
 
+    // whether a year pays one PU per uso (#80): an ARBITRIO_PU_POR_USO row, global (clave empty) and of valor 1, in
+    // force on its 1 January. without one, one PU per predio, as before #84
+    fun puPorUso(
+        parametros: List<ParametroTributario>,
+        anio: Int
+    ) = enVigor(parametros, Llaves.ARBITRIO_PU_POR_USO, LocalDate.of(anio, 1, 1)) {
+        it.clave?.trim().isNullOrEmpty() && it.valorNumerico?.compareTo(BigDecimal.ONE) == 0
+    } != null
+
     private fun suma(cuotas: List<CuotaArbitrio>) = cuotas.fold(BigDecimal.ZERO) { s, q -> s + (q.monto ?: BigDecimal.ZERO) }
 
     private fun redondeoDe(q: CuotaArbitrio) = Redondeo.de(q.redondeo) ?: Redondeo(2, RoundingMode.DOWN)
@@ -450,7 +472,8 @@ object Arbitrios {
     }
 
     // the secuencia de uso a cuota is of: its own, or, for one written before cuotas had one (one PU per predio, the
-    // lowest secuencia's), the lowest of the month's
+    // lowest secuencia's), the first of the month's: the lowest, or before the year of one PU per uso the secuencia of
+    // the titular principal's DJ
     private fun secuenciaDe(
         cuota: CuotaArbitrio,
         menor: String

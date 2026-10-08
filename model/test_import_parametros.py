@@ -193,7 +193,7 @@ class ArbitriosRowsTests(unittest.TestCase):
         self.assertEqual(ip.TIPOS_ARBITRIO, ("TASA_ARBITRIO", "ARBITRIO_ZONA", "ARBITRIO_USO", "ARBITRIO_VENCIMIENTO",
                                              "BASE_ARBITRIO", "DIMENSIONES_ARBITRIO", "HABITANTES_PROMEDIO",
                                              "HABITANTES_VARIACION", "REDONDEO_ARBITRIO", "ARBITRIO_INFLUENCIA",
-                                             "ARBITRIO_AFLUENCIA", "TOPE_ARBITRIO"))
+                                             "ARBITRIO_AFLUENCIA", "TOPE_ARBITRIO", "ARBITRIO_PU_POR_USO"))
 
     def test_a_base_names_its_servicio_and_a_known_base(self):
         self.assertEqual(ip.errores([fila("BASE_ARBITRIO", "RRSS", texto="AREA_CONSTRUIDA_M2")]), [])
@@ -290,6 +290,22 @@ class ArbitriosRowsTests(unittest.TestCase):
                                     ("0101", "ocho", None), ("0101", "8", "31/12/2025"), ("0101", "8", "2025-13-01")]:
             with self.subTest(clave=clave, valor=valor, texto=texto):
                 self.assertEqual(len(ip.errores([fila("TOPE_ARBITRIO", clave, valor_numerico=valor, texto=texto)])), 1)
+
+    def test_un_pu_por_uso_rige_desde_el_1_de_enero_de_un_anio_sin_clave_y_con_valor_1(self):
+        # el año desde el que un predio paga un PU por cada uso (#80): sin la fila, una cuota por servicio y mes, la
+        # de la secuencia menor del titular principal. un año es «por uso» si la fila rige su 1 de enero
+        def pu(clave="", valor="1", desde="2027-01-01", hasta=None):
+            return fila_del("ARBITRIO_PU_POR_USO", clave, desde=desde, hasta=hasta, valor_numerico=valor)
+
+        self.assertEqual(ip.errores([pu()]), [])
+        self.assertEqual(ip.errores([pu(hasta="2028-12-31")]), [])
+        for clave, valor, desde in [("*", "1", "2027-01-01"), ("2027", "1", "2027-01-01"), ("", None, "2027-01-01"),
+                                    ("", "0", "2027-01-01"), ("", "2", "2027-01-01"), ("", "uno", "2027-01-01"),
+                                    ("", "1", "2027-07-01"), ("", "1", "2027-01-02")]:
+            with self.subTest(clave=clave, valor=valor, desde=desde):
+                self.assertEqual(len(ip.errores([pu(clave, valor, desde)])), 1)
+        self.assertEqual(ip.errores([pu(desde="2027-07-01")]),
+                         ["ARBITRIO_PU_POR_USO : un PU por uso rige desde el 1 de enero de un año (vigencia_desde AAAA-01-01)"])
 
 
 # the rows of the sanciones and the anuncios (SPEC §4, Parámetros nuevos). FICTITIOUS values, written here only to test

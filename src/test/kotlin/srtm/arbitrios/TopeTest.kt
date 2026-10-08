@@ -29,6 +29,9 @@ class TopeTest {
     private val mapeos = listOf(param(Llaves.ARBITRIO_ZONA, "S-01", texto = "Z1"), param(Llaves.ARBITRIO_USO, "0101", texto = "CASA"))
     private val redondeo = param(Llaves.REDONDEO_ARBITRIO, "", texto = "2:ABAJO")
     private val tope = param(Llaves.TOPE_ARBITRIO, "0101", valor = "8", texto = "2025-12-31")
+
+    // the year from which a predio pays one PU per uso (#80)
+    private val puPorUso = param(Llaves.ARBITRIO_PU_POR_USO, "", valor = "1")
     private val predio = Predio(id = "predio-100", codigo = "01-01-0001", sectorCatastral = "S-01")
     private val dj = declaracion("dj-1", "01", presentada = LocalDate.of(2025, 3, 10))
 
@@ -210,7 +213,7 @@ class TopeTest {
                 listOf("A", "B", "C").map { tasa("$it:Z1:TIENDA", "50.00") } +
                 param(Llaves.TOPE_ARBITRIO, "*", valor = "18")
         // 150.00 + 100.00 a month, 3 000.00 a year; 2 000.00 paid × 1.18 = 2 360.00. the tienda (001) decides: *
-        val d = determinar(contexto(parametros), del(declaraciones = listOf(tienda, casa), anteriores = pagado(List(12) { "166.66" } + "0.08")))
+        val d = determinar(contexto(parametros + puPorUso), del(declaraciones = listOf(tienda, casa), anteriores = pagado(List(12) { "166.66" } + "0.08")))
         assertEquals(emptyList<String>(), d.faltan)
         assertEquals(72, d.cuotas.size)
         assertEquals(BigDecimal("2360.00"), suma(d.cuotas))
@@ -218,8 +221,47 @@ class TopeTest {
         assertTrue(d.cuotas.all { invariantes(it).isEmpty() && it.parametroAplicado!!.endsWith(";${Llaves.TOPE_ARBITRIO}:*") })
 
         // without a row for its group (no *), no tope at all
-        val sinGrupo = determinar(contexto(parametros.filterNot { it.clave == "*" }), del(declaraciones = listOf(tienda, casa), anteriores = mil))
+        val sinGrupo = determinar(contexto(parametros.filterNot { it.clave == "*" } + puPorUso), del(declaraciones = listOf(tienda, casa), anteriores = mil))
         assertTrue(sinGrupo.cuotas.all { it.topeAplicado == null })
+    }
+
+    // before the year of one PU per uso (#80) the predio pays the PU of the secuencia of its titular principal's DJ: the
+    // tope measures that one's cuotas, and its uso is the group. the tienda (001): 1 800.00 a year, over 1 000.00 paid
+    // × 1.18 (*) = 1 180.00. the casa (0101, 8 %) is neither charged nor the group
+    @Test
+    fun `before the year of one PU per uso the group is the uso of the secuencia charged`() {
+        val tienda =
+            declaracion("dj-t", "01", presentada = LocalDate.of(2025, 3, 10))
+                .copy(claseUso = "COMERCIAL", subClaseUso = "TIENDAS", uso = "TIENDA")
+        val casa = dj.copy(id = "dj-c", secuenciaUso = "02")
+        val parametros =
+            tasas + mapeos + redondeo + tope +
+                param(Llaves.ARBITRIO_USO, "02", texto = "TIENDA") +
+                listOf("A", "B", "C").map { tasa("$it:Z1:TIENDA", "50.00") } +
+                param(Llaves.TOPE_ARBITRIO, "*", valor = "18")
+        val d = determinar(contexto(parametros), del(declaraciones = listOf(casa, tienda), anteriores = mil))
+        assertEquals(emptyList<String>(), d.faltan)
+        assertEquals(36, d.cuotas.size)
+        assertTrue(d.cuotas.all { it.secuenciaUso == "001" && it.usoArbitrio == "TIENDA" })
+        assertEquals(BigDecimal("1180.00"), suma(d.cuotas))
+        assertEquals(BigDecimal("1800.00"), sumaSinTope(d.cuotas))
+        assertTrue(d.cuotas.all { it.parametroAplicado!!.endsWith(";${Llaves.TOPE_ARBITRIO}:*") })
+    }
+
+    // the first year of one PU per uso is measured against what the predio paid the year before, with one PU per
+    // predio: the 1 000.00 of its casa. its casa (100.00 a month) and its tienda (150.00) owe 3 000.00; × 1.08 = 1 080.00
+    @Test
+    fun `the first year of one PU per uso is topped against the year before, of one PU per predio`() {
+        val tienda =
+            declaracion("dj-t", "02", presentada = LocalDate.of(2025, 3, 10))
+                .copy(claseUso = "COMERCIAL", subClaseUso = "TIENDAS", uso = "TIENDA")
+        val parametros =
+            tasas + mapeos + redondeo + tope + param(Llaves.ARBITRIO_USO, "02", texto = "TIENDA") + listOf("A", "B", "C").map { tasa("$it:Z1:TIENDA", "50.00") }
+        val d = determinar(contexto(parametros + puPorUso), del(declaraciones = listOf(dj, tienda), anteriores = mil))
+        assertEquals(emptyList<String>(), d.faltan)
+        assertEquals(72, d.cuotas.size)
+        assertEquals(BigDecimal("3000.00"), sumaSinTope(d.cuotas))
+        assertEquals(BigDecimal("1080.00"), suma(d.cuotas)) // the casa (001) is the group: 0101, 8 %
     }
 
     @Test
