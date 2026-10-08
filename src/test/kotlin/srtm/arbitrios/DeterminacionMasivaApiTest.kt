@@ -146,7 +146,7 @@ class DeterminacionMasivaApiTest : ConArbitriosApiTest() {
 
         fun parametro(
             tipo: String,
-            clave: String,
+            clave: String?,
             valor: String? = null,
             texto: String? = null
         ) = crear(
@@ -188,6 +188,8 @@ class DeterminacionMasivaApiTest : ConArbitriosApiTest() {
         parametro(Llaves.TASA_ARBITRIO, "$recoleccion:Z1:COMERCIO", valor = "0.30")
         parametro(Llaves.TASA_ARBITRIO, "$parques:Periferia:Parque:Alta", valor = "200.00")
         parametro(Llaves.TASA_ARBITRIO, "$serenazgo:Z1:COMERCIO", valor = "9.00")
+        // the year pays one PU per uso (#80): without it, the predio of two usos would pay its casa's alone
+        parametro(Llaves.ARBITRIO_PU_POR_USO, null, valor = "1")
 
         val contribuyente = inscribir()
 

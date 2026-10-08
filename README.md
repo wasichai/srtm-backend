@@ -374,13 +374,15 @@ firma, y se cargan con `import_parametros.py --csv <archivo>`:
 | `ARBITRIO_INFLUENCIA` | la `ubicacion_area_verde` del predio (enum del modelo: `FRENTE A PARQUE`, `MEDIANAMENTE CERCANO A AREAS VERDES`, `FRENTE A BERMA`, `OTRAS UBICACIONES`) | `texto`: su nivel de influencia; ej. Miraflores 2026: `FRENTE A PARQUE` → `Frente a Parque y/o Área Verde` |
 | `ARBITRIO_AFLUENCIA` | un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos, solo o como `servicio:prefijo` (gana el de su servicio; dentro de cada familia, el más largo) | `texto`: su nivel de afluencia |
 | `TOPE_ARBITRIO` | el grupo de uso: un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos (gana el más largo), o `*` para todos los demás | `valor_numerico`: el % máximo de aumento sobre lo pagado el año anterior, mayor que 0; `texto`: vacío, o la fecha de corte del registro del predio (`AAAA-MM-DD`); ej. Miraflores 2026: 8 % en casa habitación y 18 % en otros usos, para predios registrados al 31/12/2025 (ver **Tope de incremento**) |
+| `ARBITRIO_PU_POR_USO` | vacía (global) | `valor_numerico`: 1; `vigencia_desde`: el 1 de enero del primer año en que un predio paga un PU por cada uso. Un año es «por uso» si una fila rige su 1 de enero; sin fila, un PU por predio (ver **Un PU por uso** abajo) |
 
 `import_parametros.py` revisa la forma de estas filas antes de enviar nada: la llave de la tasa (según las
 `DIMENSIONES_ARBITRIO` vigentes de su servicio), el valor, el mes, la fecha y que `transcribio` y `verifico` sean dos
 personas distintas. Si una no encaja, la nombra y sale con `2`. `BASE_ARBITRIO`, `DIMENSIONES_ARBITRIO`,
-`HABITANTES_PROMEDIO`, `HABITANTES_VARIACION`, `REDONDEO_ARBITRIO`, `ARBITRIO_INFLUENCIA`, `ARBITRIO_AFLUENCIA` y
-`TOPE_ARBITRIO` son opcionales: sin estas filas el cálculo es el
-de siempre (base `PREDIO`, dimensiones `ZONA,USO`, sin redondeo adicional y sin tope).
+`HABITANTES_PROMEDIO`, `HABITANTES_VARIACION`, `REDONDEO_ARBITRIO`, `ARBITRIO_INFLUENCIA`, `ARBITRIO_AFLUENCIA`,
+`TOPE_ARBITRIO` y `ARBITRIO_PU_POR_USO` son opcionales: sin estas filas el cálculo es el
+de siempre (base `PREDIO`, dimensiones `ZONA,USO`, sin redondeo adicional, sin tope y un PU por predio).
+`ARBITRIO_PU_POR_USO` lleva la clave vacía, `valor_numerico` 1 y una `vigencia_desde` que es un 1 de enero.
 
 **Tasas de una ordenanza, de la tabla del informe técnico.** `import_tasas_arbitrio.py` deriva el CSV de arriba
 (el que lee `import_parametros.py --csv`) de la tabla larga de tasas de una ordenanza, una fila por tasa: `servicio,
@@ -558,18 +560,24 @@ cambio.
 - **Cada mes a su fecha.** El mes *m* se decide el día 1 de *m* (`Periodo.atribucion`), no el día en que se corre:
   - **Titular:** de las DJ del año que cubren ese día, la del titular principal. Gana el mayor `porcentaje_condominio`;
     en empate, la `fecha_adquisicion` más antigua, luego el `codigo` de contribuyente menor y luego la secuencia de uso
-    menor. Se le cobra íntegro, sin prorrateo: es el contribuyente de la cuota de cada secuencia ese mes.
+    menor (leída como la numera el padrón: `1` es `001`). Se le cobra íntegro, sin prorrateo: es el contribuyente de la cuota de cada secuencia ese mes.
   - **Qué días cubre una DJ:** desde el 1 de enero, o desde el día siguiente a su `fecha_adquisicion` si cae en el año;
     hasta el 31 de diciembre, o hasta su `fecha_anulacion` si se anuló (descargo). Una importada sin fechas cubre el
     año. Una venta el 20 de mayo da: vendedor de enero a mayo, comprador de junio a diciembre.
   - **Zona:** la de cada servicio ese día, por `Zonas.de` (ver **Zona por servicio y por ubicación** arriba):
     `zona_arbitrio_ubicacion` por vía y tramo primero, `ARBITRIO_ZONA` del `sector_catastral` del predio como
     respaldo. Es la del predio: la misma para todas sus secuencias.
-  - **Un PU por uso** (decisión del 2026-10-05): cada secuencia de uso de las DJ que cubren el día se cobra aparte
-    (`porSecuencia`: la de su propio titular principal, para un condómino de esa secuencia), con su propio uso de
-    arbitrio, área, frontis y habitantes. `ARBITRIO_USO` del código de uso de cada DJ (tan preciso como la DJ:
-    `XXYYZZ` con clase, sub clase y uso; `XXYY` sin uso; `XX` con solo la clase; gana el prefijo más largo). Un
-    predio de un solo uso tiene, como antes, una sola secuencia.
+  - **Un PU por uso** (decisión del 2026-10-05), desde el año que fija `ARBITRIO_PU_POR_USO` (#80): cada secuencia
+    de uso de las DJ que cubren el día se cobra aparte (`porSecuencia`: la de su propio titular principal, para un
+    condómino de esa secuencia), con su propio uso de arbitrio, área, frontis y habitantes. `ARBITRIO_USO` del código
+    de uso de cada DJ (tan preciso como la DJ: `XXYYZZ` con clase, sub clase y uso; `XXYY` sin uso; `XX` con solo la
+    clase; gana el prefijo más largo). Un predio de un solo uso tiene, como antes, una sola secuencia.
+  - **Un PU por predio** en un año anterior a ese, o sin la fila: como antes del PU por uso, cada mes se cobra solo la
+    secuencia de la DJ del titular principal, con su uso, área, frontis y habitantes; las demás secuencias no se
+    miran. La cuota guarda igual su secuencia en la clave de 6 partes. Un mes que ya tiene una cuota del servicio,
+    de cualquier secuencia, ya está cobrado: si después cambia la DJ del titular principal (se rectifica una
+    participación o una adquisición), no se cobra un segundo PU. Un predio de un solo uso tiene las mismas cuotas en
+    los dos modos.
   - **Servicios:** cada servicio vigente ese día, salvo que el predio tenga una inafectación suya vigente ese día o
     que la cuota de esa secuencia ya exista. El monto es `tasa_unitaria × cantidad_base × (1 + (H − P) × V)`
     (`Calculo.calcular`): `tasa_unitaria` es `TASA_ARBITRIO servicio` más una parte por cada `Dimension` de
@@ -591,9 +599,9 @@ cambio.
 - **Meses sin cobro:** un mes sin titular, o una secuencia sin zona (por sector o por ubicación) o sin uso ese mes, no
   se cobra. Un predio que aparece en julio no debe de enero a junio.
 - **No se puede determinar** un predio sin titular en ningún mes, o sin zona y uso a la vez en ninguna secuencia de
-  ningún mes con titular. Una secuencia que nunca tuvo uso del catálogo, en ningún mes (aunque otra secuencia del
-  mismo predio sí lo tenga), también hace fallar el predio entero, nombrada con su número cuando hay varias
-  (`uso 002`).
+  ningún mes con titular. En un año de un PU por uso, una secuencia que nunca tuvo uso del catálogo, en ningún mes
+  (aunque otra secuencia del mismo predio sí lo tenga), también hace fallar el predio entero, nombrada con su número
+  cuando hay varias (`uso 002`); en uno de un PU por predio, esa secuencia no se mira.
 - **Todo o nada:** si falta un parámetro (una zona, un uso, una tasa, una influencia o una afluencia) de cualquier
   secuencia, no se determina nada de ese predio. `faltan`
   nombra cada uno una vez (`TASA_ARBITRIO LIMPIEZA:Z1:CASA 2026`).
@@ -606,7 +614,8 @@ cambio.
 **Tope de incremento** (`TOPE_ARBITRIO`, #87). Muchas ordenanzas limitan lo que un predio paga en un año a lo que
 pagó el anterior más un porcentaje (Miraflores 2026: 8 % en casa habitación, 18 % en otros usos; la diferencia la
 asume la municipalidad). Al final de `Arbitrios.determinar`, con todas las cuotas del predio ya calculadas:
-- **El grupo** es el código de uso de la secuencia menor del predio (el primer mes que lo tiene): su `TOPE_ARBITRIO`
+- **El grupo** es el código de uso de la secuencia menor del predio (en un año de un PU por predio, la secuencia de
+  la DJ del titular principal, la que se cobra; el primer mes que lo tiene): su `TOPE_ARBITRIO`
   es la fila del prefijo más largo, o la de `*` si ninguno coincide. Sin fila, no hay tope.
 - **Sin tope** también si el predio no tiene cuotas vigentes del año anterior (no anuladas, la última versión de
   cada una, de todos los servicios), o si esas cuotas suman 0 (no pagó nada: un límite de 0 dejaría todo el año en
@@ -685,19 +694,23 @@ plano, sobre la misma maquinaria de lotes de la [emisión masiva](#emisión-masi
 - **GET** lista (`?anio`) y **GET** `/{id}` devuelven el job. **DELETE** `/{id}` cancela sus lotes y lo borra (204);
   las cuotas que escribió quedan, porque una cuota no se borra.
 
-**Al desplegar** (un PU por uso, #84; **decisión abierta**). Antes de este cambio, un predio de varios usos tenía una
-cuota por servicio y mes, calculada con su secuencia menor; ahora tiene una por secuencia. Las cuotas que ya existen
-(sin `secuencia_uso`) cuentan como de la secuencia menor del mes, así que no se duplican. Pero las secuencias 002 en
-adelante de esos predios quedan **pendientes en todos los meses** de un año ya determinado:
-- volver a determinar ese año (la masiva, el POST de un predio o de un contribuyente, o los `pendientes` de la matriz)
-  **agrega** sus cuotas: un cobro nuevo sobre un año ya emitido;
-- si no se vuelve a determinar, la matriz de esos predios muestra `pendientes` y la HLA de sus contribuyentes responde
-  **422** («Predio …: N cuotas de arbitrios por determinar»).
+**Cómo activar el PU por uso** (#84, #80). Sin la fila `ARBITRIO_PU_POR_USO`, todos los años pagan un PU por
+predio, como antes del PU por uso: un año ya determinado no tiene nada `pendiente`, la HLA de sus contribuyentes se
+emite sin volver a determinar y una nueva determinación no agrega cuotas de las secuencias distintas de la que se
+cobra. Las cuotas
+de antes (sin `secuencia_uso`) cuentan como de la secuencia que se cobra ese mes, así que no se duplican. Para pasar
+a un PU por uso, se carga con `import_parametros.py --csv` una fila con el 1 de enero del primer año que lo aplica:
 
-Un predio de un solo uso no cambia en nada. **Antes de desplegar**, conviene contar los predios de varios usos que ya
-tienen cuotas del año en curso (los que tienen DJ del año con más de una `secuencia_uso` y alguna `cuota_arbitrio` del
-año) y decidir qué hacer con ellos: volver a determinar el año y emitir lo nuevo, o desplegar después del cierre del
-año. El código no lo decide: es una decisión de la municipalidad.
+```csv
+tipo,clave,vigencia_desde,vigencia_hasta,valor_numerico,texto,norma,fuente,transcribio,verifico
+ARBITRIO_PU_POR_USO,,2027-01-01,,1,,<ordenanza o acuerdo que lo dispone>,<archivo>,<nombre>,<otro nombre>
+```
+
+Desde ese año, cada secuencia de uso tiene su PU; los años anteriores siguen con uno por predio. Si la fila rige un
+año ya determinado, las secuencias distintas de la que se cobra de sus predios de varios usos quedan `pendientes` (y
+su HLA da 422)
+hasta volver a determinarlo: lo seguro es elegir un año que aún no se haya determinado. El tope de incremento del
+primer año por uso se mide contra lo pagado el año anterior, con un PU por predio.
 
 **HLA** (hoja de liquidación de arbitrios, `GET /api/srtm/contribuyentes/{id}/hla?anio`, PDF inline como la HR).
 - **Qué imprime:** las cuotas a nombre del contribuyente tal como se determinaron, con las mismas cifras que

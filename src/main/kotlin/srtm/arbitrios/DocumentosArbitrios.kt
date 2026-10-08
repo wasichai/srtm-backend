@@ -45,12 +45,7 @@ class DocumentosArbitrios(
         val contribuyente = registros.get(CONTRIBUYENTE, Contribuyente::class.java, contribuyenteId)
         val codigo = contribuyente.codigo ?: contribuyenteId.toString()
         val datos = arbitrios.delContribuyente(contribuyenteId, anio, delAnio)
-        val faltan = Arbitrios.faltanDelAnio(delAnio).toMutableList()
-        for (m in datos.predios) {
-            val predio = m.predio.codigo ?: m.predio.id
-            if (m.pendientes > 0) faltan += "Predio $predio: ${m.pendientes} cuotas de arbitrios por determinar"
-            faltan += m.faltan.filter { it !in faltan }.map { if (predio != null && predio in it) it else "Predio $predio: $it" }
-        }
+        val faltan = faltanDeLaHla(delAnio, datos).toMutableList()
         val conCuota = Periodo.MESES.filter { p -> datos.predios.any { it.totalesPorMes[p - 1].signum() != 0 || it.filas.any { f -> f.meses[p - 1] != null } } }
         if (faltan.isEmpty() && conCuota.isEmpty()) throw SinArbitrios("El contribuyente $codigo no tiene cuotas de arbitrios a su nombre en $anio")
         val vencimientos = conCuota.associateWith { vencimiento(delAnio.parametros, anio, it) }
@@ -100,6 +95,22 @@ class DocumentosArbitrios(
         // the documents carry the hour they were emitted at, as the municipality reads its clock
         val LIMA: ZoneId = ZoneId.of("America/Lima")
     }
+}
+
+// what keeps a contribuyente's HLA of the year from being made, before its due dates: what the year lacks, and of each
+// of its predios the cuotas still to determine (MatrizArbitrios.pendientes, Arbitrios.determinar's rule: one PU per
+// predio or per uso, by the year) and what keeps them from being determined
+fun faltanDeLaHla(
+    delAnio: ContextoArbitrios,
+    datos: ArbitriosContribuyente
+): List<String> {
+    val faltan = Arbitrios.faltanDelAnio(delAnio).toMutableList()
+    for (m in datos.predios) {
+        val predio = m.predio.codigo ?: m.predio.id
+        if (m.pendientes > 0) faltan += "Predio $predio: ${m.pendientes} cuotas de arbitrios por determinar"
+        faltan += m.faltan.filter { it !in faltan }.map { if (predio != null && predio in it) it else "Predio $predio: $it" }
+    }
+    return faltan
 }
 
 // the due date of a month's cuota: ARBITRIO_VENCIMIENTO <month> in force on its day of atribución, its texto a date.
