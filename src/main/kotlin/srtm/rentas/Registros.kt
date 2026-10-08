@@ -106,6 +106,20 @@ class Registros(
         attributes: Map<String, Any?>
     ): T = withContext(EscrituraDeSrtm) { read(type, records.create(objectName, request(escribibles(objectName, attributes)))) }
 
+    // several records of one object, created one after another as create does, with what the caller may write read
+    // once for all of them instead of once each (a predio's cuotas de arbitrio: 48 or more in one transaction)
+    suspend fun <T : Any> createAll(
+        objectName: String,
+        type: Class<T>,
+        attributes: List<Map<String, Any?>>
+    ): List<T> {
+        if (attributes.isEmpty()) return emptyList()
+        val definition = metadata.definitionOf(objectName)
+        return withContext(EscrituraDeSrtm) {
+            attributes.map { read(type, records.create(objectName, request(soloEscribibles(definition, it)))) }
+        }
+    }
+
     // core's update replaces every field the caller may write: one left out of the request is cleared. the
     // portal sends what its dto knows, merged over what is stored, so a field added in the admin (and absent
     // from the dto) is not blanked by a portal save. a field the caller's roles lock is left out of the request
