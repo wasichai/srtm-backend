@@ -2,6 +2,8 @@ package srtm.rentas
 
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
+import srtm.arbitrios.ANULACION_CUOTA_ARBITRIO
+import srtm.arbitrios.CUOTA_ARBITRIO
 import srtm.pide.ConsultasReniec
 import wasichai.core.common.ConflictException
 import wasichai.core.common.ValidationException
@@ -145,10 +147,15 @@ class DeclaracionService(
         return registros.replace(PREDIO, Predio::class.java, id, Records.attributes(next))
     }
 
-    // only while no declaración, vigente or annulled, names it
+    // only while no declaración, vigente or annulled, and no cuota de arbitrio or anulación of one names it. one
+    // delete: nothing else goes with the predio
     suspend fun borrarPredio(id: UUID) {
         registros.get(PREDIO, Map::class.java, id)
         bajaConDeclaraciones("El predio", listas.contar(DECLARACION, "predio", id))?.let { throw ConflictException(it) }
+        val cuotas = listas.contar(CUOTA_ARBITRIO, "predio", id)
+        // an anulación names its cuota's predio, so it is counted only when no cuota is
+        val anulaciones = if (cuotas > 0) 0 else listas.contar(ANULACION_CUOTA_ARBITRIO, "predio", id)
+        bajaConCuotas("El predio", cuotas, anulaciones)?.let { throw ConflictException(it) }
         registros.delete(PREDIO, id)
     }
 

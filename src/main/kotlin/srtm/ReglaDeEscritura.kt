@@ -10,9 +10,9 @@ import java.math.BigDecimal
 import java.time.LocalDate
 import java.util.Locale
 
-// what AlmacenGuardado asks before it writes a record of `objetos`, whoever writes it: the generic api, /admin, an ADMIN
-// or srtm's own services. each module has its rule as a bean of its package (srtm.arbitrios, srtm.sanciones,
-// srtm.anuncios), and none knows the others. an object has one rule at most
+// what GuardiaDeEscritura asks before a record of `objetos` is written, whoever writes it: the generic api, /admin, an
+// ADMIN, the platform, an automation or srtm's own services. each module has its rule as a bean of its package
+// (srtm.arbitrios, srtm.sanciones, srtm.anuncios), and none knows the others. an object has one rule at most
 interface ReglaDeEscritura {
     val objetos: Set<String>
 

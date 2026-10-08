@@ -127,7 +127,8 @@ internal fun segundos(lease: Duration): Double = lease.toMillis() / 1000.0
 // the lotes of one kind of job, straight on their tables: the system's writes, without audit. a lote is taken with FOR
 // UPDATE SKIP LOCKED, so two workers of any instance never take the same one; the take that got it is the only one
 // that writes it while it is EN_PROCESO (tomado_por and intentos), and a write that finds it no longer so (cancelled,
-// deleted, or taken again after its lease expired) is false: its worker stops
+// deleted, or taken again after its lease expired) is false: its worker stops. not RecordService.asPlatform (#76): it
+// cannot express SKIP LOCKED nor a compare-and-set, and a ClusterLock would serialize what SKIP LOCKED shares out
 class MaquinaLotes internal constructor(
     private val db: DatabaseClient,
     private val tablas: TablasCore,

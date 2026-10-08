@@ -460,7 +460,7 @@ class AnunciosService(
             val pagina = registros.page(objeto, type, consulta(page, PageRequest.MAX_SIZE, filtros, criterios, orden))
             filas += pagina.content
             page++
-        } while (page < pagina.totalPages)
+        } while (page < (pagina.totalPages ?: 0))
         return filas
     }
 

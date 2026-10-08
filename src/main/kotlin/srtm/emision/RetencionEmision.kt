@@ -16,8 +16,9 @@ private const val TERMINADA = "TERMINADA"
 private const val DEPURADO = "archivo depurado"
 
 // the retention of the masivas' files (srtm.emision.conservar, srtm.emision.dias), after every assembly and at
-// startup: the system's, so it updates the table straight and writes core's audit log itself (wasichai 0.2.0 has no
-// system context for RecordService)
+// startup: the system's, so it updates the table straight and writes core's audit log itself. not moved to
+// asPlatform (#76): the UPDATE ... WHERE archivo IS NOT NULL is idempotent across instances, while asPlatform would
+// need a read, a whole-row replace and a ClusterLock, for no gain. a possible improvement
 @Component
 class RetencionEmision(
     private val db: DatabaseClient,

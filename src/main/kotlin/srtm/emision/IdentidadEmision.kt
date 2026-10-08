@@ -14,10 +14,10 @@ import java.time.Instant
 import java.util.UUID
 
 // who a lote is generated as (wasichai/srtm-backend#53): the user who created it, the same who launched the emission,
-// so core checks that user's permissions on every read, as a request of theirs would. wasichai 0.2.0 has no way to
-// rebuild a user's Authentication, nor a system context for RecordService, and CurrentUser reads only a Jwt principal
-// (sub and the org, email and roles claims): this builds the one core's jwt filter would, from the user's row and
-// roles as they are now. it is never signed and never leaves the process
+// so core checks that user's permissions on every read, as a request of theirs would. a choice, not a gap (#76):
+// RecordService.asPlatform would skip those permissions. CurrentUser reads only a Jwt principal (sub and the org,
+// email and roles claims): this builds the one core's jwt filter would, from the user's row and roles as they are
+// now. it is never signed and never leaves the process
 @Component
 class IdentidadEmision(
     private val db: DatabaseClient,

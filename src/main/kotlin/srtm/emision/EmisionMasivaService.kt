@@ -131,7 +131,7 @@ private data class RegistroLote(
 // request of theirs would; the lotes are generated as that same user (IdentidadEmision). the jwt is not checked again
 // after the request. one active masiva per organization and year: two organizations emit at once. what needs no user
 // is the system's (EstadoEmisiones, LotesEmision, RetencionEmision): it writes the tables straight and core's audit
-// log itself (wasichai 0.2.0 has no system context for RecordService)
+// log itself, not through RecordService.asPlatform: their state machines need SKIP LOCKED and compare-and-set (#76)
 @Service
 class EmisionMasivaService(
     private val registros: Registros,

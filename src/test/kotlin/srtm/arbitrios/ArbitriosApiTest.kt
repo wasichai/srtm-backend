@@ -1,5 +1,7 @@
 package srtm.arbitrios
 
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.reactive.asFlow
 import kotlinx.coroutines.reactor.asCoroutineContext
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -9,9 +11,12 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.r2dbc.core.DatabaseClient
-import org.springframework.r2dbc.core.awaitSingle
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import srtm.emision.IdentidadEmision
+import srtm.emision.TablasCore
+import srtm.impuesto.PARAMETRO_TRIBUTARIO
+import srtm.rentas.CONTRIBUYENTE
+import srtm.rentas.PREDIO
 import srtm.rentas.SrtmApiTest
 import tools.jackson.databind.JsonNode
 import wasichai.core.common.ValidationException
@@ -27,6 +32,9 @@ import kotlin.random.Random
 // FICTITIOUS. the test db is shared and an ordinance is one per year: each test takes a year of its own, and its
 // servicios and parameters rule only in it
 class ArbitriosApiTest : ConArbitriosApiTest() {
+    @Autowired
+    lateinit var tablas: TablasCore
+
     @Test
     fun `a predio is determined once - 201 with its cuotas, then 200 with none`() {
         val e = Escenario()
@@ -147,16 +155,39 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         assertEquals(24, tree(send("GET", "/api/srtm/predios/${e.predio}/arbitrios?anio=${e.anio}", null, HttpStatus.OK, lector))["pendientes"].asInt())
     }
 
+    // appendOnly in the model (ADR-040): core refuses it for everyone, before srtm's guard is asked
     @Test
     fun `a cuota is never edited nor deleted, not even by an ADMIN through core's api`() {
         val e = Escenario()
         val cuota = tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))[0]
         val id = cuota["id"].asString()
         val cambio = mapOf("attributes" to atributos(cuota) + ("monto" to 0))
-        send("PUT", "/api/objects/$CUOTA_ARBITRIO/records/$id", cambio, HttpStatus.CONFLICT)
-        send("DELETE", "/api/objects/$CUOTA_ARBITRIO/records/$id", null, HttpStatus.CONFLICT)
+        assertAppendOnly(send("PUT", "/api/objects/$CUOTA_ARBITRIO/records/$id", cambio, HttpStatus.CONFLICT))
+        assertAppendOnly(send("DELETE", "/api/objects/$CUOTA_ARBITRIO/records/$id", null, HttpStatus.CONFLICT))
         val guardada = tree(send("GET", "/api/objects/$CUOTA_ARBITRIO/records/$id", null, HttpStatus.OK))
         assertEquals(8.5, guardada["attributes"]["monto"].asDouble())
+    }
+
+    // a delete would null the cuota's relation (ON DELETE SET NULL), a change postgres makes with no guard: core
+    // refuses it while a cuota points at the record (ADR-040). before 0.3.2 it went through
+    @Test
+    fun `what a cuota points at is not deleted, not even by an ADMIN`() {
+        val e = Escenario()
+        val cuota = tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))[0]
+        val apuntados =
+            listOf(
+                PREDIO to e.predio,
+                CONTRIBUYENTE to e.contribuyente,
+                SERVICIO_ARBITRIO to e.servicios[0],
+                PARAMETRO_TRIBUTARIO to cuota["parametro"].asString()
+            )
+        for ((objeto, id) in apuntados) {
+            val problema = tree(send("DELETE", "/api/objects/$objeto/records/$id", null, HttpStatus.CONFLICT))
+            assertTrue(problema["detail"].asString().contains("append-only '$CUOTA_ARBITRIO'"), problema.toString())
+            send("GET", "/api/objects/$objeto/records/$id", null, HttpStatus.OK)
+        }
+        val guardada = tree(send("GET", "/api/objects/$CUOTA_ARBITRIO/records/${cuota["id"].asString()}", null, HttpStatus.OK))
+        assertEquals(e.predio, guardada["attributes"]["predio"].asString())
     }
 
     @Test
@@ -286,7 +317,7 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
     }
 
     // Core stores a DECIMAL exactly, with no implicit rounding: tasa_unitaria (4 decimales) × cantidad_base (2
-    // decimales) leaves monto with 6, and CuotasInmutables' invariantes (which recompute the monto on insert) accept
+    // decimales) leaves monto with 6, and ReglaDeArbitrios' invariantes (which recompute the monto on insert) accept
     // it unchanged - the write guard's recomputation must not force a scale the ordinance never asked for
     @Test
     fun `without REDONDEO_ARBITRIO, monto equals tasa times área exactly - Core keeps every decimal`() {
@@ -421,16 +452,24 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
     }
 
     @Test
-    fun `the app indexes its cuotas by year and predio, and by year and contribuyente`() {
-        val e = Escenario()
-        send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED)
-        val nombres =
+    fun `the model declares the cuotas' indexes, in an organization made after startup too`() {
+        val suyo = otraOrganizacion()
+        val org = UUID.fromString(tree(send("GET", "/api/auth/me", null, HttpStatus.OK, suyo))["organizationId"].asString())
+        val t = runBlocking { tablas.de(CUOTA_ARBITRIO, listOf("anio", "predio", "contribuyente")) }.single { it.organizacion == org }
+        // tabla is schema-qualified and quoted: to_regclass reads it as it is
+        val defs =
             runBlocking {
                 db
-                    .sql("SELECT string_agg(indexname, ',') AS n FROM pg_indexes WHERE indexname LIKE 'cuota_arbitrio_%'")
-                    .map { row, _ -> row.get("n", String::class.java) ?: "" }
-                    .awaitSingle()
-            }.split(",")
-        assertTrue(nombres.any { it.endsWith("_predio") } && nombres.any { it.endsWith("_contribuyente") }, nombres.toString())
+                    .sql("SELECT pg_get_indexdef(indexrelid) AS indexdef FROM pg_index WHERE indrelid = to_regclass(CAST(:t AS text))")
+                    .bind("t", t.tabla)
+                    // postgres prints a column's name unquoted when it needs no quotes: compare the names bare
+                    .map { r, _ -> r.get("indexdef", String::class.java)!!.replace("\"", "") }
+                    .all()
+                    .asFlow()
+                    .toList()
+            }
+        for (campo in listOf("predio", "contribuyente")) {
+            assertTrue(defs.any { it.contains("(${t.columna("anio").replace("\"", "")}, ${t.columna(campo).replace("\"", "")})") }, defs.toString())
+        }
     }
 }

@@ -17,7 +17,7 @@ prediales, catastro fiscal) que se carga por REST, e importadores del padrón de
 
 - JDK 25 y Docker (para PostGIS y para los tests de integración con Testcontainers).
 - Python 3.11+ para `model/`.
-- Las librerías de wasichai (`wasichai:wasichai-bom:0.2.0` y los starters). Se resuelven desde:
+- Las librerías de wasichai (`wasichai:wasichai-bom:0.3.2` y los starters). Se resuelven desde:
   1. **GitHub Packages** (`https://maven.pkg.github.com/wasichai/wasichai`). Pide un token aunque sea para leer
      (`read:packages` basta). En `~/.gradle/gradle.properties`:
      ```properties
@@ -75,9 +75,10 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 82 created, 0 updated, 0 skipped  (40 objetos + 42 relaciones)
+python3 apply.py --diff            # lee la base y dice qué escribiría ("would PUT …"), sin escribir nada
+python3 apply.py                   # done: 82 created, 2 updated, 0 skipped  (40 objetos + 42 relaciones; 2 appendOnly)
 python3 apply.py                   # idempotente: done: 0 created, 0 updated, 82 skipped
-python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
+python3 apply.py --drop            # apaga appendOnly y lo borra, en orden inverso (¡borra también los datos!)
 ```
 
 Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
@@ -89,6 +90,28 @@ Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
   SIN DOCUMENTO); nunca vuelve obligatorio uno existente.
 - **Etiquetas:** pone la etiqueta de `model.json` al campo que Core etiqueta distinto (`predio.tipo_predio`:
   "Tipo de predio"). Es solo lo que muestra el admin.
+- **Reglas del objeto:** después de las relaciones (un índice puede nombrar un campo de relación), deja `indexes`
+  (ADR-036) y `appendOnly` (ADR-040) como los declara `model.json`, con un `PUT /api/objects/{objeto}` que
+  lleva la etiqueta y solo lo que cambia (`update object cuota_arbitrio (appendOnly)`). `model.json` manda: un índice
+  que solo tiene Core se quita, y un objeto sin `appendOnly` queda sin él. El PUT devuelve la etiqueta, el plural, la
+  descripción y `enabled` tal como los tiene Core (si faltan, Core los pisa), así que solo cambia las reglas.
+  `--dry-run` no consulta a Core: muestra lo que declara `model.json`, no la diferencia con la base.
+
+**`--diff`, antes de aplicar a una base compartida (dev).** Entra a Core y solo lo lee: corre la misma sincronización
+que `apply.py`, pero cada escritura (POST, PUT o DELETE) se imprime como `would <MÉTODO> <ruta> <resumen>` en lugar de
+enviarse, y al final `diff: nothing pending` o `diff: N writes pending, none sent`. Lo que la base ya tiene no cuenta
+como pendiente: una relación que existe, y la marca de obligatoria de un campo que ya lo es. Sobre la base de dev de
+antes de 0.3.2 muestra exactamente las dos reglas:
+
+```text
+would PUT /api/objects/cuota_arbitrio {"indexes": [["anio", "predio"], ["anio", "contribuyente"]], "appendOnly": true}
+would PUT /api/objects/anulacion_cuota_arbitrio {"appendOnly": true}
+diff: 2 writes pending, none sent
+```
+
+En dev el procedimiento es: `python3 apply.py --diff`, mostrar lo pendiente y pedir OK; recién entonces
+`python3 apply.py`. Una segunda corrida de `--diff` debe decir `diff: nothing pending`. Con `--drop`, `--diff` lista
+lo que borraría.
 
 Solo añade, relaja, reetiqueta o quita opciones sin uso: no renombra, no cambia tipos y no borra campos, así los
 registros importados siguen siendo válidos. Por ejemplo, sobre la base del padrón:
@@ -111,7 +134,8 @@ Una relación queda obligatoria cuando `model.json` dice `"required": true`; las
 [Modelo](#modelo)) se crean sin ese paso.
 
 Flags: `--core` (default `http://localhost:8090` o `$WASICHAI_CORE`), `--email`, `--password`, `--dry-run`,
-`--drop`, `--validate-only`. Salida: `0` ok, `1` error de Core, `2` `model.json` inválido.
+`--diff` (no va con `--dry-run`), `--drop`, `--validate-only`. Salida: `0` ok, `1` error de Core, `2` `model.json`
+inválido.
 
 ## Cargar los catálogos
 
@@ -320,15 +344,18 @@ Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
   `predio|servicio|anio|periodo|secuencia|version` (las cuotas anteriores al PU por uso, `predio|servicio|anio|periodo|version`).
   Core no tiene unicidad compuesta; como cada organización tiene su tabla física, la unicidad es por organización.
 - **Inmutable:** una cuota no se edita ni se borra, ni siquiera un ADMIN; una corrección es una anulación que se
-  agrega y una versión nueva de la `clave` (ver **Anulación**). Los permisos de Core no pueden decirlo (ADMIN se los salta, y `/admin` usa
-  la misma API), así que lo hace cumplir la regla `CuotasInmutables` de la guardia de escritura (`srtm.AlmacenGuardado`,
-  ver [Modelo](#modelo)): un PUT o DELETE de una cuota, por cualquier vía, responde **409**. Las cuotas no exigen la
-  marca de escritura: la API genérica todavía puede agregarlas, si cumplen sus invariantes.
+  agrega y una versión nueva de la `clave` (ver **Anulación**). `cuota_arbitrio` y `anulacion_cuota_arbitrio` son
+  `appendOnly` en el modelo (ADR-040): Core responde **409** a un PUT o DELETE de una, por cualquier vía y para
+  cualquiera, antes de la guardia de escritura. También responde **409** al borrar un predio, contribuyente, servicio o
+  parámetro al que apunta una cuota. Las cuotas no exigen la marca de escritura: la API genérica todavía puede
+  agregarlas, si cumplen sus invariantes.
 - **`periodo` de 1 a 12, `monto` no negativo y cuadrado con su desglose (el `monto_sin_tope`, cuando un tope la redujo; el
   `monto` nunca lo supera, y `tope_aplicado` va con él), `parametro_aplicado` de hasta 500 caracteres,
-  relaciones obligatorias y `clave` coherente:** los revisa el mismo `RecordStore` al insertar, venga la cuota de donde venga; si no, **400**.
+  relaciones obligatorias y `clave` coherente:** los revisa la regla `ReglaDeArbitrios` de la guardia de escritura
+  (`srtm.GuardiaDeEscritura`, ver [Modelo](#modelo)) al insertar, venga la cuota de donde venga; si no, **400**.
 - **Un valor único repetido** (dos cuotas con la misma `clave`, o cualquier otro campo único del modelo) responde
-  **409** y no 500 (`srtm.Duplicados`; Core 0.2.0 lo deja caer como error interno).
+  **409** y no 500 (`srtm.Duplicados`; Core 0.3 también responde 409, con `errors[].field`, pero en inglés; srtm lo
+  sobrescribe para dar el mensaje en castellano, y pierde el campo).
 - **Observación de 5 a 500 caracteres:** va en la propia cuota, porque la auditoría de Core no guarda observación.
 
 **Parámetros de la ordenanza.** Las tasas y los mapeos son filas de `parametro_tributario`, con vigencia y doble
@@ -623,9 +650,9 @@ predio escribe alguna entre la lectura y la escritura (la `clave` es única), no
 otra vez, una sola vez, y lo que la otra escribió ya no se recalcula.
 
 **Índices.** Core indexa solo `organization_id`, el estado y los campos únicos, y un año trae de 540 000 a 900 000
-cuotas. La app crea dos índices propios sobre la tabla física de `cuota_arbitrio` de cada organización:
-`(anio, predio)` y `(anio, contribuyente)`. Los crea al arrancar y, para una organización cuyo modelo llegó después,
-en su primer uso (`IndicesArbitrios`). Medido en el CI sobre 505 000 filas: listar un predio pasa de 62 ms a 3,3 ms.
+cuotas. El modelo declara dos índices en `cuota_arbitrio` (`indexes` de `model/model.json`): `(anio, predio)` y
+`(anio, contribuyente)`. Core los crea en la tabla física de cada organización, también en una que se crea después
+(wasichai 0.3). Medido en el CI sobre 505 000 filas: listar un predio pasa de 62 ms a 3,3 ms.
 
 **API** (`/api/srtm`, JSON en snake_case; sin `anio`, el año en curso):
 
@@ -1291,10 +1318,12 @@ Las garantías de `rentas` sobre las infracciones y los anuncios, y dónde queda
 - **Largos y rangos:** TEXT y LONG_TEXT no tienen largo en Core; los revisa la regla de escritura (código ≤ 20 en
   mayúsculas, descripción del CUIS ≤ 1000, `porcentaje_uit` mayor que 0 y hasta 10 000, área mayor que 0, lados y cantidad desde 1…).
 
-**Guardia de escritura** (`srtm.AlmacenGuardado`). Toda escritura de un registro pasa por el `RecordStore` de Core, venga
-de la API genérica (`/api/objects/{objeto}/records`), de `/admin` o de un servicio de srtm. `AlmacenGuardado` lo envuelve
-(un solo `@Bean recordStore`; el de Core es `@ConditionalOnMissingBean`) y, antes de escribir, consulta la
-`ReglaDeEscritura` del objeto. Cada módulo tiene la suya, como bean de su paquete (`CuotasInmutables` en
+**Guardia de escritura** (`srtm.GuardiaDeEscritura`). Es un `RecordWriteGuard` de wasichai (ADR-040): Core lo llama
+antes de cada escritura de un registro, por cualquier camino (la API genérica `/api/objects/{objeto}/records`, `/admin`,
+un servicio de srtm, un enlace entre registros, una transición, una automatización o la plataforma), en la corrutina de
+quien escribe y después de sus permisos, de `appendOnly` y de revisar que existan los registros a los que apunta (una
+relación a un id que no existe responde **400** antes de llegar a la guardia). La guardia consulta la
+`ReglaDeEscritura` del objeto. Cada módulo tiene la suya, como bean de su paquete (`ReglaDeArbitrios` en
 `srtm.arbitrios`, `ReglaDeSanciones` en `srtm.sanciones`, `ReglaDeAnuncios` en `srtm.anuncios`), y ninguno importa a
 otro:
 - **Alta:** los invariantes del registro (los `CHECK` de rentas, los largos y las claves), venga de donde venga; si no,
@@ -1302,18 +1331,17 @@ otro:
 - **Cambio, borrado o transición:** **409**. La única excepción: cerrar una versión del CUIS, una vez (su
   `vigencia_hasta` pasa de vacía a una fecha no anterior a `vigencia_desde`, su `clave_vigente` a NULL, y nada más
   cambia). La regla compara la fila entera, normalizada, porque el update de Core reemplaza todos los campos.
+  wasichai le presenta a la guardia un enlace o desenlace entre registros como un cambio (UPDATED): enlazar o
+  desenlazar un registro de un objeto con regla (sanciones y anuncios, el CUIS incluido) también es **409**.
 - **Marca de escritura:** los objetos de sanciones y de anuncios son `soloDesdeElServicio`: solo los escribe la api de
   srtm, que corre sus reglas. `Registros` pone la marca `EscrituraDeSrtm` (un elemento del contexto de la corrutina, el
   patrón `EscrituraDeCaja` de caja-backend) alrededor de cada `create` y `replace`; un cliente HTTP no puede ponerla.
   Sin ella, un alta (o el cierre del CUIS) responde **403**, también a un ADMIN, sin tocar la base, y deja una línea
-  WARN `ESCRITURA FUERA DE SRTM RECHAZADA`. Los arbitrios no la exigen.
-- `AlmacenGuardadoTest` falla si una versión nueva de wasichai agrega un método al `RecordStore`: delega por `by`, y un
-  método nuevo de escritura pasaría sin preguntar a ninguna regla.
+  WARN `ESCRITURA FUERA DE SRTM RECHAZADA`. La plataforma y las automatizaciones escriben sin usuario y en su propia
+  corrutina: tampoco llevan la marca. Los arbitrios no la exigen.
 
-Lo que la guardia no ve (límites de wasichai 0.2.0): borrar el objeto entero, un campo o el `unique` de un campo por la
-API de metadatos (`/api/metadata/...`, con `MANAGE_METADATA`); una escritura directa a la base (así escriben sus
-estados la emisión y la determinación masivas, que no son de estos objetos); y un módulo que escriba sin pasar por el
-`RecordStore`.
+Lo que la guardia no ve: una escritura directa a la base (así escriben sus estados los lotes de la emisión y la
+determinación masivas, `srtm.emision.TablasCore`, que no son de estos objetos).
 
 **Parámetros de las infracciones y los anuncios.** Son filas de `parametro_tributario`, con vigencia y doble firma, que
 se cargan con `import_parametros.py --csv <archivo>`; su forma se revisa antes de enviar nada (`TIPOS_SANCIONES`,
@@ -1487,13 +1515,13 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET | `/api/srtm/ubigeos` | la lista INEI completa; la cascada departamento → provincia → distrito se hace en el portal |
 | GET | `/api/srtm/vias?q&tipo&ubigeo`, `/api/srtm/unidades-urbanas?q&tipo&ubigeo` | sugerencias del catálogo |
 | GET, POST | `/api/srtm/contribuyentes?q&page&size` | búsqueda (texto en todos los campos) e inscripción |
-| GET, PUT, DELETE | `/api/srtm/contribuyentes/{id}?anio` | la ficha: datos, nº de predios y totales del año; la edición; y la baja (409 si tiene declaraciones) |
+| GET, PUT, DELETE | `/api/srtm/contribuyentes/{id}?anio` | la ficha: datos, nº de predios y totales del año; la edición; y la baja (409 si tiene declaraciones o cuotas de arbitrio) |
 | GET | `/api/srtm/contribuyentes/{id}/declaraciones?anio` | sus declaraciones, cada una con su predio |
 | GET | `/api/srtm/contribuyentes/{id}/liquidacion?anio` | el impuesto predial del año: base, tramos, mínimo, anual y cuotas con su vencimiento; `faltan` si falta un parámetro ([Impuesto predial](#impuesto-predial)) |
 | GET, POST | `/api/srtm/contribuyentes/{id}/{lista}` | las listas del contribuyente: `domicilios`, `relacionados`, `medios-contacto`, `sustentos` |
 | PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
 | GET, POST | `/api/srtm/predios?q&page&size` | búsqueda y alta |
-| GET, PUT, DELETE | `/api/srtm/predios/{id}?anio` | la ficha: datos, nº de titulares y totales del año; la edición; y la baja (409 si tiene declaraciones) |
+| GET, PUT, DELETE | `/api/srtm/predios/{id}?anio` | la ficha: datos, nº de titulares y totales del año; la edición; y la baja (409 si tiene declaraciones o cuotas de arbitrio) |
 | GET | `/api/srtm/predios/{id}/declaraciones?anio` | sus declaraciones, cada una con su contribuyente |
 | POST | `/api/srtm/declaraciones` | alta corta, desde la ficha del predio (`contribuyente` y `predio` son ids) |
 | POST | `/api/srtm/contribuyentes/{id}/declaraciones-juradas` | presenta una DJ: `{declaracion, predio_id}` sobre un predio del padrón, o `{declaracion, predio}` registrando uno |
@@ -1782,8 +1810,8 @@ solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm
   - **Intentos:** un lote tomado más de `srtm.emision.intentos` veces (`SRTM_EMISION_INTENTOS`, por defecto 3) queda
     FALLIDO y sus contribuyentes pasan a `errores` con "lote fallido tras N intentos". Un fallo inesperado al generar
     lo suelta (PENDIENTE) para el siguiente.
-- **Identidad:** `RecordService` revisa los permisos, y wasichai 0.2.0 no ofrece cómo reconstruir el `Authentication`
-  de un usuario ni un contexto de sistema; `CurrentUser` solo lee un principal `Jwt` (`sub` y los claims `org`,
+- **Identidad:** `RecordService` revisa los permisos, y `asPlatform` (wasichai 0.3) los saltaría; la emisión corre a
+  propósito como el usuario que la lanzó. `CurrentUser` solo lee un principal `Jwt` (`sub` y los claims `org`,
   `email` y `roles`). Por eso cada lote se genera **como quien lo creó** (el `created_by` del lote, el mismo usuario que
   lanzó la emisión): `IdentidadEmision` arma en memoria el `Jwt` que armaría el filtro de Core, con la fila y los roles
   actuales de ese usuario. Ese `Jwt` nunca se firma ni sale del proceso. Si el usuario fue borrado o deshabilitado, el
@@ -1998,7 +2026,7 @@ yarn format:check           # prettier: yaml y json, model.json incluido
   `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…; las de
   `srtm.sanciones`: `MultasTest`, `NotificacionesTest`, `PlazosTest`, `CuisTest`, `ProcedimientoTest`, `RecursosTest`,
   `OrdenDeLosActosTest`, `ExpedientesTest`, `HojaResolucionTest` y `PanelTest`, con cifras ficticias), la guardia
-  de escritura (`AlmacenGuardadoTest`, `ReglaDeSancionesTest`, `ReglaDeAnunciosTest`, y `AlmacenGuardadoApiTest` en
+  de escritura (`GuardiaDeEscrituraTest`, `ReglaDeSancionesTest`, `ReglaDeAnunciosTest`, y `GuardiaDeEscrituraApiTest` en
   integración), los anuncios (`AnunciosTest`, los casos de `AnuncioYSusActosTest` de rentas, y `AnunciosApiTest` en
   integración: el alta, la idempotencia, diez altas a la vez, dos renovaciones a la vez, los actos, el padrón a un
   corte, la guardia y los permisos), `Records`,
@@ -2040,6 +2068,26 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 - Los de integración corren en el CI de cada PR. Con un Docker remoto no corren en local tal cual (Testcontainers no
   llega a sus puertos): se usa una base de test externa tunelizada, con PostGIS y un nombre que termine en `_test`.
   Cómo, en [docs/develop/README.md](docs/develop/README.md#6-tests).
+
+## wasichai 0.3: lo que srtm no migra
+
+Con `RecordService.asPlatform(organizationId)` (ADR-039) y el bean `ClusterLock` (candados de postgres), 0.3 permite
+escribir como la plataforma. srtm no pasó nada a ellos (#76), y esto queda anotado con su motivo:
+
+- **Las máquinas de lotes** (`MaquinaLotes`, `EstadoTrabajos`, `EstadoEmisiones`, `LotesEmision`): toman con
+  `FOR UPDATE SKIP LOCKED`; las transiciones son compare-and-set, condicionadas al estado, con el «antes» leído bajo
+  bloqueo en la misma sentencia; `procesados` suma lo de los lotes. `RecordService` no puede expresar nada de eso, y un
+  `ClusterLock` serializaría lo que hoy reparte `SKIP LOCKED`.
+- **`RetencionEmision`:** el `UPDATE ... WHERE archivo IS NOT NULL` es idempotente entre instancias. Con `asPlatform`
+  haría falta leer, reemplazar la fila entera y tomar un `ClusterLock`, sin ganar nada. Queda como mejora posible.
+- **`IdentidadEmision`:** la emisión y la determinación corren a propósito como el usuario que las lanzó, para que
+  core revise sus permisos; `asPlatform` los saltaría. Es una elección, no una carencia.
+- **La marca `EscrituraDeSrtm`, no `apiOnly`:** el `apiOnly` de wasichai solo cierra la API REST genérica; la marca
+  rechaza además las escrituras de la plataforma y de las automatizaciones, que no pasan por la api de srtm ni corren
+  sus reglas.
+- **`Duplicados`:** desde 0.3.0 core responde 409 con `errors[].field` (D23), pero en inglés. srtm lo sigue
+  sobrescribiendo para dar al portal el mensaje en castellano, y pierde el campo. Seguimiento: traducir el `detail` de
+  core o pasar el campo.
 
 ## Siguientes pasos (fuera de este alcance)
 

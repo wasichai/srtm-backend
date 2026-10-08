@@ -184,7 +184,7 @@ class ShippedModelTests(unittest.TestCase):
         # determinacion_arbitrio of rentas, carried over: one cuota per predio, servicio, year, month and secuencia de
         # uso (the unique clave, one PU per uso), every relation required, the amount, period and key required. periodo
         # 1..12, monto >= 0, monto squaring with its desglose and the 500 characters of parametro_aplicado are
-        # kotlin's; immutability is the RecordStore's (README, Arbitrios)
+        # kotlin's; immutability is the model's: appendOnly (ADR-040), as for the anulación (README, Arbitrios)
         objetos = {o["name"]: o for o in self.model["objects"]}
         cuota = {f["name"]: f for f in objetos["cuota_arbitrio"]["fields"]}
         self.assertEqual(list(cuota), ["anio", "periodo", "monto", "parametro_aplicado", "zona", "uso_arbitrio", "secuencia_uso",
@@ -243,6 +243,11 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual({n for n, f in fields.items() if f.get("unique")}, {"clave"})
         relaciones = {r["fieldName"]: r["target"] for r in self.model["relationships"] if r["source"] == "anulacion_cuota_arbitrio"}
         self.assertEqual(relaciones, {"cuota": "cuota_arbitrio", "predio": "predio"})
+
+    def test_only_the_cuotas_and_their_anulaciones_are_append_only(self):
+        # Core refuses their update and delete, for everyone, and the delete of what a cuota points at (ADR-040)
+        self.assertEqual([o["name"] for o in self.model["objects"] if o.get("appendOnly")],
+                         ["cuota_arbitrio", "anulacion_cuota_arbitrio"])
 
     def test_the_masiva_de_arbitrios_is_a_twin_of_the_emision(self):
         # the same lotes, lease and attempts as emision_masiva / emision_lote; it writes cuotas, never a file
@@ -430,6 +435,25 @@ class ValidationTests(unittest.TestCase):
     def test_unknown_enum_is_refused(self):
         errors = self.mutate(lambda m: m["objects"][0]["fields"].append({"name": "x", "label": "X", "type": "ENUM", "enum": "nope"}))
         self.assertTrue(any("enum 'nope' is not defined" in e for e in errors))
+
+    def test_append_only_is_a_boolean(self):
+        errors = self.mutate(lambda m: m["objects"][0].update(appendOnly="yes"))
+        self.assertIn("object contribuyente: appendOnly must be true or false", errors)
+
+    def test_an_index_names_fields_or_relations_of_its_object(self):
+        def cuota(indexes):
+            return self.mutate(lambda m: next(o for o in m["objects"] if o["name"] == "cuota_arbitrio").update(indexes=indexes))
+        self.assertEqual(cuota([["anio", "predio"], ["clave"]]), [])
+        self.assertIn("object cuota_arbitrio: indexes must be a list of lists of field names", cuota("anio"))
+        self.assertIn("object cuota_arbitrio: indexes must be a list of lists of field names", cuota([["anio"], "predio"]))
+        self.assertIn("object cuota_arbitrio: an entry of indexes is empty", cuota([[]]))
+        self.assertIn("object cuota_arbitrio: index (anio, nope) names 'nope', not a field of the object", cuota([["anio", "nope"]]))
+        self.assertIn("object cuota_arbitrio: index (anio, anio) names 'anio' twice", cuota([["anio", "anio"]]))
+        self.assertIn("object cuota_arbitrio: index (anio) is repeated", cuota([["anio"], ["anio"]]))
+
+    def test_a_long_text_is_not_indexed(self):
+        errors = self.mutate(lambda m: next(o for o in m["objects"] if o["name"] == "emision_lote").update(indexes=[["contribuyentes"]]))
+        self.assertIn("object emision_lote: index (contribuyentes) names 'contribuyentes', a LONG_TEXT, which Core does not index", errors)
 
 
 if __name__ == "__main__":

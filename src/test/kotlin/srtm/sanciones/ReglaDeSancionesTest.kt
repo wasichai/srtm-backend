@@ -179,7 +179,7 @@ class ReglaDeSancionesTest {
         assertEquals(listOf("notificador"), campos(NOTIFICACION_RESOLUCION, notificada + ("notificador" to "x".repeat(61))))
     }
 
-    // closing a version of the CUIS: the one change the store lets through, with the mark (AlmacenGuardadoTest)
+    // closing a version of the CUIS: the one change the guard lets through, with the mark (GuardiaDeEscrituraTest)
 
     private val guardado = Ejemplos.codigo()
     private val cerrado = guardado + mapOf("vigencia_hasta" to "2026-06-30", "clave_vigente" to null)

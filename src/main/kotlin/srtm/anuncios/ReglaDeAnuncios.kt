@@ -8,8 +8,8 @@ import wasichai.core.common.FieldViolation
 import wasichai.core.common.ValidationException
 
 // rentas' GRANT INSERT, SELECT on the anuncios: an anuncio and its movimientos are only added, and only by srtm's api,
-// which runs their rules (srtm.AlmacenGuardado asks this one before every write). an insert holds its invariantes; an
-// update, a delete or a transition is a 409
+// which runs their rules (srtm.GuardiaDeEscritura asks this one before every write). an insert holds its invariantes;
+// an update, a delete or a transition is a 409
 @Component
 class ReglaDeAnuncios : ReglaDeEscritura {
     override val objetos = setOf(ANUNCIO, MOVIMIENTO_ANUNCIO)

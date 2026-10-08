@@ -1,6 +1,5 @@
 package srtm
 
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -22,40 +21,54 @@ import srtm.sanciones.RESOLUCION_GERENCIA
 import srtm.sanciones.SUBSANACION_NOTIFICACION
 import tools.jackson.databind.JsonNode
 import wasichai.core.common.ConflictException
-import wasichai.core.data.RecordStore
-import wasichai.core.metadata.MetadataService
+import wasichai.core.data.RecordRequest
+import wasichai.core.data.RecordService
 import java.util.UUID
 import srtm.anuncios.Ejemplos as EjemplosAnuncios
 import srtm.sanciones.Ejemplos as EjemplosSanciones
 
-// the guard before every write (srtm.AlmacenGuardado) on the whole app and PostGIS: no record of the sanciones or the
-// anuncios is written through wasichai's generic api (POST/PUT/DELETE /api/objects/{objeto}/records), not even by an
-// ADMIN. srtm writes them with the mark EscrituraDeSrtm (Registros puts it; here the store is called with it, as
-// Registros would, until the services that write them exist). the arbitrios keep their behavior (ArbitriosApiTest,
-// AnulacionApiTest)
-class AlmacenGuardadoApiTest : ConParametrosApiTest() {
+// the guard wasichai calls before every write (srtm.GuardiaDeEscritura) on the whole app and PostGIS: no record of the
+// sanciones or the anuncios is written through wasichai's generic api (POST/PUT/DELETE /api/objects/{objeto}/records),
+// not even by an ADMIN. srtm writes them with the mark EscrituraDeSrtm (Registros puts it; here RecordService is called
+// with it, as Registros does). the arbitrios keep their behavior (ArbitriosApiTest, AnulacionApiTest)
+class GuardiaDeEscrituraApiTest : ConParametrosApiTest() {
     @Autowired
-    lateinit var recordStore: RecordStore
-
-    @Autowired
-    lateinit var metadata: MetadataService
+    lateinit var records: RecordService
 
     @Test
     fun `no record of the sanciones or the anuncios is added through the generic api, not even by an ADMIN`() {
+        // the records each one points to, real: a relation to a missing one is core's 400 (D29), before the guard
         val c = inscribir()
-        val id = UUID.randomUUID().toString()
+        val uit = uit2026()
+        val codigo = conLaMarca(CODIGO_INFRACCION, EjemplosSanciones.codigo("T-${uniqueDocumento()}"))
+        val acta = conLaMarca(PAPELETA, EjemplosSanciones.papeleta("AC-${uniqueDocumento()}", codigo, uit, c))
+        val notificacion = conLaMarca(NOTIFICACION_ADMINISTRATIVA, EjemplosSanciones.notificacion("NP-${uniqueDocumento()}", c))
+        val anuncio = conLaMarca(ANUNCIO, EjemplosAnuncios.anuncio(c, correlativo = uniqueDocumento().toInt()))
+        // a year only this class gives rows to, so no service numbers a resolución in it; numero is unique
+        val correlativo = uniqueDocumento().take(6).toInt() + 1
+        val resolucion =
+            conLaMarca(
+                RESOLUCION_GERENCIA,
+                EjemplosSanciones.resolucion(acta) +
+                    mapOf(
+                        "anio" to ANIO_SIN_SERVICIO,
+                        "correlativo" to correlativo,
+                        "numero" to "RIS-$ANIO_SIN_SERVICIO-%06d".format(correlativo),
+                        "plazo" to uit
+                    )
+            )
         val registros =
             mapOf(
                 CODIGO_INFRACCION to EjemplosSanciones.codigo("T-${uniqueDocumento()}"),
                 NOTIFICACION_ADMINISTRATIVA to EjemplosSanciones.notificacion("NP-${uniqueDocumento()}", c),
-                SUBSANACION_NOTIFICACION to EjemplosSanciones.subsanacion(id),
-                PAPELETA to EjemplosSanciones.papeleta("AC-${uniqueDocumento()}", id, id, c),
-                ANULACION_PAPELETA to EjemplosSanciones.anulacion(id),
-                DESCARGO_PAPELETA to EjemplosSanciones.descargo(id, id),
-                RESOLUCION_GERENCIA to EjemplosSanciones.resolucion(id),
-                NOTIFICACION_RESOLUCION to EjemplosSanciones.notificacionResolucion(id),
+                SUBSANACION_NOTIFICACION to EjemplosSanciones.subsanacion(notificacion),
+                PAPELETA to EjemplosSanciones.papeleta("AC-${uniqueDocumento()}", codigo, uit, c),
+                ANULACION_PAPELETA to EjemplosSanciones.anulacion(acta),
+                DESCARGO_PAPELETA to EjemplosSanciones.descargo(acta, uit),
+                RESOLUCION_GERENCIA to EjemplosSanciones.resolucion(acta) + ("plazo" to uit),
+                NOTIFICACION_RESOLUCION to EjemplosSanciones.notificacionResolucion(resolucion) + ("plazo" to uit),
                 ANUNCIO to EjemplosAnuncios.anuncio(c),
-                MOVIMIENTO_ANUNCIO to EjemplosAnuncios.movimiento(id, parametro = id)
+                MOVIMIENTO_ANUNCIO to EjemplosAnuncios.movimiento(anuncio, parametro = uit)
             )
         for ((objeto, attrs) in registros) {
             val antes = cuantos(objeto)
@@ -63,6 +76,31 @@ class AlmacenGuardadoApiTest : ConParametrosApiTest() {
             assertTrue(problema["detail"].asString().contains("«$objeto»"), problema.toString())
             assertEquals(antes, cuantos(objeto), "$objeto: nothing was written")
         }
+    }
+
+    // core checks the relation targets before any guard (D29): a missing one is a 400 on its field, not the guard's 403
+    @Test
+    fun `a relation to a record that does not exist is a 400 that names it, and nothing is written`() {
+        val antes = cuantos(ANULACION_PAPELETA)
+        val problema =
+            tree(
+                send(
+                    "POST",
+                    "/api/objects/$ANULACION_PAPELETA/records",
+                    mapOf("attributes" to EjemplosSanciones.anulacion(UUID.randomUUID().toString())),
+                    HttpStatus.BAD_REQUEST
+                )
+            )
+        assertEquals(
+            listOf("papeleta"),
+            problema["errors"]
+                .iterator()
+                .asSequence()
+                .map { it["field"].asString() }
+                .toList(),
+            problema.toString()
+        )
+        assertEquals(antes, cuantos(ANULACION_PAPELETA))
     }
 
     @Test
@@ -129,40 +167,17 @@ class AlmacenGuardadoApiTest : ConParametrosApiTest() {
         assertEquals(listOf("", "", "ADMINISTRATIVA|$codigo"), vigentes)
     }
 
-    // the admin's organization and id
-    private val yo: JsonNode by lazy { tree(send("GET", "/api/auth/me", null, HttpStatus.OK)) }
-
-    private fun organizacion() = UUID.fromString(yo["organizationId"].asString())
-
-    private fun usuario() = UUID.fromString(yo["userId"].asString())
-
-    // a record written as srtm writes it (Registros, with the mark), through the app's RecordStore: its id
+    // a record written as srtm writes it (Registros: RecordService as the caller, with the mark): its id
     private fun conLaMarca(
         objeto: String,
         attrs: Map<String, Any?>
-    ): String =
-        runBlocking {
-            withContext(EscrituraDeSrtm) {
-                recordStore.insert(metadata.loadDefinition(organizacion(), objeto), organizacion(), usuario(), attrs, emptyMap()).id.toString()
-            }
-        }
+    ): String = comoAdmin { withContext(EscrituraDeSrtm) { records.create(objeto, RecordRequest(attrs)).id } }
 
     private fun cerrar(
         id: String,
         attrs: Map<String, Any?>
     ) {
-        runBlocking {
-            withContext(EscrituraDeSrtm) {
-                recordStore.update(
-                    metadata.loadDefinition(organizacion(), CODIGO_INFRACCION),
-                    organizacion(),
-                    usuario(),
-                    UUID.fromString(id),
-                    attrs,
-                    emptyMap()
-                )
-            }
-        }
+        comoAdmin { withContext(EscrituraDeSrtm) { records.update(CODIGO_INFRACCION, UUID.fromString(id), RecordRequest(attrs)) } }
     }
 
     private fun cuantos(objeto: String) = tree(send("GET", "/api/objects/$objeto/records?size=1", null, HttpStatus.OK))["totalElements"].asLong()
@@ -173,4 +188,9 @@ class AlmacenGuardadoApiTest : ConParametrosApiTest() {
 
     // a record as a request body: its attributes
     private fun atributos(registro: JsonNode): Map<String, Any?> = fields(registro["attributes"])
+
+    private companion object {
+        // years only this class gives rows to
+        const val ANIO_SIN_SERVICIO = 1984
+    }
 }

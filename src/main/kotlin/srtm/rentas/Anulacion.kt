@@ -41,6 +41,22 @@ fun bajaConDeclaraciones(
         else -> "$quien tiene $declaraciones declaraciones juradas: no se puede eliminar"
     }
 
+// why a predio or contribuyente cannot go once its declarations are gone: the cuotas de arbitrio (and, for a predio,
+// their anulaciones) that name it. both are appendOnly (model/model.json): core refuses to delete what one names, with
+// its own 409 in english and only at that delete, so srtm asks before touching anything. null when it can
+fun bajaConCuotas(
+    quien: String,
+    cuotas: Long,
+    anulaciones: Long = 0
+): String? =
+    when {
+        cuotas == 1L -> "$quien tiene 1 cuota de arbitrio: no se puede eliminar, una cuota no se borra nunca"
+        cuotas > 1L -> "$quien tiene $cuotas cuotas de arbitrio: no se puede eliminar, una cuota no se borra nunca"
+        anulaciones == 1L -> "$quien tiene 1 anulación de cuota de arbitrio: no se puede eliminar, una anulación no se borra nunca"
+        anulaciones > 1L -> "$quien tiene $anulaciones anulaciones de cuotas de arbitrio: no se puede eliminar, una anulación no se borra nunca"
+        else -> null
+    }
+
 private val LISTAS_DECLARACION =
     mapOf(
         TRANSFERENTE to "transferentes",
