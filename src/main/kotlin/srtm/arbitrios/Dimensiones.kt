@@ -30,11 +30,19 @@ object Dimensiones {
         nombre: String,
         anio: Int,
         dia: LocalDate
+    ): ValorDimension = influencia(IndiceParametros(parametros), predio, nombre, anio, dia)
+
+    fun influencia(
+        parametros: IndiceParametros,
+        predio: Predio,
+        nombre: String,
+        anio: Int,
+        dia: LocalDate
     ): ValorDimension {
         val ubicacion =
             predio.ubicacionAreaVerde?.trim()?.ifEmpty { null }
                 ?: return ValorDimension.Falta("Ubicación respecto del área verde del predio $nombre", Enlace.PREDIO)
-        val fila = enVigor(parametros, Llaves.ARBITRIO_INFLUENCIA, dia) { it.clave?.trim() == ubicacion && !it.texto.isNullOrBlank() }
+        val fila = parametros.enVigor(Llaves.ARBITRIO_INFLUENCIA, ubicacion, dia) { !it.texto.isNullOrBlank() }
         return fila?.texto?.trim()?.let { ValorDimension.Es(it) }
             ?: ValorDimension.Falta("${Llaves.ARBITRIO_INFLUENCIA} $ubicacion $anio")
     }
@@ -48,11 +56,20 @@ object Dimensiones {
         codigoUso: String,
         anio: Int,
         dia: LocalDate
+    ): ValorDimension = afluencia(IndiceParametros(parametros), servicio, codigoUso, anio, dia)
+
+    fun afluencia(
+        parametros: IndiceParametros,
+        servicio: String,
+        codigoUso: String,
+        anio: Int,
+        dia: LocalDate
     ): ValorDimension {
         fun mejor(prefijoDe: (String) -> String?) =
             parametros
+                .deTipo(Llaves.ARBITRIO_AFLUENCIA)
                 .filter {
-                    it.tipo == Llaves.ARBITRIO_AFLUENCIA && !it.texto.isNullOrBlank() && vigente(it.vigenciaDesde, it.vigenciaHasta, dia)
+                    !it.texto.isNullOrBlank() && vigente(it.vigenciaDesde, it.vigenciaHasta, dia)
                 }.mapNotNull { fila ->
                     fila.clave
                         ?.trim()

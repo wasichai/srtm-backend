@@ -76,8 +76,14 @@ object Servicios {
         parametros: List<ParametroTributario>,
         servicio: String,
         dia: LocalDate
+    ): Base? = baseLeida(IndiceParametros(parametros), servicio, dia)
+
+    fun baseLeida(
+        parametros: IndiceParametros,
+        servicio: String,
+        dia: LocalDate
     ): Base? {
-        val fila = enVigor(parametros, Llaves.BASE_ARBITRIO, dia) { it.clave?.trim() == servicio && !it.texto.isNullOrBlank() }
+        val fila = parametros.enVigor(Llaves.BASE_ARBITRIO, servicio, dia) { !it.texto.isNullOrBlank() }
         return fila?.texto?.trim()?.let { runCatching { Base.valueOf(it) }.getOrNull() }
     }
 
@@ -87,8 +93,14 @@ object Servicios {
         parametros: List<ParametroTributario>,
         servicio: String,
         dia: LocalDate
+    ): List<Dimension> = dimensiones(IndiceParametros(parametros), servicio, dia)
+
+    fun dimensiones(
+        parametros: IndiceParametros,
+        servicio: String,
+        dia: LocalDate
     ): List<Dimension> {
-        val fila = enVigor(parametros, Llaves.DIMENSIONES_ARBITRIO, dia) { it.clave?.trim() == servicio && !it.texto.isNullOrBlank() }
+        val fila = parametros.enVigor(Llaves.DIMENSIONES_ARBITRIO, servicio, dia) { !it.texto.isNullOrBlank() }
         val nombres =
             fila
                 ?.texto
@@ -111,10 +123,18 @@ object Servicios {
         zona: String,
         uso: String,
         dia: LocalDate
+    ): Habitantes? = habitantes(IndiceParametros(parametros), servicio, zona, uso, dia)
+
+    fun habitantes(
+        parametros: IndiceParametros,
+        servicio: String,
+        zona: String,
+        uso: String,
+        dia: LocalDate
     ): Habitantes? {
         val clave = Llaves.tasa(servicio, zona, uso)
-        val promedio = enVigor(parametros, Llaves.HABITANTES_PROMEDIO, dia) { it.clave?.trim() == clave && it.valorNumerico != null }?.valorNumerico
-        val variacion = enVigor(parametros, Llaves.HABITANTES_VARIACION, dia) { it.clave?.trim() == clave && it.valorNumerico != null }?.valorNumerico
+        val promedio = parametros.enVigor(Llaves.HABITANTES_PROMEDIO, clave, dia) { it.valorNumerico != null }?.valorNumerico
+        val variacion = parametros.enVigor(Llaves.HABITANTES_VARIACION, clave, dia) { it.valorNumerico != null }?.valorNumerico
         return if (promedio != null && variacion != null) Habitantes(promedio, variacion) else null
     }
 
@@ -123,8 +143,13 @@ object Servicios {
     fun redondeo(
         parametros: List<ParametroTributario>,
         dia: LocalDate
+    ): Redondeo? = redondeo(IndiceParametros(parametros), dia)
+
+    fun redondeo(
+        parametros: IndiceParametros,
+        dia: LocalDate
     ): Redondeo? {
-        val fila = enVigor(parametros, Llaves.REDONDEO_ARBITRIO, dia) { it.clave?.trim().isNullOrEmpty() && !it.texto.isNullOrBlank() }
+        val fila = parametros.enVigor(Llaves.REDONDEO_ARBITRIO, dia) { it.clave?.trim().isNullOrEmpty() && !it.texto.isNullOrBlank() }
         return Redondeo.de(fila?.texto)
     }
 
@@ -135,12 +160,19 @@ object Servicios {
         parametros: List<ParametroTributario>,
         codigoUso: String,
         dia: LocalDate
+    ): Tope? = tope(IndiceParametros(parametros), codigoUso, dia)
+
+    fun tope(
+        parametros: IndiceParametros,
+        codigoUso: String,
+        dia: LocalDate
     ): Tope? {
         val fila =
             parametros
+                .deTipo(Llaves.TOPE_ARBITRIO)
                 .filter {
                     val clave = it.clave?.trim()
-                    it.tipo == Llaves.TOPE_ARBITRIO && !clave.isNullOrEmpty() && (clave == "*" || codigoUso.startsWith(clave)) &&
+                    !clave.isNullOrEmpty() && (clave == "*" || codigoUso.startsWith(clave)) &&
                         it.valorNumerico != null && it.valorNumerico.signum() > 0 && (it.texto.isNullOrBlank() || corte(it.texto) != null) &&
                         vigente(it.vigenciaDesde, it.vigenciaHasta, dia)
                 }.maxWithOrNull(compareBy<ParametroTributario> { it.clave!!.trim().let { c -> if (c == "*") 0 else c.length } }.thenBy { it.vigenciaDesde })
