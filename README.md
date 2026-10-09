@@ -17,7 +17,7 @@ prediales, catastro fiscal) que se carga por REST, e importadores del padrón de
 
 - JDK 25 y Docker (para PostGIS y para los tests de integración con Testcontainers).
 - Python 3.11+ para `model/`.
-- Las librerías de wasichai (`wasichai:wasichai-bom:0.3.2` y los starters). Se resuelven desde:
+- Las librerías de wasichai (`wasichai:wasichai-bom:0.6.0` y los starters). Se resuelven desde:
   1. **GitHub Packages** (`https://maven.pkg.github.com/wasichai/wasichai`). Pide un token aunque sea para leer
      (`read:packages` basta). En `~/.gradle/gradle.properties`:
      ```properties
@@ -1969,6 +1969,10 @@ La versión con lotes cambia el modelo, los estados y dónde viven los archivos.
 4. **Bucket:** una regla de ciclo de vida que aborte las subidas en partes incompletas (por ejemplo, a los 7 días). Un
    pod que muere a mitad de una subida no puede abortarla, y sus partes se cobran hasta que alguien las borre.
 
+**La versión con wasichai 0.6** no cambia el modelo, pero sus migraciones de core no tienen vuelta atrás: primero
+`pg_dump`, y después se detienen las instancias viejas y se arranca la nueva
+([wasichai 0.6: qué cambia para srtm](#wasichai-06-qué-cambia-para-srtm)).
+
 **La versión con la HLA** (arbitrios) agrega `emision_masiva.documentos`, que los trabajadores leen al tomar cada
 lote. Igual que arriba: `python3 apply.py` antes de arrancar el backend nuevo. Sin ese campo el backend no ve las
 tablas de la emisión de la organización y su POST falla. Los jobs anteriores, sin `documentos`, son de HR y PU.
@@ -2088,6 +2092,48 @@ escribir como la plataforma. srtm no pasó nada a ellos (#76), y esto queda anot
 - **`Duplicados`:** desde 0.3.0 core responde 409 con `errors[].field` (D23), pero en inglés. srtm lo sigue
   sobrescribiendo para dar al portal el mensaje en castellano, y pierde el campo. Seguimiento: traducir el `detail` de
   core o pasar el campo.
+
+## wasichai 0.6: qué cambia para srtm
+
+srtm pasa de wasichai 0.3.2 a 0.6.0. El análisis y los riesgos están en
+[el plan](docs/superpowers/plans/2026-10-09-wasichai-0-6-0.md). El código de srtm no cambia: no construye a mano los
+servicios de core cuyos constructores cambiaron, no implementa `RecordStore` y nunca toca `audit_log` con SQL.
+
+- **Migraciones al arrancar, sin vuelta atrás.** Core aplica V9 a V17 y `R__audit_purge_role`. Entre ellas:
+  - `org_units`;
+  - el origen y el índice por usuario de `audit_log`;
+  - los triggers que hacen `audit_log` de solo agregar (ADR-054);
+  - `MANAGE_TENANTS`;
+  - `idempotency_keys`;
+  - `users.tokens_valid_after`.
+
+  Volver a 0.3.2 pide restaurar la base. Por eso, antes de arrancar 0.6.0, un `pg_dump`:
+  `docker compose exec postgres pg_dump -U srtm -Fc srtm > srtm-antes-de-wasichai-0-6.dump`.
+- **El rol que migra tiene que ser dueño de `audit_log`.** Lo pide V13 para crear sus triggers. V12 crea un índice
+  sobre `audit_log` sin `CONCURRENTLY`, así que en una base con mucho log conviene arrancar sin tráfico.
+- **Un WARN esperado al arrancar.** Con el superusuario de `compose.yml`, `AuditLogOwnershipCheck` avisa que el rol de
+  la app puede actuar como dueño de `audit_log`. Separar el rol de migración del rol de la app es opcional
+  (`docs/guides/build-your-app.md` de wasichai).
+- **Lo que viene apagado y srtm no prende:**
+  - el límite de intentos de login (`wasichai.security.login.enabled`);
+  - la revocación de tokens (`wasichai.security.jwt.revocation`);
+  - una política de claves más estricta que 8 caracteres;
+  - `wasichai.organizations.separate-provisioning`;
+  - `wasichai.audit.purge-role`.
+
+  Prender el límite de login o la política pide ajustar `SrtmApiTest`: hace un login del admin por test, y las claves
+  de sus funcionarios son solo minúsculas y guiones.
+- **Lo que cambia solo:**
+  - cada respuesta lleva `X-Correlation-Id`;
+  - los registros responden `ETag`, aceptan `If-Match` y `PATCH`, y su `updated_at` avanza con `clock_timestamp()`;
+  - `spring.reactor.context-propagation` pasa a `auto`;
+  - hay rutas nuevas: `/api/org-units`, `/api/auth/me/org-units` y `POST /api/auth/logout`;
+  - un campo con `defaultValue` se llena al crear (`model.json` no tiene ninguno);
+  - una auto-relación se lista dos veces (`model.json` no tiene ninguna).
+
+  Las máquinas de lotes escriben `updated_at = now()` por SQL. Dos escrituras suyas en una transacción comparten ETag,
+  lo que no importa, porque nadie usa `If-Match` sobre lotes ni trabajos.
+- **`apply.py`** reserva además `count` y `after`, los nombres del paginado por cursor de core.
 
 ## Siguientes pasos (fuera de este alcance)
 
