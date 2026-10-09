@@ -267,6 +267,25 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(len(self.core.records["ubigeo"]), 1)
         self.assertEqual(len(self.core.records["via"]), 1)
 
+    def test_the_municipalidad_only_when_the_organization_has_none(self):
+        # one record per organization: the provisional one never doubles nor overwrites what the admin edited
+        provisional = ic.read_municipalidad(os.path.join(os.path.dirname(__file__), "data", "municipalidad.json"))
+        self.assertEqual(provisional[0]["nombre"], "MUNICIPALIDAD DISTRITAL DE PERENÉ")
+        self.assertEqual(provisional[0]["ruc"], "20195238961")
+        self.assertNotIn("_comentario", provisional[0])
+        self.assertNotIn("direccion", provisional[0])
+        with redirect_stdout(io.StringIO()):
+            first = ic.load(self.client, [], [], [], workers=2, municipalidades=provisional)
+            second = ic.load(self.client, [], [], [], workers=2, municipalidades=provisional)
+        self.assertEqual((first, second), ((1, 0), (0, 1)))
+        self.assertEqual(len(self.core.records["municipalidad"]), 1)
+
+    def test_an_edited_municipalidad_stays(self):
+        self.core.add_record("municipalidad", {"nombre": "MUNICIPALIDAD DISTRITAL DE PERENÉ", "direccion": "JR. LIMA 123"})
+        with redirect_stdout(io.StringIO()):
+            ic.load(self.client, [], [], [], workers=2, municipalidades=[{"nombre": "OTRA"}])
+        self.assertEqual([r["attributes"]["nombre"] for r in self.core.records["municipalidad"]], ["MUNICIPALIDAD DISTRITAL DE PERENÉ"])
+
     def test_usos_by_codigo_once(self):
         usos = [
             {"codigo": "010101", "clase": "RESIDENCIAL", "sub_clase": "UNIFAMILIAR", "uso": "CASA HABITACIÓN"},

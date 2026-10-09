@@ -10,16 +10,15 @@
             <span th:text="|Emitido el ${hr.emitido} · HR del contribuyente ${hr.contribuyente.codigo}|">Emitido el</span>
         </div>
 
-        <table class="cabecera">
+        <div th:replace="~{cabecera :: cabecera(${hr.cabecera}, ${hr.emitido}, 'DECLARACIÓN JURADA DEL IMPUESTO PREDIAL — HR', 'Hoja de resumen')}"></div>
+
+        <table class="identificacion">
             <tr>
                 <td>
-                    <div class="municipalidad" th:text="${hr.municipalidad}">MUNICIPALIDAD</div>
-                    <div class="documento">DECLARACIÓN JURADA DEL IMPUESTO PREDIAL — HR</div>
-                    <div class="etiqueta">Hoja de resumen</div>
-                </td>
-                <td class="numero">
                     <span class="etiqueta">Año</span>
                     <span class="valor" th:text="${hr.anio}">2026</span>
+                </td>
+                <td>
                     <span class="etiqueta">Código de contribuyente</span>
                     <span class="valor" th:text="${hr.contribuyente.codigo}">000001</span>
                 </td>

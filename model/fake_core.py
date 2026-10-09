@@ -1,9 +1,11 @@
-"""A scripted fake wasichai Core for the tests: metadata routes plus in-memory records.
+"""A scripted fake wasichai Core for the tests: metadata routes plus in-memory records, and srtm's
+POST /api/srtm/infracciones/cuis and /cuis/derogacion (what import_cuis.py calls) as the service does it.
 
 Adapted from wasichai's examples/gis-sample/perene/test_apply.py. Test helper only.
 """
 import json
 import re
+from datetime import date, timedelta
 import threading
 import urllib.parse
 import uuid
@@ -12,6 +14,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 RECORDS = re.compile(r"^/api/objects/([a-z0-9_]+)/records$")
 RECORD = re.compile(r"^/api/objects/([a-z0-9_]+)/records/([0-9a-f-]+)$")
 FIELDS = re.compile(r"^/api/metadata/objects/([a-z0-9_]+)/fields$")
+OBJECT = re.compile(r"^/api/objects/([a-z0-9_]+)$")
+CUIS = "/api/srtm/infracciones/cuis"
+
+
+def _meta(label, plural_label=None, description=None, enabled=True):
+    """An object's own metadata as Core stores it: a blank plural is the label."""
+    return {"label": label, "pluralLabel": (plural_label or "").strip() or label, "description": description,
+            "enabled": enabled}
 
 
 class FakeCoreHandler(BaseHTTPRequestHandler):
@@ -53,8 +63,13 @@ class FakeCore:
 
     def __init__(self, existing_objects=(), existing_relationships=(), fail_on_post_object=None,
                  fail_put=False, fail_put_status=500, login_response=None, fail_on_record=None, existing_fields=None,
-                 fail_on_update=None, fail_on_delete=None):
+                 fail_on_update=None, fail_on_delete=None, object_rules=None, fail_object_put=None, object_meta=None):
         self.existing_objects = set(existing_objects)
+        # object name -> its object-level rules ({"indexes", "appendOnly"}), as Core stores them; none by default
+        self.object_rules = {n: dict((object_rules or {}).get(n, {})) for n in self.existing_objects}
+        # object name -> {"label", "pluralLabel", "description", "enabled"}; the name as label by default
+        self.object_meta = {n: {**_meta(n, n), **(object_meta or {}).get(n, {})} for n in self.existing_objects}
+        self.fail_object_put = fail_object_put  # PUT /api/objects/{name} -> this status
         self.existing_fields = existing_fields or {}  # object name -> list of {"name", "enumOptions"?}
         self.existing_relationships = set(existing_relationships)
         self.fail_on_post_object = fail_on_post_object  # object name -> triggers 500
@@ -129,8 +144,77 @@ class FakeCore:
         self.records[name] = [r for r in records if r["id"] != record_id]
         return 204, None
 
+    def _object(self, name):
+        """An object as GET /api/objects lists it: indexes only when some are declared, appendOnly always."""
+        rules = self.object_rules.get(name, {})
+        obj = {"name": name, **self.object_meta.get(name, _meta(name)), "appendOnly": bool(rules.get("appendOnly"))}
+        if rules.get("indexes"):
+            obj["indexes"] = rules["indexes"]
+        return obj
+
+    def _update_object(self, path, body):
+        """An object's PUT, as MetadataService.updateObject: label required and overwritten; pluralLabel left out or
+        blank becomes the label, description left out goes null, enabled left out is true; a rule left out (or null)
+        stays as it is."""
+        name = OBJECT.match(path).group(1)
+        if self.fail_object_put:
+            return self.fail_object_put, {"message": "boom-object-put"}
+        if name not in self.existing_objects:
+            return 404, {"detail": "not found"}
+        if not (body or {}).get("label"):
+            return 400, {"detail": "label is required"}
+        enabled = body.get("enabled")
+        self.object_meta[name] = _meta(body["label"], body.get("pluralLabel"), body.get("description"),
+                                       True if enabled is None else enabled)
+        for key in ("indexes", "appendOnly"):
+            if body.get(key) is not None:
+                self.object_rules[name][key] = body[key]
+        return 200, self._object(name)
+
+    def _cuis(self, body):
+        """srtm's new version of a codigo_infraccion: it closes the one in force (vigencia_hasta the day before,
+        clave_vigente emptied) and adds this one. A repeated clave is a 409, one not after the vigente a 422."""
+        if self.fail_on_record == "codigo_infraccion":
+            return 400, {"detail": "Invalid value", "errors": [{"field": "porcentaje_uit", "message": "boom-cuis"}]}
+        familia = body.get("familia") or "ADMINISTRATIVA"
+        codigo = f"{familia}|{body['codigo']}"
+        clave = f"{codigo}|{body['vigencia_desde']}"
+        versiones = self.records.setdefault("codigo_infraccion", [])
+        if any(r["attributes"].get("clave") == clave for r in versiones):
+            return 409, {"detail": "Ya existe un registro con ese valor"}
+        vigente = next((r for r in versiones if r["attributes"].get("clave_vigente") == codigo), None)
+        desde = date.fromisoformat(body["vigencia_desde"])
+        if vigente is not None:
+            if date.fromisoformat(vigente["attributes"]["vigencia_desde"]) >= desde:
+                return 422, {"detail": "vigencia_desde no es posterior a la de la vigente"}
+            vigente["attributes"].update(vigencia_hasta=(desde - timedelta(days=1)).isoformat(), clave_vigente=None)
+        nueva = self.add_record("codigo_infraccion", {**body, "familia": familia, "clave": clave, "clave_vigente": codigo})
+        # the flat record of the new version, and the one it closed (srtm.sanciones.VersionCuisCreada)
+        cerrada = {"id": vigente["id"], **vigente["attributes"]} if vigente is not None else None
+        return 201, {"id": nueva["id"], **nueva["attributes"], "cerrada": cerrada}
+
+    def _derogacion(self, body):
+        """srtm's derogation of a code: its version in force rules until vigencia_hasta and clave_vigente is emptied.
+        A code without versions is a 404, without one in force a 409, a day before it started a 422."""
+        familia = body.get("familia") or "ADMINISTRATIVA"
+        codigo = f"{familia}|{body['codigo']}"
+        versiones = [r for r in self.records.get("codigo_infraccion", []) if r["attributes"].get("clave", "").startswith(codigo + "|")]
+        if not versiones:
+            return 404, {"detail": f"El código {body['codigo']} no está en el CUIS"}
+        vigente = next((r for r in versiones if r["attributes"].get("clave_vigente") == codigo), None)
+        if vigente is None:
+            return 409, {"detail": "ya está cerrado"}
+        if date.fromisoformat(body["vigencia_hasta"]) < date.fromisoformat(vigente["attributes"]["vigencia_desde"]):
+            return 422, {"detail": "vigencia_hasta es anterior a vigencia_desde"}
+        vigente["attributes"].update(vigencia_hasta=body["vigencia_hasta"], clave_vigente=None)
+        return 200, {"id": vigente["id"], **vigente["attributes"]}
+
     def _script(self, method, full_path, body):
         path, _, query = full_path.partition("?")
+        if path == CUIS and method == "POST":
+            return self._cuis(body)
+        if path == CUIS + "/derogacion" and method == "POST":
+            return self._derogacion(body)
         if path == "/api/auth/login" and method == "POST":
             if self.login_response is not None:
                 return 200, self.login_response
@@ -142,14 +226,21 @@ class FakeCore:
         if RECORD.match(path) and method == "DELETE":
             return self._delete(path)
         if path == "/api/objects" and method == "GET":
-            return 200, [{"name": n} for n in self.existing_objects]
+            return 200, [self._object(n) for n in self.existing_objects]
         if path == "/api/objects" and method == "POST":
             name = body["name"]
             if self.fail_on_post_object and name == self.fail_on_post_object:
                 return 500, {"message": "boom"}
             if name in self.existing_objects:
                 return 409, {"message": "exists"}
+            self.existing_objects.add(name)
+            self.object_rules[name] = {k: body[k] for k in ("indexes", "appendOnly") if k in body}
+            self.object_meta[name] = _meta(body["label"], body.get("pluralLabel"), body.get("description"))
             return 201, {"name": name}
+        if OBJECT.match(path) and method == "PUT":
+            return self._update_object(path, body)
+        if path == "/api/relationships" and method == "GET":
+            return 200, [{"name": n} for n in sorted(self.existing_relationships)]
         if path == "/api/relationships" and method == "POST":
             name = body["name"]
             if name in self.existing_relationships:
@@ -169,5 +260,8 @@ class FakeCore:
         if path.startswith("/api/relationships/") and method == "DELETE":
             return 204, None
         if path.startswith("/api/objects/") and method == "DELETE":
+            # Core keeps an append-only object's table until its rule is switched off (ADR-040)
+            if self.object_rules.get(path.rsplit("/", 1)[1], {}).get("appendOnly"):
+                return 409, {"detail": "append-only: switch appendOnly off before deleting it"}
             return 204, None
         return 500, {"message": "boom"}

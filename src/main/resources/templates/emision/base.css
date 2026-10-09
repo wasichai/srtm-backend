@@ -1,5 +1,6 @@
-/* the look every emisión document shares (PU, HR): A4, the embedded DejaVu Sans, bordered boxes with a shaded title
-   bar, label/value grids and ruled tables. PdfRenderer inlines it in each template */
+/* the look every emisión document shares (PU, HR): A4, the embedded Liberation Sans (Arial's metrics, as the
+   municipality's receipts; DejaVu Sans for any glyph it lacks), the institutional header, bordered boxes with a shaded
+   title bar, label/value grids and ruled tables. PdfRenderer inlines it in each template */
 @page {
     size: A4;
     margin: 12mm 11mm 16mm 11mm;
@@ -10,14 +11,14 @@
 
     @bottom-right {
         content: 'Página ' counter(page) ' de ' counter(pages);
-        font-family: 'DejaVu Sans', sans-serif;
+        font-family: 'Liberation Sans', 'DejaVu Sans', sans-serif;
         font-size: 7pt;
         color: #333;
     }
 }
 
 body {
-    font-family: 'DejaVu Sans', sans-serif;
+    font-family: 'Liberation Sans', 'DejaVu Sans', sans-serif;
     font-size: 7.5pt;
     color: #000;
     margin: 0;
@@ -29,44 +30,105 @@ body {
     color: #333;
 }
 
-/* the header: the municipality and the document's name on the left, year and number boxed on the right */
-.cabecera {
+/* the institutional header (cabecera.html), as the municipality's receipts: the escudo on the left, the name and
+   its oficina centred; the RUC and the date, the gerencia, the address; a dashed rule, and the document's title */
+.institucion {
+    margin-bottom: 2mm;
+}
+
+.membrete {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.membrete td {
+    padding: 0;
+    vertical-align: middle;
+}
+
+.membrete .escudo {
+    width: 22mm;
+}
+
+.membrete .escudo img {
+    width: 18mm;
+}
+
+.membrete .entidad {
+    text-align: center;
+}
+
+.municipalidad {
+    font-size: 12pt;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.oficina {
+    font-size: 9.5pt;
+    text-transform: uppercase;
+    margin-top: 0.8mm;
+}
+
+.lineas {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 2mm;
+    font-size: 8.5pt;
+}
+
+.lineas td {
+    padding: 0.5mm 0;
+}
+
+.lineas .derecha {
+    text-align: right;
+}
+
+.lineas .mayusculas {
+    text-transform: uppercase;
+}
+
+.documento {
+    border-top: 0.8pt dashed #000;
+    margin-top: 2mm;
+    padding-top: 2mm;
+    font-size: 10.5pt;
+    font-weight: bold;
+    text-align: center;
+}
+
+.centrada {
+    display: block;
+    text-align: center;
+    margin-top: 0.5mm;
+}
+
+/* the document's own identification under the header: year and number, side by side */
+.identificacion {
     width: 100%;
     border: 1.2pt solid #000;
     border-collapse: collapse;
     margin-bottom: 3mm;
+    table-layout: fixed;
 }
 
-.cabecera td {
-    padding: 2mm 3mm;
-    vertical-align: middle;
-}
-
-.municipalidad {
-    font-size: 10pt;
-    font-weight: bold;
-}
-
-.documento {
-    font-size: 9pt;
-    font-weight: bold;
-    margin-top: 1mm;
-}
-
-.numero {
-    width: 42mm;
-    border-left: 1.2pt solid #000;
+.identificacion td {
+    padding: 1.2mm 3mm;
     text-align: center;
 }
 
-.numero .etiqueta {
+.identificacion td + td {
+    border-left: 1.2pt solid #000;
+}
+
+.identificacion .etiqueta {
     display: block;
 }
 
-.numero .valor {
+.identificacion .valor {
     display: block;
     font-size: 11pt;
-    margin-bottom: 1mm;
 }
 
 /* a titled, bordered box */

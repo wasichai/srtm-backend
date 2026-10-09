@@ -1,6 +1,8 @@
 package srtm.rentas
 
+import kotlinx.coroutines.withContext
 import org.springframework.stereotype.Component
+import srtm.EscrituraDeSrtm
 import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
 import wasichai.core.data.RecordCriterion
@@ -14,7 +16,9 @@ import java.util.UUID
 
 // wasichai's RecordService with the portal's dtos on it. RecordService checks the caller's object and field
 // permissions and validates every write, so nothing here repeats that. a dto carries every field, though, and
-// core refuses a whole write that names a field the caller may not write: writes send only the writable ones
+// core refuses a whole write that names a field the caller may not write: writes send only the writable ones.
+// each write carries the mark EscrituraDeSrtm: it is srtm's api, and an object only srtm writes needs it
+// (srtm.GuardiaDeEscritura)
 @Component
 class Registros(
     private val records: RecordService,
@@ -24,31 +28,47 @@ class Registros(
         objectName: String,
         type: Class<T>,
         query: RecordQuery
-    ): PageResponse<T> {
-        val result = records.list(objectName, query)
-        return PageResponse(result.content.map { read(type, it) }, result.page, result.size, result.totalElements, result.totalPages)
-    }
+    ): PageResponse<T> = records.list(objectName, query).map { read(type, it) }
 
-    // every record that matches, page by page: for the few rows a contribuyente or predio has, and catalogs
+    // every record that matches, in one keyset pass (count = false, after = nextCursor): no COUNT(*) and no OFFSET's
+    // growing skip (ADR-036). for the few rows a contribuyente or predio has, catalogs, and the cuotas of a year
     suspend fun <T : Any> all(
         objectName: String,
         type: Class<T>,
         filters: Map<String, String> = emptyMap(),
         sort: String? = null,
         descending: Boolean = false
-    ): List<T> {
+    ): List<T> =
+        todas(
+            objectName,
+            RecordQuery(page = PageRequest.of(0, PageRequest.MAX_SIZE), sort = sort, descending = descending, filters = filters, count = false)
+        ).map { read(type, it) }
+
+    // every record that meets `criteria` (conditions a module writes on the object's columns; core binds their
+    // values) and `filters`, in the same keyset pass
+    suspend fun <T : Any> donde(
+        objectName: String,
+        type: Class<T>,
+        criteria: List<RecordCriterion>,
+        filters: Map<String, String> = emptyMap(),
+        sort: String? = null
+    ): List<T> =
+        todas(
+            objectName,
+            RecordQuery(page = PageRequest.of(0, PageRequest.MAX_SIZE), sort = sort, filters = filters, criteria = criteria, count = false)
+        ).map { read(type, it) }
+
+    private suspend fun todas(
+        objectName: String,
+        primera: RecordQuery
+    ): List<RecordResponse> {
         val rows = mutableListOf<RecordResponse>()
-        var page = 0
-        do {
-            val result =
-                records.list(
-                    objectName,
-                    RecordQuery(page = PageRequest.of(page, PageRequest.MAX_SIZE), sort = sort, descending = descending, filters = filters)
-                )
+        var query = primera
+        while (true) {
+            val result = records.list(objectName, query)
             rows += result.content
-            page++
-        } while (page < result.totalPages)
-        return rows.map { read(type, it) }
+            query = query.copy(after = result.nextCursor ?: return rows)
+        }
     }
 
     suspend fun <T : Any> get(
@@ -84,7 +104,21 @@ class Registros(
         objectName: String,
         type: Class<T>,
         attributes: Map<String, Any?>
-    ): T = read(type, records.create(objectName, request(escribibles(objectName, attributes))))
+    ): T = withContext(EscrituraDeSrtm) { read(type, records.create(objectName, request(escribibles(objectName, attributes)))) }
+
+    // several records of one object, created one after another as create does, with what the caller may write read
+    // once for all of them instead of once each (a predio's cuotas de arbitrio: 48 or more in one transaction)
+    suspend fun <T : Any> createAll(
+        objectName: String,
+        type: Class<T>,
+        attributes: List<Map<String, Any?>>
+    ): List<T> {
+        if (attributes.isEmpty()) return emptyList()
+        val definition = metadata.definitionOf(objectName)
+        return withContext(EscrituraDeSrtm) {
+            attributes.map { read(type, records.create(objectName, request(soloEscribibles(definition, it)))) }
+        }
+    }
 
     // core's update replaces every field the caller may write: one left out of the request is cleared. the
     // portal sends what its dto knows, merged over what is stored, so a field added in the admin (and absent
@@ -97,7 +131,7 @@ class Registros(
         attributes: Map<String, Any?>
     ): T {
         val stored = records.get(objectName, id).attributes
-        return read(type, records.update(objectName, id, request(escribibles(objectName, stored + attributes))))
+        return withContext(EscrituraDeSrtm) { read(type, records.update(objectName, id, request(escribibles(objectName, stored + attributes)))) }
     }
 
     suspend fun delete(
@@ -105,7 +139,7 @@ class Registros(
         id: UUID
     ) = records.delete(objectName, id)
 
-    suspend fun count(objectName: String): Long = records.list(objectName, RecordQuery(page = PageRequest.of(0, 1))).totalElements
+    suspend fun count(objectName: String): Long = records.list(objectName, RecordQuery(page = PageRequest.of(0, 1))).totalElements ?: 0L
 
     // the highest value a field holds, among those starting with `prefix` when given. nulls are left out:
     // postgres sorts them first when descending
@@ -121,6 +155,33 @@ class Registros(
             }
         return records
             .list(objectName, RecordQuery(page = PageRequest.of(0, 1), sort = field, descending = true, criteria = listOf(criterion)))
+            .content
+            .firstOrNull()
+            ?.attributes
+            ?.get(field)
+            ?.toString()
+    }
+
+    // the lowest value a field holds among the records that match `filters`, nulls left out, and only among those
+    // where `vacio` (another field) is null when it is given: one row read, not all of them (when a predio's first
+    // declaración was presented, and the first year of one without that date, for TOPE_ARBITRIO)
+    suspend fun lowest(
+        objectName: String,
+        field: String,
+        filters: Map<String, String> = emptyMap(),
+        vacio: String? = null
+    ): String? {
+        fun columna(
+            definition: ObjectDefinition,
+            nombre: String
+        ) = definition.fields.first { it.name == nombre }.columnName
+        val criteria =
+            listOfNotNull(
+                RecordCriterion { definition, _ -> "${columna(definition, field)} IS NOT NULL" },
+                vacio?.let { RecordCriterion { definition, _ -> "${columna(definition, it)} IS NULL" } }
+            )
+        return records
+            .list(objectName, RecordQuery(page = PageRequest.of(0, 1), sort = field, filters = filters, criteria = criteria))
             .content
             .firstOrNull()
             ?.attributes

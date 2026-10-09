@@ -1,0 +1,4 @@
+# Mapeo FICTICIO de ubicación respecto del área verde (model.json, ubicacion_area_verde) a la etiqueta de la tabla
+# de tasas, para probar import_tasas_arbitrio.py --influencias.
+enum,etiqueta
+FRENTE A PARQUE,Frente a parque ficticio

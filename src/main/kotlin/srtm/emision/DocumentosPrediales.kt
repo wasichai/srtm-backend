@@ -2,10 +2,11 @@ package srtm.emision
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
+import srtm.Faltan
 import srtm.impuesto.LiquidacionService
+import srtm.impuesto.ParametroTributario
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
 import srtm.rentas.DECLARACION
@@ -20,7 +21,8 @@ import srtm.rentas.Registros
 import srtm.rentas.vigente
 import wasichai.core.common.NotFoundException
 import wasichai.core.common.WasichaiException
-import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
 import java.util.UUID
 
 // a pdf and the name it is served or stored under
@@ -41,11 +43,11 @@ class VariosTitulares(
     val titulares: List<Titular>
 ) : WasichaiException(HttpStatus.CONFLICT, "El predio tiene ${titulares.size} titulares: indique el contribuyente")
 
-// the year's liquidación lacks a parameter: problem+json 422 with `faltan`, the ones missing
+// the year's liquidación lacks a parameter: problem+json 422 with `faltan`, the ones missing (srtm.Faltan)
 class FaltanParametros(
     anio: Int,
-    val faltan: List<String>
-) : WasichaiException(HttpStatus.UNPROCESSABLE_CONTENT, "Faltan parámetros tributarios de $anio: ${faltan.joinToString(", ")}")
+    faltan: List<String>
+) : Faltan("Faltan parámetros tributarios de $anio: ${faltan.joinToString(", ")}", faltan)
 
 // the predial documents: the PU (a predio and one titular) and the HR (a contribuyente). the only way in for the
 // endpoints and the masiva (wasichai/srtm-backend#41). reads go through Registros as the caller, so core applies their
@@ -55,7 +57,7 @@ class DocumentosPrediales(
     private val registros: Registros,
     private val renderer: PdfRenderer,
     private val liquidaciones: LiquidacionService,
-    @param:Value("\${srtm.municipalidad.nombre}") private val municipalidad: String
+    private val cabeceras: CabeceraDocumento
 ) {
     // the PU of a predio for one titular: its vigente declaraciones of `anio`, a section per secuencia de uso.
     // NotFoundException without one (or when `contribuyenteId` declares none); VariosTitulares when the predio has
@@ -90,19 +92,21 @@ class DocumentosPrediales(
                     obras = registros.all(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, filters = id, sort = "created_at")
                 )
             }
-        val hoja = hojaPu(municipalidad, anio, predio, contribuyente, usos, LocalDate.now())
+        val hoja = hojaPu(cabeceras.actual(), anio, predio, contribuyente, usos, LocalDateTime.now(LIMA))
         val pdf = withContext(Dispatchers.Default) { renderer.render("pu", mapOf("pu" to hoja)) }
         return Documento("PU-${predio.codigo ?: predioId}-$anio.pdf", pdf)
     }
 
     // the HR of a contribuyente for `anio`: its vigente declaraciones and the impuesto predial with its cuotas, from the
     // same liquidación GET /liquidacion answers (LiquidacionService.determinar). FaltanParametros when a parameter of
-    // the year is missing; NotFoundException when the contribuyente does not exist or has no vigente declaración
+    // the year is missing; NotFoundException when the contribuyente does not exist or has no vigente declaración.
+    // `parametros` are the year's already read (a lote of the masiva reads them once); null reads them
     suspend fun hr(
         contribuyenteId: UUID,
-        anio: Int
+        anio: Int,
+        parametros: List<ParametroTributario>? = null
     ): Documento {
-        val determinacion = liquidaciones.determinar(contribuyenteId, anio)
+        val determinacion = liquidaciones.determinar(contribuyenteId, anio, parametros)
         val contribuyente = determinacion.contribuyente
         val liquidacion = determinacion.liquidacion
         if (liquidacion.faltan.isNotEmpty()) throw FaltanParametros(anio, liquidacion.faltan)
@@ -110,7 +114,7 @@ class DocumentosPrediales(
             throw NotFoundException("El contribuyente ${contribuyente.codigo.orEmpty()} no tiene declaración jurada vigente en $anio")
         }
         val predios = registros.byIds(PREDIO, Predio::class.java, determinacion.declaraciones.mapNotNull { it.predio })
-        val hoja = hojaHr(municipalidad, anio, contribuyente, predios, determinacion.declaraciones, liquidacion, LocalDate.now())
+        val hoja = hojaHr(cabeceras.actual(), anio, contribuyente, predios, determinacion.declaraciones, liquidacion, LocalDateTime.now(LIMA))
         val pdf = withContext(Dispatchers.Default) { renderer.render("hr", mapOf("hr" to hoja)) }
         return Documento("HR-${contribuyente.codigo ?: contribuyenteId}-$anio.pdf", pdf)
     }
@@ -123,3 +127,6 @@ class DocumentosPrediales(
         }
     }
 }
+
+// the documents carry the hour they were emitted at, as the municipality reads its clock
+private val LIMA: ZoneId = ZoneId.of("America/Lima")

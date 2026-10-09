@@ -1,13 +1,21 @@
 # the libraries outside wasichai's bom. wasichai's own starters are versioned by wasichai-bom in build.gradle.kts
 [versions]
+# srtm.emision.almacen=s3: aws sdk v2, the bom aligns its modules
+awssdk = "2.55.10"
 # the maintained fork of openhtmltopdf, on pdfbox 3
 openhtmltopdf = "1.1.87"
 pdfbox = "3.0.8"
 thymeleaf = "3.1.5.RELEASE"
 
 [libraries]
+awssdk-bom = { module = "software.amazon.awssdk:bom", version.ref = "awssdk" }
+awssdk-s3 = { module = "software.amazon.awssdk:s3" }
+# the sdk's web identity provider (irsa) loads it by reflection: without it, every call of an eks pod fails
+awssdk-sts = { module = "software.amazon.awssdk:sts" }
 openhtmltopdf-pdfbox = { module = "io.github.openhtmltopdf:openhtmltopdf-pdfbox", version.ref = "openhtmltopdf" }
 # its log through slf4j (spring's logging) instead of java.util.logging on stderr
 openhtmltopdf-slf4j = { module = "io.github.openhtmltopdf:openhtmltopdf-slf4j", version.ref = "openhtmltopdf" }
 pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
 thymeleaf = { module = "org.thymeleaf:thymeleaf", version.ref = "thymeleaf" }
+# a minio for AlmacenS3's tests: versioned by testcontainers' bom (through spring boot's)
+testcontainers-minio = { module = "org.testcontainers:testcontainers-minio" }

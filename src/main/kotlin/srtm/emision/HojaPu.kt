@@ -9,7 +9,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
-import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -25,10 +25,11 @@ data class UsoDeclarado(
 )
 
 data class HojaPu(
-    val municipalidad: String,
+    val cabecera: Cabecera,
     val anio: Int,
     // the numbers of the declaraciones printed, one per uso
     val declaraciones: String,
+    // dd/MM/yyyy HH:mm, Lima's time
     val emitido: String,
     val contribuyente: TitularPu,
     val predio: UbicacionPu,
@@ -103,20 +104,20 @@ data class ValoresPu(
 )
 
 fun hojaPu(
-    municipalidad: String,
+    cabecera: Cabecera,
     anio: Int,
     predio: Predio,
     contribuyente: Contribuyente,
     usos: List<UsoDeclarado>,
-    hoy: LocalDate
+    ahora: LocalDateTime
 ): HojaPu {
     val secciones = usos.sortedBy { it.declaracion.secuenciaUso.orEmpty() }.map(::seccion)
     val primera = secciones.firstOrNull()
     return HojaPu(
-        municipalidad = municipalidad,
+        cabecera = cabecera,
         anio = anio,
         declaraciones = secciones.map { it.numeroDeclaracion }.filter { it.isNotEmpty() }.joinToString(", "),
-        emitido = hoy.format(FECHA),
+        emitido = ahora.format(FECHA_HORA),
         contribuyente =
             TitularPu(
                 codigo = contribuyente.codigo.orEmpty(),
@@ -224,3 +225,4 @@ internal fun soles(valor: BigDecimal?): String = "S/ ${numero(valor ?: BigDecima
 
 private val PUNTO = DecimalFormatSymbols(Locale.US)
 internal val FECHA = DateTimeFormatter.ofPattern("dd/MM/yyyy")
+internal val FECHA_HORA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")

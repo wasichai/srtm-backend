@@ -16,8 +16,6 @@ import srtm.rentas.vigente
 import java.time.LocalDate
 import java.util.UUID
 
-const val PARAMETRO_TRIBUTARIO = "parametro_tributario"
-
 // the impuesto predial of a contribuyente, under /api like the rest of the portal's api: core's jwt chain protects it
 @RestController
 @RequestMapping("/api/srtm")
@@ -44,7 +42,8 @@ class Determinacion(
 @Service
 class LiquidacionService(
     private val registros: Registros,
-    private val contribuyentes: ContribuyenteService
+    private val contribuyentes: ContribuyenteService,
+    private val parametrosTributarios: ParametrosTributarios
 ) {
     suspend fun liquidar(
         id: UUID,
@@ -52,17 +51,19 @@ class LiquidacionService(
     ): Liquidacion = determinar(id, anio).liquidacion
 
     // the base is the valor afecto of its vigentes declaraciones of the year: each titular's part (condominio), so a
-    // shared predio is not counted twice. an annulled one counts nothing. a contribuyente that does not exist is a 404
+    // shared predio is not counted twice. an annulled one counts nothing. a contribuyente that does not exist is a 404.
+    // `parametros` are the year's already read (the masiva reads them once per lote); null reads them
     suspend fun determinar(
         id: UUID,
-        anio: Int
+        anio: Int,
+        parametros: List<ParametroTributario>? = null
     ): Determinacion {
         val contribuyente = contribuyentes.get(id)
         val declaraciones =
             registros
                 .all(DECLARACION, Declaracion::class.java, filters = mapOf("contribuyente" to id.toString(), "anio" to anio.toString()))
                 .filter(::vigente)
-        val parametros = registros.all(PARAMETRO_TRIBUTARIO, ParametroTributario::class.java)
-        return Determinacion(contribuyente, declaraciones, ImpuestoPredial.liquidar(anio, totalesDeContribuyente(declaraciones).valorAfecto, parametros))
+        val liquidacion = ImpuestoPredial.liquidar(anio, totalesDeContribuyente(declaraciones).valorAfecto, parametros ?: parametrosTributarios.todos())
+        return Determinacion(contribuyente, declaraciones, liquidacion)
     }
 }

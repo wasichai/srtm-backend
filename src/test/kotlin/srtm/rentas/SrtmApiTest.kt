@@ -1,36 +1,61 @@
 package srtm.rentas
 
+import kotlinx.coroutines.reactor.asCoroutineContext
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.security.core.context.ReactiveSecurityContextHolder
+import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.reactive.server.WebTestClient
+import srtm.emision.IdentidadEmision
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 import wasichai.test.WasichaiIntegrationTest
 import java.io.File
+import java.util.Base64
 import java.util.UUID
 
 // the base of the portal api's integration tests: the real model (model/model.json, applied the way model/apply.py
 // does it) before every test, the seeded admin's token, and the calls the tests make. the test db is shared by every
 // class of the suite: records carry unique documents and codes
+// the documents' header is read fresh: a test that edits the municipalidad sees it in the next pdf
+@TestPropertySource(properties = ["srtm.municipalidad.cache=0s"])
 abstract class SrtmApiTest : WasichaiIntegrationTest() {
     // the seeded admin's; a call takes another one where a test needs it
     protected lateinit var token: String
 
     protected val json: JsonMapper get() = JSON
 
+    @Autowired
+    private lateinit var identidad: IdentidadEmision
+
+    // in-process, as the seeded admin (the token's subject): runs `bloque` with their Authentication, to call the services (Registros, ...) from a test the way
+    // a request would: same pattern as TrabajoDeterminacion
+    protected fun <T> comoAdmin(bloque: suspend () -> T): T =
+        runBlocking {
+            val carga = String(Base64.getUrlDecoder().decode(token.removePrefix("Bearer ").split('.')[1]))
+            val admin = UUID.fromString(tree(carga)["sub"].asString())
+            val autenticacion = checkNotNull(identidad.de(admin)) { "the seeded admin is not enabled" }
+            withContext(ReactiveSecurityContextHolder.withAuthentication(autenticacion).asCoroutineContext()) { bloque() }
+        }
+
     @BeforeEach
     fun adminYModelo() {
         token = bearer()
-        applyModel()
+        aplicarModelo()
     }
 
     protected fun modelo(): JsonNode = json.readTree(File("model/model.json"))
 
     // model/apply.py in kotlin: what is missing gets created (objects, fields with their geometry, enum options,
-    // required relationships), a field model.json no longer requires is relaxed, the rest is left alone
-    private fun applyModel() {
+    // relationships, required when model.json says so), a field model.json no longer requires is relaxed, an object's
+    // indexes and appendOnly follow model.json, the rest is left alone. in the organization of `token`'s user: the
+    // seeded admin's by default
+    protected fun aplicarModelo(token: String = this.token) {
         val model = modelo()
         val enums = model["enums"]
 
@@ -57,7 +82,7 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                 }
             }
 
-        val existing: Set<String> = tree(send("GET", "/api/objects", null, HttpStatus.OK)).names()
+        val existing: Set<String> = tree(send("GET", "/api/objects", null, HttpStatus.OK, token)).names()
         for (obj in model["objects"]) {
             val name = obj["name"].asString()
             val fields = obj["fields"].iterator().asSequence().toList()
@@ -71,18 +96,19 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                         "pluralLabel" to obj["pluralLabel"].asString(),
                         "fields" to fields.map(::payload)
                     ),
-                    HttpStatus.CREATED
+                    HttpStatus.CREATED,
+                    token
                 )
                 continue
             }
             val stored =
                 tree(
-                    send("GET", "/api/metadata/objects/$name/fields", null, HttpStatus.OK)
+                    send("GET", "/api/metadata/objects/$name/fields", null, HttpStatus.OK, token)
                 ).iterator().asSequence().associateBy { it["name"].asString() }
             for (field in fields) {
                 val current = stored[field["name"].asString()]
                 if (current == null) {
-                    send("POST", "/api/metadata/objects/$name/fields", payload(field), HttpStatus.CREATED)
+                    send("POST", "/api/metadata/objects/$name/fields", payload(field), HttpStatus.CREATED, token)
                     continue
                 }
                 val change = mutableMapOf<String, Any>()
@@ -97,10 +123,10 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                     if (missing.isNotEmpty()) change["enumOptions"] = have + missing
                 }
                 if (current["required"].asBoolean() && !required(field)) change["required"] = false
-                if (change.isNotEmpty()) send("PUT", "/api/metadata/objects/$name/fields/${field["name"].asString()}", change, HttpStatus.OK)
+                if (change.isNotEmpty()) send("PUT", "/api/metadata/objects/$name/fields/${field["name"].asString()}", change, HttpStatus.OK, token)
             }
         }
-        val relationships: Set<String> = tree(send("GET", "/api/relationships", null, HttpStatus.OK)).names()
+        val relationships: Set<String> = tree(send("GET", "/api/relationships", null, HttpStatus.OK, token)).names()
         for (rel in model["relationships"]) {
             if (rel["name"].asString() in relationships) continue
             send(
@@ -108,15 +134,66 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                 "/api/relationships",
                 listOf("name", "label", "inverseLabel", "source", "target", "fieldName").associateWith { rel[it].asString() } +
                     ("type" to "MANY_TO_ONE"),
-                HttpStatus.CREATED
+                HttpStatus.CREATED,
+                token
             )
+            // an optional relation stays optional (test_model.py's OPCIONALES)
+            if (!required(rel)) continue
             send(
                 "PUT",
                 "/api/metadata/objects/${rel["source"].asString()}/fields/${rel["fieldName"].asString()}",
                 mapOf("required" to true),
-                HttpStatus.OK
+                HttpStatus.OK,
+                token
             )
         }
+
+        // the object's rules, after the relationships (an index can name a relation field): indexes and appendOnly as
+        // model.json declares them, compared as core stores them (trimmed, lower case, in order; appendOnly left out is
+        // false). only what differs is sent, with label, pluralLabel, description and enabled as core has them: its
+        // object PUT resets them when left out (description null, plural the label, enabled true)
+        fun sets(node: JsonNode?) =
+            node
+                ?.iterator()
+                ?.asSequence()
+                ?.map { set ->
+                    set
+                        .iterator()
+                        .asSequence()
+                        .map { it.asString().trim().lowercase() }
+                        .toList()
+                }?.toList()
+                .orEmpty()
+        val stored = tree(send("GET", "/api/objects", null, HttpStatus.OK, token)).iterator().asSequence().associateBy { it["name"].asString() }
+        for (obj in model["objects"]) {
+            val name = obj["name"].asString()
+            val current = stored.getValue(name)
+            val change = mutableMapOf<String, Any>()
+            val indexes = sets(obj["indexes"])
+            if (indexes != sets(current["indexes"])) change["indexes"] = indexes
+            val appendOnly = obj["appendOnly"]?.asBoolean() ?: false
+            if (appendOnly != (current["appendOnly"]?.asBoolean() ?: false)) change["appendOnly"] = appendOnly
+            if (change.isEmpty()) continue
+            val kept =
+                mapOf(
+                    "label" to current["label"].asString(),
+                    "pluralLabel" to current["pluralLabel"]?.takeUnless { it.isNull }?.asString(),
+                    "description" to current["description"]?.takeUnless { it.isNull }?.asString(),
+                    "enabled" to (current["enabled"]?.asBoolean() ?: true)
+                )
+            send("PUT", "/api/objects/$name", kept + change, HttpStatus.OK, token)
+        }
+    }
+
+    // a new organization with the model applied, as core provisions one: its admin's token
+    protected fun otraOrganizacion(): String {
+        val slug = uniqueName("org").lowercase()
+        val email = "admin@$slug.test"
+        val clave = "clave-de-la-otra-organizacion"
+        post("/api/organizations", mapOf("name" to slug, "slug" to slug, "adminEmail" to email, "adminPassword" to clave))
+        val suyo = bearer(email, clave)
+        aplicarModelo(suyo)
+        return suyo
     }
 
     // calls

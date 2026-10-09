@@ -51,6 +51,20 @@ class AnulacionTest {
     }
 
     @Test
+    fun `a predio or contribuyente with cuotas de arbitrio or their anulaciones is not deleted`() {
+        assertNull(bajaConCuotas("El predio", 0, 0))
+        assertEquals("El predio tiene 1 cuota de arbitrio: no se puede eliminar, una cuota no se borra nunca", bajaConCuotas("El predio", 1))
+        assertEquals(
+            "El contribuyente tiene 24 cuotas de arbitrio: no se puede eliminar, una cuota no se borra nunca",
+            bajaConCuotas("El contribuyente", 24)
+        )
+        assertEquals(
+            "El predio tiene 2 anulaciones de cuotas de arbitrio: no se puede eliminar, una anulación no se borra nunca",
+            bajaConCuotas("El predio", 0, 2)
+        )
+    }
+
+    @Test
     fun `a declaration with lists is annulled instead of deleted`() {
         assertNull(bajaDeDeclaracion(emptyList()))
         assertEquals("La declaración tiene otros frentes: anúlela en lugar de eliminarla", bajaDeDeclaracion(listOf(OTRO_FRENTE)))

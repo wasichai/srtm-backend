@@ -24,5 +24,40 @@ services:
       timeout: 5s
       retries: 20
 
+  # srtm.emision.almacen=s3 locally, without aws: docker compose --profile s3 up -d (README, "Almacén S3 (K8s)"). a
+  # minio with the srtm-emisiones bucket. the community fork: minio no longer publishes minio/minio on docker hub
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    container_name: srtm-minio
+    profiles: ['s3']
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      # only for this local minio: the app reads them as AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+      MINIO_ROOT_USER: srtm
+      MINIO_ROOT_PASSWORD: srtm-minio
+    ports:
+      # loopback only, as postgres: the api, and the console to look into the bucket
+      - '127.0.0.1:${SRTM_MINIO_PORT:-9000}:9000'
+      - '127.0.0.1:${SRTM_MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-fs', 'http://localhost:9000/minio/health/live']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # creates the bucket once minio answers, and exits. idempotent
+  minio-init:
+    image: pgsty/mc:RELEASE.2026-09-16T00-00-00Z
+    container_name: srtm-minio-init
+    profiles: ['s3']
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ['/bin/sh', '-c']
+    command: ['mc alias set srtm http://minio:9000 srtm srtm-minio && mc mb --ignore-existing srtm/srtm-emisiones']
+
 volumes:
   postgres-data:
+  minio-data:

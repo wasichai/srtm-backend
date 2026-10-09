@@ -1,0 +1,34 @@
+<!doctype html>
+<!-- the header every emitted document opens with (PU, HR), laid out as the municipality's receipts: the escudo and the
+     name with its oficina, the RUC and the date, the gerencia and the address, then the document's title. `c` is a
+     Cabecera (CabeceraDocumento: the admin's municipalidad record); a line without its value is left out -->
+<html xmlns:th="http://www.thymeleaf.org" lang="es">
+    <body>
+        <div class="institucion" th:fragment="cabecera(c, emitido, titulo, etiqueta)">
+            <table class="membrete">
+                <tr>
+                    <td class="escudo"><img th:if="${c.escudo}" th:src="${c.escudo}" alt="Escudo" /></td>
+                    <td class="entidad">
+                        <div class="municipalidad" th:text="${c.nombre}">MUNICIPALIDAD</div>
+                        <div class="oficina" th:if="${c.oficina}" th:text="${c.oficina}">OFICINA</div>
+                    </td>
+                    <td class="escudo"></td>
+                </tr>
+            </table>
+            <table class="lineas">
+                <tr>
+                    <td><span th:if="${c.ruc}" th:text="|RUC: ${c.ruc}|">RUC: 20000000000</span></td>
+                    <td class="derecha" th:text="|Fecha: ${emitido}|">Fecha: 01/01/2026 00:00</td>
+                </tr>
+                <tr th:if="${c.gerencia}">
+                    <td class="mayusculas" colspan="2" th:text="${c.gerencia}">GERENCIA</td>
+                </tr>
+                <tr th:if="${c.direccion}">
+                    <td class="mayusculas" colspan="2" th:text="${c.direccion}">DIRECCIÓN</td>
+                </tr>
+            </table>
+            <div class="documento" th:text="${titulo}">DOCUMENTO</div>
+            <div class="etiqueta centrada" th:text="${etiqueta}">documento</div>
+        </div>
+    </body>
+</html>

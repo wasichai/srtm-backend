@@ -15,8 +15,10 @@ import java.util.Locale
 
 // a template of templates/emision (thymeleaf, standalone: the app is webflux, there is no mvc view layer) to a pdf with
 // openhtmltopdf. the page size (A4) and margins are the template's css: templates/emision/base.css, which every
-// template inlines through the "css" variable. the font is DejaVu Sans, embedded (subset) so accents and ñ print
-// the same everywhere. thread-safe: the engine caches the parsed templates, the builder is per call
+// template inlines through the "css" variable. the font is Liberation Sans (Arial's metrics, as the municipality's
+// receipts; SIL OFL), regular, bold and their italics, with DejaVu Sans behind it for any glyph it lacks: embedded
+// (subset) so accents and ñ print the same everywhere. the header is the fragment templates/emision/cabecera.html.
+// thread-safe: the engine caches the parsed templates, the builder is per call
 @Component
 class PdfRenderer {
     init {
@@ -41,8 +43,12 @@ class PdfRenderer {
 
     private val fuentes =
         listOf(
-            Fuente(recurso("fonts/DejaVuSans.ttf"), 400),
-            Fuente(recurso("fonts/DejaVuSans-Bold.ttf"), 700)
+            Fuente(LIBERATION, recurso("fonts/LiberationSans-Regular.ttf"), 400, FontStyle.NORMAL),
+            Fuente(LIBERATION, recurso("fonts/LiberationSans-Bold.ttf"), 700, FontStyle.NORMAL),
+            Fuente(LIBERATION, recurso("fonts/LiberationSans-Italic.ttf"), 400, FontStyle.ITALIC),
+            Fuente(LIBERATION, recurso("fonts/LiberationSans-BoldItalic.ttf"), 700, FontStyle.ITALIC),
+            Fuente(DEJAVU, recurso("fonts/DejaVuSans.ttf"), 400, FontStyle.NORMAL),
+            Fuente(DEJAVU, recurso("fonts/DejaVuSans-Bold.ttf"), 700, FontStyle.NORMAL)
         )
 
     // `template` is the file's name under templates/emision, without .html. the model's values are escaped (th:text)
@@ -55,7 +61,7 @@ class PdfRenderer {
         val out = ByteArrayOutputStream()
         PdfRendererBuilder()
             .useFastMode()
-            .apply { fuentes.forEach { f -> useFont({ ByteArrayInputStream(f.bytes) }, FAMILIA, f.peso, FontStyle.NORMAL, true) } }
+            .apply { fuentes.forEach { f -> useFont({ ByteArrayInputStream(f.bytes) }, f.familia, f.peso, f.estilo, true) } }
             .withHtmlContent(html, null)
             .toStream(out)
             .run()
@@ -63,13 +69,16 @@ class PdfRenderer {
     }
 
     private class Fuente(
+        val familia: String,
         val bytes: ByteArray,
-        val peso: Int
+        val peso: Int,
+        val estilo: FontStyle
     )
 
     private companion object {
-        // base.css names it
-        const val FAMILIA = "DejaVu Sans"
+        // base.css names them, in this order
+        const val LIBERATION = "Liberation Sans"
+        const val DEJAVU = "DejaVu Sans"
         val ES: Locale = Locale.forLanguageTag("es-PE")
         val DOCTYPE = Regex("^\\s*<!doctype html>", RegexOption.IGNORE_CASE)
 

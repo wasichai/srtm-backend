@@ -4,8 +4,9 @@
 Reads a JSON metadata model (objects, fields, relationships, enums), checks it
 against Core's rules (--validate-only stops there) and creates it in Core via
 the REST API, in file order (so relationship targets already exist), marking
-each required relationship's field required. Today that is 19 objects and 10
-relationships: "done: 29 created" on an empty Core, "29 skipped" on a second run.
+each required relationship's field required (an optional one is left optional), and last the object-level
+rules model.json declares (indexes, appendOnly). Today that is 40 objects and 42 relationships, two of them
+append-only: "done: 82 created, 2 updated" on an empty Core, "82 skipped" on a second run.
 
 On a Core that already has the model it syncs instead: it adds the fields and
 the ENUM options model.json has and Core lacks, drops the ENUM options it no
@@ -13,7 +14,14 @@ longer lists and no record uses (a list it changes takes model.json's order, the
 options kept for being in use last), relaxes a field model.json no longer
 requires and relabels one labelled differently. It never renames, retypes, makes
 required or removes a field or an option in use, so imported records stay
-valid. --drop tears everything down in reverse order (data included).
+valid. An object's indexes and appendOnly are model.json's: what differs is
+set, an index only Core has is dropped. --drop switches those rules off and
+tears everything down in reverse order (data included).
+
+--dry-run prints model.json's payloads and asks Core nothing. --diff logs in
+and reads the real Core, writes nothing, and prints each write the real run
+would send ("would PUT /api/objects/... {...}"), then "diff: nothing pending"
+or how many are: the evidence asked for before applying to a shared Core.
 
 GEOMETRY fields (the lotes' polygons, the domicilio's point) are wasichai-gis's:
 srtm installs it, on PostGIS. Adapted from wasichai's
@@ -45,11 +53,13 @@ SQL_KEYWORDS = frozenset({
     "with",
 })
 
-# Field names Core reserves: system columns + query-param names used on list endpoints.
+# Field names Core reserves: system columns + query-param names used on list endpoints. count and after are
+# SystemColumns.RESERVED since core 0.3 (keyset paging, ADR-031 D22)
 RESERVED_FIELD_NAMES = frozenset({
     "id", "organization_id", "created_at", "updated_at", "created_by",
     "updated_by", "workflow_state", "version",
     "page", "size", "sort", "dir", "q", "bbox", "geometry", "limit",
+    "count", "after",
 })
 
 VALID_NAME = re.compile(r"^[a-z][a-z0-9_]{0,48}$")
@@ -76,6 +86,19 @@ FIELD_TYPES = frozenset({
     "ENUM", "EMAIL", "URL", "UUID", "GEOMETRY",
 })
 
+# an object's rules model.json declares and apply keeps in sync after the relationships: composite indexes
+# (ADR-036) and append-only (ADR-040). left out of an object, they are none
+RULE_KEYS = ("indexes", "appendOnly")
+RULES_OFF = {"indexes": [], "appendOnly": False}
+
+# what Core's object PUT overwrites, not leaves alone, when missing (MetadataService.updateObject: description goes
+# null, pluralLabel becomes the label, enabled true). a rule PUT sends them back as Core has them, so it touches only
+# the rules: an admin's description, plural or disabled object survives
+OBJECT_KEYS = ("label", "pluralLabel", "description", "enabled")
+
+# what Core does not index (FieldSets.requireIndexable): long text, and a geometry (wasichai-gis refuses to sort by one)
+UNINDEXABLE_TYPES = frozenset({"LONG_TEXT", "GEOMETRY"})
+
 # mirror wasichai-gis's GeometryFieldType: a geometry names its shape; srid 1..999999 (default 4326), 2d or 3d
 GEOMETRY_TYPES = frozenset({"POINT", "LINESTRING", "POLYGON", "MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON"})
 
@@ -97,6 +120,35 @@ def _check_identifier(name, kind, maxlen, label):
         )
     if name in SQL_KEYWORDS:
         errors.append(f"{label}: {kind} name '{name}' is a reserved SQL keyword")
+    return errors
+
+
+def _check_rules(obj, field_types, relation_fields):
+    """Mirror Core's checks of an object's rules (FieldSets.normalize): appendOnly a boolean; indexes a list of non-empty
+    lists, each naming fields of the object (a relation's fieldName counts) once, none a LONG_TEXT or a GEOMETRY."""
+    label = f"object {obj.get('name', '')}"
+    errors = []
+    if "appendOnly" in obj and not isinstance(obj["appendOnly"], bool):
+        errors.append(f"{label}: appendOnly must be true or false")
+    indexes = obj.get("indexes", [])
+    if not isinstance(indexes, list) or not all(isinstance(i, list) and all(isinstance(f, str) for f in i) for i in indexes):
+        return errors + [f"{label}: indexes must be a list of lists of field names"]
+    seen = []
+    for index in indexes:
+        if not index:
+            errors.append(f"{label}: an entry of indexes is empty")
+            continue
+        shown = f"index ({', '.join(index)})"
+        for name in dict.fromkeys(index):
+            if index.count(name) > 1:
+                errors.append(f"{label}: {shown} names '{name}' twice")
+            if name in field_types and field_types[name] in UNINDEXABLE_TYPES:
+                errors.append(f"{label}: {shown} names '{name}', a {field_types[name]}, which Core does not index")
+            elif name not in field_types and name not in relation_fields:
+                errors.append(f"{label}: {shown} names '{name}', not a field of the object")
+        if index in seen:
+            errors.append(f"{label}: {shown} is repeated")
+        seen.append(index)
     return errors
 
 
@@ -219,6 +271,13 @@ def validate(model):
             )
         seen_source_field_names.add(source_field_key)
 
+    relation_fields = {}
+    for rel in relationships:
+        relation_fields.setdefault(rel.get("source"), set()).add(rel.get("fieldName"))
+    for obj in objects:
+        field_types = {f.get("name"): f.get("type") for f in obj.get("fields", [])}
+        errors.extend(_check_rules(obj, field_types, relation_fields.get(obj.get("name"), set())))
+
     return errors
 
 
@@ -294,6 +353,25 @@ def relationship_payload(rel):
     }
 
 
+def rule_changes(obj, current):
+    """The object-level rules model.json declares and Core lacks: indexes (ADR-036), appendOnly (ADR-040). They go
+    after the relationships, since an index can name a relation field. Only what differs is sent. Compared as Core
+    stores them: field names trimmed and lower-cased, in their order; appendOnly left out is false. model.json is the
+    source of the indexes: one only Core has is dropped."""
+    changes = {}
+    want_indexes = [[f.strip().lower() for f in s] for s in obj.get("indexes", [])]
+    if want_indexes != (current.get("indexes") or []):
+        changes["indexes"] = want_indexes
+    if bool(obj.get("appendOnly")) != bool(current.get("appendOnly")):
+        changes["appendOnly"] = bool(obj.get("appendOnly"))
+    return changes
+
+
+def declared_rules(obj):
+    """The rules model.json declares for an object, as a PUT of it sends them: what an empty Core gets."""
+    return rule_changes(obj, {})
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -323,6 +401,47 @@ def _apply_required_put(client, rel):
         _fatal("PUT", path, e)
         return False
     return True
+
+
+def _objects_by_name(data):
+    if isinstance(data, dict):
+        data = data.get("items", data.get("content", []))
+    return {o["name"]: o for o in (data or [])}
+
+
+def _put_rules(client, obj, current, changes):
+    """PUT an object's rules: only the keys that change, with label, pluralLabel, description and enabled as Core has
+    them (`current`, its GET /api/objects entry), which the PUT would otherwise reset. Returns False if Core refused
+    (already reported)."""
+    path = f"/api/objects/{obj['name']}"
+    kept = {k: current[k] for k in OBJECT_KEYS if k in current}
+    kept.setdefault("label", obj["label"])  # Core requires it
+    try:
+        client.put(path, {**kept, **changes})
+    except CoreError as e:
+        _fatal("PUT", path, e)
+        return False
+    print(f"update object {obj['name']} ({', '.join(sorted(changes))})")
+    return True
+
+
+def sync_object_rules(client, model):
+    """Every object's rules as model.json declares them, after the relationships (an index can name a relation field).
+    Returns how many objects changed, or None when Core refused (already reported)."""
+    try:
+        current_by_name = _objects_by_name(client.get("/api/objects"))
+    except CoreError as e:
+        _fatal("GET", "/api/objects", e)
+        return None
+    updated = 0
+    for obj in model["objects"]:
+        current = current_by_name.get(obj["name"], {})
+        changes = rule_changes(obj, current)
+        if changes:
+            if not _put_rules(client, obj, current, changes):
+                return None
+            updated += 1
+    return updated
 
 
 def _fields_by_name(data):
@@ -452,6 +571,11 @@ def do_apply(client, model):
         if not _apply_required_put(client, rel):
             return 1
 
+    ruled = sync_object_rules(client, model)
+    if ruled is None:
+        return 1
+    updated += ruled
+
     print(f"done: {created} created, {updated} updated, {skipped} skipped")
     return 0
 
@@ -474,6 +598,19 @@ def do_drop(client, model):
     deleted = 0
     skipped = 0
 
+    # Core keeps an append-only object's table, columns and relationships, and the columns an index names, until
+    # their rules are off (ADR-040, ADR-036): --drop is that deliberate step
+    try:
+        current_by_name = _objects_by_name(client.get("/api/objects"))
+    except CoreError as e:
+        _fatal("GET", "/api/objects", e)
+        return 1
+    for obj in reversed(model["objects"]):
+        current = current_by_name.get(obj["name"])
+        changes = {k: v for k, v in RULES_OFF.items() if current and current.get(k)}
+        if changes and not _put_rules(client, obj, current, changes):
+            return 1
+
     to_delete = [
         (f"relationship {rel['name']}", f"/api/relationships/{rel['name']}")
         for rel in reversed(model["relationships"])
@@ -492,6 +629,74 @@ def do_drop(client, model):
     return 0
 
 
+OBJECT_PATH = re.compile(r"^/api/objects/[a-z0-9_]+$")
+FIELD_PATH = re.compile(r"^(/api/metadata/objects/[a-z0-9_]+/fields)/([a-z0-9_]+)$")
+
+
+class DiffClient:
+    """--diff: the real Core is read, never written. A GET goes to Core; a write the real run would send is printed as
+    "would <METHOD> <path> <summary>" and answered as Core would, so do_apply and do_drop run unchanged. What Core
+    already has is no write: a relationship it has is the 409 apply skips, and a field PUT that changes nothing of what
+    Core has (apply re-marks every required relationship's field on each run) is not printed."""
+
+    def __init__(self, client):
+        self.client = client
+        self.pending = 0
+        self._fields = {}
+        self.relationships = {r["name"] for r in client.get("/api/relationships") or []}
+
+    def get(self, path):
+        return self.client.get(path)
+
+    def post(self, path, body):
+        if path == "/api/relationships" and body.get("name") in self.relationships:
+            raise CoreError(409, "exists")
+        self._would("POST", path, body)
+        return 201, {"name": body.get("name")}
+
+    def put(self, path, body):
+        if self._unchanged(path, body):
+            return 200, {}
+        self._would("PUT", path, body)
+        return 200, {}
+
+    def delete(self, path):
+        self._would("DELETE", path, None)
+        return 204, None
+
+    def _unchanged(self, path, body):
+        field = FIELD_PATH.match(path)
+        if not field:
+            return False
+        fields_path, name = field.groups()
+        if fields_path not in self._fields:
+            self._fields[fields_path] = _fields_by_name(self.client.get(fields_path))
+        current = self._fields[fields_path].get(name)
+        return current is not None and all(current.get(k) == v for k, v in body.items())
+
+    def _would(self, method, path, body):
+        self.pending += 1
+        print(f"would {method} {path} {_summary(path, body)}".rstrip())
+
+    def report(self):
+        print("diff: nothing pending" if not self.pending else f"diff: {self.pending} writes pending, none sent")
+
+
+def _summary(path, body):
+    """A write's payload in one line: the name of what it creates, else what it changes (a rule PUT without the label,
+    plural, description and enabled it sends back as Core has them)."""
+    if body is None:
+        return ""
+    if "name" in body:
+        return body["name"]
+    if OBJECT_PATH.match(path):
+        body = {k: v for k, v in body.items() if k not in OBJECT_KEYS}
+    return json.dumps(body, ensure_ascii=False)
+
+
+DRY_RUN_KEPT = "(plus label, pluralLabel, description and enabled as Core has them)"
+
+
 def _print_dry_run(model):
     for obj in model["objects"]:
         print("# POST /api/objects")
@@ -499,9 +704,21 @@ def _print_dry_run(model):
     for rel in model["relationships"]:
         print("# POST /api/relationships")
         print(json.dumps(relationship_payload(rel), indent=2, ensure_ascii=False))
+    # what model.json declares (an empty Core gets it); on one that has the model, only what differs is sent
+    for obj in model["objects"]:
+        rules = declared_rules(obj)
+        if rules:
+            print(f"# PUT /api/objects/{obj['name']} {DRY_RUN_KEPT}")
+            print(json.dumps(rules, indent=2, ensure_ascii=False))
 
 
 def _print_drop_dry_run(model):
+    # if Core has them on
+    for obj in reversed(model["objects"]):
+        rules = {k: RULES_OFF[k] for k in declared_rules(obj)}
+        if rules:
+            print(f"# PUT /api/objects/{obj['name']} {DRY_RUN_KEPT}")
+            print(json.dumps(rules, indent=2, ensure_ascii=False))
     for rel in reversed(model["relationships"]):
         print(f"# DELETE /api/relationships/{rel['name']}")
     for obj in reversed(model["objects"]):
@@ -518,7 +735,10 @@ def _parse_args(argv):
     p.add_argument("--core", default=os.environ.get("WASICHAI_CORE", "http://localhost:8090"))
     p.add_argument("--email", default=os.environ.get("WASICHAI_EMAIL", "admin@wasichai.local"))
     p.add_argument("--password", default=os.environ.get("WASICHAI_PASSWORD", "admin"))
-    p.add_argument("--dry-run", action="store_true")
+    # --dry-run prints model.json's payloads and asks Core nothing; --diff asks the real Core and prints what is pending
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument("--dry-run", action="store_true")
+    mode.add_argument("--diff", action="store_true")
     p.add_argument("--drop", action="store_true")
     p.add_argument("--validate-only", action="store_true")
     return p.parse_args(argv)
@@ -553,9 +773,17 @@ def main(argv=None):
         _fatal("POST", "/api/auth/login", e)
         return 1
 
-    if args.drop:
-        return do_drop(client, model)
-    return do_apply(client, model)
+    if not args.diff:
+        return do_drop(client, model) if args.drop else do_apply(client, model)
+    try:
+        diff = DiffClient(client)
+    except CoreError as e:
+        _fatal("GET", "/api/relationships", e)
+        return 1
+    code = do_drop(diff, model) if args.drop else do_apply(diff, model)
+    if code == 0:
+        diff.report()
+    return code
 
 
 if __name__ == "__main__":

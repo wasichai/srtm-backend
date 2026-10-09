@@ -3,6 +3,7 @@ package srtm.emision
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.rendering.PDFRenderer
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import srtm.rentas.Contribuyente
@@ -10,14 +11,16 @@ import srtm.rentas.Declaracion
 import srtm.rentas.NivelConstruccion
 import srtm.rentas.ObraComplementaria
 import srtm.rentas.Predio
+import java.awt.image.BufferedImage
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.math.BigDecimal
-import java.time.LocalDate
+import java.time.LocalDateTime
 import javax.imageio.ImageIO
 
 // what the PU shows of a predio, its titular and each of its usos, formatted; and the pu template rendering it
 class HojaPuTest {
-    private val hoy = LocalDate.of(2026, 3, 15)
+    private val ahora = LocalDateTime.of(2026, 3, 15, 9, 30)
 
     @Test
     fun `the titular is named by its full name and document`() {
@@ -112,6 +115,41 @@ class HojaPuTest {
     }
 
     @Test
+    fun `the pu opens with the municipality's header, as its receipts`() {
+        val texto = texto(PdfRenderer().render("pu", mapOf("pu" to hoja())))
+        assertTrue("MUNICIPALIDAD DISTRITAL DE PERENÉ" in texto, texto)
+        assertTrue("GERENCIA DE ADMINISTRACIÓN TRIBUTARIA" in texto, texto)
+        assertTrue("RUC: 20195238961" in texto, texto)
+        assertTrue("Fecha: 15/03/2026 09:30" in texto, texto)
+        assertTrue("SUB GERENCIA DE RENTAS" in texto, texto)
+        assertTrue("JR. LIMA 123 - PERENÉ" in texto, texto)
+        assertTrue("PREDIO URBANO" in texto, texto)
+    }
+
+    @Test
+    fun `a header with only its name prints no empty lines`() {
+        val texto = texto(PdfRenderer().render("pu", mapOf("pu" to hoja(cabecera = Cabecera("MUNICIPALIDAD DISTRITAL DE PERENÉ")))))
+        assertTrue("MUNICIPALIDAD DISTRITAL DE PERENÉ" in texto, texto)
+        assertFalse("RUC:" in texto, texto)
+        assertTrue("Fecha: 15/03/2026 09:30" in texto, texto)
+    }
+
+    @Test
+    fun `the font is liberation sans, arial's metrics`() {
+        val nombres = fuentes(PdfRenderer().render("pu", mapOf("pu" to hoja())))
+        assertTrue(nombres.any { "LiberationSans" in it }, nombres.toString())
+        assertTrue(nombres.any { "LiberationSans-Bold" in it }, nombres.toString())
+    }
+
+    @Test
+    fun `the escudo prints only when configured`() {
+        val png = ByteArrayOutputStream().also { ImageIO.write(BufferedImage(40, 50, BufferedImage.TYPE_INT_RGB), "png", it) }.toByteArray()
+        val conEscudo = hoja(cabecera = CABECERA.copy(escudo = escudoDe(png, "escudo.png")))
+        assertEquals(1, imagenes(PdfRenderer().render("pu", mapOf("pu" to conEscudo))))
+        assertEquals(0, imagenes(PdfRenderer().render("pu", mapOf("pu" to hoja()))))
+    }
+
+    @Test
     fun `a hundred pus in a row`() {
         val renderer = PdfRenderer()
         val hoja = hoja(usos = listOf(uso("001", 11), uso("002", 12)))
@@ -139,8 +177,9 @@ class HojaPuTest {
 
     private fun hoja(
         contribuyente: Contribuyente = CONTRIBUYENTE,
-        usos: List<UsoDeclarado> = listOf(uso("001", 11))
-    ) = hojaPu("MUNICIPALIDAD DISTRITAL DE PERENÉ", 2026, PREDIO, contribuyente, usos, hoy)
+        usos: List<UsoDeclarado> = listOf(uso("001", 11)),
+        cabecera: Cabecera = CABECERA
+    ) = hojaPu(cabecera, 2026, PREDIO, contribuyente, usos, ahora)
 
     private fun uso(
         secuencia: String,

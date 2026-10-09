@@ -12,7 +12,7 @@ API están en el [README principal](../../README.md).
 | Python | 3.11+ | `model/` (solo stdlib, sin `pip install`) |
 | Node | >= 26 | solo si también corres el front, `../srtm-ui` |
 
-Las librerías de wasichai (`wasichai:wasichai-bom:0.2.0` y sus starters) se resuelven así, en este orden:
+Las librerías de wasichai (`wasichai:wasichai-bom:0.6.0` y sus starters) se resuelven así, en este orden:
 
 1. **GitHub Packages**. Pide un token aunque sea para leer. En `~/.gradle/gradle.properties`:
    ```properties
@@ -92,13 +92,16 @@ Con el servidor corriendo y `develop/.env` cargado:
 
 ```bash
 cd model
-python3 apply.py                                   # 19 objetos + 10 relaciones; idempotente
+python3 apply.py                                   # 21 objetos + 10 relaciones; idempotente
 python3 import_parametros.py                       # UIT, tramos y mínimo del predial; idempotente
+python3 import_catalogos.py                        # catálogos y la municipalidad (cabecera del PU y la HR); idempotente
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --limit 200
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"
 ```
 
+- **Cabecera del PU y la HR:** los datos de `model/data/municipalidad.json` son provisionales. Los reales se editan
+  en `/admin` (objeto *Municipalidad*); el escudo se configura con `SRTM_MUNICIPALIDAD_ESCUDO`.
 - **Datos personales:** el Excel y `model/reports/` traen DNI, nombres y domicilios. No se copian al repo: `*.xlsx`
   y `model/reports/` están en `.gitignore`.
 - **Tiempo de carga:** la importación completa son unos 42 000 registros. Con la base local tarda unos minutos. Por

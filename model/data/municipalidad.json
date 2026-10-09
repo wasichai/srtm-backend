@@ -1,0 +1,8 @@
+{
+  "_comentario": "Datos PROVISIONALES de la cabecera del PU y la HR (objeto municipalidad). import_catalogos.py los crea solo si la organización no tiene ninguno; los reales se cambian en el admin. El RUC sale del padrón (MUNICIPALIDAD DISTRITAL DE PERENE).",
+  "nombre": "MUNICIPALIDAD DISTRITAL DE PERENÉ",
+  "oficina": "GERENCIA DE ADMINISTRACIÓN TRIBUTARIA",
+  "ruc": "20195238961",
+  "gerencia": "SUB GERENCIA DE RENTAS",
+  "direccion": null
+}

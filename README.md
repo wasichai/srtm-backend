@@ -17,7 +17,7 @@ prediales, catastro fiscal) que se carga por REST, e importadores del padrón de
 
 - JDK 25 y Docker (para PostGIS y para los tests de integración con Testcontainers).
 - Python 3.11+ para `model/`.
-- Las librerías de wasichai (`wasichai:wasichai-bom:0.2.0` y los starters). Se resuelven desde:
+- Las librerías de wasichai (`wasichai:wasichai-bom:0.6.0` y los starters). Se resuelven desde:
   1. **GitHub Packages** (`https://maven.pkg.github.com/wasichai/wasichai`). Pide un token aunque sea para leer
      (`read:packages` basta). En `~/.gradle/gradle.properties`:
      ```properties
@@ -75,9 +75,10 @@ Con el servidor corriendo:
 ```bash
 cd model
 python3 apply.py --validate-only   # valida model.json contra las reglas de Core, sin llamar a nada
-python3 apply.py                   # done: 30 created, 0 updated, 0 skipped  (20 objetos + 10 relaciones)
-python3 apply.py                   # idempotente: done: 0 created, 0 updated, 29 skipped
-python3 apply.py --drop            # lo borra, en orden inverso (¡borra también los datos!)
+python3 apply.py --diff            # lee la base y dice qué escribiría ("would PUT …"), sin escribir nada
+python3 apply.py                   # done: 82 created, 2 updated, 0 skipped  (40 objetos + 42 relaciones; 2 appendOnly)
+python3 apply.py                   # idempotente: done: 0 created, 0 updated, 82 skipped
+python3 apply.py --drop            # apaga appendOnly y lo borra, en orden inverso (¡borra también los datos!)
 ```
 
 Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
@@ -89,6 +90,28 @@ Sobre una base que ya tiene el modelo, `apply.py` también **sincroniza**:
   SIN DOCUMENTO); nunca vuelve obligatorio uno existente.
 - **Etiquetas:** pone la etiqueta de `model.json` al campo que Core etiqueta distinto (`predio.tipo_predio`:
   "Tipo de predio"). Es solo lo que muestra el admin.
+- **Reglas del objeto:** después de las relaciones (un índice puede nombrar un campo de relación), deja `indexes`
+  (ADR-036) y `appendOnly` (ADR-040) como los declara `model.json`, con un `PUT /api/objects/{objeto}` que
+  lleva la etiqueta y solo lo que cambia (`update object cuota_arbitrio (appendOnly)`). `model.json` manda: un índice
+  que solo tiene Core se quita, y un objeto sin `appendOnly` queda sin él. El PUT devuelve la etiqueta, el plural, la
+  descripción y `enabled` tal como los tiene Core (si faltan, Core los pisa), así que solo cambia las reglas.
+  `--dry-run` no consulta a Core: muestra lo que declara `model.json`, no la diferencia con la base.
+
+**`--diff`, antes de aplicar a una base compartida (dev).** Entra a Core y solo lo lee: corre la misma sincronización
+que `apply.py`, pero cada escritura (POST, PUT o DELETE) se imprime como `would <MÉTODO> <ruta> <resumen>` en lugar de
+enviarse, y al final `diff: nothing pending` o `diff: N writes pending, none sent`. Lo que la base ya tiene no cuenta
+como pendiente: una relación que existe, y la marca de obligatoria de un campo que ya lo es. Sobre la base de dev de
+antes de 0.3.2 muestra exactamente las dos reglas:
+
+```text
+would PUT /api/objects/cuota_arbitrio {"indexes": [["anio", "predio"], ["anio", "contribuyente"]], "appendOnly": true}
+would PUT /api/objects/anulacion_cuota_arbitrio {"appendOnly": true}
+diff: 2 writes pending, none sent
+```
+
+En dev el procedimiento es: `python3 apply.py --diff`, mostrar lo pendiente y pedir OK; recién entonces
+`python3 apply.py`. Una segunda corrida de `--diff` debe decir `diff: nothing pending`. Con `--drop`, `--diff` lista
+lo que borraría.
 
 Solo añade, relaja, reetiqueta o quita opciones sin uso: no renombra, no cambia tipos y no borra campos, así los
 registros importados siguen siendo válidos. Por ejemplo, sobre la base del padrón:
@@ -107,8 +130,12 @@ registros importados siguen siendo válidos. Por ejemplo, sobre la base del padr
   `ESTACIONAMIENTO` una vez migradas las DJ que los usan ([Migrar los usos del padrón](#migrar-los-usos-del-padrón));
 - crea los objetos y relaciones de las fases 1 y 2.
 
+Una relación queda obligatoria cuando `model.json` dice `"required": true`; las opcionales (ver
+[Modelo](#modelo)) se crean sin ese paso.
+
 Flags: `--core` (default `http://localhost:8090` o `$WASICHAI_CORE`), `--email`, `--password`, `--dry-run`,
-`--drop`, `--validate-only`. Salida: `0` ok, `1` error de Core, `2` `model.json` inválido.
+`--diff` (no va con `--dry-run`), `--drop`, `--validate-only`. Salida: `0` ok, `1` error de Core, `2` `model.json`
+inválido.
 
 ## Cargar los catálogos
 
@@ -117,11 +144,14 @@ obras complementarias desde objetos catálogo:
 
 ```bash
 cd model
-python3 import_catalogos.py                                                           # ubigeo, categorías, partidas de obras y usos
+python3 import_catalogos.py                                                           # ubigeo, categorías, partidas de obras, usos y municipalidad
 python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run  # lee Core y dice qué haría
 python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"            # ubigeo + vías + unidades urbanas
 ```
 
+- **`municipalidad`:** la cabecera del PU y la HR ([Cabecera de los documentos](#cabecera-de-los-documentos)). Se
+  crea desde `model/data/municipalidad.json` solo si la organización no tiene ninguna; nunca pisa la editada en el
+  admin. Los datos que trae son **provisionales**.
 - **`ubigeo`:** los 1 893 distritos del INEI, de `model/data/ubigeo.csv`. El archivo es un recorte de
   [ubigeo-peru-aumentado](https://github.com/jmcastagnetto/ubigeo-peru-aumentado): código INEI, departamento,
   provincia y distrito.
@@ -289,6 +319,746 @@ python3 import_parametros.py             # parametro_tributario: 13 created, 0 u
 
 Fuera de alcance: el reajuste de las cuotas 2 a 4 por el IPM, la prórroga de los vencimientos por ordenanza, el derecho
 de emisión y las deducciones (los parámetros ya se cargan, pero la DJ guarda su `deduccion`).
+
+## Arbitrios
+
+Los arbitrios se portan del negocio de `rentas` (`DeterminarArbitrios`). Ya están el modelo, la carga de una
+ordenanza, el cálculo (`srtm.arbitrios.Arbitrios`, una función pura) y la determinación por predio y por contribuyente
+con sus consultas, la determinación masiva, la Hoja de Liquidación de Arbitrios (HLA), sola y en la emisión masiva, y
+la anulación de una cuota.
+
+**Modelo:**
+
+| Objeto | Qué es |
+|---|---|
+| `ordenanza_arbitrio` | La ordenanza de un año (`anio` único) y su ratificación por la provincial (`acuerdo_ratificacion`, `fecha_ratificacion`, `municipalidad_ratificante`). Sin ordenanza ratificada no se determina ni se emite (D-02b). |
+| `servicio_arbitrio` | Un servicio que la ordenanza cobra (barrido, residuos, serenazgo…), con `codigo` único de hasta 20 caracteres y su vigencia. Ningún servicio está escrito en el código. |
+| `inafectacion_arbitrio` | Un predio que no paga un servicio en una vigencia (ambos extremos cuentan), con su motivo, documento y observación. |
+| `cuota_arbitrio` | Lo determinado de un predio, un servicio, un uso (`secuencia_uso`) y un mes: `monto`, `parametro_aplicado` (las llaves leídas, separadas por `;`), `zona` y `uso_arbitrio` usados, su desglose (`base`, `cantidad_base`, `tasa_unitaria`, `habitantes`, `habitantes_presuntos`, `promedio_habitantes`, `variacion_habitante`, `influencia`, `afluencia`, `redondeo`), `monto_sin_tope` y `tope_aplicado` (vacíos salvo que el tope de incremento la haya reducido), `fecha_calculo` y `observacion`, más relaciones obligatorias a `predio`, `contribuyente` (el titular principal ese mes), `servicio` y `parametro` (la fila de `parametro_tributario`). |
+| `anulacion_cuota_arbitrio` | La corrección de una cuota: `motivo`, `observacion`, `fecha`, y su `cuota` y `predio`. `clave` única (el id de la cuota): una sola anulación por cuota. |
+| `determinacion_arbitrio_masiva`, `determinacion_arbitrio_lote` | El job de la determinación de un año en segundo plano y sus lotes de predios, gemelos de `emision_masiva` y `emision_lote`. No generan archivo. |
+| `zona_arbitrio_ubicacion` | Una zona por vía, tramo (`numero_inicial`/`numero_final` y `paridad`) y manzana, opcionalmente de un solo `servicio`; más precisa que el sector catastral de `ARBITRIO_ZONA`, y se intenta primero (`Zonas.de`, ver **Zona por servicio y por ubicación**). `clave` única por vía, tramo, manzana, paridad, servicio y vigencia. |
+
+Las garantías de `determinacion_arbitrio` de rentas, trasladadas:
+- **Una cuota por predio, servicio, año, mes y secuencia de uso:** `cuota_arbitrio.clave` es única y vale
+  `predio|servicio|anio|periodo|secuencia|version` (las cuotas anteriores al PU por uso, `predio|servicio|anio|periodo|version`).
+  Core no tiene unicidad compuesta; como cada organización tiene su tabla física, la unicidad es por organización.
+- **Inmutable:** una cuota no se edita ni se borra, ni siquiera un ADMIN; una corrección es una anulación que se
+  agrega y una versión nueva de la `clave` (ver **Anulación**). `cuota_arbitrio` y `anulacion_cuota_arbitrio` son
+  `appendOnly` en el modelo (ADR-040): Core responde **409** a un PUT o DELETE de una, por cualquier vía y para
+  cualquiera, antes de la guardia de escritura. También responde **409** al borrar un predio, contribuyente, servicio o
+  parámetro al que apunta una cuota. Las cuotas no exigen la marca de escritura: la API genérica todavía puede
+  agregarlas, si cumplen sus invariantes.
+- **`periodo` de 1 a 12, `monto` no negativo y cuadrado con su desglose (el `monto_sin_tope`, cuando un tope la redujo; el
+  `monto` nunca lo supera, y `tope_aplicado` va con él), `parametro_aplicado` de hasta 500 caracteres,
+  relaciones obligatorias y `clave` coherente:** los revisa la regla `ReglaDeArbitrios` de la guardia de escritura
+  (`srtm.GuardiaDeEscritura`, ver [Modelo](#modelo)) al insertar, venga la cuota de donde venga; si no, **400**.
+- **Un valor único repetido** (dos cuotas con la misma `clave`, o cualquier otro campo único del modelo) responde
+  **409** y no 500 (`srtm.Duplicados`; Core 0.3 también responde 409, con `errors[].field`, pero en inglés; srtm lo
+  sobrescribe para dar el mensaje en castellano, y pierde el campo).
+- **Observación de 5 a 500 caracteres:** va en la propia cuota, porque la auditoría de Core no guarda observación.
+
+**Parámetros de la ordenanza.** Las tasas y los mapeos son filas de `parametro_tributario`, con vigencia y doble
+firma, y se cargan con `import_parametros.py --csv <archivo>`:
+
+| `tipo` | `clave` | Valor |
+|---|---|---|
+| `TASA_ARBITRIO` | `servicio` y una parte por cada Dimension del servicio (`zona:uso` por defecto); su parte de zona puede ir vacía cuando la primera Dimension del servicio es `ZONA` (`servicio::uso`): significa "esta tasa rige en toda zona del servicio" (una tarifa que no varía por zona, dentro de un servicio cuyas demás tasas sí varían — ver `import_tasas_arbitrio.py`, debajo); `Arbitrios.determinar` prueba primero la llave exacta de la zona del predio y, si no existe, esta; la exacta gana siempre que exista | `valor_numerico`: la tasa mensual en soles, no negativa |
+| `ARBITRIO_ZONA` | el sector catastral | `texto`: su zona según la ordenanza |
+| `ARBITRIO_USO` | un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos (gana el más largo) | `texto`: su uso de arbitrio |
+| `ARBITRIO_VENCIMIENTO` | el mes, de 1 a 12 | `texto`: su vencimiento, `AAAA-MM-DD` |
+| `BASE_ARBITRIO` | el servicio | `texto`: su Base (`PREDIO`, `FRONTIS_ML` o `AREA_CONSTRUIDA_M2`); ej. Miraflores 2026, RRSS: `AREA_CONSTRUIDA_M2` |
+| `DIMENSIONES_ARBITRIO` | el servicio | `texto`: sus Dimension separadas por comas, sin repetir (`ZONA`, `USO`, `INFLUENCIA`, `AFLUENCIA`); ej. Miraflores 2026, PARQUES: `ZONA,INFLUENCIA,AFLUENCIA` |
+| `HABITANTES_PROMEDIO` / `HABITANTES_VARIACION` | `servicio:zona:uso` | `valor_numerico`: sus habitantes promedio y su variación, mayor que 0 (una sin la otra en el archivo no cuenta); ej. Miraflores 2026: P=2, V=0.5 |
+| `REDONDEO_ARBITRIO` | vacía (global a la ordenanza) | `texto`: `decimales:modo` (`ABAJO`, `MEDIO` o `ARRIBA`); ej. Miraflores 2026: `2:ABAJO` |
+| `ARBITRIO_INFLUENCIA` | la `ubicacion_area_verde` del predio (enum del modelo: `FRENTE A PARQUE`, `MEDIANAMENTE CERCANO A AREAS VERDES`, `FRENTE A BERMA`, `OTRAS UBICACIONES`) | `texto`: su nivel de influencia; ej. Miraflores 2026: `FRENTE A PARQUE` → `Frente a Parque y/o Área Verde` |
+| `ARBITRIO_AFLUENCIA` | un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos, solo o como `servicio:prefijo` (gana el de su servicio; dentro de cada familia, el más largo) | `texto`: su nivel de afluencia |
+| `TOPE_ARBITRIO` | el grupo de uso: un prefijo del código de `uso_predio`, de 2, 4 o 6 dígitos (gana el más largo), o `*` para todos los demás | `valor_numerico`: el % máximo de aumento sobre lo pagado el año anterior, mayor que 0; `texto`: vacío, o la fecha de corte del registro del predio (`AAAA-MM-DD`); ej. Miraflores 2026: 8 % en casa habitación y 18 % en otros usos, para predios registrados al 31/12/2025 (ver **Tope de incremento**) |
+| `ARBITRIO_PU_POR_USO` | vacía (global) | `valor_numerico`: 1; `vigencia_desde`: el 1 de enero del primer año en que un predio paga un PU por cada uso. Un año es «por uso» si una fila rige su 1 de enero; sin fila, un PU por predio (ver **Un PU por uso** abajo) |
+
+`import_parametros.py` revisa la forma de estas filas antes de enviar nada: la llave de la tasa (según las
+`DIMENSIONES_ARBITRIO` vigentes de su servicio), el valor, el mes, la fecha y que `transcribio` y `verifico` sean dos
+personas distintas. Si una no encaja, la nombra y sale con `2`. `BASE_ARBITRIO`, `DIMENSIONES_ARBITRIO`,
+`HABITANTES_PROMEDIO`, `HABITANTES_VARIACION`, `REDONDEO_ARBITRIO`, `ARBITRIO_INFLUENCIA`, `ARBITRIO_AFLUENCIA`,
+`TOPE_ARBITRIO` y `ARBITRIO_PU_POR_USO` son opcionales: sin estas filas el cálculo es el
+de siempre (base `PREDIO`, dimensiones `ZONA,USO`, sin redondeo adicional, sin tope y un PU por predio).
+`ARBITRIO_PU_POR_USO` lleva la clave vacía, `valor_numerico` 1 y una `vigencia_desde` que es un 1 de enero.
+
+**Tasas de una ordenanza, de la tabla del informe técnico.** `import_tasas_arbitrio.py` deriva el CSV de arriba
+(el que lee `import_parametros.py --csv`) de la tabla larga de tasas de una ordenanza, una fila por tasa: `servicio,
+zona, uso_codigo, uso, ubicacion, nivel_afluencia, base, tasa_mensual`, con una cabecera `#` que cita la fuente (la
+forma de `arbitrios-miraflores-2026.csv`, #86). No carga nada a Core: solo escribe el archivo, y para eso llama
+`import_parametros.errores` antes de escribir.
+
+```bash
+cd model
+python3 import_tasas_arbitrio.py --tasas tasas.csv --servicios BARRIDO_CALLES=BAR,RECOLECCION_RESIDUOS=RRS \
+    --usos usos.csv --influencias influencias.csv --vigencia-desde 2026-01-01 --norma "Ordenanza N.° 665/MM" \
+    --fuente "El Peruano, 20/12/2025" --transcribio "ANA, 2026-01-05" --verifico "BETO, 2026-01-09" \
+    --redondeo 2:ABAJO --habitantes RECOLECCION_RESIDUOS=2:0.5 \
+    --vencimientos 2026-02-28,2026-05-30,2026-08-29,2026-11-30 --dry-run   # cuenta por tipo, no escribe
+python3 import_tasas_arbitrio.py ... --salida parametros-2026.csv          # sin --dry-run, escribe el archivo
+```
+
+Por cada servicio escribe `BASE_ARBITRIO` (de su columna `base`: «ml» → `FRONTIS_ML`, «m2»/«m²» → `AREA_CONSTRUIDA_M2`,
+«predio» → `PREDIO`) y `DIMENSIONES_ARBITRIO` (`ZONA` si alguna fila del servicio trae zona, `USO` si alguna trae
+`uso_codigo`, `INFLUENCIA`/`AFLUENCIA` igual, en ese orden); una `TASA_ARBITRIO` por fila, siempre (zona y
+`nivel_afluencia` normalizados sin acentos, en mayúsculas y con `_`; `uso_codigo` y `ubicacion` verbatim). Una fila
+sin zona en un servicio cuyas demás filas sí la traen no se descarta ni se rechaza: su parte de zona queda vacía
+(«esta tasa rige en toda zona del servicio», la tarifa de «otros usos» de Miraflores que no varía por zona, a
+diferencia de la de casa habitación del mismo servicio). `--usos` (`prefijo,uso`) y `--influencias` (`enum,etiqueta`)
+pasan verbatim a `ARBITRIO_USO`/`ARBITRIO_INFLUENCIA`; toda tasa cuyo `uso_codigo`/`ubicacion` no esté en esas
+columnas no encaja. `--habitantes SERVICIO=P:V` (repetible) escribe `HABITANTES_PROMEDIO`/`HABITANTES_VARIACION` por
+cada `servicio:zona:uso` de casa habitación presente para ese servicio (su columna `uso` contiene «casa
+habitación», sin acentos); una fila de casa habitación sin zona no tiene cómo repartirse "en toda zona del
+servicio", así que no encaja. `--redondeo` escribe la fila global; `--vencimientos` escribe las 12
+`ARBITRIO_VENCIMIENTO` a partir de 12 fechas (una por mes) o 4 (trimestral: cada una cubre sus 3 meses).
+`--dry-run` imprime la cantidad por tipo y no escribe nada: `--salida` es obligatorio sin `--dry-run`, y no hace
+falta con él. Los códigos de salida no cambian con `--dry-run`.
+
+`ARBITRIO_AFLUENCIA` **no se deriva aquí a propósito**: mapea el uso propio de un predio a su nivel de afluencia —
+dato del predio, no de la ordenanza — y esta tabla no lo trae.
+
+Sale con `2` (nada escrito) si un servicio de una fila no está en `--servicios`, una base no se reconoce, una tasa
+se repite, un uso o una ubicación no tienen mapeo, una fila de casa habitación no tiene zona bajo `--habitantes`,
+`--vencimientos` no trae 12 ni 4 fechas, o el CSV construido no pasa `import_parametros.errores`.
+
+**Cuidado al cargar `ARBITRIO_ZONA`, `zona_arbitrio_ubicacion` y `ARBITRIO_AFLUENCIA` aparte.** Estos tres no los
+escribe `import_tasas_arbitrio.py` (zona y ubicación son del predio, no de la tabla de tasas); quien los carga
+—a mano o con `import_zonas_arbitrio.py`— **debe escribir el mismo texto normalizado que las `TASA_ARBITRIO`
+usan en su clave**: sin acentos, en mayúsculas, lo que no es letra ni número vuelto `_` («Zona 1» → `ZONA_1`,
+«Área 0» → `AREA_0`, «Muy alta» → `MUY_ALTA`). Una zona o una afluencia escrita como la ordenanza la imprime
+(«Zona 1», «Muy alta») no calza con la clave de ninguna `TASA_ARBITRIO`, y el predio entero falla con un
+`TASA_ARBITRIO` en `faltan` — sin ningún otro aviso.
+
+`model/data/arbitrios/ficticio-parametros.csv` es exactamente lo que `import_tasas_arbitrio.py` produce de
+`ficticio-tasas.csv`, `ficticio-usos.csv` y `ficticio-influencias.csv` (un contrato cruzado: `ArbitriosTest.kt`
+lee este mismo archivo, y `test_import_tasas_arbitrio.py` lo regenera y compara byte a byte). Para regenerarlo:
+
+```bash
+cd model
+python3 import_tasas_arbitrio.py --tasas data/arbitrios/ficticio-tasas.csv \
+    --servicios BARRIDO_CALLES=BAR,RECOLECCION_RESIDUOS=RRS,PARQUES_JARDINES=PYJ,SERENAZGO=SER \
+    --usos data/arbitrios/ficticio-usos.csv --influencias data/arbitrios/ficticio-influencias.csv \
+    --vigencia-desde 2041-01-01 --norma "Ordenanza ficticia 000-2041-MDP" --fuente test \
+    --transcribio "ANA, 2041-01-05" --verifico "BETO, 2041-01-09" --redondeo 2:ABAJO \
+    --habitantes RECOLECCION_RESIDUOS=4:0.3 --vencimientos 2041-02-28,2041-05-30,2041-08-29,2041-11-30 \
+    --salida data/arbitrios/ficticio-parametros.csv
+```
+
+**Tasas reajustadas por IPC, sin ordenanza con cuadro** (art. 69-B del TUO de la Ley de Tributación Municipal;
+art. 8 de la Ord. 2386-MML, #88). Muchas ordenanzas que reajustan sus tasas del año anterior por el IPC no
+publican ningún cuadro, solo el porcentaje (a veces ni eso: Arequipa 2026 no lo dice). `derivar_ipc_arbitrio.py`
+deriva el CSV del año siguiente desde el del año base, sin teclear ninguna cifra:
+
+```bash
+cd model
+python3 derivar_ipc_arbitrio.py --csv parametros-2026.csv --desde 2026 --ipc 2.10 \
+    --norma "OM 012-2027-MDP" --redondeo 4:MEDIO \
+    --transcribio "CARLA, 2027-01-05" --verifico "DIEGO, 2027-01-09" --salida parametros-2027.csv
+```
+
+Toma, de `--csv`, la fila de cada `(tipo, clave)` de `TIPOS_ARBITRIO` con la `vigencia_desde` más reciente que no
+pase el 31/12 de `--desde`, entre las que siguen vigentes ese día (una fila que empieza después de esa fecha, o
+cuya `vigencia_hasta` es anterior, se ignora), y escribe cada una para el año siguiente, con `vigencia_desde` el 01/01 de ese año:
+- `TASA_ARBITRIO`: su `valor_numerico` × (1 + `--ipc` / 100), redondeado con `--redondeo` (`decimales:modo`, el
+  mismo `ABAJO`/`MEDIO`/`ARRIBA` de `REDONDEO_ARBITRIO`); su `texto` queda `DERIVADA IPC <ipc>% de <clave> <año
+  base>`. Ejemplo de Miraflores 2026 con IPC 2,10 % y `4:MEDIO`: `2.5428` → `2.5962` (`2.5428 × 1.021 =
+  2.5961988`).
+- Toda otra fila (`ARBITRIO_ZONA`, `ARBITRIO_USO`, `ARBITRIO_INFLUENCIA`, `ARBITRIO_AFLUENCIA`, `BASE_ARBITRIO`,
+  `DIMENSIONES_ARBITRIO`, `HABITANTES_PROMEDIO`/`HABITANTES_VARIACION`, `REDONDEO_ARBITRIO`, `TOPE_ARBITRIO`) se
+  copia tal cual (mismo `valor_numerico` y `texto`), salvo el `texto` de `ARBITRIO_VENCIMIENTO` y el de
+  `TOPE_ARBITRIO` cuando es una fecha: ambos se corren un año (29 de febrero → 28 de febrero si el año siguiente
+  no es bisiesto). `REDONDEO_ARBITRIO` se copia con su propio modo; `--redondeo` solo redondea las tasas de este
+  reajuste, no la reemplaza.
+- Toda fila derivada cita la fila base (su `clave` y el año base, en `fuente`) y lleva la `norma`, `transcribio`
+  y `verifico` del propio reajuste, no los de la fila base: dos firmas distintas por fila, exigidas por
+  `import_parametros.errores`.
+
+`--redondeo` es **obligatorio**: ninguna de las ordenanzas revisadas publica cómo redondea un reajuste por IPC.
+Sale con `2` (nada escrito) si falta `--redondeo` o no es `decimales:modo`, si `--ipc` no es un número, o si el
+CSV construido no pasa `import_parametros.errores`.
+
+**La ordenanza, los servicios y las inafectaciones** se cargan con `import_arbitrios.py`, desde un JSON:
+
+```json
+{"ordenanzas": [{"anio": 2026, "numero": "…", "fecha_publicacion": "…", "acuerdo_ratificacion": "…",
+                 "fecha_ratificacion": "…", "municipalidad_ratificante": "…"}],
+ "servicios": [{"codigo": "…", "nombre": "…", "orden": 1, "vigencia_desde": "2026-01-01", "ordenanza": 2026}],
+ "inafectaciones": [{"predio": "<codigo del predio>", "servicio": "<codigo del servicio>", "vigencia_desde": "…",
+                     "motivo": "…", "observacion": "…"}]}
+```
+
+```bash
+cd model
+python3 import_arbitrios.py --archivo arbitrios-2026.json --dry-run   # lee Core y dice qué haría, sin escribir
+python3 import_arbitrios.py --archivo arbitrios-2026.json
+```
+
+`import_arbitrios.py`:
+- un servicio nombra su ordenanza por el año, y una inafectación nombra su predio y su servicio por el código;
+- antes de la primera escritura revisa el archivo (campos obligatorios, fechas, vigencias, códigos repetidos,
+  observación de 5 a 500 caracteres) y que existan los predios, los servicios y las ordenanzas que nombra;
+- es idempotente con claves naturales: la ordenanza por `anio`, el servicio por `codigo`, la inafectación por predio,
+  servicio y `vigencia_desde`; actualiza en su lugar lo que cambió y no borra nada;
+- sale con `0` si todo va bien, `1` si Core rechaza algo y `2` si el archivo no encaja (sin escribir nada).
+
+**Zona por servicio y por ubicación.** La zona de un servicio, cada día, la decide `srtm.arbitrios.Zonas.de` en seis
+niveles, de más a menos preciso; gana el primero con alguna fila vigente que coincida (varias filas de ese nivel que
+coincidan en la zona la ganan igual; si no coinciden, la zona es ambigua y el predio entero falla, nombrada en
+`faltan`):
+1. `zona_arbitrio_ubicacion` del servicio, con la manzana del predio.
+2. `zona_arbitrio_ubicacion` del servicio, sin manzana (vacía).
+3. `zona_arbitrio_ubicacion` de todos los servicios (`servicio` vacío), con la manzana del predio.
+4. `zona_arbitrio_ubicacion` de todos los servicios, sin manzana.
+5. `ARBITRIO_ZONA servicio:sector_catastral`.
+6. `ARBITRIO_ZONA sector_catastral`.
+
+Una fila de `zona_arbitrio_ubicacion` coincide cuando está vigente ese día, su `via` es la del predio (sin distinguir
+mayúsculas ni tildes), su `tipo_via` está vacío o es el del predio (comparado igual que la vía), el número del predio cae en su tramo
+(`numero_inicial`/`numero_final`, extremos vacíos abiertos) y su `paridad` es `AMBOS`, vacía o la del número. Sin
+ninguna fila que coincida en los cuatro niveles de ubicación, cae al sector catastral (niveles 5 y 6); sin sector
+catastral tampoco, la zona de ese servicio no se resuelve, falta «Sector catastral del predio …» y **el predio entero
+no se determina** (todo o nada), aunque otros servicios del predio sí resuelvan por ubicación. Un predio sin sector
+se determina solo cuando cada uno de sus servicios resuelve su zona por ubicación.
+
+Se carga con `import_zonas_arbitrio.py`, desde un CSV con las columnas
+`servicio,tipo_via,via,manzana,numero_inicial,numero_final,paridad,zona,vigencia_desde,vigencia_hasta,norma,observacion`
+y una cabecera `#` con la fuente; `servicio` vacío aplica a todos, `manzana` vacía no filtra por manzana, `tipo_via`
+vacío no filtra por tipo de vía y `vigencia_hasta` vacía sigue vigente. **La columna `zona` debe traer el mismo
+texto normalizado que las `TASA_ARBITRIO` de ese servicio** (ver la advertencia de arriba, en **Tasas de una
+ordenanza**): `import_zonas_arbitrio.py` no normaliza nada, solo lo versiona tal cual se le da.
+
+```bash
+cd model
+python3 import_zonas_arbitrio.py --csv zonas-2026.csv --dry-run   # lee Core y dice qué haría, sin escribir
+python3 import_zonas_arbitrio.py --csv zonas-2026.csv
+```
+
+`import_zonas_arbitrio.py`:
+- la clave natural es `servicio|tipo_via|via|manzana|numero_inicial|numero_final|paridad|vigencia_desde` (la misma
+  fórmula de `claveDeZonaUbicacion`, trasladada a Python); cambiar cualquiera de esos campos es un tramo nuevo, no
+  una fila reemplazada;
+- antes de la primera escritura revisa el archivo: campos obligatorios, `numero_inicial` y `numero_final` enteros
+  con `numero_inicial <= numero_final`, `paridad` del enum, fechas ISO, y que dos filas que un mismo predio podría
+  encontrar en el mismo nivel no tengan distinta zona con vigencias que se cruzan (la ambigüedad que `Zonas.de`
+  encontraría al calcular): mismo servicio (o ambas de todos), misma manzana (o ambas sin manzana), la misma vía y
+  un `tipo_via` igual o vacío en alguna (las dos comparadas como `Zonas`: sin espacios en los extremos, sin
+  distinguir mayúsculas ni tildes), paridades iguales o alguna `AMBOS`, y tramos que se solapan. `AV LIMA` y
+  `JR LIMA` no chocan; `PAR 200-298` y `AMBOS 200-298`, o `AV X` y `Av x`, sí;
+- es idempotente: crea lo que falta, actualiza en su lugar `zona`, `vigencia_hasta`, `norma` y `observacion` (lo que
+  no es parte de la clave) y no borra nada;
+- sale con `0` si todo va bien, `1` si Core rechaza algo y `2` si el archivo no encaja (sin escribir nada).
+
+**Compatibilidad.** Sin ninguna fila de `zona_arbitrio_ubicacion`, los cuatro primeros niveles no tienen candidatas y
+`Zonas.de` cae directo al sector catastral: un predio de un solo uso determina las mismas cuotas que antes de este
+cambio.
+
+**Cálculo** (`Arbitrios.determinar`, de un predio y un año):
+- **Del año:** hace falta la ordenanza del año ratificada (acuerdo y fecha) y al menos un servicio vigente. Si no,
+  `faltan` lo dice y no se determina ningún predio.
+- **Cada mes a su fecha.** El mes *m* se decide el día 1 de *m* (`Periodo.atribucion`), no el día en que se corre:
+  - **Titular:** de las DJ del año que cubren ese día, la del titular principal. Gana el mayor `porcentaje_condominio`;
+    en empate, la `fecha_adquisicion` más antigua, luego el `codigo` de contribuyente menor y luego la secuencia de uso
+    menor (leída como la numera el padrón: `1` es `001`). Se le cobra íntegro, sin prorrateo: es el contribuyente de la cuota de cada secuencia ese mes.
+  - **Qué días cubre una DJ:** desde el 1 de enero, o desde el día siguiente a su `fecha_adquisicion` si cae en el año;
+    hasta el 31 de diciembre, o hasta su `fecha_anulacion` si se anuló (descargo). Una importada sin fechas cubre el
+    año. Una venta el 20 de mayo da: vendedor de enero a mayo, comprador de junio a diciembre.
+  - **Zona:** la de cada servicio ese día, por `Zonas.de` (ver **Zona por servicio y por ubicación** arriba):
+    `zona_arbitrio_ubicacion` por vía y tramo primero, `ARBITRIO_ZONA` del `sector_catastral` del predio como
+    respaldo. Es la del predio: la misma para todas sus secuencias.
+  - **Un PU por uso** (decisión del 2026-10-05), desde el año que fija `ARBITRIO_PU_POR_USO` (#80): cada secuencia
+    de uso de las DJ que cubren el día se cobra aparte (`porSecuencia`: la de su propio titular principal, para un
+    condómino de esa secuencia), con su propio uso de arbitrio, área, frontis y habitantes. `ARBITRIO_USO` del código
+    de uso de cada DJ (tan preciso como la DJ: `XXYYZZ` con clase, sub clase y uso; `XXYY` sin uso; `XX` con solo la
+    clase; gana el prefijo más largo). Un predio de un solo uso tiene, como antes, una sola secuencia.
+  - **Un PU por predio** en un año anterior a ese, o sin la fila: como antes del PU por uso, cada mes se cobra solo la
+    secuencia de la DJ del titular principal, con su uso, área, frontis y habitantes; las demás secuencias no se
+    miran. La cuota guarda igual su secuencia en la clave de 6 partes. Un mes que ya tiene una cuota del servicio,
+    de cualquier secuencia, ya está cobrado: si después cambia la DJ del titular principal (se rectifica una
+    participación o una adquisición), no se cobra un segundo PU. Un predio de un solo uso tiene las mismas cuotas en
+    los dos modos.
+  - **Servicios:** cada servicio vigente ese día, salvo que el predio tenga una inafectación suya vigente ese día o
+    que la cuota de esa secuencia ya exista. El monto es `tasa_unitaria × cantidad_base × (1 + (H − P) × V)`
+    (`Calculo.calcular`): `tasa_unitaria` es `TASA_ARBITRIO servicio` más una parte por cada `Dimension` de
+    `Servicios.dimensiones` (`zona:uso` por defecto); `cantidad_base` (`BASE_ARBITRIO` del servicio) es 1 por
+    predio, o el frontis en ml o el área construida en m² de la DJ de la secuencia; el factor de habitantes
+    (`HABITANTES_PROMEDIO`/`HABITANTES_VARIACION` de `servicio:zona:uso`) es 1 sin esas filas, o cuando la DJ no
+    declara `numero_habitantes` (se presume el promedio, H = P). El monto se redondea al final según
+    `REDONDEO_ARBITRIO` (`decimales:modo`, global a la ordenanza); sin `BASE_ARBITRIO`, habitantes ni redondeo es
+    la tasa mensual tal cual, igual que antes de este cálculo. `parametro_aplicado` guarda las llaves exactas que se
+    leyeron, separadas por `;`; sin `DIMENSIONES_ARBITRIO` es solo la de la tasa, la de siempre. `Calculo.formula`
+    imprime la misma cuenta en texto, como la ordenanza la lee: `"5.0856 S/ por ml × 10.50 ml = 53.39"`,
+    `"0.0514 S/ por m² × 100.00 m² × (1 + (4 − 2) × 0.50) = 10.28"` o, por predio, `"85.9875 S/ por predio"` (con
+    `= monto` solo si hubo redondeo); una cuota de antes del desglose (`base` null) es solo su `monto`.
+  - **Influencia y afluencia** (`Dimensiones.influencia`/`afluencia`, cuando el servicio las lista): la influencia es
+    `ARBITRIO_INFLUENCIA` de la `ubicacion_area_verde` del predio; sin esa ubicación, o sin su fila, falta y el predio
+    entero no se determina (todo o nada, igual que una zona o un uso que falta). La afluencia es `ARBITRIO_AFLUENCIA`
+    del código de uso, con la misma regla del prefijo más largo que `ARBITRIO_USO`, pero primero por su servicio
+    (`servicio:prefijo`, si existe) antes de caer a uno general (`prefijo`).
+- **Meses sin cobro:** un mes sin titular, o una secuencia sin zona (por sector o por ubicación) o sin uso ese mes, no
+  se cobra. Un predio que aparece en julio no debe de enero a junio.
+- **No se puede determinar** un predio sin titular en ningún mes, o sin zona y uso a la vez en ninguna secuencia de
+  ningún mes con titular. En un año de un PU por uso, una secuencia que nunca tuvo uso del catálogo, en ningún mes
+  (aunque otra secuencia del mismo predio sí lo tenga), también hace fallar el predio entero, nombrada con su número
+  cuando hay varias (`uso 002`); en uno de un PU por predio, esa secuencia no se mira.
+- **Todo o nada:** si falta un parámetro (una zona, un uso, una tasa, una influencia o una afluencia) de cualquier
+  secuencia, no se determina nada de ese predio. `faltan`
+  nombra cada uno una vez (`TASA_ARBITRIO LIMPIEZA:Z1:CASA 2026`).
+- **Reejecutar no duplica:** las cuotas que ya existen, de cada secuencia, no se recalculan.
+- **La clave** de cada cuota es `predio|servicio|anio|periodo|secuencia|version` (ver **Modelo** arriba): un predio
+  de un solo uso tiene, como antes de este cambio, una cuota por servicio y mes, con el mismo `monto` y el mismo
+  `parametro_aplicado` de siempre; uno de varios usos tiene una por secuencia, y cada una se calcula con su propio
+  uso de arbitrio, su base y su tasa, así que tiene su propio `monto` y su propio `parametro_aplicado`.
+
+**Tope de incremento** (`TOPE_ARBITRIO`, #87). Muchas ordenanzas limitan lo que un predio paga en un año a lo que
+pagó el anterior más un porcentaje (Miraflores 2026: 8 % en casa habitación, 18 % en otros usos; la diferencia la
+asume la municipalidad). Al final de `Arbitrios.determinar`, con todas las cuotas del predio ya calculadas:
+- **El grupo** es el código de uso de la secuencia menor del predio (en un año de un PU por predio, la secuencia de
+  la DJ del titular principal, la que se cobra; el primer mes que lo tiene): su `TOPE_ARBITRIO`
+  es la fila del prefijo más largo, o la de `*` si ninguno coincide. Sin fila, no hay tope.
+- **Sin tope** también si el predio no tiene cuotas vigentes del año anterior (no anuladas, la última versión de
+  cada una, de todos los servicios), o si esas cuotas suman 0 (no pagó nada: un límite de 0 dejaría todo el año en
+  0), o si se registró después de la fecha de corte (`texto`). **Registrado** es cuando el predio entró al padrón: la
+  fecha más antigua de sus declaraciones **de cualquier año**, no la de la DJ de este año; cada DJ cuenta con su
+  `fecha_presentacion` o, si no la tiene (una DJ migrada), con el 1 de enero de su `anio`. Un predio cuya primera DJ
+  es de 2024, que pagó en 2025 y presentó su DJ de 2026 en febrero de 2026, con corte 2025-12-31, tiene tope; uno
+  con DJ migradas de 2020 a 2025 sin fecha y la de 2026 presentada el 1 de febrero, también (registrado el
+  2020-01-01); uno cuya primera DJ es de enero de 2026, no.
+- **Si no**, `límite = suma del año anterior × (1 + tope / 100)`. Si las cuotas vigentes de este año ya escritas más
+  las nuevas lo superan, **solo las nuevas** bajan en proporción, hasta `límite − ya escritas` (nunca por debajo de
+  0): cada una se redondea con su propio redondeo (`2:ABAJO` si no tiene), la diferencia del redondeo va a la última
+  (en el orden en que se determinaron: mes, secuencia, servicio) sin que ninguna pase de lo que era, y la suma
+  queda exacta. Cada nueva guarda `monto_sin_tope` (lo de antes del tope, que es lo que cuadra con su desglose),
+  `tope_aplicado` (el %) y `TOPE_ARBITRIO:<clave>` en `parametro_aplicado`; `Calculo.formula` termina en
+  `"= 33.33, con tope de 8 %: 29.99"`.
+- **Ejemplo** (cifras ficticias, `TopeTest`): un predio de casa habitación que pagó 1 000.00 en 2025 y debería pagar
+  1 200.00 en 2026 (100.00 al mes en tres servicios: 33.33 + 33.33 + 33.34), con `TOPE_ARBITRIO 0101` de 8 %, paga
+  1 080.00: cada cuota × 1 080 / 1 200, redondeada hacia abajo (29.99, 29.99 y 30.00 al mes, 1 079.76 en el año), y
+  los 0.24 que faltan van a la última de diciembre (30.24). Si los primeros 6 meses ya estaban escritos (600.00),
+  las 18 nuevas suman 480.00.
+- **La última** es la última en el orden en que se determinan las cuotas: por mes, luego por secuencia y luego por
+  servicio (su `orden`); no el orden alfabético de la `clave`, que pondría el mes 9 después del 12.
+- `ArbitriosService` lee las cuotas del año anterior (con sus anulaciones) y la fecha de registro (dos filas,
+  `Registros.lowest`: la `fecha_presentacion` más baja de las declaraciones del predio y el `anio` más bajo de las que
+  no la tienen; `Arbitrios.registrado` toma la menor) solo cuando el año tiene alguna
+  fila `TOPE_ARBITRIO` vigente: sin ella no hay lecturas nuevas y las cuotas son las de siempre (`monto_sin_tope` y
+  `tope_aplicado` vacíos).
+
+**Escritura.** Las cuotas de un predio se escriben en una transacción: todas o ninguna. Si otra determinación del mismo
+predio escribe alguna entre la lectura y la escritura (la `clave` es única), no queda nada de esta: se lee y se calcula
+otra vez, una sola vez, y lo que la otra escribió ya no se recalcula.
+
+**Índices.** Core indexa solo `organization_id`, el estado y los campos únicos, y un año trae de 540 000 a 900 000
+cuotas. El modelo declara dos índices en `cuota_arbitrio` (`indexes` de `model/model.json`): `(anio, predio)` y
+`(anio, contribuyente)`. Core los crea en la tabla física de cada organización, también en una que se crea después
+(wasichai 0.3). Medido en el CI sobre 505 000 filas: listar un predio pasa de 62 ms a 3,3 ms.
+
+**API** (`/api/srtm`, JSON en snake_case; sin `anio`, el año en curso):
+
+| Método | Ruta | Responde |
+|---|---|---|
+| GET | `/arbitrios/servicios?anio` | Los servicios vigentes algún día del año, en su orden. |
+| GET | `/arbitrios/parametros?anio` | La ordenanza, los servicios y las filas de la ordenanza vigentes en el año, con `faltan`. Siempre 200. |
+| GET | `/arbitrios?anio&predio&contribuyente&servicio&page&size` | Una página de cuotas. Un parámetro desconocido o mal formado es **422** y lo nombra en `errors` (nunca un filtro ignorado). |
+| GET | `/predios/{id}/arbitrios?anio` | La matriz servicio × mes, el titular de cada mes según la regla, los totales por servicio, por mes y del año, la `fecha_calculo` de la última cuota, cuántas cuotas agregaría determinar ahora (`pendientes`) y qué falta para hacerlo (`faltan`, y lo mismo con su predio, su declaración cuando la tiene y dónde se arregla: `faltan_detalle: [{mensaje, predio, declaracion, enlace}]`; `enlace` es `"DECLARACION"` cuando lo arregla la DJ —su uso, frontis o área construida—, `"PREDIO"` cuando lo arregla la ubicación del predio —su sector catastral, una zona por ubicación ausente o ambigua, su ubicación respecto del área verde— y `null` cuando no lo arregla ninguna de las dos: una fila de la ordenanza aunque nombre el sector o el uso del predio —`TASA_ARBITRIO`, `ARBITRIO_ZONA`, `ARBITRIO_USO`, `ARBITRIO_INFLUENCIA`, `ARBITRIO_AFLUENCIA`, `TOPE_ARBITRIO`—, un titular que ninguna DJ cubre, un factor de habitantes negativo o una invariante). Cada celda lleva su `desglose`, una entrada por secuencia de uso (`secuencia_uso`) con `id`, `monto`, `base`, `cantidad_base`, `tasa_unitaria`, `habitantes`, `promedio_habitantes`, `variacion_habitante`, `habitantes_presuntos`, `zona`, `uso_arbitrio`, `influencia`, `afluencia` y `formula`, la cuenta legible (`Calculo.formula`): `"0.0514 S/ por m² × 100.00 m² × (1 + (4 − 2) × 0.50) = 10.28"`, `"5.0856 S/ por ml × 10.50 ml = 53.39"` o, por predio, `"85.9875 S/ por predio"`; una cuota de antes del desglose (`base` null) solo trae `soles(monto)`. |
+| GET | `/contribuyentes/{id}/arbitrios?anio` | Lo mismo por cada predio de sus DJ del año (o del que tiene cuotas), solo con las cuotas a su nombre, y su total. |
+| POST | `/predios/{id}/arbitrios` `{anio, observacion}` | **201** con las cuotas escritas; **200** con `[]` si no había nada pendiente; **422** con `faltan` y `faltan_detalle`; **400** si la observación no tiene de 5 a 500 caracteres; **403** sin permiso de creación sobre `cuota_arbitrio`. |
+| POST | `/contribuyentes/{id}/arbitrios` `{anio, observacion}` | Determina cada predio de sus DJ del año (también una anulada: puede cubrir los meses previos a una venta). Calcula todos antes de escribir: si uno no se puede determinar, **422** que lo nombra (`Predio <código>: …`, también en `faltan_detalle`) y no escribe ninguno. |
+
+**Determinación masiva** (`/api/srtm/arbitrios/determinaciones`). Determina todos los predios de un año en segundo
+plano, sobre la misma maquinaria de lotes de la [emisión masiva](#emisión-masiva):
+- **POST `{anio, observacion}` → 202** con el job PENDIENTE. Antes de crear nada responde:
+  - **403** si quien la lanza no tiene creación y edición sobre `determinacion_arbitrio_masiva` y creación sobre
+    `determinacion_arbitrio_lote` y `cuota_arbitrio`;
+  - **400** si la observación no tiene de 5 a 500 caracteres;
+  - **422** con `faltan` si el año no tiene su ordenanza ratificada, sus servicios o filas de tasas, zonas y usos;
+  - **409** si ya hay una del año en curso en la organización.
+- **Preparación.** En segundo plano y como quien la lanzó, toma los predios con alguna DJ del año (también anulada: puede
+  cubrir los meses previos a una venta), los ordena por código y los corta en lotes de `srtm.emision.lote`
+  (`determinacion_arbitrio_lote`). El job pasa a EN_PROCESO.
+- **Trabajadores.** Los mismos de la emisión toman sus lotes (`TrabajoDeterminacion`), turnándose con los de la emisión:
+  ninguna espera a que la otra termine.
+  - Un lote se procesa como el usuario que lo creó, con la ordenanza, los servicios, los parámetros y los usos del año
+    leídos una vez por lote.
+  - Cada predio se determina y se escribe como en el POST de su ficha, en su propia transacción.
+  - Un predio que no se puede determinar va a `errores` (`[{predio, mensaje}]`, por su código) y el lote sigue.
+  - Una cuota que ya existía no se vuelve a escribir, así que un lote retomado tras vencer su lease vuelve a empezar
+    sin duplicar nada.
+  - Toda escritura del lote exige su toma (`tomado_por` + `intentos`).
+- **Cierre.** Cuando todos sus lotes terminaron, el job pasa a **TERMINADA** con `procesados` (predios), `generadas`
+  (cuotas) y `errores`. No genera archivo, así que no pasa por ENSAMBLANDO. Mientras corre, `generadas` suma las de
+  sus lotes terminados.
+- **Fallos.** Igual que en la emisión: un lote que agota `srtm.emision.intentos` queda FALLIDO con todos sus predios en
+  `errores`; si su creador ya no existe o está deshabilitado, también; un job sin quien lo prepare pasa a FALLIDA.
+- **GET** lista (`?anio`) y **GET** `/{id}` devuelven el job. **DELETE** `/{id}` cancela sus lotes y lo borra (204);
+  las cuotas que escribió quedan, porque una cuota no se borra.
+
+**Cómo activar el PU por uso** (#84, #80). Sin la fila `ARBITRIO_PU_POR_USO`, todos los años pagan un PU por
+predio, como antes del PU por uso: un año ya determinado no tiene nada `pendiente`, la HLA de sus contribuyentes se
+emite sin volver a determinar y una nueva determinación no agrega cuotas de las secuencias distintas de la que se
+cobra. Las cuotas
+de antes (sin `secuencia_uso`) cuentan como de la secuencia que se cobra ese mes, así que no se duplican. Para pasar
+a un PU por uso, se carga con `import_parametros.py --csv` una fila con el 1 de enero del primer año que lo aplica:
+
+```csv
+tipo,clave,vigencia_desde,vigencia_hasta,valor_numerico,texto,norma,fuente,transcribio,verifico
+ARBITRIO_PU_POR_USO,,2027-01-01,,1,,<ordenanza o acuerdo que lo dispone>,<archivo>,<nombre>,<otro nombre>
+```
+
+Desde ese año, cada secuencia de uso tiene su PU; los años anteriores siguen con uno por predio. Si la fila rige un
+año ya determinado, las secuencias distintas de la que se cobra de sus predios de varios usos quedan `pendientes` (y
+su HLA da 422)
+hasta volver a determinarlo: lo seguro es elegir un año que aún no se haya determinado. El tope de incremento del
+primer año por uso se mide contra lo pagado el año anterior, con un PU por predio.
+
+**HLA** (hoja de liquidación de arbitrios, `GET /api/srtm/contribuyentes/{id}/hla?anio`, PDF inline como la HR).
+- **Qué imprime:** las cuotas a nombre del contribuyente tal como se determinaron, con las mismas cifras que
+  `GET /contribuyentes/{id}/arbitrios`:
+  - por predio, la zona y el uso, los meses con cuota por servicio y sus totales;
+  - por predio, el cálculo (`PredioHla.calculos`): una línea por secuencia de uso, servicio y `Calculo.formula`
+    distintos del año, con el rango de meses en que rigió (abreviado a 3 letras, `ene`, `feb`… `dic`; un solo mes
+    va solo, `mar`, y un rango junta los dos extremos con un guion en, `ene–dic`), por ejemplo
+    `"Recolección (uso 001), ene–dic: 0.0514 S/ por m² × 100.00 m² × (1 + (4 − 2) × 0.50) = 10.28"`. La misma
+    fórmula que vuelve a aparecer sin ser contigua (una tasa que cambió y volvió) imprime una línea por tramo. Una
+    cuota de antes del desglose (`base` null) no aporta ninguna línea: la HLA se ve como antes de este cálculo;
+  - las cuotas mensuales con su vencimiento (`ARBITRIO_VENCIMIENTO` de cada mes, vigente al día 1);
+  - el total del año, la fecha de cálculo y la ordenanza con su ratificación.
+- **Usa** la cabecera de los documentos (`templates/emision/hla.html`).
+- **422 con `faltan`** si:
+  - el año no tiene su ordenanza ratificada;
+  - un predio del contribuyente tiene cuotas por determinar, o no se puede determinar;
+  - un mes con cuota no tiene vencimiento.
+- **404** si no hay ninguna cuota a su nombre en el año (un condómino que no es el titular principal).
+- **En la emisión masiva:** el `POST /api/srtm/emisiones` acepta `documentos` (de `HR`, `PU`, `HLA`; por defecto
+  `["HR","PU"]`, como antes). Con la HLA:
+  - **422 con `faltan`** antes de crear nada si al año le falta lo que toda HLA necesita (lo de
+    `/arbitrios/parametros` y los vencimientos de los 12 meses);
+  - la HLA va después de la HR y los PU de cada contribuyente (`<codigo>-<nombre>/HLA-<anio>.pdf` en el ZIP), con la
+    ordenanza y los parámetros leídos una vez por lote;
+  - un contribuyente cuya HLA no se puede hacer **sigue con su HR y sus PU** y queda en `errores` como
+    `HLA: <por qué>`;
+  - uno sin cuotas a su nombre no lleva HLA, y no es un error.
+
+**Anulación** (`POST /api/srtm/arbitrios/cuotas/{id}/anulacion` `{motivo, observacion}` → 201). Así se corrige
+una cuota, en lugar de editarla:
+- se agrega una `anulacion_cuota_arbitrio`, que tampoco se edita ni se borra (409 por cualquier vía);
+- la cuota anulada deja de contar en la matriz, en los totales y en la HLA, y solo su secuencia vuelve a quedar
+  pendiente: las demás secuencias del mismo servicio y mes no se tocan;
+- la siguiente determinación del predio la escribe de nuevo con la versión siguiente de su `clave`
+  (`…|001|2`, `…|001|3`: la misma secuencia, otra versión), con la tasa, la zona, el uso y el titular vigentes
+  entonces;
+- una cuota se anula una sola vez (**409**);
+- `motivo` es obligatorio, y la observación va de 5 a 500 caracteres (**400**);
+- pide creación sobre `anulacion_cuota_arbitrio` (**403**).
+
+La consulta paginada (`GET /arbitrios`) lista las cuotas tal como se escribieron, también las anuladas: la matriz, los
+totales y la HLA son los que las excluyen.
+
+**Permisos.** Consultar pide lectura de `cuota_arbitrio`, `servicio_arbitrio`, `ordenanza_arbitrio`,
+`inafectacion_arbitrio` y `parametro_tributario`. Determinar pide, además, creación sobre `cuota_arbitrio`. Nadie
+actualiza ni borra cuotas ni anulaciones; anular pide creación sobre `anulacion_cuota_arbitrio`.
+
+**Ninguna cifra inventada.** Todavía no hay una transcripción verificada de la ordenanza de arbitrios de Perené y su
+ratificación (E-6 del plan de desbloqueo D-02 de `normativa`). Hasta que la haya, el repo no lleva ni el JSON ni el CSV
+de tasas, y los tests usan valores ficticios escritos dentro del propio test.
+
+## Infracciones administrativas
+
+Las multas administrativas (familia `ADMINISTRATIVA`) se portan del contexto `sanciones` de `rentas`: el modelo, la
+guardia de escritura y la carga del CUIS (ver [Modelo](#modelo)), las reglas puras de `srtm.sanciones` y su api bajo
+`/api/srtm/infracciones/...`: el CUIS, las notificaciones previas con sus padrones, los plazos cargados y el panel
+(`InfraccionesController`),
+las actas (`ActasController`) y los descargos, las resoluciones con su PDF y sus notificaciones
+(`ResolucionesController`). srtm no cobra: la multa queda determinada en el acta, sin deuda, pagos ni coactiva
+([Siguientes pasos](#siguientes-pasos-fuera-de-este-alcance)).
+
+### API de infracciones
+
+Bajo `/api/srtm/infracciones`, con las convenciones de arbitrios: registros en snake_case con los nombres del modelo,
+relaciones como id, fechas ISO, dinero como número (los textos para leer, como los `detail` de los 409/422 y el
+`detalle` de los actos, citan las fechas en `dd/MM/yyyy`, con `srtm.legible()`). Un parámetro de consulta desconocido o mal formado es **422** y lo
+nombra en `errors` (`Filtros.soloConoce`). Cada acto pide permiso de creación sobre su objeto **antes** de leer nada
+(**403** que nombra el objeto), exige `observacion` de 5 a 500 caracteres (**400**) y escribe con la marca de srtm
+(`Registros.create`/`replace`): la API genérica no escribe estos objetos (POST **403**, PUT/DELETE **409**, también un
+ADMIN). `FaltanSanciones` sale como **422** con `faltan: [...]` (`ErroresDeSanciones`, para todos los controladores de
+`srtm.sanciones`).
+
+| Método | Ruta | |
+|---|---|---|
+| GET | `/cuis?vigentes_a&materia&q` | `{vigentes_a, uit: {valor, anio, parametro_id} \| null, faltan, codigos}`: las versiones vigentes ese día (por omisión hoy), por código; `materia` y `q` (código o descripción) buscan una parte. Cada código lleva `multa`, `multa_segunda` y `multa_tercera` a la UIT de `vigentes_a` (`Multas.calcular`); null si el grado no tiene % o si no hay UIT. Sin UIT: `uit: null` y `faltan: ["UIT 2026"]`. Siempre 200. Es también el reporte de códigos del brief: el catálogo vigente a una fecha, con sus multas. |
+| POST | `/cuis` `{familia?, codigo, descripcion, materia?, porcentaje_uit, porcentaje_uit_segunda?, porcentaje_uit_tercera?, medida_complementaria?, base_legal, vigencia_desde, observacion}` | **201** con el registro plano de la versión nueva y `cerrada` (la que cerró, o null). **409** si esa versión (`familia\|codigo\|vigencia_desde`) ya existe; **422** si no empieza después de la vigente (o pisa una cerrada); **400** por campo. Es lo que llama `import_cuis.py`. |
+| POST | `/cuis/derogacion` `{familia?, codigo, vigencia_hasta}` | **200** con el registro plano de la versión derogada: rige hasta `vigencia_hasta` (inclusive) y ninguna la sigue. **404** si el CUIS no tiene el código; **409** si no tiene versión vigente; **422** si `vigencia_hasta` es anterior a su `vigencia_desde`; **400** por campo. Es lo que llama `import_cuis.py --completo`. |
+| GET | `/notificaciones?numero&q&contribuyente&desde&hasta&vencidas_a&page&size` | Página (`size` 20 por omisión) de notificaciones, la más reciente primero, **como estaban a `vencidas_a`** (por omisión hoy): el registro plano + `vencimiento` (null sin plazo), `vencida`, `vencidas_a`, `subsanada: {fecha} \| null`, `acta: {id, numero} \| null` y `contribuyente_nombre`. Una notificación fechada después de `vencidas_a` no sale (no existía), y la subsanación y el acta solo cuentan si su fecha es ≤ `vencidas_a`. `numero` es el número entero (exacto); `q`, una parte del número sin distinguir mayúsculas (`%` y `_` se toman literales); `contribuyente`, su id. |
+| POST | `/notificaciones` `{numero, fecha, contribuyente?, predio?, direccion, motivo, plazo_dias?, observacion}` | **201** con la fila de arriba. **404** si el contribuyente o el predio no existen; **409** si el número ya está; **422** si la fecha es posterior a hoy; **400** por campo (`plazo_dias` de 1 a 32767). |
+| POST | `/notificaciones/{id}/subsanacion` `{fecha?, observacion}` | **201** con la subsanación. `fecha` por omisión hoy. **409** si ya está subsanada; **422** si venció a esa fecha, si ya originó un acta, o si la fecha es posterior a hoy o anterior a la notificación. |
+| GET | `/notificaciones/vencidas?corte&page&size` | El padrón de vencidas: las no subsanadas, sin acta y vencidas a `corte` (por omisión hoy; con la misma regla de fechas: un acta posterior al corte no la saca), la de vencimiento más antiguo primero; cada fila es la de arriba más `corte` (y `vencimiento` nunca es null). |
+| GET | `/notificaciones/por-contribuyente?contribuyente&page&size` | El padrón por contribuyente: las del contribuyente (obligatorio, su id; **404** si no existe), la más reciente primero, con las filas de arriba a hoy. |
+| GET | `/panel?anio` | `{anio, al_dia, actas, resoluciones, notificadas, vencen_esta_semana, semana: {desde, hasta}, coactiva: null, nota}` del año (por omisión el actual) a hoy ([Panel](#panel)); `notificadas` no cuenta las RIS de actas anuladas o dejadas sin efecto. `coactiva` siempre es null y `nota` dice por qué: «En coactiva no existe en srtm: no hay cobranza». **422** si `anio` no es un año o con otro parámetro; **403** sin lectura sobre lo que cuenta. |
+| GET | `/plazos?anio` | `{anio, al_dia, plazos: [{clave, dias, unidad, texto, vigencia_desde, vigencia_hasta, parametro_id}], feriados: {fechas, parametro_id} \| null, faltan}`: los `PLAZO DESCARGO_PAPELETA` y `PLAZO RG_RECURSO` vigentes al 1 de enero del año (por omisión el actual; en el año en curso, a hoy: `al_dia` es el día leído) y el `FERIADOS <anio>` (sus fechas movibles, ordenadas), leídos como los leen los actos (`Plazos.cargados`). Lo que falta o está mal formado va en `faltan` con el nombre que daría el 422 de un acto (`PLAZO RG_RECURSO 2027`, `FERIADOS 2027`). Siempre 200; **422** si `anio` no es un año o con otro parámetro. |
+| POST | `/actas` `{numero, fecha_infraccion, hora_infraccion?, lugar, codigo, reincidencia, obligado, contribuyente?, predio?, notificacion_previa?, expediente?, inspector?, descripcion_hecho?, observacion}` | **201** con el registro plano de `papeleta` + `referencia` (`PAPELETA-<id>`) + `desglose {base_imponible, porcentaje_infraccion, importe_infraccion, porcentaje_a_cobrar, importe_a_pagar, importe_con_beneficio, fecha_calculo}`. `codigo` es el texto del CUIS; `hora_infraccion` `HH:mm`. **422** si el código no rige ese día (nombra código y fecha), con `faltan` (`UIT 1991`, `CUIS A-042 porcentaje_uit_segunda`, todos a la vez), si la previa está subsanada o si la fecha es posterior a hoy o anterior a la previa; **404** si el obligado, el contribuyente, el predio o la previa no existen; **409** si el número ya está; **400** por campo (contribuyente o predio, al menos uno). |
+| GET | `/actas?numero&administrado&codigo&fase&desde&hasta&page&size` | Página de filas `{id, numero, fecha_infraccion, administrado, documento, codigo, descripcion_infraccion, porcentaje_infraccion, importe_a_pagar, fecha_calculo, medida_complementaria, fase, fase_al_dia, estado_de_la_deuda}`, la infracción más reciente primero. `administrado` busca una parte del documento o del nombre del obligado; `codigo`, el texto del CUIS (cualquier versión); `fase` ∈ PREVENTIVA, CONSTATADA, SANCIONADA (otra → **422** que las nombra). `fase` es null en un acta anulada o dejada sin efecto. |
+| GET | `/actas/{id}` | `{acta, referencia, codigo_infraccion (la versión usada), notificacion_previa, partes, actos: [{orden, acto, fecha, documento, id, detalle}], descargos, resoluciones, anulacion, fase, fase_al_dia, estado_de_la_deuda, acciones: {descargo, resolucion, anulacion: {permitida, motivo}}}`. `partes` = `{obligado: {id, nombre, documento, domicilio_fiscal \| null}, contribuyente: {id, nombre, documento} \| null, predio: {id, codigo, direccion \| null} \| null}`. Cada resolución lleva sus `notificaciones` y `acciones: {notificacion: {permitida, motivo}}` (impedida si el acta está anulada, o si está dejada sin efecto y la resolución no es la que la dejó sin efecto, con el texto del 422). `detalle` es legible: fechas `dd/MM/yyyy` y palabras («Fundado, se deja sin efecto», «No ubicado»), no los códigos. |
+| POST | `/actas/{id}/anulacion` `{motivo, fecha?, observacion}` | **201** con el registro plano de `anulacion_papeleta` (`clave` = id del acta). `fecha` por omisión hoy. **409** si ya está anulada; **422** si una resolución la dejó sin efecto, o si la fecha es anterior a la infracción o posterior a hoy. |
+| POST | `/actas/{id}/descargos` `{numero_expediente, tipo_recurso, fecha, sustento, observacion}` | **201** con el registro plano de `descargo_papeleta`: `presentado_hasta`, `en_plazo`, `plazo_texto` (`5 DIAS_HABILES`) y la relación `plazo` (la fila leída). El tardío se registra con `en_plazo: false`. **422** con `faltan` (`PLAZO DESCARGO_PAPELETA 1991`, `FERIADOS 1991`; no escribe nada), si el acta está anulada o sin efecto, o si la fecha es anterior a la infracción o posterior a hoy; **409** si el expediente ya está; **404** si el acta no existe; **400** por campo. |
+| POST | `/actas/{id}/resoluciones` `{tipo, descargo, sentido, efecto, fecha?, sustento, sancion_accesoria, observacion}` | **201** con el registro plano de `resolucion_gerencia`: `numero` (`RIS-AAAA-NNNNNN` o `RGR-AAAA-NNNNNN`), `anio`, `correlativo`, `plazo_texto` y `plazo`. Lo que no aplica va null; `fecha` por omisión hoy. **422** con `faltan` (`PLAZO RG_RECURSO 1991`), por `SE_REDUCE`, por una RECURSO sin descargo, por un fallo sin descargo (o un descargo sin fallo), por un descargo de otra acta, si el acta está anulada o sin efecto, o si la fecha es anterior a la infracción o al descargo, o posterior a hoy; **409** por una segunda RIS del acta o una segunda resolución del descargo; **404** si el acta o el descargo no existen. |
+| GET | `/resoluciones/{id}/pdf` | La resolución en PDF, `inline; filename="RIS-1991-000001.pdf"`, dibujada otra vez desde las filas congeladas. **404** si no existe; **403** sin lectura sobre `resolucion_gerencia`. |
+| POST | `/resoluciones/{id}/notificacion` `{fecha_diligencia?, modalidad, resultado, notificador, direccion, receptor, documento_receptor, vinculo, acuse, observacion}` | **201** con el registro plano de `notificacion_resolucion`: `intento`, la `direccion` usada (sin `direccion`, el domicilio fiscal del obligado) y, si surte efecto (NOTIFICADO o RECHAZADO), `exigible_desde`, `plazo_texto` y `plazo`; con NO_UBICADO van null. `fecha_diligencia` por omisión hoy. **422** si el acta está anulada («no queda nada que notificar») o, dejada sin efecto, si no es la resolución que la dejó sin efecto («esta ya no se notifica»; la que la dejó sin efecto se notifica como cualquiera), sin dirección (ni dada ni domicilio fiscal), con `faltan` (`PLAZO RG_RECURSO`, `FERIADOS`) si surte efecto, o si la diligencia es anterior a la resolución o posterior a hoy; **404** si la resolución no existe. |
+
+Y bajo `/api/srtm`, en las fichas: `GET /contribuyentes/{id}/infracciones` (las actas donde es el obligado o el
+contribuyente) y `GET /predios/{id}/infracciones` (las que nombran el predio) responden `{al_dia, actas: [fila]}`, con
+las filas de `GET /actas` a hoy; **404** si el contribuyente o el predio no existen.
+
+### CUIS
+
+El cuadro único de infracciones y sanciones se versiona por vigencia: un cambio nunca edita una fila. `CuisService`
+agrega la versión nueva y cierra la vigente (`vigencia_hasta` = el día antes, `clave_vigente` = NULL, con
+`registros.replace`) en **una transacción**, bajo el candado consultivo `Candado.CODIGO_INFRACCION` de
+`familia|codigo` (`srtm.Candados`, `pg_advisory_xact_lock`). Dentro del candado vuelve a leer las versiones del código
+y aplica `Cuis.versionNueva`: dos versiones nuevas a la vez no se pisan (una espera a la otra; la misma versión dos
+veces da 409). La versión cerrada conserva sus cifras, y un acta que la usó sigue apuntándola. El código se recorta y
+se pasa a mayúsculas; `familia` por omisión es `ADMINISTRATIVA` (otra es 400). Los porcentajes llegan como número o
+como texto (`import_cuis.py` manda las celdas del CSV como texto).
+
+Una norma que **deroga** un código sin darle versión nueva (la OM 006-2026-MDP deroga el CUIEMA de la OM 01-2021, cuyos
+códigos `01.01.001`… no siguen en el nuevo, que numera `001`…) lo cierra con `Cuis.derogar`: la vigente rige hasta el
+día que dice la norma, bajo el mismo candado, y solo cambian `vigencia_hasta` y `clave_vigente`. Un código derogado
+puede volver con una versión nueva posterior.
+
+**Largos y alícuotas del CUIS.** Son más anchos que en `rentas`, porque el CUIEMA de Perené no cabía: descripción ≤ 1000
+(llega a 537), materia ≤ 120 (66), medida complementaria ≤ 500 (169) y base legal ≤ 2000 (938). `porcentaje_uit` y los de reincidencia, y
+los porcentajes del acta, van de más de 0 a 10 000 (100 UIT; Perené llega a 1000 %).
+
+### Notificaciones previas
+
+`NotificacionesService` registra la notificación previa (número del formulario, único y en mayúsculas) y su
+subsanación, que es un objeto que se agrega (una por notificación: `clave` = id de la notificación). Lo derivado nunca
+se guarda: `vencimiento` y `vencida` salen de `Notificaciones` (el último día del plazo todavía vale, #411; sin plazo
+no vence), la subsanación de su registro y el acta de la `papeleta` que la nombra (`notificacion_previa`). La
+subsanación toma el candado `Candado.NOTIFICACION` del id de la notificación y aplica
+`Notificaciones.exigirSubsanable`; el alta del acta toma el mismo candado para que no se crucen ([Actas](#actas)). El padrón de
+vencidas lee las candidatas (con plazo y fecha anterior al corte), aplica `Notificaciones.vencida` y corta la página
+después: la definición de vencida es una sola.
+
+**El padrón a una fecha pasada** muestra cada notificación como estaba ese día (`NotificacionesService.derivar(n, al,
+hechos)`, pura): la subsanación y el acta solo cuentan si su fecha (la de la subsanación, la de la infracción) es ≤
+`vencidas_a`, y el padrón no trae las notificaciones fechadas después de `vencidas_a` (`hasta`, si se da, no pasa de
+ahí). El padrón de vencidas usa la misma regla al `corte`. `q` busca una parte del número (`Filtros.contiene`, `ILIKE`
+con los comodines escapados); `numero` sigue siendo exacto.
+
+### Actas
+
+`ActasService` registra el acta (papeleta, familia `ADMINISTRATIVA`) con su multa **calculada una vez y congelada**:
+toma la versión del código que rige el día de la infracción (`Cuis.vigenteA` sobre las versiones de ese código, no la
+última), la UIT vigente ese día (`Multas.uit`) y aplica `Multas.calcular` con el grado que declara el inspector. Copia
+en la fila el desglose, la `medida_complementaria` de la versión y las relaciones `codigo_infraccion` (la versión
+usada) y `uit` (la fila leída): corregir la fila de la UIT o agregar una versión nueva del CUIS no cambia un acta ya
+escrita. `fecha_calculo` es el día del registro. El número se recorta y se pasa a mayúsculas, y `clave` =
+`familia|numero` lo hace único. El `obligado` es explícito (no se deduce) y el acta nombra un contribuyente o un predio,
+al menos uno.
+
+Con `notificacion_previa`, el alta toma el candado `Candado.NOTIFICACION` del id de la notificación (el mismo que la
+subsanación), la vuelve a leer y aplica `Notificaciones.exigirQueOrigineActa` y `OrdenDeLosActos` (la infracción no es
+anterior a la previa), todo en la misma transacción que el insert: un acta y una subsanación de la misma previa a la
+vez no se escriben las dos. La anulación es un objeto que se agrega (`clave` = id del acta), bajo el candado
+`Candado.ACTA` del acta, con `Procedimiento.exigirAnulable` (409 si ya está anulada, 422 si una resolución la dejó sin
+efecto).
+
+La **fase** y el **estado de la deuda** nunca se guardan: `ActasService.hechos(actas)` lee, una consulta por tipo, la
+previa y su subsanación, la anulación y las resoluciones de cada acta, y `Procedimiento.fase` / `estadoDeLaDeuda` los
+derivan a hoy (`fase_al_dia`). Por eso el filtro `fase` de la grilla es el único que no va a la base: con `fase`, la
+consulta lee todas las actas que dejan los demás filtros (número, código, administrado, fechas, en la base), deriva la
+fase de cada una con la misma función que pinta la columna y corta la página después; sin `fase`, pagina en la base.
+Así el filtro encuentra exactamente lo que la columna muestra (#397).
+
+La ficha (`GET /actas/{id}`) lista los actos en **orden legal** (`Expedientes.actos`): la notificación previa, el
+acta, los descargos, las resoluciones, las notificaciones de las resoluciones y la anulación; dentro de cada tipo, por
+fecha. `detalle` dice qué es cada uno hoy, para leerlo: fechas `dd/MM/yyyy` y palabras en vez de códigos (la previa
+«Vence el 15/08/2026» o «Vencida el …», el descargo «En plazo (hasta el …)» o no, la resolución «Fundado, se deja sin
+efecto. Notificada el …», la notificación «No ubicado» o «Notificado, exigible desde el …»). `acciones` sale de las
+reglas: `Procedimiento.impedimento("impugnar")` para el descargo, `Resoluciones.impedimento(hechos, descargos)` para
+la resolución (además de anulada o sin efecto: con la RIS dictada y ningún descargo sin resolver no queda resolución
+que dictar) e `impedimentoDeAnular`, con el mismo texto que daría el acto; cada resolución lleva
+`acciones.notificacion` (`Procedimiento.impedimentoDeNotificar(hechos, resolucion)`: impedida si el acta está
+anulada; si está dejada sin efecto, impedida salvo en la resolución cuyo efecto es `SE_DEJA_SIN_EFECTO`). `partes` (`Partes.de`, pura) nombra al obligado con su documento y su domicilio fiscal vigente (el que usa la
+notificación de una resolución por omisión), al contribuyente y al predio que nombra el acta; lo vacío va null.
+
+### Descargos y resoluciones
+
+`ResolucionesService` registra los actos que contestan un acta, cada uno un objeto que solo se agrega y que **copia**
+lo que leyó:
+
+- **Descargo.** `Descargos.registrar` con el `PLAZO DESCARGO_PAPELETA` y los `FERIADOS` vigentes **el día de la
+  infracción** (como `rentas`): `presentado_hasta`, `en_plazo` y `plazo_texto` quedan en la fila, con la relación
+  `plazo` a la fila leída. El tardío se registra (`en_plazo` false): lo que corresponde es declararlo improcedente.
+  No procede contra un acta anulada o sin efecto (`Procedimiento.exigirQueQuedeAlgoQue("impugnar")`) y su fecha va
+  entre la infracción y hoy (`OrdenDeLosActos`). El número de expediente se recorta, va en mayúsculas y es único.
+- **Resolución.** `Resoluciones.validar` (SE_REDUCE 422, RECURSO con descargo, fallo ⇔ descargo, el descargo es de
+  esta acta, nada contra un acta anulada o sin efecto, una RIS por acta y una por descargo), `OrdenDeLosActos` (después
+  de la infracción y de la presentación del descargo) y el `PLAZO RG_RECURSO` vigente a su fecha, que copia
+  (`plazo_texto`, lo imprime el papel). El número es `RIS-AAAA-NNNNNN` (ADMINISTRATIVA) o `RGR-AAAA-NNNNNN` (RECURSO),
+  por tipo y año de la fecha: el correlativo es el mayor + 1, leído bajo el candado `Candado.RESOLUCION` de
+  `tipo|anio` en la misma transacción que el insert (`numeroDeResolucion`). La transacción toma antes `Candado.ACTA`
+  (el de la anulación): una resolución que deja sin efecto y una anulación no se cruzan, y dentro del candado se
+  vuelve a validar. `clave_ris` (id del acta en la RIS) y `clave_descargo` (id del descargo) son la red de la base.
+  - **El papel se dibuja antes de abrir la transacción**, con los datos que se van a guardar (y el correlativo
+    esperado en ese momento): si no se puede dibujar no se escribe nada, y el dibujo no retiene el candado. No se
+    guardan los bytes: `GET /resoluciones/{id}/pdf` lo vuelve a dibujar de las filas congeladas (decisión 8).
+- **Notificación de la resolución.** Un intento por fila: `intento` = los que hay + 1, bajo el candado
+  `Candado.NOTIFICACION_RESOLUCION` del id de la resolución (`clave` = `resolucion|intento`), tomado después de
+  `Candado.ACTA`: no se notifica nada de un acta anulada (422 «no queda nada que notificar») y, de una dejada sin
+  efecto, solo la resolución que la dejó sin efecto (a las demás, 422 «esta ya no se notifica»); la que la dejó sin
+  efecto se notifica como cualquiera y su `exigible_desde` se cuenta con `RG_RECURSO`
+  (`Procedimiento.exigirNotificable`, comprobado otra vez dentro del candado), y la notificación no se cruza con la
+  anulación. Sin `direccion`, el
+  domicilio fiscal del obligado (`contribuyente.domicilio_fiscal`, que sigue al domicilio fiscal activo); sin ninguno,
+  422. `NotificacionesDeResolucion.exigibilidad` con el `PLAZO RG_RECURSO` y los `FERIADOS` vigentes a la diligencia:
+  NOTIFICADO y RECHAZADO surten efecto (`exigible_desde`, `plazo_texto`, `plazo`); NO_UBICADO no hace exigible nada
+  y se registra otro intento. La diligencia va entre la resolución y hoy.
+
+**El papel** (`templates/emision/resolucion.html`, con `HojaResolucion.kt` que deja cada valor ya formateado): la
+cabecera de los documentos con la fecha de la resolución, el número y la fecha; el acta (número, fecha y hora,
+lugar, código, descripción y base legal de la versión del CUIS que usó, reincidencia, medida complementaria y el
+desglose congelado con su `fecha_calculo`); el obligado (nombre, documento y domicilio fiscal); el recurso si lo hay
+(expediente, tipo, presentado el, «Presentado dentro del plazo: SÍ, el plazo vencía el …» o «NO, el plazo venció el
+…»); el sentido, el efecto, la sanción accesoria y el sustento; «Plazo para impugnar: `plazo_texto`», con la cita del
+art. 218.2 del TUO de la Ley 27444 (sin cifras de la norma en el código); y las líneas de firma de Gerente y
+Secretario, «sin firma digital (D-05)». Los considerandos no se inventan: un párrafo marcado dice «Considerandos: los
+provee la municipalidad (decisión 8)». Corregir la UIT, el plazo o agregar una versión del CUIS no cambia el papel de
+una resolución ya dictada. srtm no guarda la historia de los domicilios: el domicilio que imprime es el fiscal
+vigente al dibujarlo.
+
+### Panel
+
+`GET /infracciones/panel` es el `inf-panel` de `rentas` (Ejercicio; Actas levantadas, Resoluciones dictadas,
+Notificadas, Vencen esta semana). `PanelService` lee, una consulta por tipo, lo que cuenta `Panel.contar` (pura, con
+el día como argumento) y la respuesta lleva `al_dia` (hoy):
+
+- **`actas`:** las actas cuya infracción cae en el año, **todas**: también las anuladas o dejadas sin efecto, porque se
+  levantaron (es la cifra de actas levantadas, no la de deuda viva).
+- **`resoluciones`:** las RIS (tipo `ADMINISTRATIVA`) fechadas en el año. Una RGR resuelve un recurso: no sanciona y no
+  cuenta.
+- **`notificadas`:** de esas RIS, las que tienen al menos una notificación que surte efecto (NOTIFICADO o RECHAZADO);
+  una NO_UBICADO no cuenta, ni la RIS de un acta anulada o dejada sin efecto (`Procedimiento.estadoDeLaDeuda` de su
+  acta, sea cual sea el año de la anulación o de la resolución que la dejó sin efecto): ya no queda nada notificado.
+  `resoluciones` sí las cuenta, porque se dictaron.
+- **`vencen_esta_semana`:** las notificaciones previas no subsanadas y sin acta cuyo vencimiento
+  (`Notificaciones.vencimiento`, la misma definición del padrón de vencidas) cae de lunes a domingo, ambos incluidos,
+  de la semana de `al_dia` (`semana: {desde, hasta}`). Es de la semana de hoy, no del año pedido.
+- **`coactiva`:** null siempre. srtm no cobra (no hay deuda, pagos ni coactiva), así que no hay cifra que dar y `nota`
+  lo dice; nunca un 0.
+
+Como el resto de las consultas de `srtm.sanciones`, no pide un permiso propio: `RecordService` exige lectura sobre
+cada objeto que lee (`papeleta`, `resolucion_gerencia`, `notificacion_resolucion`, `notificacion_administrativa`,
+`subsanacion_notificacion`, `contribuyente`), y sin ella responde **403**.
+
+Los padrones de las notificaciones previas (vencidas y por contribuyente) y el reporte de códigos (el CUIS vigente con
+sus multas) son las consultas de la tabla de arriba.
+
+### Reglas
+
+Funciones puras (`srtm.sanciones`): sin base, sin reloj (la fecha entra como argumento) y con `BigDecimal`. Los
+servicios leen los registros y los parámetros y se los pasan; las pruebas portan los casos de `rentas` con cifras
+ficticias.
+
+| Regla | Qué decide | Fuente en `rentas` |
+|---|---|---|
+| `Multas.calcular(codigo, uit, reincidencia)` | El desglose del acta: `base_imponible` = la UIT, `porcentaje_infraccion` = `porcentaje_uit`, `porcentaje_a_cobrar` = el % del grado declarado (`porcentaje_uit`, `_segunda` o `_tercera`), los dos importes = base × % / 100, `importe_con_beneficio` vacío. Un grado sin su % falta (`CUIS A-042 porcentaje_uit_segunda`): nunca se cobra el de otro grado. `Multas.uit(parametros, dia)`: la UIT vigente el día de la infracción, o `UIT 2026`. | `Papeleta`, `PapeletaTest` |
+| `Multas.redondear` | El único redondeo: al céntimo, `HALF_UP`, una sola vez sobre el producto exacto (el mismo que `ImpuestoPredial`). | decisión 2 |
+| `Notificaciones.vencimiento` / `vencida` | `vencimiento` = fecha + `plazo_dias`; vencida a un corte si el corte es **posterior** (el último día todavía vale); sin plazo no vence nunca. Una sola definición para el padrón de vencidas, la fase y la subsanación. `exigirSubsanable`: una vez (409), no con acta ni vencida (422); `exigirQueOrigineActa`: una subsanada no origina acta (422). | `NotificacionAdministrativaTest`, `SubsanarNotificacionTest`, #411 |
+| `Plazos` | Días hábiles (art. 144 de la Ley 27444): ni sábado ni domingo, ni `Vencimientos.FERIADOS_NACIONALES`, ni los `FERIADOS <anio>` cargados (`Calendario.de(parametros)`). `siguienteHabil` (estricto), `sumarHabiles` (sin contar el primero), `hasta` (infracción del 2026-03-04 con 5 → 2026-03-12), `exigibleDesde` (diligencia + hábil siguiente + plazo + 1 día). `faltan` nombra cada `FERIADOS <anio>` que el cómputo tocó y no está. `plazo(parametros, clave, fecha)`: la fila `PLAZO` vigente, entera y en `DIAS_HABILES`, o `PLAZO DESCARGO_PAPELETA 2026`. | `CalendarioHabil`, `Exigibilidad`, `SancionesJdbcTest`, `ElPlazoQueConcedeCadaResolucionJdbcTest` |
+| `Cuis` | `vigenteA(versiones, fecha)` (los dos extremos cuentan; la de ese día, no la última), `cerrar(vigente, nuevaDesde)` (solo `vigencia_hasta` = el día antes y `clave_vigente` = NULL; una cerrada no se cierra, 409; la nueva empieza después de la vigente, 422), `versionNueva(versiones, desde)` (lo que se cierra; nunca se pisa una versión). | `CodigoInfraccionTest`, `MantenerCatalogoDeInfraccionesTest` |
+| `Procedimiento.estadoDeLaDeuda(hechos)` / `fase(hechos, corte)` | Estado: `ANULADA`, `DEJADA_SIN_EFECTO` (si **alguna** resolución, de cualquier tipo, deja la multa sin efecto) o `PENDIENTE`. Fase: ninguna si no está pendiente (nunca «la más parecida»), `SANCIONADA` con su RIS (una RGR no sanciona), `PREVENTIVA` con la previa sin subsanar ni vencida al corte, si no `CONSTATADA`. `faseDelFiltro`: otra fase → 422 que nombra las tres. | `FaseDelProcedimiento`, `ProcedimientoSancionadorRepositoryJdbcTest` (#397, frontera #411) |
+| `Descargos.registrar(infraccion, fecha, parametros)` | `presentado_hasta` = `Plazos.hasta` con el `PLAZO DESCARGO_PAPELETA` vigente el día de la infracción, `en_plazo` = fecha ≤ `presentado_hasta`, `plazo_texto`; el tardío se registra. | `RegistrarDescargo`, `DescargosResolucionesYDepositoTest` |
+| `Resoluciones.validar(...)` / `plazo(tipo, fecha, parametros)` | RECURSO exige descargo; sentido y efecto van con el descargo y solo con él; el descargo es de esta acta; nada contra un acta `ANULADA` o `DEJADA_SIN_EFECTO` (422); una RIS por acta y una por descargo (409, además de `clave_ris` y `clave_descargo`). La RIS y la RGR conceden `RG_RECURSO` y, sin él, no toman otro. | `ResolverConResolucionDeGerencia`, `ElPlazoQueConcedeCadaTipoTest` (#410, #412) |
+| `NotificacionesDeResolucion.exigibilidad(...)` | Surte efecto ⇔ `NOTIFICADO` o `RECHAZADO`; entonces `exigible_desde` y el plazo, contados desde la diligencia (2026-08-03 con 15 → 2026-08-27, porque el 6 de agosto es feriado nacional; sin él sería el 26). | `NotificarResolucionDeGerencia`, `Exigibilidad` |
+| `Procedimiento.impedimentoDeNotificar(hechos, resolucion)` | Por qué no se notifica una resolución (la `acciones.notificacion` de la ficha y el 422 del acto): el acta anulada, o dejada sin efecto y la resolución no es la que la dejó sin efecto (esa se notifica: el administrado tiene que conocerla). | — |
+| `Resoluciones.impedimento(hechos, descargos)` | Por qué no se puede dictar una resolución ahora (la `acciones.resolucion` de la ficha): el acta anulada o sin efecto, o la RIS ya dictada y ningún descargo sin su resolución. | — |
+| `hojaResolucion(cabecera, resolucion, acta, codigo, obligado, descargo)` | Lo que imprime el papel de una resolución, todo desde filas congeladas: nada se vuelve a calcular. | `ModeloDeLaResolucionDeGerencia` |
+| `Panel.contar(anio, alDia, hechos)` / `semana(dia)` | Las cifras del panel: actas del año (todas), RIS del año, las notificadas (alguna notificación que surte efecto, y el acta ni anulada ni dejada sin efecto) y las previas sin subsanar ni acta que vencen de lunes a domingo de la semana de `alDia`; `coactiva` null y la `nota`. | `inf-panel` |
+| `Plazos.cargados(anio, hoy, parametros)` | Los plazos cargados de un año (`GET /plazos`): las dos filas `PLAZO` vigentes al 1 de enero (a `hoy` en el año en curso) y el `FERIADOS <anio>` que usa `Calendario.de`, o lo que falta con el nombre del 422 de un acto. | — |
+| `NotificacionesService.derivar(n, al, hechos)` / `Partes.de(acta, personas, predio)` | La fila de una notificación a un día (la subsanación y el acta, solo si su fecha es ≤ `al`) y las partes del expediente. | — |
+| `OrdenDeLosActos.exigir(acto, fecha, hoy, previos)` | Ningún acto antes del que lo origina ni después de hoy; el mismo día vale. 422 que nombra las dos fechas (`ActoFueraDeOrden`). | `OrdenDeLosActos` (#402) |
+
+**Errores.** `FaltanSanciones(acto, faltan)` es el 422 con `faltan` (gemelo de `FaltanArbitrios`; el controlador lo
+traduce con `srtm.sanciones.problemaFaltan`); `Resultado<T>(valor, faltan)` lleva la cifra o lo que falta, nunca los
+dos, y `exigir(acto)` lanza el 422. `NoProcede` es el 422 de una petición que las reglas no admiten (con
+`errors[].field` cuando hay un campo), y `ActoFueraDeOrden` su caso de fechas. Los mensajes citan las fechas en
+`dd/MM/yyyy` («no puede fecharse el 03/03/2026: es anterior a la infracción del acta AC-0001, del 04/03/2026»). Un estado que no admite el acto (ya
+subsanada, ya anulada, segunda RIS) es `ConflictException` (409).
+
+**Lo que cambia respecto de `rentas`:**
+- **SE_REDUCE → 422** «No hay regla de reducción: la fija la ordenanza (D-02b)». En `rentas` se guardaba sin efecto.
+- **Una RIS por acta** (`clave_ris`); `rentas` no tenía índice para la ADMINISTRATIVA y admitía dos.
+- **Sin `FERIADOS <anio>` → 422 `faltan`**; `rentas` contaba sin feriados cuando el conjunto no los traía.
+- **Una notificación subsanada no origina acta** (422), y una con acta no se subsana (422); una vencida tampoco (422,
+  donde `rentas` respondía 409).
+- **La multa se calcula y se congela** con el CUIS y la UIT; `rentas` tomaba los seis importes tecleados del acta.
+- **El alta del acta se publica** (`rentas` solo exponía la consulta) y el filtro `administrado` busca una parte del
+  documento o del nombre (en `rentas`, el documento).
+- Sin `PAGADA` ni `COACTIVA` (no hay cobranza), y una versión del CUIS para un código sin vigente es su primera versión.
+
+## Anuncios y propaganda
+
+La tasa por anuncios y propaganda se porta del negocio de `rentas` (`RegistrarAnuncio`, `RenovarAnuncio`,
+`CesarAnuncio`, `ConsultaDeAnuncios`) al paquete `srtm.anuncios`, que no importa a ningún otro módulo de negocio. El
+modelo (`anuncio`, `movimiento_anuncio`) y su regla de escritura están en [Modelo](#modelo).
+
+**El anuncio no se edita.** Su estado no es una columna: se deriva de sus movimientos y del día que se pregunta
+(`srtm.anuncios.Anuncios`, funciones puras, sin base ni reloj):
+- `estado(movimientos, fecha)`: RETIRADO si hay retiro, CESADO si hay cese, VENCIDO si la vigencia derivada es anterior
+  a la fecha, si no VIGENTE. Un movimiento posterior a la fecha no cuenta: el padrón de un día pasado dice lo que decía
+  ese día. Sin plazo no vence.
+- `vigencia(movimientos, fecha)`: la `vigencia_hasta` del último acto que devenga hasta esa fecha (a igual fecha, el
+  último escrito). Una renovación prorroga sin tocar el anuncio, cuya `vigencia_hasta` es la del acto fundacional.
+- `ejercicioQueRenueva(vigenciaActual, fechaActo, nuevaVigencia)` (rentas#417): el año de la nueva vigencia, o el del
+  acto si no trae plazo. Una prórroga que abarca varios ejercicios no se cobra como uno: 422.
+- `devengo(...)`, `devengado(movimientos, alDia)`, `tasa(...)`, `exigirOrden(...)` y `acciones(...)`.
+
+**Los actos** (cada uno pide `observacion` de 5 a 500 caracteres, y permiso de creación sobre su objeto antes de leer
+nada: `anuncio` el alta, `movimiento_anuncio` los demás; **403** que lo nombra):
+- **Alta** (`POST /api/srtm/anuncios`): escribe el anuncio y su AUTORIZACION en una transacción. La tasa es la fila
+  `TASA_ANUNCIO <clase>` vigente a la `fecha_autorizacion` (hoy si no viene), copiada en el movimiento con la fila como
+  `parametro`; sin ella, **422** con `faltan: ["TASA_ANUNCIO PANEL 2026"]` y no se escribe nada. Una tasa en el cuerpo
+  se ignora. El número `AN-AAAA-NNNNNN` es el correlativo del año de la autorización, bajo el candado consultivo de la
+  serie y el año (`srtm.Candados`, `pg_advisory_xact_lock`): el máximo más uno, dentro de la transacción. El único de
+  `numero` es la red: si salta, **409** «vuelva a intentarlo».
+- **Idempotencia:** la cabecera `Idempotency-Key` (hasta 64 caracteres) va a `anuncio.clave_idempotencia`, que es única.
+  El reenvío con la misma clave responde **200** con el anuncio y la autorización de la primera vez y `ya_existia:
+  true`, sin devengar otra vez; dos primeras peticiones a la vez se ordenan bajo el candado, y si aun así chocan en el
+  único se relee y se responde 200.
+- **Renovación** (`POST /api/srtm/anuncios/{id}/renovacion`): devenga el ejercicio que renueva, con la tasa de ese
+  ejercicio leída al 1 de enero. **409** si ese ejercicio ya está devengado (lo garantizan los únicos `clave` y
+  `referencia_cargo`, así que de dos renovaciones a la vez se escribe una); **422** si el anuncio está cesado o
+  retirado, si la prórroga abarca varios ejercicios o si la vigencia termina antes de la fecha; **422** con `faltan`.
+- **Cese y retiro** (`/cese`, `/retiro`, con `motivo`): no devengan ni mueven la vigencia, y no deshacen lo devengado.
+  **409** si el acto ya existe; **422** un retiro sin cese.
+- **Orden de los actos:** ninguno se fecha después de hoy ni antes de la autorización o del último movimiento del
+  anuncio (**422** que nombra las dos fechas).
+
+**Las consultas** responden con su fecha: el padrón (`GET /api/srtm/anuncios`) da el estado a `vigentes_a` (hoy por
+omisión) y solo los anuncios autorizados hasta ese día; filtra por `contribuyente` (id), `clase`, `estado` (VIGENTE,
+VENCIDO, CESADO, RETIRADO) y `q` (número, denominación o dirección), y un filtro desconocido o mal formado es **422**
+que lo nombra. La ficha da el estado, la vigencia, lo devengado (`{importe, al_dia}`: la suma de las tasas de los
+actos que devengan hasta ese día, no una deuda) y `acciones` (`{renovacion, cese, retiro}`, cada una
+`{permitida, motivo}`). `GET /api/srtm/anuncios/tasas?anio` da la tasa de cada clase y las que faltan, nunca un 0.
+
+**Ninguna cifra inventada.** La tasa se carga como `TASA_ANUNCIO` con `import_parametros.py`, una por clase y ejercicio
+completo, sin multiplicar por el área (la fórmula por área está pendiente de la ordenanza, D-02b). Los tests usan tasas
+ficticias, en un año pasado propio.
+
+**La de Perené** (`model/data/parametros-anuncios-perene.csv`). Perené no tiene ordenanza de tasa por anuncios: su TUPA 2019
+cobra un derecho de trámite, y se toma como tasa del ejercicio por decisión del usuario. Desde 2026-01-01 (el PDF no dice
+desde cuándo rige el TUPA):
+- S/ 90,20 para LETRERO, PANEL, TOLDO, PANTALLA_DIGITAL y GLOBO_AEROSTATICO (proc. 71 C, anuncio de publicidad
+  exterior en predio o vía pública);
+- S/ 31,00 para BANDEROLA (proc. 73, banderola o pasacalle, cada una, máximo 15 días).
+
+```bash
+cd model
+python3 import_parametros.py --csv data/parametros-anuncios-perene.csv --dry-run
+python3 import_parametros.py --csv data/parametros-anuncios-perene.csv
+```
 
 ## Importar el catastro fiscal
 
@@ -504,7 +1274,7 @@ python3 apply.py                                  # 3. quita ANEXO, HABILITACION
 
 ## Modelo
 
-Veinte objetos (`model/model.json`):
+Treinta y nueve objetos (`model/model.json`):
 - **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
   *Formato Padrón Municipal Armonización 2026*.
 - **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
@@ -515,8 +1285,131 @@ Veinte objetos (`model/model.json`):
 - **Catálogos:** `ubigeo`, `via`, `unidad_urbana`, `categoria_valor`, `obra_categoria` y `uso_predio`.
 - **Parámetros tributarios:** `parametro_tributario`, los valores normativos verificados del repo `normativa` (ver
   [Impuesto predial](#impuesto-predial)).
-- **Emisión masiva:** `emision_masiva`, el job de la emisión de un año en segundo plano (ver
+- **Emisión masiva:** `emision_masiva`, el job de la emisión de un año en segundo plano, y `emision_lote`, sus lotes (ver
   [Emisión masiva](#emisión-masiva)).
+- **Arbitrios:** `ordenanza_arbitrio`, `servicio_arbitrio`, `inafectacion_arbitrio`, `cuota_arbitrio` y
+  `anulacion_cuota_arbitrio`, y el job de la determinación masiva con sus lotes, `determinacion_arbitrio_masiva` y `determinacion_arbitrio_lote` (ver
+  [Arbitrios](#arbitrios)).
+- **Infracciones administrativas** (`srtm.sanciones`): `codigo_infraccion` (el CUIS, versionado por vigencia),
+  `notificacion_administrativa` (la notificación previa) y su `subsanacion_notificacion`, `papeleta` (el acta, con su
+  multa calculada y congelada), `anulacion_papeleta`, `descargo_papeleta`, `resolucion_gerencia` (RIS o RGR) y
+  `notificacion_resolucion`.
+- **Anuncios y propaganda** (`srtm.anuncios`): `anuncio` y `movimiento_anuncio` (autorización, renovación, cese y
+  retiro; la autorización y la renovación devengan la tasa).
+
+Las garantías de `rentas` sobre las infracciones y los anuncios, y dónde quedan:
+- **Unicidad:** Core no tiene unicidad compuesta, así que un campo único guarda las partes unidas: `codigo_infraccion.clave`
+  (`familia|codigo|vigencia_desde`), `papeleta.clave` (`familia|numero`), una subsanación, una anulación y una RIS por
+  cosa (su `clave` o `clave_ris` es el id de lo que toca), una resolución por descargo (`clave_descargo`),
+  `notificacion_resolucion.clave` (`resolucion|intento`), y del movimiento la `clave` por acto (`<anuncio>|AUTORIZACION`,
+  `|CESE`, `|RETIRO`, `|RENOVACION|<anio>`) y la `referencia_cargo` (`ANUNCIO-<anuncio>-<anio>`), que choca entre una
+  autorización y una renovación del mismo año. Los números de formulario (`notificacion_administrativa.numero`,
+  `descargo_papeleta.numero_expediente`), de resolución y de anuncio, y `anuncio.clave_idempotencia`, también son únicos.
+- **Una sola versión vigente del CUIS por código:** `codigo_infraccion.clave_vigente` es única y vale `familia|codigo`
+  mientras la versión rige; al cerrarse queda vacía (NULL, nunca `""`), y PostgreSQL admite muchos NULL en un único.
+- **Lo que se lee se copia:** el acta guarda la UIT (`base_imponible`), los porcentajes y los importes; el descargo y la
+  resolución, el plazo (`plazo_texto`); el movimiento, la tasa. La relación (`uit`, `plazo`, `parametro`,
+  `codigo_infraccion`) queda como procedencia: `import_parametros.py` actualiza una fila en su lugar.
+- **Relaciones opcionales:** las únicas que un registro puede no tener (`test_model.py`, `OPCIONALES`):
+  `notif_adm_contribuyente`, `notif_adm_predio`, `papeleta_contribuyente`, `papeleta_predio` (un acta nombra al menos
+  uno de los dos: lo revisa la regla), `papeleta_notificacion_previa`, `resolucion_descargo`, `notif_resolucion_plazo`
+  (solo la notificación que surte efecto), `anuncio_predio` y `movimiento_parametro` (solo el movimiento que devenga).
+  Todas las demás son obligatorias.
+- **Largos y rangos:** TEXT y LONG_TEXT no tienen largo en Core; los revisa la regla de escritura (código ≤ 20 en
+  mayúsculas, descripción del CUIS ≤ 1000, `porcentaje_uit` mayor que 0 y hasta 10 000, área mayor que 0, lados y cantidad desde 1…).
+
+**Guardia de escritura** (`srtm.GuardiaDeEscritura`). Es un `RecordWriteGuard` de wasichai (ADR-040): Core lo llama
+antes de cada escritura de un registro, por cualquier camino (la API genérica `/api/objects/{objeto}/records`, `/admin`,
+un servicio de srtm, un enlace entre registros, una transición, una automatización o la plataforma), en la corrutina de
+quien escribe y después de sus permisos, de `appendOnly` y de revisar que existan los registros a los que apunta (una
+relación a un id que no existe responde **400** antes de llegar a la guardia). La guardia consulta la
+`ReglaDeEscritura` del objeto. Cada módulo tiene la suya, como bean de su paquete (`ReglaDeArbitrios` en
+`srtm.arbitrios`, `ReglaDeSanciones` en `srtm.sanciones`, `ReglaDeAnuncios` en `srtm.anuncios`), y ninguno importa a
+otro:
+- **Alta:** los invariantes del registro (los `CHECK` de rentas, los largos y las claves), venga de donde venga; si no,
+  **400** que nombra cada campo en `errors[].field`.
+- **Cambio, borrado o transición:** **409**. La única excepción: cerrar una versión del CUIS, una vez (su
+  `vigencia_hasta` pasa de vacía a una fecha no anterior a `vigencia_desde`, su `clave_vigente` a NULL, y nada más
+  cambia). La regla compara la fila entera, normalizada, porque el update de Core reemplaza todos los campos.
+  wasichai le presenta a la guardia un enlace o desenlace entre registros como un cambio (UPDATED): enlazar o
+  desenlazar un registro de un objeto con regla (sanciones y anuncios, el CUIS incluido) también es **409**.
+- **Marca de escritura:** los objetos de sanciones y de anuncios son `soloDesdeElServicio`: solo los escribe la api de
+  srtm, que corre sus reglas. `Registros` pone la marca `EscrituraDeSrtm` (un elemento del contexto de la corrutina, el
+  patrón `EscrituraDeCaja` de caja-backend) alrededor de cada `create` y `replace`; un cliente HTTP no puede ponerla.
+  Sin ella, un alta (o el cierre del CUIS) responde **403**, también a un ADMIN, sin tocar la base, y deja una línea
+  WARN `ESCRITURA FUERA DE SRTM RECHAZADA`. La plataforma y las automatizaciones escriben sin usuario y en su propia
+  corrutina: tampoco llevan la marca. Los arbitrios no la exigen.
+
+Lo que la guardia no ve: una escritura directa a la base (así escriben sus estados los lotes de la emisión y la
+determinación masivas, `srtm.emision.TablasCore`, que no son de estos objetos).
+
+**Parámetros de las infracciones y los anuncios.** Son filas de `parametro_tributario`, con vigencia y doble firma, que
+se cargan con `import_parametros.py --csv <archivo>`; su forma se revisa antes de enviar nada (`TIPOS_SANCIONES`,
+`TIPOS_ANUNCIO`, y `srtm.sanciones.Llaves` / `srtm.anuncios.Llaves` nombran los mismos tipos):
+
+| `tipo` | `clave` | Valor |
+|---|---|---|
+| `PLAZO` | `DESCARGO_PAPELETA` o `RG_RECURSO` | `valor_numerico`: los días, entero mayor que 0; `texto`: `DIAS_HABILES` (la única unidad, por ahora) |
+| `FERIADOS` | el año (`2026`) | `texto`: los feriados movibles del año, fechas ISO de ese año separadas por coma (vacío si no hay); rige del 1 de enero al 31 de diciembre |
+| `TASA_ANUNCIO` | una `clase_anuncio` (`PANEL`…) | `valor_numerico`: la tasa del ejercicio completo, mayor que 0 |
+
+La UIT es la del predial (`UIT`, en `data/parametros-predial.csv`). Ninguno de estos valores está transcrito y
+verificado en `normativa` todavía; la tasa de anuncios de Perené viene de su TUPA (ver [Anuncios y
+propaganda](#anuncios-y-propaganda)).
+
+**El CUIS** se carga con `import_cuis.py`, desde un CSV con `familia,codigo,descripcion,materia,porcentaje_uit,
+porcentaje_uit_segunda,porcentaje_uit_tercera,medida_complementaria,base_legal,vigencia_desde,observacion` y una
+cabecera `#` que cita la fuente. Los de Perené están en `data/cuiema/` (ver abajo); los tests usan uno ficticio:
+
+```bash
+cd model
+python3 import_cuis.py --csv cuis.csv --dry-run   # lee Core y dice qué versiones agregaría y cuáles cerraría
+python3 import_cuis.py --csv cuis.csv             # codigo_infraccion: N created, M closed, K skipped, 0 derogated
+python3 import_cuis.py --csv cuis.csv --completo  # además deroga los códigos vigentes que el archivo no trae
+```
+
+- `familia` vacía es `ADMINISTRATIVA`; el código se pasa a mayúsculas.
+- Antes de la primera escritura revisa el archivo (obligatorios, largos, alícuotas de más de 0 a 10 000, fechas,
+  versiones repetidas) y lo que hay en Core.
+- Es idempotente por `clave`: salta la versión que Core ya tiene. Si Core la tiene con otros valores, sale con `2`: un
+  cambio es una versión nueva, con otra `vigencia_desde`.
+- Una versión nueva de un código vigente cierra la anterior (`vigencia_hasta` = el día antes, `clave_vigente` = NULL) y se
+  agrega; una no posterior a la vigente sale con `2`. Como el CUIS es `soloDesdeElServicio`, cada versión va a
+  `POST /api/srtm/infracciones/cuis`, que cierra y agrega en una transacción.
+- Con `--completo` el archivo es el CUIS entero desde su única `vigencia_desde` (dos fechas distintas salen con `2`): cada
+  código vigente en Core que el archivo no trae se deroga el día antes, por `POST /api/srtm/infracciones/cuis/derogacion`.
+  Sin la opción, un código que el archivo no trae no se toca.
+- Sale con `0` si todo va bien, `1` si el servidor rechaza algo y `2` si el archivo no encaja (sin escribir nada).
+
+**El CUIEMA de Perené** (`model/data/cuiema/`). Dos normas. Los PDF son escaneos sin texto y se transcribieron en
+doble lectura, con las diferencias resueltas sobre la imagen y verificadas contra el PDF:
+
+| Norma | Vigencia | Transcripción | Carga | Fuera |
+|---|---|---|---|---|
+| OM N.° 01-2021/MDP (anexo, págs. 29-157) | desde 2021-01-26 | `perene-2021-transcripcion.csv` | `perene-2021-cuis.csv` | `perene-2021-excluidas.csv` |
+| OM N.° 006-2026-MDP (anexo, págs. 16-33), que deroga la anterior | desde 2026-05-07 | `perene-2026-transcripcion.csv` | `perene-2026-cuis.csv` | `perene-2026-excluidas.csv` |
+
+- La **transcripción** es la norma literal, con sus erratas: código, infracción, calificación, medida cautelar,
+  pecuniaria, no pecuniaria y base legal, más la página, la materia (el encabezado de sección) y una nota por cada
+  decisión de lectura. La calificación y la medida cautelar no tienen campo en `codigo_infraccion`: quedan aquí.
+- La **carga** la deriva `derivar_cuiema.py` (nada se teclea en ella): el % de la columna pecuniaria va a
+  `porcentaje_uit`, y su condición («100% si es modalidad A») va entre paréntesis en la descripción. La no pecuniaria
+  va a la medida complementaria. La tabla de 2026 no tiene base legal: va la ordenanza. Un código impreso con un
+  solo dígito al inicio (`5.02.114`) recibe su cero (`05.02.114`).
+- **Fuera** quedan, con su motivo, las filas que no son una versión del CUIS: sin multa pecuniaria, con 0 %, una
+  multa que no es un % de la UIT («1% del valor de la obra»), una por unidad («por cada árbol», «por metro³»: el acta
+  calcula una sola multa), una cifra ilegible y un código impreso dos veces con multas distintas (`06.01.032`).
+
+```bash
+cd model
+python3 import_cuis.py --csv data/cuiema/perene-2021-cuis.csv --dry-run
+python3 import_cuis.py --csv data/cuiema/perene-2021-cuis.csv
+python3 import_cuis.py --csv data/cuiema/perene-2026-cuis.csv --completo --dry-run   # deroga los de 2021 al 2026-05-06
+python3 import_cuis.py --csv data/cuiema/perene-2026-cuis.csv --completo
+```
+
+El orden importa: 2021 primero, y 2026 con `--completo`. Así los códigos de 2021 rigen hasta el 2026-05-06 y un
+acta de esas fechas toma la versión de su día.
 
 Geometrías (wasichai-gis, GeoJSON en EPSG:4326 por la API):
 - `predio.lote_geom` y `catastro_fiscal.lote_geom`: POLYGON, guardados en UTM 18S (EPSG:32718).
@@ -622,13 +1515,13 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET | `/api/srtm/ubigeos` | la lista INEI completa; la cascada departamento → provincia → distrito se hace en el portal |
 | GET | `/api/srtm/vias?q&tipo&ubigeo`, `/api/srtm/unidades-urbanas?q&tipo&ubigeo` | sugerencias del catálogo |
 | GET, POST | `/api/srtm/contribuyentes?q&page&size` | búsqueda (texto en todos los campos) e inscripción |
-| GET, PUT, DELETE | `/api/srtm/contribuyentes/{id}?anio` | la ficha: datos, nº de predios y totales del año; la edición; y la baja (409 si tiene declaraciones) |
+| GET, PUT, DELETE | `/api/srtm/contribuyentes/{id}?anio` | la ficha: datos, nº de predios y totales del año; la edición; y la baja (409 si tiene declaraciones o cuotas de arbitrio) |
 | GET | `/api/srtm/contribuyentes/{id}/declaraciones?anio` | sus declaraciones, cada una con su predio |
 | GET | `/api/srtm/contribuyentes/{id}/liquidacion?anio` | el impuesto predial del año: base, tramos, mínimo, anual y cuotas con su vencimiento; `faltan` si falta un parámetro ([Impuesto predial](#impuesto-predial)) |
 | GET, POST | `/api/srtm/contribuyentes/{id}/{lista}` | las listas del contribuyente: `domicilios`, `relacionados`, `medios-contacto`, `sustentos` |
 | PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
 | GET, POST | `/api/srtm/predios?q&page&size` | búsqueda y alta |
-| GET, PUT, DELETE | `/api/srtm/predios/{id}?anio` | la ficha: datos, nº de titulares y totales del año; la edición; y la baja (409 si tiene declaraciones) |
+| GET, PUT, DELETE | `/api/srtm/predios/{id}?anio` | la ficha: datos, nº de titulares y totales del año; la edición; y la baja (409 si tiene declaraciones o cuotas de arbitrio) |
 | GET | `/api/srtm/predios/{id}/declaraciones?anio` | sus declaraciones, cada una con su contribuyente |
 | POST | `/api/srtm/declaraciones` | alta corta, desde la ficha del predio (`contribuyente` y `predio` son ids) |
 | POST | `/api/srtm/contribuyentes/{id}/declaraciones-juradas` | presenta una DJ: `{declaracion, predio_id}` sobre un predio del padrón, o `{declaracion, predio}` registrando uno |
@@ -647,11 +1540,17 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET | `/api/srtm/documentos/{tipo}/{numero}` | los apellidos y nombres que RENIEC da de un DNI; 404 si no hay datos o no hay convenio ([PIDE RENIEC](#pide-reniec)) |
 | GET | `/api/srtm/predios/{id}/pu?anio&contribuyente` | la PU del predio en PDF, inline; 404 sin DJ vigente en el año, 409 con `titulares` si hay varios y falta `contribuyente` ([Emisión de documentos](#emisión-de-documentos)) |
 | GET | `/api/srtm/contribuyentes/{id}/hr?anio` | la HR del contribuyente en PDF, inline, con el impuesto y las cuotas de `/liquidacion`; 422 con `faltan` sin parámetros del año, 404 sin DJ vigente en el año ([Emisión de documentos](#emisión-de-documentos)) |
-| POST | `/api/srtm/emisiones` `{anio, formato: PDF\|ZIP}` | lanza la emisión masiva del año en segundo plano: 202 con el job; 403 sin permiso de creación y de edición sobre `emision_masiva`; 409 si ya corre una, en esta u otra instancia ([Emisión masiva](#emisión-masiva)) |
+| POST | `/api/srtm/emisiones` `{anio, formato: PDF\|ZIP}` | lanza la emisión masiva del año en segundo plano, por lotes: 202 con el job; 403 sin permiso de creación y de edición sobre `emision_masiva` y de creación sobre `emision_lote`; 409 si ya hay una activa de la misma organización y año ([Emisión masiva](#emisión-masiva)) |
 | GET | `/api/srtm/emisiones?anio` | los jobs, el más reciente primero |
 | GET | `/api/srtm/emisiones/{id}` | un job: `{id, anio, formato, estado, total, procesados, errores:[{contribuyente, mensaje}], archivo, tamano, mensaje, iniciado, terminado}` |
 | GET | `/api/srtm/emisiones/{id}/archivo` | el PDF o ZIP, `attachment; filename="emision-<anio>-<id>.pdf\|zip"`, en streaming; 409 si aún no está TERMINADA; 410 si la retención depuró el archivo |
-| DELETE | `/api/srtm/emisiones/{id}` | borra el job y su archivo: 204; 409 si aún corre; 403 sin permiso de borrado sobre `emision_masiva` |
+| DELETE | `/api/srtm/emisiones/{id}` | borra el job, sus lotes y sus archivos (si aún corre, la cancela): 204; 403 sin permiso de borrado sobre `emision_masiva` |
+| GET | `/api/srtm/anuncios?contribuyente&clase&estado&vigentes_a&q&page&size` | el padrón de anuncios: página de `{…anuncio, contribuyente_nombre, estado, vigencia_hasta_vigente, vigentes_a}` ([Anuncios y propaganda](#anuncios-y-propaganda)) |
+| POST | `/api/srtm/anuncios` (cabecera `Idempotency-Key`) | el alta con su autorización: 201 `{anuncio, movimiento, ya_existia:false}`; 200 en el reenvío con la misma clave; 422 con `faltan` |
+| GET | `/api/srtm/anuncios/{id}` | `{anuncio, movimientos, estado, vigencia_hasta_vigente, al_dia, devengado: {importe, al_dia}, acciones}` |
+| POST | `/api/srtm/anuncios/{id}/renovacion`, `/cese`, `/retiro` | los actos: 201 con el movimiento; 409 acto o ejercicio repetido; 422 fuera de orden, cesado, sin cese o `faltan` |
+| GET | `/api/srtm/anuncios/tasas?anio` | `{anio, tasas: [{clase, tasa, parametro_id, vigencia_desde}], faltan}` |
+| GET | `/api/srtm/contribuyentes/{id}/anuncios`, `/api/srtm/predios/{id}/anuncios` | `{al_dia, anuncios: [{…anuncio, estado, vigencia_hasta_vigente}]}` |
 
 Reglas del registro de contribuyente (en `Reglas.kt`, con sus tests):
 - **Inscripción:** el backend asigna `codigo` (6 dígitos, correlativo), `numero_declaracion` y `fecha_registro`.
@@ -799,7 +1698,9 @@ wasichai/srtm-backend#37, aquí están la PU (Predio Urbano) y la HR (Hoja de Re
     HTML, y openhtmltopdf (el fork mantenido `io.github.openhtmltopdf`, sobre PDFBox 3) lo pasa a PDF.
   - Hoja A4, con `templates/emision/base.css` en línea en cada plantilla (variable `css`): márgenes, recuadros con
     título sombreado, grillas de etiqueta y valor, tablas y el pie "Página X de Y".
-  - Fuente DejaVu Sans embebida (`resources/fonts`, con su licencia): tildes y ñ salen iguales en cualquier visor.
+  - Fuente Liberation Sans embebida (`resources/fonts`, con su licencia SIL OFL 1.1), con las métricas de Arial,
+    como los recibos de la municipalidad; Arial no se puede distribuir. DejaVu Sans queda detrás para cualquier glifo
+    que le falte. Tildes y ñ salen iguales en cualquier visor.
   - El log de openhtmltopdf va por slf4j, en WARN (`logging.level.com.openhtmltopdf`).
 - **`PdfMerger.merge(partes, destino)`:** une PDF en orden con PDFBox, de bytes a un stream o de archivos a un
   archivo. Usa archivos temporales (`MemoryUsageSetting.setupTempFileOnly()`), para que la masiva no llene la memoria.
@@ -809,8 +1710,8 @@ wasichai/srtm-backend#37, aquí están la PU (Predio Urbano) y la HR (Hoja de Re
   - Lee Core como el usuario, a través de `Registros`, y dibuja el PDF fuera del hilo de la petición.
 - **La PU** (`templates/emision/pu.html`, con `HojaPu.kt` que deja cada valor ya formateado):
   - Una por predio y titular, con sus DJ **vigentes** del año. Cada `secuencia_uso` es una sección "Uso N.°".
-  - Cabecera: la municipalidad (`srtm.municipalidad.nombre`, `SRTM_MUNICIPALIDAD_NOMBRE`), el título, el año y los
-    N.° de declaración.
+  - Cabecera institucional ([Cabecera de los documentos](#cabecera-de-los-documentos)), el título y, debajo, el año
+    y los N.° de declaración.
   - Contribuyente, ubicación del predio, datos del predio, niveles (con las 7 categorías), obras complementarias y
     los valores declarados (autoavalúo, valor condominio, deducción, valor afecto).
   - Muestra los valores declarados, sin revalorizar. Los niveles y obras INACTIVO no salen.
@@ -836,60 +1737,285 @@ wasichai/srtm-backend#37, aquí están la PU (Predio Urbano) y la HR (Hoja de Re
   - Responde `application/pdf` con `Content-Disposition: inline; filename="HR-<codigo>-<anio>.pdf"`.
   - 422 si falta un parámetro tributario del año. El problem+json agrega `faltan` (como en `/liquidacion`).
   - 404 si el contribuyente no existe o no tiene DJ vigente ese año.
-- **Tiempo:** unos 80 ms por PU de dos usos solo en dibujar el PDF (`HojaPuTest`). `PuApiTest` mide 100 PU seguidas
+- **Tiempo:** unos 50 ms por PU de dos usos solo en dibujar el PDF (`HojaPuTest`). `PuApiTest` mide 100 PU seguidas
   por la API, con las lecturas de Core, y lo imprime en la salida de `integrationTest`.
+
+### Cabecera de los documentos
+
+El PU y la HR abren con la misma cabecera (`templates/emision/cabecera.html`), ordenada como los recibos de la
+municipalidad: el escudo a la izquierda, con el nombre en negrita y la oficina centrados; el RUC y la fecha y hora de
+emisión (hora de Lima); la gerencia; la dirección; una línea punteada, y el título del documento.
+
+- **Los datos** salen del registro `municipalidad` de la organización (nombre, oficina, RUC, gerencia y dirección),
+  que se edita en el admin: `/admin`, objeto *Municipalidad*.
+  - Hay uno por organización. Si hay más, vale el más antiguo y el log lo avisa.
+  - Sin registro, la cabecera solo lleva `srtm.municipalidad.nombre` (`SRTM_MUNICIPALIDAD_NOMBRE`).
+  - Una línea vacía no se imprime.
+  - Se lee como el usuario que emite, así que su rol necesita permiso de lectura sobre `municipalidad`, como sobre
+    `parametro_tributario`.
+  - Se guarda `srtm.municipalidad.cache` (1 min) por organización: un cambio en el admin aparece en el PDF dentro de
+    ese tiempo.
+  - Los datos de `model/data/municipalidad.json` son **provisionales**: el RUC sale del padrón, y la oficina y la
+    gerencia son genéricas. Se corrigen en el admin.
+- **El escudo** es un archivo: core no tiene campos de imagen.
+  - `srtm.municipalidad.escudo` (`SRTM_MUNICIPALIDAD_ESCUDO`) admite `classpath:…` o `file:…`, solo PNG o JPG.
+  - Se lee una vez al arrancar y va dentro del PDF. Si no es PNG ni JPG, o si no existe, la app no arranca y el error
+    nombra el archivo.
+  - Vacío, la cabecera no lleva escudo.
 
 ## Emisión masiva
 
 Todas las HR y PU de un año (wasichai/srtm-backend#41), en segundo plano, como **un solo PDF** (por contribuyente, su
 HR seguida de sus PU) o como **un ZIP** (`<codigo>-<nombre>/HR-<anio>.pdf` y `<codigo>-<nombre>/PU-<codigo_predio>-<anio>.pdf`).
+Con `documentos`, cada contribuyente lleva los que se pidan de HR, PU y HLA (ver [Arbitrios](#arbitrios)).
+El padrón se reparte en **lotes** que generan en paralelo los **trabajadores** de todas las instancias, coordinados
+solo por Postgres, y **una sola instancia ensambla** el resultado (wasichai/srtm-backend#53, #54).
 
-- **Job:** el objeto Core `emision_masiva` (anio, formato, estado PENDIENTE → EN_PROCESO → TERMINADA o FALLIDA, total,
-  procesados, errores como JSON, archivo, tamano, mensaje, iniciado, terminado). El job guarda su avance como quien
-  lo lanzó, así que el POST exige permiso de **creación y de edición** sobre el objeto antes de crear nada: sin el de
-  edición da 403 (problem+json). Antes, un job que no podía guardarse quedaba PENDIENTE y trababa toda emisión
-  posterior (wasichai/srtm-backend#47).
-- **`EmisionMasivaService`:**
-  - Un `CoroutineScope(SupervisorJob() + Dispatchers.IO)` de la aplicación, cerrado en `@PreDestroy`.
-  - **Un solo worker en todo el despliegue**, aunque corran varias instancias contra la misma base: el POST toma un
-    advisory lock de Postgres (`pg_try_advisory_lock`, `CerrojoEmision`) en una conexión propia, y el worker lo
-    retiene hasta terminar. Si otro lo tiene (en esta u otra instancia), el POST da 409 sin crear el job. Si la
-    instancia muere, Postgres cierra su sesión y suelta el lock. Es uno para todas las organizaciones: mientras una
-    emite, la otra recibe 409. Si la conexión del lock se cae a mitad de un job, otra instancia podría empezar otra
-    emisión: la conexión no se vigila.
-  - Un job PENDIENTE o EN_PROCESO sin nadie que tenga el lock no tiene worker (la instancia murió, o el job no pudo
-    guardar su final): el siguiente worker, al empezar, lo pasa a FALLIDA ("interrumpida: el proceso que la corría ya
-    no está"). Nunca traba las emisiones siguientes.
-  - Recorre los contribuyentes con DJ **vigentes** del año, por código, y por cada uno pide `hr` y la `pu` de cada
-    predio (por código de predio) a `DocumentosPrediales`. Un condominio da una PU por titular.
-  - **PDF:** cada documento va a un archivo temporal y al final `PdfMerger` los une en uno. **ZIP:** `ZipOutputStream`
-    en streaming. El archivo se escribe como `.part` y se renombra al terminar.
-  - Guarda `procesados` cada 25 contribuyentes y al final. Un contribuyente que falla queda en `errores`
-    (`{contribuyente: <codigo>, mensaje}`), sin sus documentos, y el resto sigue: el job termina TERMINADA. Un error
-    general lo deja FALLIDA con `mensaje`.
-  - **Usuario:** el job corre como quien lo lanzó. La autenticación de la petición pasa a la corrutina del job
-    (`ReactiveSecurityContextHolder.withAuthentication(...).asCoroutineContext()`, como hace wasichai-agent), así que
-    Core aplica sus permisos a cada lectura y escritura. El JWT no se vuelve a validar: su vencimiento no corta un job
-    ya empezado.
-  - **Al arrancar** (`ApplicationReadyEvent`), si nadie tiene el lock, los jobs PENDIENTE o EN_PROCESO de cualquier
-    organización pasan a FALLIDA con el mensaje "interrumpida por reinicio", se borran los `.part` y los `.partes-`
-    que dejó un job a medias, y corre la retención. Si otra instancia tiene el lock, no toca nada: su job está vivo, y
-    su worker recuperará los demás.
-  - **Auditoría:** al arrancar no hay usuario, y wasichai 0.2.0 no ofrece un contexto de sistema para escribir por
-    `RecordService` (exige el JWT de un usuario). Por eso la recuperación y la retención van directo a la tabla del
-    objeto, con los nombres de columna que da la metadata de Core, y dejan su entrada en el log de auditoría de Core
-    con su `AuditService`: operación UPDATE, sin usuario, con los campos que cambiaron. No avisan a los listeners de
-    `RecordChange`.
-- **Archivos** en `srtm.emision.dir` (`SRTM_EMISION_DIR`, por defecto `./data/emisiones`, fuera de git), con el
-  nombre `emision-<anio>-<id>.pdf|zip`. Llevan datos personales de todo el padrón: en producción, un volumen
-  persistente y privado.
-- **Retención**, después de cada emisión y al arrancar: de cada organización y año se conservan los últimos
-  `srtm.emision.conservar` archivos (`SRTM_EMISION_CONSERVAR`, por defecto 5), y ninguno más viejo que
+- **Job:** el objeto Core `emision_masiva` (anio, formato, estado, total, procesados, errores como JSON, archivo, tamano,
+  mensaje, iniciado, terminado, latido, documentos como JSON). Estados: **PENDIENTE** (se lee el padrón y se crean los lotes) →
+  **EN_PROCESO** (los trabajadores generan los lotes) → **ENSAMBLANDO** (una instancia une las partes) →
+  **TERMINADA** o **FALLIDA** (con `mensaje`). `procesados` es la suma de los lotes y avanza durante la corrida.
+- **`POST /api/srtm/emisiones`** (202): exige permiso de **creación y de edición** sobre `emision_masiva` y de
+  **creación** sobre `emision_lote` antes de crear nada (403 problem+json si falta alguno, wasichai/srtm-backend#47).
+  Los lotes se crean como quien llamó, y aunque las transiciones del job las escribe el sistema, las de su preparación
+  (PENDIENTE → EN_PROCESO, o FALLIDA si falla) quedan en la auditoría como edición (UPDATE) de quien la lanzó: por eso
+  la edición. Da **409** si ya hay una emisión PENDIENTE, EN_PROCESO o
+  ENSAMBLANDO **de la misma organización y año** ("Ya hay una emisión masiva de <anio> en curso: espere a que
+  termine"); dos organizaciones emiten a la vez. Si llegan dos POST a la vez, sigue el más antiguo y el otro da 409.
+  En segundo plano, como quien llamó, lee los contribuyentes con DJ **vigentes** del año (por código, sus predios por
+  código), los corta en lotes y pasa la emisión a EN_PROCESO con su `total`. Un fallo la deja FALLIDA.
+- **Lotes** (objeto Core `emision_lote`): `emision`, `numero` (el orden), `contribuyentes` (JSON), `estado`
+  (PENDIENTE, EN_PROCESO, TERMINADO o FALLIDO), `tomado_por`, `latido`, `intentos`, `procesados`, `documentos`,
+  `errores` y `parte` (su clave en el almacén). Tienen `srtm.emision.lote` contribuyentes (`SRTM_EMISION_LOTE`, por
+  defecto 100). Un trabajador toma el siguiente con `UPDATE ... FOR UPDATE SKIP LOCKED` sobre la tabla física: dos
+  trabajadores, de esta u otra instancia, nunca toman el mismo. Las organizaciones se turnan: cada toma empieza por la
+  siguiente a la del último lote que tomó la instancia, así las emisiones de dos organizaciones avanzan a la vez. Genera la parte (`GeneradorEmision`: por cada
+  contribuyente su HR y sus PU; PDF unido con `PdfMerger` o ZIP en streaming) en sus temporales y la deja en el almacén
+  como `emision-<id>/parte-00001.pdf|zip`. Un contribuyente que falla queda en `errores`
+  (`{contribuyente: <codigo>, mensaje}`), sin sus documentos, y el resto sigue.
+- **Trabajadores** (`TrabajadoresEmision`): al arrancar, cada instancia lanza N corrutinas (`SupervisorJob`,
+  `Dispatchers.IO`) con un id de instancia `<hostname>-<uuid del arranque>`, que queda en `tomado_por`. Cada una, en
+  su ciclo: falla las emisiones abandonadas, reclama un ensamblado pendiente, o toma un lote. Sin trabajo espera
+  `srtm.emision.espera` (`SRTM_EMISION_ESPERA`, por defecto 5s); un POST a esa instancia la despierta antes.
+  - **Cuántos:** `srtm.emision.trabajadores` (`SRTM_EMISION_TRABAJADORES`, por defecto `auto`). `auto` =
+    `min(núcleos, (memoria máxima − 512 MiB) / 300 MiB)`, entre 1 y los núcleos. Un número se toma tal cual; `0` es una
+    instancia que no corre trabajadores (sigue atendiendo POST). Nunca pasa de `spring.r2dbc.pool.max-size − 2` (para
+    no dejar sin conexiones al portal; si un número lo pasa, se avisa en el log). El valor y el id de la instancia se
+    registran al arrancar.
+  - **Lease:** el trabajador renueva el `latido` de su lote cada `lease/4`. Un lote EN_PROCESO cuyo latido venció
+    `srtm.emision.lease` (`SRTM_EMISION_LEASE`, por defecto 2m) lo toma otro: así se retoma lo de una instancia que
+    murió. Cada toma suma un intento, y cada escritura del lote exige que siga siendo de esa toma: un trabajador que lo
+    perdió (lease vencido y retomado, o la emisión cancelada o borrada) aborta, borra su temporal y no toca nada del
+    nuevo dueño. Su parte se borra solo si el lote ya no existe o quedó FALLIDO.
+  - **Intentos:** un lote tomado más de `srtm.emision.intentos` veces (`SRTM_EMISION_INTENTOS`, por defecto 3) queda
+    FALLIDO y sus contribuyentes pasan a `errores` con "lote fallido tras N intentos". Un fallo inesperado al generar
+    lo suelta (PENDIENTE) para el siguiente.
+- **Identidad:** `RecordService` revisa los permisos, y `asPlatform` (wasichai 0.3) los saltaría; la emisión corre a
+  propósito como el usuario que la lanzó. `CurrentUser` solo lee un principal `Jwt` (`sub` y los claims `org`,
+  `email` y `roles`). Por eso cada lote se genera **como quien lo creó** (el `created_by` del lote, el mismo usuario que
+  lanzó la emisión): `IdentidadEmision` arma en memoria el `Jwt` que armaría el filtro de Core, con la fila y los roles
+  actuales de ese usuario. Ese `Jwt` nunca se firma ni sale del proceso. Si el usuario fue borrado o deshabilitado, el
+  lote falla sin reintentos ("el usuario que lanzó la emisión ya no existe o está deshabilitado"). La preparación corre
+  con la autenticación de la petición (`ReactiveSecurityContextHolder.withAuthentication(...)`); el JWT no se vuelve a
+  validar después.
+- **Ensamblado** (`EnsambladorEmision`): el trabajador que deja un lote TERMINADO o FALLIDO intenta pasar la emisión a
+  ENSAMBLANDO con un `UPDATE` condicional (EN_PROCESO y sin lotes por generar, o ENSAMBLANDO con el latido vencido):
+  solo el que obtiene la fila ensambla, y mantiene su latido cada `lease/4`. Trae las partes en orden de `numero`,
+  las une (PDF con `PdfMerger`; ZIP copiando las entradas en orden), guarda el archivo final, borra las partes y pasa
+  la emisión a TERMINADA con `archivo`, `tamano`, `terminado`, `procesados` y los `errores` de todos los lotes en
+  orden. Luego corre la retención. Si el ensamblador muere, otro trabajador lo retoma cuando vence el lease; si el
+  archivo final ya estaba guardado, lo usa tal cual. Un fallo deja la emisión FALLIDA con `mensaje` y sin partes. Una
+  emisión sin contribuyentes no tiene lotes: el primer ciclo de un trabajador la ensambla vacía.
+- **Al arrancar** (`ApplicationReadyEvent`): las emisiones abandonadas pasan a FALLIDA ("interrumpida: el proceso que
+  la corría ya no está"): las PENDIENTE cuyo latido venció (su preparación murió) y las EN_PROCESO **sin latido**, que
+  son jobs de la versión anterior a los lotes (no tienen lotes y nunca se ensamblan). Corre la retención. Los lotes de
+  una emisión viva no se tocan: se retoman al vencer su lease. Cada grupo de trabajadores limpia sus temporales antes
+  de empezar. Ya no hay advisory lock (`CerrojoEmision` se fue).
+- **Auditoría:** las transiciones del job (PENDIENTE → EN_PROCESO, → ENSAMBLANDO, → TERMINADA o FALLIDA) y la
+  retención van directo a la tabla del objeto, con los nombres de columna que da la metadata de Core, y dejan su
+  entrada en el log de auditoría con `AuditService`: operación UPDATE, con el usuario que lanzó la emisión cuando es su
+  preparación y sin usuario cuando es del sistema. El avance y el latido no se auditan, ni las escrituras de los lotes.
+  No avisan a los listeners de `RecordChange`.
+- **Varias instancias en Docker:** todas contra la misma base y con el **mismo volumen** en `srtm.emision.dir` (el
+  almacén local es compartido), y cada una con sus `temporales` **locales** (nunca compartidos: cada instancia limpia
+  los suyos al arrancar). Por ejemplo, con un servicio `backend` en `compose.yml`:
+
+  ```yaml
+  backend:
+    image: srtm-backend
+    environment:
+      SRTM_EMISION_DIR: /data/emisiones # el volumen compartido
+      SRTM_EMISION_TEMPORALES: /tmp/srtm-emision # dentro del contenedor, de cada réplica
+    volumes:
+      - emisiones:/data/emisiones
+  ```
+
+  y `docker compose up --scale backend=3`. Los lotes se reparten entre las réplicas; cualquiera atiende el POST, la
+  consulta y la descarga. Sin volumen compartido (K8s), con `srtm.emision.almacen=s3`: ver **Almacén S3 (K8s)**.
+- **Almacén** (`AlmacenEmision`, wasichai/srtm-backend#52): dónde viven los archivos ya generados. El servicio y el
+  controlador solo hablan con esta interfaz (`guardar`, `abrir`, `traer`, `borrar`, `existe`, `tamano`, `listar`), así
+  que los archivos pueden estar en el disco del servidor o en un almacén de objetos compartido por todas las
+  instancias. Se elige con `srtm.emision.almacen` (`SRTM_EMISION_ALMACEN`): `local` (por defecto, `AlmacenLocal`) o
+  `s3` (`AlmacenS3`, abajo).
+  - **Claves:** relativas, separadas por `/`, de segmentos `[A-Za-z0-9._-]`; nunca vacías, ni `.` ni `..`, ni con `/`
+    al inicio (cualquier otra es `IllegalArgumentException`: ninguna clave sale del almacén). El resultado de una
+    emisión es `emision-<id>/emision-<anio>-<id>.pdf|zip`; las partes de sus lotes, `emision-<id>/parte-00001.pdf|zip`.
+    Todo lo de una emisión cuelga de `emision-<id>/`, así que borrarla es borrar ese prefijo (`listar` + `borrar`).
+    `guardar` consume el archivo local (al volver ya no existe), `abrir` devuelve un `Resource` en streaming cuyo
+    `contentLength()` no lee el contenido, y `abrir`, `traer` y `tamano` de una clave que no está dan
+    `ClaveInexistenteException`.
+  - **`AlmacenLocal`:** `<srtm.emision.dir>/<clave>` (`SRTM_EMISION_DIR`, por defecto `./data/emisiones`, fuera de git).
+    `guardar` mueve el archivo a un nombre temporal junto a su destino y lo renombra de forma atómica (sirve entre
+    sistemas de archivos). Llevan datos personales de todo el padrón: en producción, un volumen persistente y privado.
+  - **Archivos del formato anterior:** antes los archivos eran planos, `<dir>/emision-<anio>-<id>.pdf|zip`. Al crearse,
+    `AlmacenLocal` mueve cada uno a `<dir>/emision-<id>/emision-<anio>-<id>.<ext>` y deja en el log cuántos movió. Es
+    idempotente, y un archivo que no se puede mover se registra y queda donde estaba: nunca impide arrancar. Los
+    `.part` y `.partes-` que haya dejado la versión anterior en `<dir>` ya no se limpian (la limpieza corre en
+    `temporales`): se borran a mano.
+  - **Temporales** `srtm.emision.temporales` (`SRTM_EMISION_TEMPORALES`, por defecto `${java.io.tmpdir}/srtm-emision`):
+    el `.part` de un lote, el `.partes-` de su PDF y el `ensamblado-` de un ensamblado. Es local de cada instancia y
+    descartable; no necesita persistir. Lo que deja un trabajador que murió se borra cuando los trabajadores vuelven a
+    arrancar.
+  - **Otra implementación:** implementar `AlmacenEmision` (con su IO bloqueante dentro de `Dispatchers.IO`), extender
+    `AlmacenEmisionContractTest` dando su almacén vacío en `nuevo()`, y activarla con su propio valor de
+    `srtm.emision.almacen` (`@ConditionalOnProperty(prefix = "srtm.emision", name = ["almacen"], havingValue = "...")`).
+    Las claves y su validación (`exigirClave`) son las de arriba para todas.
+- **Almacén S3 (K8s)** (`AlmacenS3`, wasichai/srtm-backend#56): con `srtm.emision.almacen=s3` los archivos van a un
+  bucket de S3 (o de un servicio con su API, como MinIO) y **no hace falta volumen**: ni `srtm.emision.dir` ni un disco
+  compartido. Cada pod solo necesita sus `temporales` locales (un `emptyDir` basta).
+  - **Variables:** `srtm.emision.s3.bucket` (`SRTM_EMISION_S3_BUCKET`), obligatoria: sin ella la aplicación no arranca
+    ("srtm.emision.s3.bucket es obligatorio con srtm.emision.almacen=s3"). `srtm.emision.s3.region`
+    (`SRTM_EMISION_S3_REGION`): vacía, la de la cadena del SDK (`AWS_REGION`, que IRSA ya pone en el pod); contra otro
+    endpoint, `us-east-1`. `srtm.emision.s3.endpoint` (`SRTM_EMISION_S3_ENDPOINT`): solo para otro servicio que AWS
+    (MinIO), al que se llega por *path-style*; vacía en AWS. `srtm.emision.s3.prefijo` (`SRTM_EMISION_S3_PREFIJO`): las
+    claves van debajo (`srtm/emisiones` da `srtm/emisiones/emision-<id>/...`; las `/` de los extremos sobran); vacío, en
+    la raíz del bucket. Al arrancar se comprueba el bucket (`HeadBucket`): si no existe o las credenciales no llegan, la
+    aplicación no arranca y lo nombra ("No se puede usar el bucket '<bucket>' de srtm.emision.s3.bucket: no existe").
+    Así un bucket equivocado nunca parece un almacén con los archivos borrados.
+  - **Credenciales:** las de la cadena por defecto del AWS SDK v2, nunca en la configuración de la app. En EKS, **IRSA**:
+    el pod corre con una ServiceAccount anotada con `eks.amazonaws.com/role-arn` y el SDK toma el rol solo
+    (`AWS_ROLE_ARN`, `AWS_WEB_IDENTITY_TOKEN_FILE`; asume el rol con STS, por eso el módulo `sts` del SDK va en el
+    classpath). Si no, un **secreto** de Kubernetes con `AWS_ACCESS_KEY_ID` y
+    `AWS_SECRET_ACCESS_KEY` como variables de entorno. El rol necesita `s3:PutObject`, `s3:GetObject`,
+    `s3:DeleteObject`, `s3:AbortMultipartUpload` y `s3:ListBucket` sobre el bucket (o su prefijo). Por ejemplo:
+
+    ```yaml
+    serviceAccountName: srtm-backend # con IRSA; sin IRSA, el envFrom del secreto
+    containers:
+      - name: backend
+        image: srtm-backend
+        env:
+          - { name: SRTM_EMISION_ALMACEN, value: s3 }
+          - { name: SRTM_EMISION_S3_BUCKET, value: municipalidad-srtm-emisiones }
+          - { name: SRTM_EMISION_S3_PREFIJO, value: srtm/emisiones }
+          - { name: SRTM_EMISION_TEMPORALES, value: /tmp/srtm-emision } # un emptyDir del pod
+        # envFrom: [{ secretRef: { name: srtm-s3 } }] # AWS_ACCESS_KEY_ID y AWS_SECRET_ACCESS_KEY
+    ```
+
+  - **Cómo guarda:** un archivo de menos de 16 MiB va en un `PutObject`; uno mayor, por *multipart upload* en partes de
+    16 MiB leídas del archivo una a una (los PDF pueden pesar GB), que se aborta si algo falla. Una clave solo aparece
+    completa (`PutObject` y `CompleteMultipartUpload` son atómicos): el ensamblado que encuentra el archivo final ya
+    guardado puede usarlo tal cual. `traer` descarga a los temporales para el ensamblado, `listar` pagina por prefijo
+    y `borrar` de una clave que no está no hace nada.
+  - **Checksums:** el SDK manda checksums CRC32 (en S3 sobre HTTPS, al final del cuerpo). Las subidas en partes llevan
+    siempre CRC32, fijado en el código (`CreateMultipartUpload` y cada parte); AWS S3 y MinIO lo aceptan. Para un
+    almacén compatible que no acepte los checksums al final del cuerpo, `AWS_REQUEST_CHECKSUM_CALCULATION=when_required`
+    los apaga en los `PutObject` (archivos de menos de 16 MiB), pero no en las subidas en partes.
+  - **Descarga:** pasa por el backend, que mantiene el control de permisos, en streaming desde S3: el `Content-Length`
+    sale de un `HeadObject` y el objeto se abre recién al leerlo, sin cargarlo en memoria, en trozos de 64 KiB leídos
+    en `boundedElastic` (la lectura de S3 bloquea: nunca en el event loop de Netty). Si el cliente corta, se aborta la
+    conexión con S3 en vez de leer el resto. No responde `Range` (siempre el archivo entero). (Una URL prefirmada queda
+    como opción a futuro.)
+  - **Probar en local:** `docker compose --profile s3 up -d` levanta MinIO (`127.0.0.1:9000`, consola en
+    `127.0.0.1:9001`, usuario `srtm`, clave `srtm-minio`) y crea el bucket `srtm-emisiones`. Luego se arranca con
+    `SRTM_EMISION_ALMACEN=s3`, `SRTM_EMISION_S3_BUCKET=srtm-emisiones`, `SRTM_EMISION_S3_ENDPOINT=http://localhost:9000`,
+    `AWS_ACCESS_KEY_ID=srtm` y `AWS_SECRET_ACCESS_KEY=srtm-minio` (comentadas en `develop/example.env`). La imagen es el
+    fork comunitario `pgsty/minio`: MinIO ya no publica `minio/minio` en Docker Hub.
+- **Retención**, después de cada ensamblado y al arrancar (`RetencionEmision`): de cada organización y año se conservan
+  los últimos `srtm.emision.conservar` archivos (`SRTM_EMISION_CONSERVAR`, por defecto 5), y ninguno más viejo que
   `srtm.emision.dias` días (`SRTM_EMISION_DIAS`, por defecto 0: sin límite). 0 apaga una regla. El job depurado se
-  queda, sin `archivo` y con el mensaje "archivo depurado"; su descarga da 410. `DELETE /api/srtm/emisiones/{id}`
-  borra el job y su archivo (409 si aún corre; uno PENDIENTE o EN_PROCESO sin worker sí se borra).
-- **Descarga** `GET /api/srtm/emisiones/{id}/archivo`: `FileSystemResource`, en streaming, sin cargar el archivo en
-  memoria. El nombre se arma del job, nunca se lee del registro.
+  queda, sin `archivo` y con el mensaje "archivo depurado"; su descarga da 410.
+- **`DELETE /api/srtm/emisiones/{id}`** (204): exige permiso de borrado antes de tocar nada. Si la emisión sigue activa,
+  sus lotes por generar pasan a FALLIDO (sus trabajadores lo notan en su siguiente escritura y abortan); luego se borran
+  sus lotes, el job y todo lo que el almacén guarde bajo `emision-<id>/`. Ya no da 409.
+- **Descarga** `GET /api/srtm/emisiones/{id}/archivo`: el `Resource` del almacén, en streaming, sin cargar el archivo en
+  memoria y con su `Content-Length`, sin leer el archivo. Un archivo en disco (`AlmacenLocal`) lo escribe el
+  `ResourceHttpMessageWriter` de Spring, con un canal asíncrono y el largo de lo que responde: los `Range` con 206 (uno
+  o varios, `multipart/byteranges`; una descarga cortada puede retomarse) y uno imposible o mal formado con 416. Otro
+  recurso, como un objeto de S3, va en trozos de 64 KiB leídos en `boundedElastic`, con el `Content-Length` de `tamano`
+  del almacén, y **no responde `Range`**: siempre el archivo entero, con 200. 409 si no está TERMINADA, 410 si se
+  depuró, 404 si el almacén ya no tiene la clave. La clave y el nombre (`Content-Disposition`) se arman del job, nunca
+  se leen del registro.
+
+### Actualizar desde la versión anterior
+
+La versión con lotes cambia el modelo, los estados y dónde viven los archivos. Para pasar a ella:
+
+1. **El modelo primero**, con el backend nuevo todavía apagado: `cd model && python3 apply.py --dry-run` imprime, sin
+   llamar a Core, el modelo entero como si se creara de cero (no lo que cambiaría en una base existente), y sirve para
+   revisar `model.json`. Luego `python3 apply.py`, que sobre el modelo existente crea `emision_lote` y su relación y
+   añade `emision_masiva.latido` y el estado `ENSAMBLANDO`. Sin `emision_lote`, el backend nuevo no ve la
+   organización (le faltan las tablas de los lotes) y su POST falla.
+2. **Sin versiones mezcladas:** detener **todas** las instancias viejas (mejor sin ninguna masiva corriendo) antes de
+   arrancar las nuevas. Un POST de una instancia vieja pasa a FALLIDA los jobs activos de las nuevas: la versión vieja
+   da por huérfano todo job activo que no corra su propio worker. Y una instancia nueva falla el job que una vieja
+   esté corriendo (no tiene `latido`). Al arrancar, la versión nueva pasa a FALLIDA los jobs que dejó la anterior
+   (PENDIENTE o EN_PROCESO sin `latido`): se vuelven a emitir. Con el almacén local, `AlmacenLocal` mueve al arrancar los archivos planos de la versión anterior
+   (`<dir>/emision-<anio>-<id>.<ext>`) a su clave.
+3. **De local a S3:** los archivos existentes **no se migran solos**: si no se copian al bucket con las mismas claves,
+   sus descargas dan 404. Por ejemplo `aws s3 sync <srtm.emision.dir> s3://<bucket>/<prefijo>`. Viniendo directo de la
+   versión anterior, arrancar antes una vez con `local` (para que `AlmacenLocal` los pase a sus claves) o copiarlos ya
+   como `emision-<id>/emision-<anio>-<id>.<ext>`.
+4. **Bucket:** una regla de ciclo de vida que aborte las subidas en partes incompletas (por ejemplo, a los 7 días). Un
+   pod que muere a mitad de una subida no puede abortarla, y sus partes se cobran hasta que alguien las borre.
+
+**La versión con wasichai 0.6** no cambia el modelo, pero sus migraciones de core no tienen vuelta atrás: primero
+`pg_dump`, y después se detienen las instancias viejas y se arranca la nueva
+([wasichai 0.6: qué cambia para srtm](#wasichai-06-qué-cambia-para-srtm)).
+
+**La versión con la HLA** (arbitrios) agrega `emision_masiva.documentos`, que los trabajadores leen al tomar cada
+lote. Igual que arriba: `python3 apply.py` antes de arrancar el backend nuevo. Sin ese campo el backend no ve las
+tablas de la emisión de la organización y su POST falla. Los jobs anteriores, sin `documentos`, son de HR y PU.
+
+### Medición
+
+Calibrar `srtm.emision.lote` y `srtm.emision.trabajadores` es medir (wasichai/srtm-backend#55). Cada lote lee una sola vez
+los parámetros tributarios del año (`ParametrosTributarios.todos()`, como el usuario que creó el lote) y los pasa a
+todas sus HR: antes se recargaban en cada contribuyente. La HR individual (`GET /contribuyentes/{id}/hr`) y
+`GET /contribuyentes/{id}/liquidacion` los siguen leyendo en cada llamada, y el 422 con `faltan` no cambia. El log
+(INFO, `srtm.emision.GrupoTrabajadores`) deja dos líneas:
+
+```text
+lote 3 de la emisión <id>: 100 contribuyentes, 187 documentos en 41250 ms (4.5 documentos/s)
+emisión <id> de 2026: 11800 contribuyentes, 15900 documentos en 5230.4 s (3.0 documentos/s)
+```
+
+- **Por lote:** al terminar cada lote. Los documentos son las HR y las PU que escribió (un contribuyente que falló no
+  suma). La duración es la del trabajador con ese lote: leer los parámetros, generar, guardar la parte y cerrar el lote.
+  Los documentos/s son **de un trabajador**: con `trabajadores=N` corren N lotes a la vez.
+- **Por emisión:** al pasar a TERMINADA. Los documentos son la suma de los lotes y la duración va **desde `iniciado`
+  (el POST) hasta el final**: incluye la preparación, la espera entre lotes y el ensamblado. Es el rendimiento real de
+  la emisión, el que ve quien la pidió.
+- **Cómo leerlas:** si los documentos/s de la emisión se acercan a N veces los de un lote, los trabajadores escalan; si
+  no, estorba algo compartido (el pool de conexiones, la base, el disco del almacén, el ensamblado). Un lote muy corto
+  deja la preparación y el ensamblado pesando más: suba `srtm.emision.lote`. Uno muy largo reparte mal el final y
+  repite más trabajo si un lote se reintenta: bájelo. `srtm.emision.trabajadores` no rinde más allá de los núcleos ni
+  del pool de conexiones (ver arriba), y cada uno suma memoria al renderizar.
+- **Cómo medir:** una emisión del padrón completo en dev con `SRTM_EMISION_TRABAJADORES=1` y otra con `auto`, anotando
+  la máquina (núcleos y RAM) y las dos líneas de la emisión.
+- **Medido (2026-10-02), padrón sintético:** 240 contribuyentes y 300 PU (540 documentos, PDF, `lote=20`), en una
+  máquina de 4 núcleos (Xeon 2.8 GHz) y 15 GiB de RAM, con la JVM en 4 GiB de heap y Postgres (Testcontainers) en la
+  misma máquina, después de una emisión de calentamiento:
+
+  | `trabajadores` | Duración de la emisión | Documentos/s (emisión) | Documentos/s por lote |
+  |---|---|---|---|
+  | `1` | 23.8 s | 22.7 | 23–26 |
+  | `auto` (= 4) | 10.4 s | 51.8 | 14–16 |
+
+  Con 4 trabajadores la emisión rinde 2.3 veces más: cada lote va más lento (comparten núcleos con Postgres y el
+  render), pero corren cuatro a la vez. Llevado al padrón completo (unos 11 800 contribuyentes y 15 000 PU, ~26 800
+  documentos), serían unos 20 min con `1` y unos 9 min con `auto` en esa máquina. **Falta la cifra medida en dev con el
+  padrón real** (wasichai/srtm-backend#55): ahí la base y el almacén están en otra máquina y las PU tienen más usos.
 
 ## Tests
 
@@ -901,18 +2027,113 @@ yarn format:check           # prettier: yaml y json, model.json incluido
 ```
 
 - **Unitarios:** las reglas puras (`ReglasTest`, `CondominioTest`, `AnulacionTest`, `MotivoTest`,
-  `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…), `Records`,
+  `ImpuestoPredialTest` y `VencimientosTest`, con los parámetros de `model/data/parametros-predial.csv`…; las de
+  `srtm.sanciones`: `MultasTest`, `NotificacionesTest`, `PlazosTest`, `CuisTest`, `ProcedimientoTest`, `RecursosTest`,
+  `OrdenDeLosActosTest`, `ExpedientesTest`, `HojaResolucionTest` y `PanelTest`, con cifras ficticias), la guardia
+  de escritura (`GuardiaDeEscrituraTest`, `ReglaDeSancionesTest`, `ReglaDeAnunciosTest`, y `GuardiaDeEscrituraApiTest` en
+  integración), los anuncios (`AnunciosTest`, los casos de `AnuncioYSusActosTest` de rentas, y `AnunciosApiTest` en
+  integración: el alta, la idempotencia, diez altas a la vez, dos renovaciones a la vez, los actos, el padrón a un
+  corte, la guardia y los permisos), `Records`,
   `Registros`, `srtm.pide` (`PideReniecTest`, contra un servidor local) y `srtm.emision` (`PdfRendererTest`,
-  `PdfMergerTest`, `HojaPuTest`, `HojaHrTest`, `GeneradorEmisionTest`, que leen el PDF de vuelta con PDFBox).
+  `PdfMergerTest`, `HojaPuTest`, `HojaHrTest`, `GeneradorEmisionTest`, que leen el PDF de vuelta con PDFBox; `AlmacenLocalTest`, que corre el contrato
+  de `AlmacenEmision` sobre un directorio temporal).
 - **Integración** (`@Tag("integration")`): `SrtmSmokeTest` y las clases `*ApiTest`, que llaman a la API del portal
   sobre la app entera y PostGIS. Heredan de `SrtmApiTest`: el modelo aplicado como lo hace `apply.py`, el token del
   admin de desarrollo y las llamadas. Cada endpoint de `RentasController` y `DocumentosController` tiene un caso feliz
   y uno de error donde aplica, repartidos por tema: `RentasApiTest` (el recorrido completo), `ListasApiTest` (las
   filas de las ocho listas), `DeclaracionJuradaApiTest` (una DJ rechazada no deja nada a medias), `FichasApiTest`,
-  `CatalogosApiTest`, `CatastroApiTest`, `CondominioApiTest`, `AnulacionApiTest`, `MotivoApiTest`…
+  `CatalogosApiTest`, `CatastroApiTest`, `CondominioApiTest`, `AnulacionApiTest`, `MotivoApiTest`… Las de
+  `srtm.sanciones` heredan de `ConSancionesApiTest` (UIT ficticias de 2041 y de 1991, ningún año 2042 ni 1990 con UIT;
+  plazos y feriados ficticios; cada acto por su endpoint, fechado en el pasado porque ningún acto se fecha después de
+  hoy; cada clase con sus años): `SancionesCuisApiTest` (catálogo con y sin UIT, versión que cierra la vigente, dos
+  versiones a la vez, el cuerpo de `import_cuis.py`), `NotificacionesApiTest` (alta, padrón, frontera #411,
+  subsanación, vencidas, por contribuyente), `ActasApiTest` (alta y desglose, la multa congelada al corregir la UIT y
+  versionar el CUIS, código que no rige, `faltan`, previa subsanada, acta y subsanación a la vez, fases con su corte,
+  filtro de fase igual a la columna, ficha en orden legal, anulación, fichas de contribuyente y predio, API genérica y
+  permisos), `ResolucionesApiTest` (1993–1996: descargo en plazo y tardío, `faltan` de plazos y feriados, correlativos
+  a la vez, una RIS por acta, SE_REDUCE, sin efecto, el papel congelado, notificación y exigibilidad) y `PanelApiTest`
+  (1997–1999: las cifras del año con sus extremos, la semana de lunes a domingo, `coactiva` null y la `nota`, parámetros
+  y permisos) y `AjustesApiTest` (1985–1989: no se notifica la resolución de un acta anulada, ni de una dejada sin efecto salvo la
+  resolución que la dejó sin efecto, con
+  `acciones.notificacion` y sin contarla en `notificadas`; el `detalle` legible; las `partes`; `q`; el padrón a una
+  fecha pasada; `GET /plazos`).
+- **Trabajadores de la emisión masiva en los tests:** `src/test/resources/application.properties` fija
+  `srtm.emision.trabajadores=0` para toda la corrida (gana sobre `application.yml`; un `@TestPropertySource` gana sobre
+  ambos), así que ningún contexto corre trabajadores salvo el de `EmisionMasivaApiTest` (2), que se cierra al terminar
+  su clase (`@DirtiesContext`): un contexto queda en caché mientras corren las demás clases, y sus trabajadores
+  tomarían los lotes que esas clases crean para mirarlos. `TrabajadoresEmisionApiTest` juega dos instancias con dos
+  `GrupoTrabajadores` propios, cada uno con su `instancia` y sus temporales.
+- **Almacén S3 en los tests:** `AlmacenS3Test` corre el contrato de `AlmacenEmision` (más las partes, el aborto y el
+  streaming) contra un MinIO de Testcontainers (`pgsty/minio`, uno para toda la corrida), y `EmisionS3ApiTest` corre
+  la app con `srtm.emision.almacen=s3` contra él: dos instancias sin disco compartido completan una emisión PDF y una
+  ZIP, y una descarga de 101 MiB llega en streaming (más de mil trozos, ninguno de más de 64 KiB). `AlmacenS3ConfigTest`
+  (unitario) revisa qué almacén se arma, que no arranca sin bucket o sin llegar a él y que el módulo `sts` (IRSA) está
+  en el classpath; `DescargaEmisionTest`, que la descarga de un recurso que bloquea se lee en `boundedElastic`.
 - Los de integración corren en el CI de cada PR. Con un Docker remoto no corren en local tal cual (Testcontainers no
   llega a sus puertos): se usa una base de test externa tunelizada, con PostGIS y un nombre que termine en `_test`.
   Cómo, en [docs/develop/README.md](docs/develop/README.md#6-tests).
+
+## wasichai 0.3: lo que srtm no migra
+
+Con `RecordService.asPlatform(organizationId)` (ADR-039) y el bean `ClusterLock` (candados de postgres), 0.3 permite
+escribir como la plataforma. srtm no pasó nada a ellos (#76), y esto queda anotado con su motivo:
+
+- **Las máquinas de lotes** (`MaquinaLotes`, `EstadoTrabajos`, `EstadoEmisiones`, `LotesEmision`): toman con
+  `FOR UPDATE SKIP LOCKED`; las transiciones son compare-and-set, condicionadas al estado, con el «antes» leído bajo
+  bloqueo en la misma sentencia; `procesados` suma lo de los lotes. `RecordService` no puede expresar nada de eso, y un
+  `ClusterLock` serializaría lo que hoy reparte `SKIP LOCKED`.
+- **`RetencionEmision`:** el `UPDATE ... WHERE archivo IS NOT NULL` es idempotente entre instancias. Con `asPlatform`
+  haría falta leer, reemplazar la fila entera y tomar un `ClusterLock`, sin ganar nada. Queda como mejora posible.
+- **`IdentidadEmision`:** la emisión y la determinación corren a propósito como el usuario que las lanzó, para que
+  core revise sus permisos; `asPlatform` los saltaría. Es una elección, no una carencia.
+- **La marca `EscrituraDeSrtm`, no `apiOnly`:** el `apiOnly` de wasichai solo cierra la API REST genérica; la marca
+  rechaza además las escrituras de la plataforma y de las automatizaciones, que no pasan por la api de srtm ni corren
+  sus reglas.
+- **`Duplicados`:** desde 0.3.0 core responde 409 con `errors[].field` (D23), pero en inglés. srtm lo sigue
+  sobrescribiendo para dar al portal el mensaje en castellano, y pierde el campo. Seguimiento: traducir el `detail` de
+  core o pasar el campo.
+
+## wasichai 0.6: qué cambia para srtm
+
+srtm pasa de wasichai 0.3.2 a 0.6.0. El análisis y los riesgos están en
+[el plan](docs/superpowers/plans/2026-10-09-wasichai-0-6-0.md). El código de srtm no cambia: no construye a mano los
+servicios de core cuyos constructores cambiaron, no implementa `RecordStore` y nunca toca `audit_log` con SQL.
+
+- **Migraciones al arrancar, sin vuelta atrás.** Core aplica V9 a V17 y `R__audit_purge_role`. Entre ellas:
+  - `org_units`;
+  - el origen y el índice por usuario de `audit_log`;
+  - los triggers que hacen `audit_log` de solo agregar (ADR-054);
+  - `MANAGE_TENANTS`;
+  - `idempotency_keys`;
+  - `users.tokens_valid_after`.
+
+  Volver a 0.3.2 pide restaurar la base. Por eso, antes de arrancar 0.6.0, un `pg_dump`:
+  `docker compose exec postgres pg_dump -U srtm -Fc srtm > srtm-antes-de-wasichai-0-6.dump`.
+- **El rol que migra tiene que ser dueño de `audit_log`.** Lo pide V13 para crear sus triggers. V12 crea un índice
+  sobre `audit_log` sin `CONCURRENTLY`, así que en una base con mucho log conviene arrancar sin tráfico.
+- **Un WARN esperado al arrancar.** Con el superusuario de `compose.yml`, `AuditLogOwnershipCheck` avisa que el rol de
+  la app puede actuar como dueño de `audit_log`. Separar el rol de migración del rol de la app es opcional
+  (`docs/guides/build-your-app.md` de wasichai).
+- **Lo que viene apagado y srtm no prende:**
+  - el límite de intentos de login (`wasichai.security.login.enabled`);
+  - la revocación de tokens (`wasichai.security.jwt.revocation`);
+  - una política de claves más estricta que 8 caracteres;
+  - `wasichai.organizations.separate-provisioning`;
+  - `wasichai.audit.purge-role`.
+
+  Prender el límite de login o la política pide ajustar `SrtmApiTest`: hace un login del admin por test, y las claves
+  de sus funcionarios son solo minúsculas y guiones.
+- **Lo que cambia solo:**
+  - cada respuesta lleva `X-Correlation-Id`;
+  - los registros responden `ETag`, aceptan `If-Match` y `PATCH`, y su `updated_at` avanza con `clock_timestamp()`;
+  - `spring.reactor.context-propagation` pasa a `auto`;
+  - hay rutas nuevas: `/api/org-units`, `/api/auth/me/org-units` y `POST /api/auth/logout`;
+  - un campo con `defaultValue` se llena al crear (`model.json` no tiene ninguno);
+  - una auto-relación se lista dos veces (`model.json` no tiene ninguna).
+
+  Las máquinas de lotes escriben `updated_at = now()` por SQL. Dos escrituras suyas en una transacción comparten ETag,
+  lo que no importa, porque nadie usa `If-Match` sobre lotes ni trabajos.
+- **`apply.py`** reserva además `count` y `after`, los nombres del paginado por cursor de core.
 
 ## Siguientes pasos (fuera de este alcance)
 
@@ -922,9 +2143,26 @@ yarn format:check           # prettier: yaml y json, model.json incluido
   extranjería) con la misma interfaz `ConsultaDocumento`. El fondo del mapa es OpenStreetMap; una capa WMS/WMTS
   municipal se puede publicar con GeoServer.
 - **Cálculo y cobranza:** el reajuste IPM de las cuotas, las prórrogas por ordenanza y el derecho de emisión del
-  predial; arbitrios, deuda, pagos y recibos.
+  predial; las tasas reales de arbitrios (cuando `normativa` transcriba la ordenanza de Perené), deuda, pagos y
+  recibos.
 - **Fiscalización:** el flujo (rol y pantallas) que determina de oficio una declaración: medio de determinación
   FISCALIZACIÓN o DE OFICIO y su modificación de oficio.
 - **En el modelo:** workflows y plantillas de documentos.
+- **Infracciones administrativas** ([Infracciones administrativas](#infracciones-administrativas)):
+  - **Cobro:** srtm determina la multa y no la cobra. La orden de cobro y el pago van en `caja-backend`, con la
+    referencia estable `PAPELETA-<id>` del acta; con ellos llegan los estados `PAGADA` y `COACTIVA`.
+  - **Recaudación y coactiva:** la resolución de multa (RM) y la ejecución coactiva, y el resumen de recaudación de las
+    multas; hasta entonces el panel responde `coactiva: null` con su nota.
+  - **Datos reales:** el CUIS, la UIT, los plazos y los feriados de Perené (D-02b: la ordenanza y su regla de
+    reducción, `SE_REDUCE`, hoy 422), cargados con `import_cuis.py` e `import_parametros.py`; en el repo solo hay
+    cifras ficticias.
+  - **El papel de la resolución:** la firma digital (D-05; hoy dice «sin firma digital» y se firma a mano) y los
+    considerandos, que provee la municipalidad (decisión 8; hoy un párrafo marcado los reserva).
+  - **Historia de domicilios:** si se decide, para imprimir y notificar al domicilio fiscal vigente a la fecha de la
+    resolución (hoy, el actual).
+  - **Tránsito:** la familia `TRANSITO` de `rentas` no se trae (decisión 6); solo `ADMINISTRATIVA`.
+- **Anuncios:** la orden de cobro de cada tasa devengada a caja-backend, con la referencia estable
+  `ANUNCIO-<id>-<anio>` del movimiento (srtm determina, no cobra); la fórmula por área y lados, pendiente de la
+  ordenanza (hoy la tasa es por clase y ejercicio completo); las tasas reales, cuando `normativa` las transcriba.
 
 El frontend web está en `srtm-ui`.

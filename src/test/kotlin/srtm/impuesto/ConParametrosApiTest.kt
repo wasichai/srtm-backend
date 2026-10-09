@@ -9,13 +9,14 @@ import tools.jackson.databind.JsonNode
 abstract class ConParametrosApiTest : SrtmApiTest() {
     @BeforeEach
     fun parametros() {
-        // the test db is shared by the suite: load each row of the csv once
-        val stored =
-            tree(send("GET", "/api/objects/parametro_tributario/records?size=500", null, HttpStatus.OK))["content"]
-                .iterator()
-                .asSequence()
-                .map { clave(it["attributes"]) }
-                .toSet()
+        // the test db is shared by the suite (the arbitrios' tests add rows too): load each row of the csv once
+        val stored = mutableSetOf<Triple<String, String, String>>()
+        var page = 0
+        do {
+            val result = tree(send("GET", "/api/objects/parametro_tributario/records?size=200&page=$page", null, HttpStatus.OK))
+            result["content"].iterator().forEach { stored += clave(it["attributes"]) }
+            page++
+        } while (page < result["totalPages"].asInt())
         for (p in Parametros.predial) {
             val attributes =
                 mapOf(

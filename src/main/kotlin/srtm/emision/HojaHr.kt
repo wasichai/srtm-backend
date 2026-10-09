@@ -5,15 +5,16 @@ import srtm.rentas.Contribuyente
 import srtm.rentas.Declaracion
 import srtm.rentas.Predio
 import java.math.BigDecimal
-import java.time.LocalDate
+import java.time.LocalDateTime
 
 // the HR (hoja de resumen): what templates/emision/hr.html prints of a contribuyente in a year. its predios (a row per
 // vigente declaración, so a predio with two usos has two) and the determinación of the impuesto predial with its
 // cuotas, as the liquidación computed them. every value is text already: the template only lays it out
 
 data class HojaHr(
-    val municipalidad: String,
+    val cabecera: Cabecera,
     val anio: Int,
+    // dd/MM/yyyy HH:mm, Lima's time
     val emitido: String,
     val contribuyente: ContribuyenteHr,
     val predios: List<FilaPredioHr>,
@@ -76,13 +77,13 @@ data class FilaCuota(
 
 // `liquidacion` must be complete (no faltan): the caller answers 422 before. `predios` by id, the declaraciones'
 fun hojaHr(
-    municipalidad: String,
+    cabecera: Cabecera,
     anio: Int,
     contribuyente: Contribuyente,
     predios: Map<String, Predio>,
     declaraciones: List<Declaracion>,
     liquidacion: Liquidacion,
-    hoy: LocalDate
+    ahora: LocalDateTime
 ): HojaHr {
     require(liquidacion.faltan.isEmpty()) { "liquidación incompleta: faltan ${liquidacion.faltan}" }
     val filas =
@@ -101,22 +102,10 @@ fun hojaHr(
             }
     val cuotas = liquidacion.cuotas.map { FilaCuota(it.numero.toString(), soles(it.monto), it.vencimiento.format(FECHA)) }
     return HojaHr(
-        municipalidad = municipalidad,
+        cabecera = cabecera,
         anio = anio,
-        emitido = hoy.format(FECHA),
-        contribuyente =
-            ContribuyenteHr(
-                codigo = contribuyente.codigo.orEmpty(),
-                nombre = nombreDe(contribuyente),
-                documento = documentoDe(contribuyente),
-                domicilioFiscal =
-                    unir(
-                        " — ",
-                        contribuyente.domicilioFiscal,
-                        unir(" / ", contribuyente.domicilioDistrito, contribuyente.domicilioProvincia, contribuyente.domicilioDepartamento)
-                    ),
-                condicionEspecial = declaraciones.mapNotNull { it.condicionEspecial?.trim()?.ifEmpty { null } }.distinct().joinToString(", ")
-            ),
+        emitido = ahora.format(FECHA_HORA),
+        contribuyente = contribuyenteHr(contribuyente, declaraciones),
         predios = filas,
         totales =
             TotalesHr(
@@ -148,3 +137,20 @@ fun hojaHr(
         contado = "Al contado: ${soles(liquidacion.impuestoAnual)} hasta el ${cuotas.firstOrNull()?.vencimiento.orEmpty()}"
     )
 }
+
+// who a document is for, as the HR and the HLA print it. `declaraciones`: the ones whose condiciones especiales it states
+internal fun contribuyenteHr(
+    contribuyente: Contribuyente,
+    declaraciones: List<Declaracion>
+) = ContribuyenteHr(
+    codigo = contribuyente.codigo.orEmpty(),
+    nombre = nombreDe(contribuyente),
+    documento = documentoDe(contribuyente),
+    domicilioFiscal =
+        unir(
+            " — ",
+            contribuyente.domicilioFiscal,
+            unir(" / ", contribuyente.domicilioDistrito, contribuyente.domicilioProvincia, contribuyente.domicilioDepartamento)
+        ),
+    condicionEspecial = declaraciones.mapNotNull { it.condicionEspecial?.trim()?.ifEmpty { null } }.distinct().joinToString(", ")
+)
