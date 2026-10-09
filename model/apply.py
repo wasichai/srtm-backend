@@ -53,11 +53,13 @@ SQL_KEYWORDS = frozenset({
     "with",
 })
 
-# Field names Core reserves: system columns + query-param names used on list endpoints.
+# Field names Core reserves: system columns + query-param names used on list endpoints. count and after are
+# SystemColumns.RESERVED since core 0.3 (keyset paging, ADR-031 D22)
 RESERVED_FIELD_NAMES = frozenset({
     "id", "organization_id", "created_at", "updated_at", "created_by",
     "updated_by", "workflow_state", "version",
     "page", "size", "sort", "dir", "q", "bbox", "geometry", "limit",
+    "count", "after",
 })
 
 VALID_NAME = re.compile(r"^[a-z][a-z0-9_]{0,48}$")

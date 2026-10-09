@@ -432,6 +432,11 @@ class ValidationTests(unittest.TestCase):
         self.assertTrue(any("reserved by Core" in e for e in errors))
         self.assertTrue(any("reserved SQL keyword" in e for e in errors))
 
+    def test_keyset_paging_names_are_reserved(self):
+        for name in ("count", "after"):
+            errors = self.mutate(lambda m: m["objects"][0]["fields"].append({"name": name, "label": "X", "type": "TEXT"}))
+            self.assertTrue(any("field name is reserved by Core" in e for e in errors), name)
+
     def test_unknown_enum_is_refused(self):
         errors = self.mutate(lambda m: m["objects"][0]["fields"].append({"name": "x", "label": "X", "type": "ENUM", "enum": "nope"}))
         self.assertTrue(any("enum 'nope' is not defined" in e for e in errors))
