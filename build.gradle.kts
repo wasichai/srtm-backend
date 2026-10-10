@@ -1,5 +1,20 @@
 import org.springframework.boot.gradle.tasks.bundling.BootJar
 
+// security floors for the build's own classpath: the spring boot plugin brings commons-lang3 3.16.0 (through
+// commons-compress) and jackson 3.1.5, both vulnerable. build time only; the app's come from wasichai-bom
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        constraints {
+            classpath("org.apache.commons:commons-lang3:${libs.versions.commons.lang3.get()}")
+            classpath("tools.jackson.core:jackson-core:${libs.versions.jackson3.get()}")
+            classpath("tools.jackson.core:jackson-databind:${libs.versions.jackson3.get()}")
+        }
+    }
+}
+
 plugins {
     kotlin("jvm") version "2.4.20"
     kotlin("plugin.spring") version "2.4.20"
@@ -57,6 +72,16 @@ kotlin {
 // ktlint reads .editorconfig; same tool version as wasichai
 ktlint {
     version.set("1.7.1")
+}
+
+// ktlint's tool classpath pins logback 1.3.15 (vulnerable). lift it; ktlint only logs through it
+configurations.matching { it.name.startsWith("ktlint") }.configureEach {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "ch.qos.logback") {
+            useVersion(libs.versions.logback.get())
+            because("logback below 1.5.34 is vulnerable")
+        }
+    }
 }
 
 // unit tests always run; container-backed ones go through integrationTest
