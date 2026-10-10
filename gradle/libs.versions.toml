@@ -1,7 +1,7 @@
 # the libraries outside wasichai's bom. wasichai's own starters are versioned by wasichai-bom in build.gradle.kts
 [versions]
 # srtm.emision.almacen=s3: aws sdk v2, the bom aligns its modules
-awssdk = "2.55.10"
+awssdk = "2.55.12"
 # the maintained fork of openhtmltopdf, on pdfbox 3
 openhtmltopdf = "1.1.87"
 pdfbox = "3.0.8"
