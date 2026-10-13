@@ -17,7 +17,7 @@ prediales, catastro fiscal) que se carga por REST, e importadores del padrón de
 
 - JDK 25 y Docker (para PostGIS y para los tests de integración con Testcontainers).
 - Python 3.11+ para `model/`.
-- Las librerías de wasichai (`wasichai:wasichai-bom:0.6.0` y los starters). Se resuelven desde:
+- Las librerías de wasichai (`wasichai:wasichai-bom:1.2.0` y los starters). Se resuelven desde:
   1. **GitHub Packages** (`https://maven.pkg.github.com/wasichai/wasichai`). Pide un token aunque sea para leer
      (`read:packages` basta). En `~/.gradle/gradle.properties`:
      ```properties
@@ -1973,6 +1973,10 @@ La versión con lotes cambia el modelo, los estados y dónde viven los archivos.
 `pg_dump`, y después se detienen las instancias viejas y se arranca la nueva
 ([wasichai 0.6: qué cambia para srtm](#wasichai-06-qué-cambia-para-srtm)).
 
+**La versión con wasichai 1.2** tampoco cambia el modelo. Core aplica V18, que agrega una columna nullable a
+`custom_fields` y no tiene vuelta atrás: igual que arriba, primero `pg_dump`
+([wasichai 1.2: qué cambia para srtm](#wasichai-12-qué-cambia-para-srtm)).
+
 **La versión con la HLA** (arbitrios) agrega `emision_masiva.documentos`, que los trabajadores leen al tomar cada
 lote. Igual que arriba: `python3 apply.py` antes de arrancar el backend nuevo. Sin ese campo el backend no ve las
 tablas de la emisión de la organización y su POST falla. Los jobs anteriores, sin `documentos`, son de HR y PU.
@@ -2134,6 +2138,25 @@ servicios de core cuyos constructores cambiaron, no implementa `RecordStore` y n
   Las máquinas de lotes escriben `updated_at = now()` por SQL. Dos escrituras suyas en una transacción comparten ETag,
   lo que no importa, porque nadie usa `If-Match` sobre lotes ni trabajos.
 - **`apply.py`** reserva además `count` y `after`, los nombres del paginado por cursor de core.
+
+## wasichai 1.2: qué cambia para srtm
+
+srtm pasa de wasichai 0.6.0 a 1.2.0 (cruza 1.0.0 y 1.1.0). El análisis está en
+[el plan](docs/superpowers/plans/2026-10-13-wasichai-1-2-0.md). El código de srtm no cambia: los parámetros nuevos de
+`CustomField`, `MetadataService` y `RecordService` van al final y tienen valor por defecto, y `RoleQueries.roleNamesOf`
+sigue igual. El salto a 1.0 no trae cambios que rompan: es un `release-as`.
+
+- **Migración al arrancar, sin vuelta atrás.** Core aplica V18: `custom_fields.time_zone`, nullable, sin mover datos.
+  Volver a 0.6.0 pide restaurar la base, así que antes un `pg_dump`.
+- **Caché de metadata** (`wasichai.metadata.cache.ttl`, 5 s por defecto). Cada nodo guarda las definiciones de los
+  objetos, workflows, automatizaciones, reglas, relaciones y campos FILE, y el acceso del usuario se lee una vez por
+  request. Un nodo olvida lo suyo al cambiar el modelo; los demás tardan hasta el ttl. Con varias instancias, un
+  `apply.py` aplicado contra una se ve en las otras a lo sumo 5 s después. `0` apaga la caché. srtm no escribe la
+  metadata de core por SQL, así que nada de srtm la deja desactualizada.
+- **Máscara de lectura por campo** y política de lectura de los descriptores FILE: solo actúan si un rol tiene
+  permisos por campo, y los roles de srtm no los usan.
+- **Lo nuevo que srtm no usa:** la zona horaria de un campo DATETIME (`timeZone`, IANA o un desfase fijo).
+  `apply.py` todavía no la acepta.
 
 ## Siguientes pasos (fuera de este alcance)
 
