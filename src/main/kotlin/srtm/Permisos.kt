@@ -16,12 +16,25 @@ class Permisos(
     suspend fun exigirCrear(
         objeto: String,
         acto: String
+    ) = exigir(Actions.CREATE, "creación", objeto, acto)
+
+    // a query of what an object keeps (the brecha's panel over brecha_corrida): a 403 that names it, before reading
+    suspend fun exigirLeer(
+        objeto: String,
+        acto: String
+    ) = exigir(Actions.READ, "lectura", objeto, acto)
+
+    private suspend fun exigir(
+        accion: String,
+        permiso: String,
+        objeto: String,
+        acto: String
     ) {
         val usuario = currentUser.require()
         try {
-            currentUser.requirePermission(usuario, Actions.CREATE, metadata.definitionOf(objeto).obj.id)
+            currentUser.requirePermission(usuario, accion, metadata.definitionOf(objeto).obj.id)
         } catch (_: ForbiddenException) {
-            throw ForbiddenException("${acto.replaceFirstChar { it.uppercase() }} exige permiso de creación sobre $objeto")
+            throw ForbiddenException("${acto.replaceFirstChar { it.uppercase() }} exige permiso de $permiso sobre $objeto")
         }
     }
 }

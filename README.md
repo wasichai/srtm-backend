@@ -54,6 +54,8 @@ ese puerto queda en el loopback del servidor: llega por un túnel, `ssh -N -L 54
 | `SRTM_PIDE_RENIEC_ENABLED` | `false` | consulta de DNI a RENIEC por la PIDE (ver [PIDE RENIEC](#pide-reniec)) |
 | `SRTM_PIDE_RENIEC_DNI_USUARIO` / `_RUC_USUARIO` / `_PASSWORD` | vacías | credenciales del convenio con la PIDE; nunca en el repositorio |
 | `SRTM_PIDE_RENIEC_URL` / `_TIMEOUT` | `https://ws2.pide.gob.pe/Rest/RENIEC/Consultar` / `5s` | servicio REST "Consultar" y cuánto se espera |
+| `SRTM_CATASTRO_ENABLED` | `false` | valuaciones de catastro-backend para la brecha (ver [Brecha de recaudación](#brecha-de-recaudación)) |
+| `SRTM_CATASTRO_URL` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_TIMEOUT` | `http://localhost:8091` / vacías / `60s` | catastro-backend y su cuenta de servicio `srtm`; el secreto nunca en el repositorio |
 
 ### Pasar una base existente a PostGIS
 
@@ -763,6 +765,93 @@ actualiza ni borra cuotas ni anulaciones; anular pide creación sobre `anulacion
 ratificación (E-6 del plan de desbloqueo D-02 de `normativa`). Hasta que la haya, el repo no lleva ni el JSON ni el CSV
 de tasas, y los tests usan valores ficticios escritos dentro del propio test.
 
+## Brecha de recaudación
+
+Mide cuánto deja de recaudar el padrón: compara el autoavalúo **declarado** (las DJ de srtm) con el **valorizado** por
+catastro-backend (aranceles, valores unitarios y depreciación del levantamiento catastral) y recalcula con él el
+impuesto predial y los arbitrios. catastro-backend solo valoriza; el impuesto, la brecha y el tablero son de srtm
+(`srtm.brecha`). Reusa las reglas de srtm, sin copiarlas: `totalesDePredio`, `condominio`, `ImpuestoPredial.liquidar`
+y `Arbitrios.determinar`.
+
+**Configuración.** srtm lee `GET {url}/api/catastro/valuaciones?anio&page&size=500` (todas las páginas) como la
+cuenta de servicio `srtm` de catastro-backend (rol `SRTM_LECTOR`, la crea su `model/crear_cuenta_srtm.py`). El token
+sale de `POST {url}/api/auth/token {clientId, clientSecret}` y se guarda hasta un minuto antes de `expiresAt` (o
+hasta un 401). Variables: `SRTM_CATASTRO_ENABLED`, `SRTM_CATASTRO_URL`, `SRTM_CATASTRO_CLIENT_ID`,
+`SRTM_CATASTRO_CLIENT_SECRET`, `SRTM_CATASTRO_TIMEOUT` (por petición). Apagado, o sin url o cuenta, una corrida no
+empieza: **409** «Catastro no configurado». Si la cuenta no puede leer alguno de los cuatro objetos del catastro,
+catastro responde 403 a todo y la corrida queda FALLIDA con ese estado.
+
+**Cruce** (D7). Cada ítem del catastro busca su predio: por código municipal (`predio.codigo`), si no por código CPU
+(`codigo_cpu`), si no por sector, manzana y lote (`sector_catastral`, `manzana_catastral`, `lote`), sin distinguir
+mayúsculas ni espacios en los extremos. Un predio cruza una sola vez: un ítem posterior con la misma llave prueba la
+siguiente. Entre varios predios de la misma llave gana el que tiene DJ del año y luego el de código menor.
+
+**Categorías** (una fila de `brecha_predio` por ítem del catastro y por predio del padrón sin catastro). El padrón son
+los predios con alguna DJ **vigente** del año; su autoavalúo declarado es el de `totalesDePredio` (el mayor de cada
+secuencia de uso, una vez).
+
+| Categoría | Qué es |
+|---|---|
+| `OMISO` | Ítem del catastro sin predio en el padrón (o cuyo predio no tiene DJ vigente del año: la fila guarda el predio). |
+| `SIN_CATASTRO` | Predio del padrón que ningún ítem cruzó. |
+| `SIN_VALOR` | Cruzó, pero catastro no lo valorizó: lleva su `motivo` (D5). |
+| `SUBVALUADO` | Autoavalúo catastral > declarado × 1.05. |
+| `SOBREVALUADO` | Autoavalúo catastral < declarado × 0.95. |
+| `COINCIDE` | Dentro de ±5 %, ambos extremos incluidos (D10). |
+
+**Impuesto.** Por cada contribuyente con DJ vigente del año:
+- el valor catastral de cada predio cruzado y valorizado se reparte entre sus secuencias de uso según el autoavalúo
+  declarado de cada una; si todas declaran 0, según su área construida; si tampoco, en partes iguales (D12), al
+  céntimo y la última con el residuo;
+- cada DJ de la secuencia toma esa parte como `valor_autoavaluo` y `condominio` recalcula `valor_condominio` y
+  `valor_afecto`: conserva el % de cada condómino y su `deduccion` (D8: no se aplica ninguna deducción nueva);
+- `Δ impuesto = liquidar(Σ valor_afecto con catastro) − liquidar(Σ valor_afecto declarado)` (el `impuestoAnual`, con
+  sus tramos y el mínimo);
+- ese Δ se reparte entre sus predios en proporción a cuánto movió cada uno su valor afecto (en valor absoluto), y su
+  impuesto declarado en proporción al valor afecto de cada uno. Así la suma por predio es exactamente la suma por
+  contribuyente.
+
+Un **omiso** no tiene contribuyente: su impuesto se estima liquidando su autoavalúo catastral solo
+(`estimado = true`). Sin los parámetros del impuesto del año (UIT, tramos, mínimo) la corrida queda **FALLIDA** con
+`Faltan parámetros del impuesto predial: UIT 2099`.
+
+**Arbitrios.** Para cada predio cruzado y valorizado, `Δ arbitrios = Arbitrios.determinar` del año entero con las DJ
+del predio llevando el uso del catastro (su `uso_predio`), su área construida (repartida como el autoavalúo) y su
+frente, **menos** lo mismo con las DJ declaradas. Ninguna cuota cuenta como ya escrita y no hay tope (no se leen las
+del año anterior): es el cargo anual hipotético de ambos lados, y nada se escribe. Si al año le falta la ordenanza o
+sus servicios, o el contexto no se pudo leer, no hay Δ arbitrios y la corrida lo dice en `mensaje`; un predio que no se
+puede determinar queda sin Δ y se cuenta en `mensaje`. Un omiso no tiene Δ arbitrios (no tiene zona ni DJ).
+
+**Corrida.** `POST /api/srtm/brecha/corridas {anio}` responde **202** con la corrida PENDIENTE; en segundo plano, como
+quien la lanzó, un solo trabajador lee el catastro y el padrón, calcula y escribe las filas en lotes de 200,
+actualizando `procesados`, hasta TERMINADA (o FALLIDA, con `mensaje`). Unos 4 000 predios son uno o dos minutos: la
+maquinaria de lotes de la determinación masiva no aporta aquí. Una sola activa por organización y año (candado
+`BRECHA`): otra responde **409**; una cuyo `latido` tiene más de 10 minutos (su instancia murió) se da por abandonada.
+Pide creación y edición sobre `brecha_corrida` y creación sobre `brecha_predio` (**403**); consultar pide lectura
+sobre `brecha_corrida`.
+
+| Método | Ruta | Responde |
+|---|---|---|
+| POST | `/api/srtm/brecha/corridas` `{anio}` | 202 con la corrida; 400 año inválido; 403; 409 catastro no configurado o corrida en curso. |
+| GET | `/api/srtm/brecha/corridas?anio` | Las corridas, la más reciente primero. |
+| GET | `/api/srtm/brecha/corridas/{id}` | Una corrida, con su avance (`totalPredios`, `procesados`). |
+| GET | `/api/srtm/brecha/{anio}/panel?corrida` | KPIs, por categoría y por sector de la última corrida TERMINADA del año (o de `corrida`); 404 si no hay. |
+| GET | `/api/srtm/brecha/{anio}/predios?categoria&sector&page&size&corrida` | Página de filas; 422 si `categoria` no es una de las seis. |
+| GET | `/api/srtm/brecha/{anio}/lotes?corrida` | GeoJSON `FeatureCollection` (EPSG:4326) con `{categoria, codigo, deltaImpuesto}`. |
+
+El JSON va en camelCase, como `/liquidacion`. `lote_geom` de `brecha_predio` es un POLYGON 32718 como el de `predio`:
+guarda el lote del predio del padrón o, para un omiso, el del catastro; así `/lotes` lo lee de las filas y la capa gis
+(`/api/gis/objects/brecha_predio/features`) también puede servirlo.
+
+**Decisiones por confirmar** (valores por defecto del plan de la brecha):
+- D5: una celda «.....» del cuadro de valores no es cero: el predio queda SIN_VALOR con su motivo.
+- D7: llave de cruce código municipal → CPU → sector, manzana y lote.
+- D8: la deducción Amazonía no se aplica; solo la `deduccion` que ya trae cada DJ.
+- D10: COINCIDE con |Δ autoavalúo| ≤ 5 %.
+- D11: solo 2026 (el año lo decide catastro; srtm acepta cualquiera con sus parámetros).
+- D12: reparto entre secuencias por autoavalúo declarado, si no por área construida, si no en partes iguales.
+- Los demás (D1–D4, D6, D9: tablas, materiales, estados, partidas, actualización y obras) son de catastro-backend.
+
 ## Infracciones administrativas
 
 Las multas administrativas (familia `ADMINISTRATIVA`) se portan del contexto `sanciones` de `rentas`: el modelo, la
@@ -1274,7 +1363,7 @@ python3 apply.py                                  # 3. quita ANEXO, HABILITACION
 
 ## Modelo
 
-Treinta y nueve objetos (`model/model.json`):
+Cuarenta y dos objetos (`model/model.json`):
 - **Padrón:** `contribuyente`, `predio` y `declaracion_predial`, cargados desde el Excel. Sus nombres de campo siguen el
   *Formato Padrón Municipal Armonización 2026*.
 - **Registro de contribuyente del SRTM (fase 1):** `domicilio`, `relacionado`, `medio_contacto` y `sustento`, cada uno
@@ -1296,6 +1385,8 @@ Treinta y nueve objetos (`model/model.json`):
   `notificacion_resolucion`.
 - **Anuncios y propaganda** (`srtm.anuncios`): `anuncio` y `movimiento_anuncio` (autorización, renovación, cese y
   retiro; la autorización y la renovación devengan la tasa).
+- **Brecha de recaudación** (`srtm.brecha`): `brecha_corrida` (una medición de un año) y `brecha_predio` (sus filas,
+  con el lote en `lote_geom`). Ver [Brecha de recaudación](#brecha-de-recaudación).
 
 Las garantías de `rentas` sobre las infracciones y los anuncios, y dónde quedan:
 - **Unicidad:** Core no tiene unicidad compuesta, así que un campo único guarda las partes unidas: `codigo_infraccion.clave`

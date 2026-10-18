@@ -54,6 +54,16 @@ srtm:
       timeout: ${SRTM_PIDE_RENIEC_TIMEOUT:5s}
       # how long a consulta backs a save with fuente PIDE RENIEC
       vigencia: 30m
+  catastro:
+    # catastro-backend's valuations for the brecha de recaudación, read as its service account srtm (role
+    # SRTM_LECTOR, created by catastro's model/crear_cuenta_srtm.py). off until the url and the account are set in the
+    # environment, never here. off, no corrida starts (409)
+    enabled: ${SRTM_CATASTRO_ENABLED:false}
+    url: ${SRTM_CATASTRO_URL:http://localhost:8091}
+    client-id: ${SRTM_CATASTRO_CLIENT_ID:}
+    client-secret: ${SRTM_CATASTRO_CLIENT_SECRET:}
+    # each request: catastro values a page of 500 predios on the fly
+    timeout: ${SRTM_CATASTRO_TIMEOUT:60s}
   emision:
     # where the emisiones' files are kept (AlmacenEmision): local, on this server's disk under dir, or s3, in the
     # bucket of s3.* (no shared volume: what k8s wants)

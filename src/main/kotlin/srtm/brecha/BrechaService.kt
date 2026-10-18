@@ -1,0 +1,296 @@
+package srtm.brecha
+
+import jakarta.annotation.PreDestroy
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.reactive.awaitFirstOrNull
+import kotlinx.coroutines.reactor.asCoroutineContext
+import org.slf4j.LoggerFactory
+import org.springframework.security.core.context.ReactiveSecurityContextHolder
+import org.springframework.stereotype.Service
+import org.springframework.transaction.ReactiveTransactionManager
+import org.springframework.transaction.reactive.TransactionalOperator
+import org.springframework.transaction.reactive.executeAndAwait
+import srtm.Candado
+import srtm.Candados
+import srtm.arbitrios.ArbitriosService
+import srtm.arbitrios.ContextoArbitrios
+import srtm.arbitrios.INAFECTACION_ARBITRIO
+import srtm.arbitrios.InafectacionArbitrio
+import srtm.impuesto.ParametrosTributarios
+import srtm.rentas.CONTRIBUYENTE
+import srtm.rentas.Contribuyente
+import srtm.rentas.DECLARACION
+import srtm.rentas.Declaracion
+import srtm.rentas.PREDIO
+import srtm.rentas.Predio
+import srtm.rentas.Records
+import srtm.rentas.Registros
+import wasichai.core.common.Actions
+import wasichai.core.common.ConflictException
+import wasichai.core.common.ForbiddenException
+import wasichai.core.common.NotFoundException
+import wasichai.core.common.PageRequest
+import wasichai.core.common.PageResponse
+import wasichai.core.common.UnauthorizedException
+import wasichai.core.common.ValidationException
+import wasichai.core.data.RecordQuery
+import wasichai.core.identity.AuthenticatedUser
+import wasichai.core.identity.CurrentUser
+import wasichai.core.metadata.MetadataService
+import java.time.Duration
+import java.time.Instant
+import java.time.LocalDate
+import java.util.UUID
+import kotlin.coroutines.cancellation.CancellationException
+
+// the corridas de brecha (DeterminacionMasivaService's shape, without its lotes): a POST checks what it can, leaves a
+// PENDIENTE corrida and returns; in the background, as the caller, one worker reads catastro-backend's valuations of
+// the year and srtm's padrón, measures them (Brecha.medir) and writes the brecha_predio rows in batches, counting them
+// in procesados, until the corrida is TERMINADA (or FALLIDA, with mensaje). ~4 000 predios are a minute or two of one
+// worker: the masiva's lotes (several instances, leases per lote) would buy nothing here. one active corrida per
+// organization and year, under Candado.BRECHA; one whose latido is older than LEASE (its instance died) no longer
+// counts as active and is failed when the next one starts
+@Service
+class BrechaService(
+    private val registros: Registros,
+    private val metadata: MetadataService,
+    private val currentUser: CurrentUser,
+    private val candados: Candados,
+    private val catastro: Catastro,
+    private val arbitrios: ArbitriosService,
+    private val parametrosTributarios: ParametrosTributarios,
+    transacciones: ReactiveTransactionManager
+) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val transaccion = TransactionalOperator.create(transacciones)
+
+    // 202: the corrida PENDIENTE. before anything exists: 403 without the permissions its run uses, 400 for the year,
+    // 409 when catastro is not configured or a corrida of the year is running
+    suspend fun lanzar(pedido: PedidoCorrida): Corrida {
+        val llamante =
+            ReactiveSecurityContextHolder.getContext().awaitFirstOrNull()?.authentication
+                ?: throw UnauthorizedException("Authentication required")
+        val usuario = exigirPermisos()
+        val anio = pedido.anio ?: LocalDate.now().year
+        if (anio !in ArbitriosService.ANIOS) {
+            throw ValidationException("El año no es válido", "anio", "de ${ArbitriosService.ANIOS.first} a ${ArbitriosService.ANIOS.last}")
+        }
+        if (!catastro.configurado) throw ConflictException(NO_CONFIGURADO)
+        val creada =
+            transaccion.executeAndAwait {
+                candados.bloquear(Candado.BRECHA, "${usuario.organizationId}|$anio")
+                val ahora = Instant.now()
+                for (activa in activas(anio)) {
+                    if (viva(activa, ahora)) throw ConflictException("Ya hay una corrida de la brecha de $anio en curso: espere a que termine")
+                    actualizar(
+                        UUID.fromString(activa.id),
+                        mapOf(
+                            "estado" to FALLIDA,
+                            "mensaje" to "Abandonada: su instancia dejó de latir",
+                            "terminado" to ahora.toString()
+                        )
+                    )
+                }
+                registros.create(
+                    BRECHA_CORRIDA,
+                    RegistroCorrida::class.java,
+                    mapOf(
+                        "anio" to anio,
+                        "estado" to PENDIENTE,
+                        "total_predios" to 0,
+                        "procesados" to 0,
+                        "iniciado" to ahora.toString(),
+                        "latido" to ahora.toString()
+                    )
+                )
+            }
+        val id = UUID.fromString(creada.id)
+        scope.launch(ReactiveSecurityContextHolder.withAuthentication(llamante).asCoroutineContext()) { correr(id, anio) }
+        return corridaDe(creada)
+    }
+
+    suspend fun lista(anio: Int?): List<Corrida> =
+        registros
+            .all(
+                BRECHA_CORRIDA,
+                RegistroCorrida::class.java,
+                filters = anio?.let { mapOf("anio" to it.toString()) } ?: emptyMap(),
+                sort = "created_at",
+                descending = true
+            ).map(::corridaDe)
+
+    suspend fun get(id: UUID): Corrida = corridaDe(registros.get(BRECHA_CORRIDA, RegistroCorrida::class.java, id))
+
+    // the corrida a query reads: the one given (404 unless it is of the year), else the latest TERMINADA of the year
+    // (404 when there is none)
+    suspend fun corridaDelAnio(
+        anio: Int,
+        corrida: UUID?
+    ): RegistroCorrida {
+        if (corrida != null) {
+            val r = registros.get(BRECHA_CORRIDA, RegistroCorrida::class.java, corrida)
+            if (r.anio != anio) throw NotFoundException("La corrida $corrida no es de $anio")
+            return r
+        }
+        return registros
+            .all(BRECHA_CORRIDA, RegistroCorrida::class.java, filters = mapOf("anio" to "$anio", "estado" to TERMINADA), sort = "created_at", descending = true)
+            .firstOrNull()
+            ?: throw NotFoundException("No hay una corrida terminada de la brecha de $anio")
+    }
+
+    // every row of a corrida
+    suspend fun filas(corrida: String): List<FilaBrecha> = registros.all(BRECHA_PREDIO, FilaBrecha::class.java, filters = mapOf("corrida" to corrida))
+
+    // a page of a corrida's rows, by categoría and sector when given, by their codes
+    suspend fun pagina(
+        corrida: String,
+        categoria: Categoria?,
+        sector: String?,
+        page: Int,
+        size: Int
+    ): PageResponse<PredioBrecha> {
+        val filtros =
+            buildMap {
+                put("corrida", corrida)
+                if (categoria != null) put("categoria", categoria.name)
+                if (sector != null) put("sector", sector)
+            }
+        return registros
+            .page(BRECHA_PREDIO, FilaBrecha::class.java, RecordQuery(page = PageRequest.of(page, size), sort = "codigo_catastro", filters = filtros))
+            .map(::predioBrechaDe)
+    }
+
+    // in the background, as the caller: catastro's valuations, the padrón, the measure and its rows. what goes wrong
+    // leaves the corrida FALLIDA with why
+    private suspend fun correr(
+        id: UUID,
+        anio: Int
+    ) {
+        try {
+            latir(id, mapOf("estado" to EN_CURSO))
+            val parametros = parametrosTributarios.todos()
+            val valuaciones = catastro.valuaciones(anio)
+            latir(id, mapOf("version_catastro" to valuaciones.version))
+            val (contexto, sinArbitrios) =
+                try {
+                    arbitrios.contexto(anio) to null
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null to (e.message ?: e.javaClass.simpleName)
+                }
+            val medicion = Brecha.medir(anio, valuaciones.items, padron(anio, contexto), parametros, contexto, LocalDate.now(), sinArbitrios)
+            if (medicion.faltan.isNotEmpty()) {
+                fallar(id, "Faltan parámetros del impuesto predial: ${medicion.faltan.joinToString("; ")}")
+                return
+            }
+            latir(id, mapOf("total_predios" to medicion.filas.size))
+            var procesados = 0
+            for (lote in medicion.filas.chunked(LOTE)) {
+                transaccion.executeAndAwait {
+                    registros.createAll(BRECHA_PREDIO, FilaBrecha::class.java, lote.map { Records.attributes(it.copy(corrida = id.toString())) })
+                }
+                procesados += lote.size
+                latir(id, mapOf("procesados" to procesados))
+            }
+            val corrida = registros.get(BRECHA_CORRIDA, RegistroCorrida::class.java, id)
+            val kpis = Brecha.panel(corrida, medicion.filas).kpis
+            actualizar(
+                id,
+                mapOf(
+                    "estado" to TERMINADA,
+                    "terminado" to Instant.now().toString(),
+                    "latido" to Instant.now().toString(),
+                    "declarado" to kpis.autoavaluoDeclarado,
+                    "catastro" to kpis.autoavaluoCatastro,
+                    "delta_impuesto" to kpis.deltaImpuesto,
+                    "delta_arbitrios" to kpis.deltaArbitrios,
+                    "mensaje" to medicion.avisos.joinToString("\n").ifEmpty { null }
+                )
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            log.error("la corrida de brecha {} falló", id, e)
+            runCatching { fallar(id, e.message ?: e.javaClass.simpleName) }
+        }
+    }
+
+    // what Brecha.medir reads of srtm: every predio (the candidates of the cruce) and declaración of the year; for the
+    // arbitrios, when their context was read, the contribuyentes' codes and the inafectaciones
+    private suspend fun padron(
+        anio: Int,
+        contexto: ContextoArbitrios?
+    ): Padron {
+        val predios = registros.all(PREDIO, Predio::class.java)
+        val declaraciones = registros.all(DECLARACION, Declaracion::class.java, filters = mapOf("anio" to "$anio"))
+        if (contexto == null) return Padron(predios, declaraciones)
+        val codigos =
+            registros
+                .byIds(CONTRIBUYENTE, Contribuyente::class.java, declaraciones.mapNotNull { it.contribuyente })
+                .mapValues { it.value.codigo }
+        return Padron(predios, declaraciones, codigos, registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java))
+    }
+
+    private suspend fun activas(anio: Int) =
+        registros
+            .all(BRECHA_CORRIDA, RegistroCorrida::class.java, filters = mapOf("anio" to "$anio"))
+            .filter { it.estado in ACTIVAS }
+
+    // its instance still beats: its latido is within LEASE
+    private fun viva(
+        r: RegistroCorrida,
+        ahora: Instant
+    ): Boolean {
+        val latido = (r.latido ?: r.iniciado)?.let { runCatching { Instant.parse(it) }.getOrNull() } ?: return false
+        return latido.plus(LEASE).isAfter(ahora)
+    }
+
+    private suspend fun latir(
+        id: UUID,
+        campos: Map<String, Any?>
+    ) = actualizar(id, campos + ("latido" to Instant.now().toString()))
+
+    private suspend fun fallar(
+        id: UUID,
+        mensaje: String
+    ) = actualizar(id, mapOf("estado" to FALLIDA, "mensaje" to mensaje, "terminado" to Instant.now().toString()))
+
+    private suspend fun actualizar(
+        id: UUID,
+        campos: Map<String, Any?>
+    ) = registros.replace(BRECHA_CORRIDA, RegistroCorrida::class.java, id, campos)
+
+    // the run writes the corrida (its progress) and its rows as the caller: a caller who may not do it is refused first
+    private suspend fun exigirPermisos(): AuthenticatedUser {
+        val usuario = currentUser.require()
+        try {
+            currentUser.requirePermission(usuario, Actions.CREATE, metadata.definitionOf(BRECHA_CORRIDA).obj.id)
+            currentUser.requirePermission(usuario, Actions.UPDATE, metadata.definitionOf(BRECHA_CORRIDA).obj.id)
+            currentUser.requirePermission(usuario, Actions.CREATE, metadata.definitionOf(BRECHA_PREDIO).obj.id)
+        } catch (_: ForbiddenException) {
+            throw ForbiddenException(
+                "Lanzar una corrida de la brecha exige permiso de creación y de edición sobre $BRECHA_CORRIDA, y de creación sobre " +
+                    "$BRECHA_PREDIO: la corrida guarda su avance y escribe sus predios"
+            )
+        }
+        return usuario
+    }
+
+    @PreDestroy
+    fun cerrar() = scope.cancel()
+
+    private companion object {
+        val log = LoggerFactory.getLogger(BrechaService::class.java)
+
+        // rows per transaction, and per update of procesados
+        const val LOTE = 200
+
+        // a corrida whose latido is older is abandoned (its instance died): generous, the read of catastro beats once
+        val LEASE: Duration = Duration.ofMinutes(10)
+    }
+}
