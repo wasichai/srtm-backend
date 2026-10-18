@@ -64,6 +64,9 @@ srtm:
     client-secret: ${SRTM_CATASTRO_CLIENT_SECRET:}
     # each request: catastro values a page of 500 predios on the fly
     timeout: ${SRTM_CATASTRO_TIMEOUT:60s}
+    # the srtm organization (its slug or its id) whose catastro this is: the configuration is the install's, so only
+    # that organization's corridas read it (409 for another's). empty while enabled: no corrida starts (409)
+    organizacion: ${SRTM_CATASTRO_ORGANIZACION:}
   emision:
     # where the emisiones' files are kept (AlmacenEmision): local, on this server's disk under dir, or s3, in the
     # bucket of s3.* (no shared volume: what k8s wants)

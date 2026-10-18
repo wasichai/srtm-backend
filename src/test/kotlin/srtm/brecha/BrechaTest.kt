@@ -138,6 +138,50 @@ class BrechaTest {
         )
     }
 
+    @Test
+    fun `an item crossing by a fallback key never takes a predio a later item names by its codigo`() {
+        val a = predio("a", codigo = "A", cpu = "CPU-1", sector = "01", manzana = "A", lote = "1")
+        val b = predio("b", codigo = "B", cpu = "CPU-2")
+        val pares =
+            Brecha.cruzar(
+                listOf(
+                    // first in the list, by CPU and by sector-manzana-lote both pointing at a
+                    item(municipal = "NO-EXISTE", cpu = "CPU-1", sector = "01", manzana = "A", lote = "1"),
+                    // a by its código municipal, and b by its CPU, after the fallback
+                    item(municipal = "A"),
+                    item(municipal = "OTRO", cpu = "CPU-2")
+                ),
+                listOf(a, b)
+            )
+        assertEquals(listOf(null, "a", "b"), pares.map { it.second?.id })
+    }
+
+    @Test
+    fun `a sector-manzana-lote shared by several items or several predios crosses none of them`() {
+        val p1 = predio("p1", sector = "01", manzana = "A", lote = "1")
+        val p2 = predio("p2", sector = "01", manzana = "A", lote = "1")
+        val p3 = predio("p3", sector = "01", manzana = "B", lote = "1")
+        val p4 = predio("p4", sector = "01", manzana = "C", lote = "1")
+        val pares =
+            Brecha.cruzar(
+                listOf(
+                    // one item, two predios
+                    item(sector = "01", manzana = "A", lote = "1"),
+                    // two items, one predio
+                    item(sector = "01", manzana = "B", lote = "1"),
+                    item(sector = "01", manzana = "b", lote = "1"),
+                    // one and one: it crosses
+                    item(sector = "01", manzana = "C", lote = "1")
+                ),
+                listOf(p1, p2, p3, p4),
+                setOf("p1")
+            )
+        assertEquals(listOf(null, null, null, "p4"), pares.map { it.second?.id })
+        // a predio its código took first leaves the key unique for the rest
+        val porCodigo = Brecha.cruzar(listOf(item(municipal = "P-p1"), item(sector = "01", manzana = "A", lote = "1")), listOf(p1, p2))
+        assertEquals(listOf("p1", "p2"), porCodigo.map { it.second?.id })
+    }
+
     // the categories (D10)
 
     @Test
@@ -440,6 +484,34 @@ class BrechaTest {
         assertEquals(listOf("Δ arbitrios sin tope: el año tiene TOPE_ARBITRIO"), m.avisos)
     }
 
+    @Test
+    fun `a catastro with no item at all, while the padron has predios, is no measure`() {
+        val conDj = Padron(listOf(predio("a")), listOf(dj("d1", "c1", "a", "1000")))
+        assertEquals(
+            "El catastro no devolvió valuaciones de 2026 y el padrón tiene 1 predios con DJ vigente: revise el levantamiento del año en catastro-backend",
+            Brecha.sinValuaciones(anio, emptyList(), conDj)
+        )
+        assertNull(Brecha.sinValuaciones(anio, listOf(item(municipal = "P-a")), conDj))
+        // nothing on either side: nothing to fail for
+        assertNull(Brecha.sinValuaciones(anio, emptyList(), Padron(listOf(predio("a")), emptyList())))
+    }
+
+    @Test
+    fun `the rows are ordered by the padron's code, then the catastro's, then as they came`() {
+        val filas =
+            listOf(
+                FilaBrecha(codigoCatastro = "Z"),
+                FilaBrecha(codigoPredio = "B", codigoCatastro = "Y"),
+                FilaBrecha(codigoPredio = "A"),
+                FilaBrecha(codigoCatastro = "M"),
+                FilaBrecha(),
+                FilaBrecha(codigoPredio = "B", codigoCatastro = "X")
+            )
+        val o = Brecha.ordenadas(filas)
+        assertEquals(listOf("A" to null, "B" to "X", "B" to "Y", null to "M", null to "Z", null to null), o.map { it.codigoPredio to it.codigoCatastro })
+        assertEquals((0..5).toList(), o.map { it.orden })
+    }
+
     // the panel and the lotes
 
     @Test
@@ -464,6 +536,7 @@ class BrechaTest {
                     deltaImpuesto = BigDecimal("33.00")
                 ),
                 FilaBrecha(categoria = "SIN_CATASTRO", sector = "02", autoavaluoDeclarado = BigDecimal("70.00")),
+                FilaBrecha(categoria = "SIN_VALOR", sector = "02", autoavaluoDeclarado = BigDecimal("40.00")),
                 FilaBrecha(
                     categoria = "COINCIDE",
                     sector = null,
@@ -477,26 +550,32 @@ class BrechaTest {
         assertEquals(CorridaDelPanel("c", "2026-10-19T10:00:00Z", "valuacion-v1"), p.corrida)
         assertEquals(
             Kpis(
-                prediosCatastro = 3,
-                prediosPadron = 3,
+                prediosCatastro = 4,
+                prediosPadron = 4,
                 omisos = 1,
                 subvaluados = 1,
                 sobrevaluados = 0,
                 coinciden = 1,
                 sinCatastro = 1,
-                sinValor = 0,
-                autoavaluoDeclarado = BigDecimal("180.00"),
+                sinValor = 1,
+                // the compared rows only (SUBVALUADO, OMISO, COINCIDE): 110 + 150 = 260
+                autoavaluoDeclarado = BigDecimal("110.00"),
                 autoavaluoCatastro = BigDecimal("260.00"),
                 deltaAutoavaluo = BigDecimal("150.00"),
                 deltaImpuesto = BigDecimal("38.00"),
-                deltaArbitrios = BigDecimal("2.00")
+                deltaArbitrios = BigDecimal("2.00"),
+                deltaImpuestoOmisosEstimado = BigDecimal("33.00"),
+                // every row: SIN_CATASTRO's 70 and SIN_VALOR's 40 too
+                autoavaluoDeclaradoTotal = BigDecimal("220.00"),
+                autoavaluoCatastroTotal = BigDecimal("260.00")
             ),
             p.kpis
         )
+        assertEquals(p.kpis.autoavaluoCatastro, p.kpis.autoavaluoDeclarado + p.kpis.deltaAutoavaluo)
         assertEquals(Categoria.entries.map { it.name }, p.porCategoria.map { it.categoria })
         assertEquals(PorCategoria("OMISO", 1, BigDecimal("50.00"), BigDecimal("33.00"), null), p.porCategoria.first())
         assertEquals(
-            listOf(PorSector("01", 2, BigDecimal("38.00"), BigDecimal("2.00"), 1, 1), PorSector("02", 1, BigDecimal("0.00"), null, 0, 0)),
+            listOf(PorSector("01", 2, BigDecimal("38.00"), BigDecimal("2.00"), 1, 1), PorSector("02", 2, BigDecimal("0.00"), null, 0, 0)),
             p.porSector.take(2)
         )
         assertNull(p.porSector.last().sector)

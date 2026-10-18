@@ -40,7 +40,7 @@ class ClienteCatastroTest {
             }
             val page = Regex("page=(\\d+)").find(ex.requestURI.query)!!.groupValues[1].toInt()
             // 3 items in pages of 2 (the stub ignores size=500 to make paging visible)
-            val items = listOf(ITEM_VALORADO, ITEM_SIN_VALOR, ITEM_VALORADO.replace("PM-1", "PM-3")).drop(page * 2).take(2)
+            val items = listOf(ITEM_VALORADO, ITEM_SIN_VALOR, ITEM_GRANDE).drop(page * 2).take(2)
             responder(ex, 200, """{"anio":2026,"version":"valuacion-v1","page":$page,"size":2,"total":3,"items":[${items.joinToString(",")}]}""")
         }
         server.start()
@@ -84,6 +84,36 @@ class ClienteCatastroTest {
     }
 
     @Test
+    fun `the figures are read as decimals, never through a double, the geometry as doubles`() {
+        val v = runBlocking { cliente().valuaciones(2026) }
+        // a double keeps ~16 digits: this one would come back 12345678901234568
+        assertEquals(BigDecimal("12345678901234567.89"), v.items[2].autoavaluo)
+        assertEquals(BigDecimal("0.10"), v.items[2].obras)
+        val anillo = (v.items[0].loteGeom!!["coordinates"] as List<*>).first() as List<*>
+        assertEquals(listOf(-75.22, -10.95), anillo.first())
+    }
+
+    @Test
+    fun `the catastro is one organization's, by its id or its slug, and none set refuses every corrida`() {
+        val id = java.util.UUID.randomUUID()
+        assertNull(otraOrganizacion(id.toString(), id, null))
+        assertNull(otraOrganizacion(" perene ", id, "PERENE"))
+        assertEquals(
+            DE_OTRA_ORGANIZACION,
+            otraOrganizacion(
+                java.util.UUID
+                    .randomUUID()
+                    .toString(),
+                id,
+                null
+            )
+        )
+        assertEquals(DE_OTRA_ORGANIZACION, otraOrganizacion("perene", id, "otra"))
+        assertEquals(DE_OTRA_ORGANIZACION, otraOrganizacion("perene", id, null))
+        assertEquals(SIN_ORGANIZACION, otraOrganizacion("  ", id, "perene"))
+    }
+
+    @Test
     fun `a token is asked again a minute before it expires, and after a 401`() {
         expira = Instant.now().plusSeconds(30)
         val c = cliente()
@@ -115,6 +145,11 @@ class ClienteCatastroTest {
             "areaTerreno":200,"areaConstruida":100,"longitudFrente":10.5,"terreno":9100.00,"construccion":78781.60,"obras":8870.61,
             "autoavaluo":96752.21,"motivo":null,"llave":null,
             "loteGeom":{"type":"Polygon","coordinates":[[[-75.22,-10.95],[-75.2195,-10.95],[-75.2195,-10.9495],[-75.22,-10.95]]]}}"""
+        val ITEM_GRANDE =
+            ITEM_VALORADO
+                .replace("PM-1", "PM-3")
+                .replace("96752.21", "12345678901234567.89")
+                .replace("8870.61", "0.10")
         val ITEM_SIN_VALOR =
             """{"codigoMunicipal":"PM-2","codigoCpu":null,"sector":"S01","manzana":"M01","lote":"L01","uso":"010101",
             "areaTerreno":200,"areaConstruida":100,"longitudFrente":null,"terreno":null,"construccion":null,"obras":null,"autoavaluo":null,

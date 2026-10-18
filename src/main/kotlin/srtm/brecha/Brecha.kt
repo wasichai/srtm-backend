@@ -96,9 +96,13 @@ object Brecha {
     }
 
     // D7: each catastro item to the padrón's predio of its código municipal (predio.codigo), else of its código CPU,
-    // else of its sector, manzana and lote (sector_catastral, manzana_catastral, lote). a predio crosses once: the first
-    // item takes it, and a later one tries its next key. among several predios of the same key, those with a
-    // declaración of the year (preferidos) go first, then by código. null: an omiso
+    // else of its sector, manzana and lote (sector_catastral, manzana_catastral, lote). in passes over every item, so
+    // an item's fallback key never takes a predio another item names by a stronger one, whatever their order: first
+    // every código municipal, then the CPU of the items still alone, then their sector-manzana-lote. a predio crosses
+    // once. in the first two passes, among several predios of the same key, those with a declaración of the year
+    // (preferidos) go first, then by código. sector-manzana-lote is not an identity: it crosses only when one item and
+    // one predio left share it; when several items or several predios share it, none of them crosses (the items are
+    // OMISO and the predios SIN_CATASTRO) rather than pair them at random. null: an omiso
     fun cruzar(
         items: List<ValuacionCatastral>,
         predios: List<Predio>,
@@ -110,21 +114,31 @@ object Brecha {
             ordenados
                 .mapNotNull { p -> clave(p)?.let { it to p } }
                 .groupBy({ it.first }, { it.second })
-        val porCodigo = indice { llave(it.codigo) }
-        val porCpu = indice { llave(it.codigoCpu) }
-        val porSml = indice { sml(it.sectorCatastral, it.manzanaCatastral, it.lote) }
         val tomados = HashSet<String>()
-        return items.map { item ->
-            val candidatos =
-                listOf(
-                    llave(item.codigoMunicipal)?.let(porCodigo::get),
-                    llave(item.codigoCpu)?.let(porCpu::get),
-                    sml(item.sector, item.manzana, item.lote)?.let(porSml::get)
-                )
-            val predio = candidatos.asSequence().flatMap { it.orEmpty() }.firstOrNull { it.id !in tomados }
-            if (predio != null) tomados += predio.id!!
-            item to predio
+        val cruce = arrayOfNulls<Predio>(items.size)
+
+        fun pasada(
+            clave: (ValuacionCatastral) -> String?,
+            porClave: Map<String, List<Predio>>
+        ) = items.forEachIndexed { i, item ->
+            if (cruce[i] != null) return@forEachIndexed
+            val predio = clave(item)?.let(porClave::get)?.firstOrNull { it.id !in tomados } ?: return@forEachIndexed
+            cruce[i] = predio
+            tomados += predio.id!!
         }
+        pasada({ llave(it.codigoMunicipal) }, indice { llave(it.codigo) })
+        pasada({ llave(it.codigoCpu) }, indice { llave(it.codigoCpu) })
+
+        val solos = items.indices.filter { cruce[it] == null }.groupBy { sml(items[it].sector, items[it].manzana, items[it].lote) }
+        val libres = ordenados.filter { it.id !in tomados }.groupBy { sml(it.sectorCatastral, it.manzanaCatastral, it.lote) }
+        for ((clave, suyos) in solos) {
+            if (clave == null) continue
+            val predio = libres[clave]?.singleOrNull() ?: continue
+            val i = suyos.singleOrNull() ?: continue
+            cruce[i] = predio
+            tomados += predio.id!!
+        }
+        return items.mapIndexed { i, item -> item to cruce[i] }
     }
 
     // a crossed and valued predio, by its declared autoavalúo (D10: ±5 % both ends included is COINCIDE)
@@ -484,6 +498,35 @@ object Brecha {
         return Medicion(filas, emptyList(), avisos)
     }
 
+    // catastro answered no item at all while the padrón has predios of the year: an empty or misconfigured catastro,
+    // not a district of omisos. measuring it would call every predio SIN_CATASTRO: the corrida fails with why instead
+    fun sinValuaciones(
+        anio: Int,
+        items: List<ValuacionCatastral>,
+        padron: Padron
+    ): String? {
+        if (items.isNotEmpty()) return null
+        val predios =
+            padron.declaraciones
+                .filter { it.anio == anio && it.predio != null && declaracionVigente(it) }
+                .mapNotNull { it.predio }
+                .toSet()
+        if (predios.isEmpty()) return null
+        return "El catastro no devolvió valuaciones de $anio y el padrón tiene ${predios.size} predios con DJ vigente: " +
+            "revise el levantamiento del año en catastro-backend"
+    }
+
+    // the rows in the order /predios pages them: by the padrón's code, then the catastro's (nulls last), then as they
+    // came; orden keeps that position, a sort core can do on one field and that never ties
+    fun ordenadas(filas: List<FilaBrecha>): List<FilaBrecha> =
+        filas
+            .withIndex()
+            .sortedWith(
+                compareBy<IndexedValue<FilaBrecha>, String?>(nullsLast()) {
+                    it.value.codigoPredio
+                }.thenBy(nullsLast()) { it.value.codigoCatastro }.thenBy { it.index }
+            ).mapIndexed { i, f -> f.value.copy(orden = i) }
+
     // the catastro item's code as srtm shows it: its código municipal, else its CPU, else sector-manzana-lote
     fun codigoCatastro(item: ValuacionCatastral): String? =
         item.codigoMunicipal?.trim()?.ifEmpty { null }
@@ -499,14 +542,20 @@ object Brecha {
             else -> null
         }
 
+    // the rows the autoavalúo KPIs compare: those valued on both sides and the omisos (catastro's value, nothing
+    // declared). SIN_CATASTRO and SIN_VALOR have one side only and stay out, so declarado + Δ = catastro on the panel
+    val COMPARADAS = setOf(Categoria.SUBVALUADO.name, Categoria.SOBREVALUADO.name, Categoria.COINCIDE.name, Categoria.OMISO.name)
+
     // GET /brecha/{anio}/panel: the corrida's rows counted (PanelService's way: read, then count in memory). the padrón
-    // is every row but the omisos, the catastro every row but those SIN_CATASTRO. Δ arbitrios is null while no row has
-    // one
+    // is every row but the omisos, the catastro every row but those SIN_CATASTRO. autoavalúo declarado, catastro and Δ
+    // are over COMPARADAS (they reconcile); the *Total ones over every row, for reference. Δ arbitrios is null while no
+    // row has one
     fun panel(
         corrida: RegistroCorrida,
         filas: List<FilaBrecha>
     ): PanelBrecha {
         fun de(c: Categoria) = filas.count { it.categoria == c.name }
+        val comparadas = filas.filter { it.categoria in COMPARADAS }
         val porCategoria =
             Categoria.entries.map { c ->
                 val suyas = filas.filter { it.categoria == c.name }
@@ -543,11 +592,14 @@ object Brecha {
                 coinciden = de(Categoria.COINCIDE),
                 sinCatastro = de(Categoria.SIN_CATASTRO),
                 sinValor = de(Categoria.SIN_VALOR),
-                autoavaluoDeclarado = suma(filas.map { it.autoavaluoDeclarado }),
-                autoavaluoCatastro = suma(filas.map { it.autoavaluoCatastro }),
-                deltaAutoavaluo = suma(filas.map { it.deltaAutoavaluo }),
+                autoavaluoDeclarado = suma(comparadas.map { it.autoavaluoDeclarado }),
+                autoavaluoCatastro = suma(comparadas.map { it.autoavaluoCatastro }),
+                deltaAutoavaluo = suma(comparadas.map { it.deltaAutoavaluo }),
                 deltaImpuesto = suma(filas.map { it.deltaImpuesto }),
-                deltaArbitrios = sumaONull(filas.map { it.deltaArbitrios })
+                deltaArbitrios = sumaONull(filas.map { it.deltaArbitrios }),
+                deltaImpuestoOmisosEstimado = suma(filas.filter { it.categoria == Categoria.OMISO.name }.map { it.deltaImpuesto }),
+                autoavaluoDeclaradoTotal = suma(filas.map { it.autoavaluoDeclarado }),
+                autoavaluoCatastroTotal = suma(filas.map { it.autoavaluoCatastro })
             ),
             porCategoria,
             porSector

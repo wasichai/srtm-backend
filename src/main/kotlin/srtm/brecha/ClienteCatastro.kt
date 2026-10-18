@@ -14,6 +14,7 @@ import org.springframework.http.MediaType
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.util.UriComponentsBuilder
+import tools.jackson.databind.DeserializationFeature
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
@@ -22,7 +23,9 @@ import java.time.Instant
 import kotlin.coroutines.cancellation.CancellationException
 
 // srtm's access to catastro-backend: its url and the service account that catastro's model/crear_cuenta_srtm.py
-// created (role SRTM_LECTOR). off by default; the secret comes from the environment (application.yml, README)
+// created (role SRTM_LECTOR). off by default; the secret comes from the environment (application.yml, README).
+// organizacion is the srtm organization (its slug or its id) whose catastro that is: the configuration is the
+// install's, and only that organization's corridas may read it
 @ConfigurationProperties(prefix = "srtm.catastro")
 data class CatastroProperties(
     val enabled: Boolean = false,
@@ -30,12 +33,13 @@ data class CatastroProperties(
     val clientId: String = "",
     val clientSecret: String = "",
     // each request: catastro values a page on the fly
-    val timeout: Duration = Duration.ofSeconds(60)
+    val timeout: Duration = Duration.ofSeconds(60),
+    val organizacion: String = ""
 ) {
     val completa: Boolean get() = listOf(url, clientId, clientSecret).none { it.isBlank() }
 
     // never the secret: this text may end up in a log
-    override fun toString() = "CatastroProperties(enabled=$enabled, url=$url, clientId=$clientId, timeout=$timeout)"
+    override fun toString() = "CatastroProperties(enabled=$enabled, url=$url, clientId=$clientId, timeout=$timeout, organizacion=$organizacion)"
 }
 
 // catastro-backend's valuations of a year, every page of them
@@ -67,6 +71,26 @@ class SinCatastro : Catastro {
 const val NO_CONFIGURADO =
     "Catastro no configurado: srtm.catastro necesita enabled, url, client-id y client-secret " +
         "(SRTM_CATASTRO_ENABLED, SRTM_CATASTRO_URL, SRTM_CATASTRO_CLIENT_ID, SRTM_CATASTRO_CLIENT_SECRET)"
+
+const val SIN_ORGANIZACION =
+    "Catastro sin organización: fije srtm.catastro.organizacion (SRTM_CATASTRO_ORGANIZACION) con el slug o el id de la " +
+        "organización de srtm cuyo catastro es"
+
+const val DE_OTRA_ORGANIZACION = "Catastro no configurado para esta organización: srtm.catastro.organizacion es otra"
+
+// why a corrida of this organization may not read the configured catastro, or null when it may: configurada is
+// srtm.catastro.organizacion, an id or a slug (slug: this organization's, when configurada is not an id)
+fun otraOrganizacion(
+    configurada: String,
+    id: java.util.UUID,
+    slug: String?
+): String? {
+    val valor = configurada.trim()
+    if (valor.isEmpty()) return SIN_ORGANIZACION
+    val comoId = runCatching { java.util.UUID.fromString(valor) }.getOrNull()
+    val es = if (comoId != null) comoId == id else slug != null && slug.equals(valor, ignoreCase = true)
+    return if (es) null else DE_OTRA_ORGANIZACION
+}
 
 // catastro-backend by rest, as its service account: POST {url}/api/auth/token {clientId, clientSecret} -> {token,
 // expiresAt}, kept until a minute before it expires (and dropped on a 401), then GET {url}/api/catastro/valuaciones
@@ -147,7 +171,7 @@ class ClienteCatastro(
                         .bodyToMono(String::class.java)
                         .timeout(properties.timeout)
                         .awaitSingleOrNull()
-                return JSON.readTree(body.orEmpty())
+                return DECIMALES.readTree(body.orEmpty())
             } catch (e: CancellationException) {
                 throw e
             } catch (e: CatastroException) {
@@ -208,9 +232,13 @@ class ClienteCatastro(
         private val MARGEN: Duration = Duration.ofSeconds(60)
         private val JSON = JsonMapper.builder().build()
 
+        // the items' figures as decimals, never through a double (a 17-digit autoavalúo would lose its céntimos)
+        private val DECIMALES = JsonMapper.builder().enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS).build()
+
         @Suppress("UNCHECKED_CAST")
         fun item(n: JsonNode): ValuacionCatastral {
-            val geometria = n.path("loteGeom").takeIf { it.isObject }?.let { JSON.convertValue(it, Map::class.java) as Map<String, Any?> }
+            // the geometry's coordinates as doubles, as wasichai-gis takes them: read again by the plain mapper
+            val geometria = n.path("loteGeom").takeIf { it.isObject }?.let { JSON.readValue(it.toString(), Map::class.java) as Map<String, Any?> }
             return ValuacionCatastral(
                 codigoMunicipal = n.path("codigoMunicipal").texto(),
                 codigoCpu = n.path("codigoCpu").texto(),
@@ -258,6 +286,9 @@ class CatastroConfig {
         if (!properties.completa) {
             log.warn("srtm.catastro.enabled sin url, client-id o client-secret: no se corre la brecha")
             return SinCatastro()
+        }
+        if (properties.organizacion.isBlank()) {
+            log.warn("srtm.catastro.enabled sin organizacion: ninguna corrida de la brecha empieza hasta fijarla")
         }
         return ClienteCatastro(properties)
     }

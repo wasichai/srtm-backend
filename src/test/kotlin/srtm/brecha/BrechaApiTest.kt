@@ -21,11 +21,18 @@ import java.util.concurrent.atomic.AtomicReference
 
 // the brecha end to end against a stub of catastro-backend (the jdk's http server, on the contract of task 5): predios
 // and declaraciones through the portal's api, a corrida started by POST and followed until TERMINADA, and the panel,
-// the rows and the lotes it answers. each test runs in an organization of its own, so the corrida reads only its data
+// the rows and the lotes it answers. the catastro is one organization's (srtm.catastro.organizacion): the tests share
+// that one, created once with the slug the property names, and keep apart by year; another organization is refused
 class BrechaApiTest : SrtmApiTest() {
-    // an organization with the model and the verified predial parameters: its admin's token
-    private fun organizacion(): String {
-        val suyo = otraOrganizacion()
+    // the organization of the catastro, with the model and the verified predial parameters: its admin's token
+    private fun organizacion(): String = organizacionDelCatastro ?: crearOrganizacion().also { organizacionDelCatastro = it }
+
+    private fun crearOrganizacion(): String {
+        val email = "admin@$SLUG.test"
+        val clave = "clave-de-la-organizacion-del-catastro"
+        post("/api/organizations", mapOf("name" to SLUG, "slug" to SLUG, "adminEmail" to email, "adminPassword" to clave))
+        val suyo = bearer(email, clave)
+        aplicarModelo(suyo)
         for (p in Parametros.predial) {
             val attributes =
                 mapOf(
@@ -132,9 +139,17 @@ class BrechaApiTest : SrtmApiTest() {
             listOf(4, 4, 1, 1, 0, 1, 1, 1),
             listOf("prediosCatastro", "prediosPadron", "omisos", "subvaluados", "sobrevaluados", "coinciden", "sinCatastro", "sinValor").map { k[it].asInt() }
         )
-        assertEquals(BigDecimal("250000.00"), dec(k["autoavaluoDeclarado"]))
+        // the compared rows (A, B) and the omiso: 180000 + 90000 = 270000. C (SIN_CATASTRO) and D (SIN_VALOR) only in
+        // the totals
+        assertEquals(BigDecimal("180000.00"), dec(k["autoavaluoDeclarado"]))
         assertEquals(BigDecimal("270000.00"), dec(k["autoavaluoCatastro"]))
         assertEquals(BigDecimal("90000.00"), dec(k["deltaAutoavaluo"]))
+        assertEquals(dec(k["autoavaluoCatastro"]), dec(k["autoavaluoDeclarado"]) + dec(k["deltaAutoavaluo"]))
+        assertEquals(BigDecimal("250000.00"), dec(k["autoavaluoDeclaradoTotal"]))
+        assertEquals(BigDecimal("270000.00"), dec(k["autoavaluoCatastroTotal"]))
+        assertEquals(liquidar("40000.00"), dec(k["deltaImpuestoOmisosEstimado"]))
+        assertEquals(BigDecimal("180000.00"), dec(corrida["declarado"]))
+        assertEquals(BigDecimal("270000.00"), dec(corrida["catastro"]))
         // c1 goes from 180000 to 230000 of base; the omiso is estimated alone; c2 does not move
         val esperado = liquidar("230000.00") - liquidar("180000.00") + liquidar("40000.00")
         assertEquals(esperado, dec(k["deltaImpuesto"]))
@@ -179,14 +194,14 @@ class BrechaApiTest : SrtmApiTest() {
     fun `a run failed midway (abandoned) neither ends TERMINADA nor writes its rows`() {
         val org = organizacion()
         val sufijo = uniqueDocumento()
-        declarar(org, contribuyente(org), predio(org, "Q-$sufijo"), "1000.00")
+        declarar(org, contribuyente(org), predio(org, "Q-$sufijo"), "1000.00", anio = 2027)
         ITEMS.set(listOf(item("Q-$sufijo", "2000.00")))
         val llego = CountDownLatch(1)
         val sigue = CountDownLatch(1)
         BLOQUEO.set(llego to sigue)
         val id: String
         try {
-            id = tree(send("POST", "/api/srtm/brecha/corridas", mapOf("anio" to 2026), HttpStatus.ACCEPTED, org))["id"].asString()
+            id = tree(send("POST", "/api/srtm/brecha/corridas", mapOf("anio" to 2027), HttpStatus.ACCEPTED, org))["id"].asString()
             assertTrue(llego.await(30, TimeUnit.SECONDS), "the run never asked catastro")
             // what a later POST does to a stale one: FALLIDA, through the generic api (a full replace)
             val guardada = tree(send("GET", "/api/objects/brecha_corrida/records/$id", null, HttpStatus.OK, org))["attributes"]
@@ -204,8 +219,75 @@ class BrechaApiTest : SrtmApiTest() {
             assertEquals("Abandonada en la prueba", c["mensaje"].asString())
             assertEquals(0, c["procesados"].asInt())
         }
-        val filas = tree(send("GET", "/api/srtm/brecha/2026/predios?corrida=$id", null, HttpStatus.OK, org))
+        val filas = tree(send("GET", "/api/srtm/brecha/2027/predios?corrida=$id", null, HttpStatus.OK, org))
         assertEquals(0, filas["totalElements"].asInt())
+    }
+
+    // a corrida EN_CURSO whose latido is older than the lease, as a dead instance leaves it
+    private fun colgada(
+        org: String,
+        anio: Int
+    ): String =
+        post(
+            "/api/objects/brecha_corrida/records",
+            mapOf(
+                "attributes" to
+                    mapOf(
+                        "anio" to anio,
+                        "estado" to EN_CURSO,
+                        "total_predios" to 0,
+                        "procesados" to 0,
+                        "iniciado" to "2020-01-01T00:00:00Z",
+                        "latido" to "2020-01-01T00:00:00Z"
+                    )
+            ),
+            org
+        )["id"].asString()
+
+    private fun guardada(
+        id: String,
+        org: String
+    ) = tree(send("GET", "/api/objects/brecha_corrida/records/$id", null, HttpStatus.OK, org))["attributes"]
+
+    @Test
+    fun `a corrida whose instance stopped beating is read FALLIDA, so nobody waits on it`() {
+        val org = organizacion()
+        val id = colgada(org, 2028)
+        val c = tree(send("GET", "/api/srtm/brecha/corridas/$id", null, HttpStatus.OK, org))
+        assertEquals(FALLIDA, c["estado"].asString(), c.toString())
+        assertTrue(c["mensaje"].asString().startsWith("Abandonada: sin latido desde 2020-01-01"), c.toString())
+        assertTrue(!c["terminado"].isNull)
+        // stored so by an admin's read
+        assertEquals(FALLIDA, guardada(id, org)["estado"].asString())
+        assertEquals(FALLIDA, tree(send("GET", "/api/srtm/brecha/corridas?anio=2028", null, HttpStatus.OK, org))[0]["estado"].asString())
+
+        // a reader who may only read gets it FALLIDA too, without writing it; the next admin's read stores it
+        val otra = colgada(token, 2028)
+        val lector = funcionario(listOf(permiso(BRECHA_CORRIDA, "READ")))
+        val vista = tree(send("GET", "/api/srtm/brecha/corridas", null, HttpStatus.OK, lector)).first { it["id"].asString() == otra }
+        assertEquals(FALLIDA, vista["estado"].asString(), vista.toString())
+        assertEquals(EN_CURSO, guardada(otra, token)["estado"].asString())
+        assertEquals(FALLIDA, tree(send("GET", "/api/srtm/brecha/corridas/$otra", null, HttpStatus.OK))["estado"].asString())
+        assertEquals(FALLIDA, guardada(otra, token)["estado"].asString())
+    }
+
+    @Test
+    fun `the catastro is not another organization's`() {
+        val otra = otraOrganizacion()
+        val problema = tree(send("POST", "/api/srtm/brecha/corridas", mapOf("anio" to 2026), HttpStatus.CONFLICT, otra))
+        assertEquals(DE_OTRA_ORGANIZACION, problema["detail"].asString(), problema.toString())
+        assertEquals(0, tree(send("GET", "/api/srtm/brecha/corridas", null, HttpStatus.OK, otra)).size())
+    }
+
+    @Test
+    fun `a catastro that answers no item while the padron has predios fails the corrida`() {
+        val org = organizacion()
+        declarar(org, contribuyente(org), predio(org, "V-${uniqueDocumento()}"), "1000.00", anio = 2029)
+        ITEMS.set(emptyList())
+        val corrida = corrida(org, 2029)
+        assertEquals(FALLIDA, corrida["estado"].asString(), corrida.toString())
+        assertTrue(corrida["mensaje"].asString().startsWith("El catastro no devolvió valuaciones de 2029"), corrida.toString())
+        assertEquals(0, corrida["totalPredios"].asInt())
     }
 
     @Test
@@ -226,6 +308,10 @@ class BrechaApiTest : SrtmApiTest() {
 
     companion object {
         private val ITEMS = AtomicReference<List<String>>(emptyList())
+
+        // the organization srtm.catastro.organizacion names, by its slug: created by the first test that needs it
+        private val SLUG = "brecha-${java.util.UUID.randomUUID().toString().take(8)}"
+        private var organizacionDelCatastro: String? = null
 
         // while set, the valuaciones say they were asked (first) and wait (second) before answering
         private val BLOQUEO = AtomicReference<Pair<CountDownLatch, CountDownLatch>?>(null)
@@ -268,6 +354,7 @@ class BrechaApiTest : SrtmApiTest() {
             registro.add("srtm.catastro.url") { "http://127.0.0.1:${CATASTRO.address.port}" }
             registro.add("srtm.catastro.client-id") { "srtm" }
             registro.add("srtm.catastro.client-secret") { "secreto-de-prueba" }
+            registro.add("srtm.catastro.organizacion") { SLUG }
         }
 
         @JvmStatic

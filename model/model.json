@@ -1270,8 +1270,10 @@
         {"name": "total_predios", "label": "Predios", "type": "INTEGER", "description": "Filas de brecha_predio: los ítems del catastro más los predios del padrón sin catastro."},
         {"name": "procesados", "label": "Procesados", "type": "INTEGER", "description": "Filas escritas hasta ahora."},
         {"name": "mensaje", "label": "Mensaje", "type": "LONG_TEXT", "description": "Por qué falló, o lo que no se pudo calcular (los arbitrios)."},
-        {"name": "declarado", "label": "Autoavalúo declarado (S/)", "type": "DECIMAL"},
-        {"name": "catastro", "label": "Autoavalúo catastral (S/)", "type": "DECIMAL"},
+        {"name": "declarado", "label": "Autoavalúo declarado (S/)", "type": "DECIMAL",
+          "description": "De los predios comparados (valorizados en los dos lados): declarado + Δ autoavalúo = catastro."},
+        {"name": "catastro", "label": "Autoavalúo catastral (S/)", "type": "DECIMAL",
+          "description": "De los predios comparados y de los omisos; sin los SIN_VALOR."},
         {"name": "delta_impuesto", "label": "Δ impuesto predial (S/)", "type": "DECIMAL"},
         {"name": "delta_arbitrios", "label": "Δ arbitrios (S/)", "type": "DECIMAL", "description": "Vacío si los arbitrios del año no se pudieron calcular (ver mensaje)."},
         {"name": "latido", "label": "Latido", "type": "DATETIME",
@@ -1301,7 +1303,8 @@
         {"name": "estimado", "label": "Estimado", "type": "BOOLEAN", "description": "El impuesto de un omiso: liquidado solo con su autoavalúo, sin contribuyente."},
         {"name": "motivo", "label": "Motivo", "type": "TEXT", "description": "Por qué el catastro no lo valoró, o por qué no cruzó."},
         {"name": "lote_geom", "label": "Lote", "type": "GEOMETRY", "geometryType": "POLYGON", "srid": 32718,
-          "description": "El lote del predio del padrón o, para un omiso, el del catastro (UTM 18S)."}
+          "description": "El lote del predio del padrón o, para un omiso, el del catastro (UTM 18S)."},
+        {"name": "orden", "label": "Orden", "type": "INTEGER", "description": "Su lugar en la lista: por código del predio, luego por código catastral."}
       ]
     }
   ],

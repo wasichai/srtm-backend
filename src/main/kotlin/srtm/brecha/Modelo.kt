@@ -89,7 +89,9 @@ data class FilaBrecha(
     val deltaArbitrios: BigDecimal? = null,
     val estimado: Boolean? = null,
     val motivo: String? = null,
-    val loteGeom: Map<String, Any?>? = null
+    val loteGeom: Map<String, Any?>? = null,
+    // its position in /predios (Brecha.ordenadas)
+    val orden: Int? = null
 )
 
 // the corrida as the portal shows it (camelCase, like /liquidacion)
@@ -197,11 +199,19 @@ data class Kpis(
     val coinciden: Int,
     val sinCatastro: Int,
     val sinValor: Int,
+    // over the rows compared (valued on both sides, and the omisos): declarado + Δ = catastro
     val autoavaluoDeclarado: BigDecimal,
     val autoavaluoCatastro: BigDecimal,
     val deltaAutoavaluo: BigDecimal,
+    // net: what the subvaluados add less what the sobrevaluados take, plus the omisos' estimate
     val deltaImpuesto: BigDecimal,
-    val deltaArbitrios: BigDecimal?
+    val deltaArbitrios: BigDecimal?,
+    // the omisos' part of deltaImpuesto (each liquidated alone: an estimate)
+    val deltaImpuestoOmisosEstimado: BigDecimal,
+    // every declared autoavalúo of the padrón (SIN_CATASTRO and SIN_VALOR too) and every catastro value: they do not
+    // reconcile with deltaAutoavaluo
+    val autoavaluoDeclaradoTotal: BigDecimal,
+    val autoavaluoCatastroTotal: BigDecimal
 )
 
 data class PorCategoria(

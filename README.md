@@ -56,6 +56,7 @@ ese puerto queda en el loopback del servidor: llega por un túnel, `ssh -N -L 54
 | `SRTM_PIDE_RENIEC_URL` / `_TIMEOUT` | `https://ws2.pide.gob.pe/Rest/RENIEC/Consultar` / `5s` | servicio REST "Consultar" y cuánto se espera |
 | `SRTM_CATASTRO_ENABLED` | `false` | valuaciones de catastro-backend para la brecha (ver [Brecha de recaudación](#brecha-de-recaudación)) |
 | `SRTM_CATASTRO_URL` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_TIMEOUT` | `http://localhost:8091` / vacías / `60s` | catastro-backend y su cuenta de servicio `srtm`; el secreto nunca en el repositorio |
+| `SRTM_CATASTRO_ORGANIZACION` | vacía | slug o id de la organización de srtm cuyo catastro es; vacía, ninguna corrida de la brecha empieza |
 
 ### Pasar una base existente a PostGIS
 
@@ -777,14 +778,27 @@ y `Arbitrios.determinar`.
 cuenta de servicio `srtm` de catastro-backend (rol `SRTM_LECTOR`, la crea su `model/crear_cuenta_srtm.py`). El token
 sale de `POST {url}/api/auth/token {clientId, clientSecret}` y se guarda hasta un minuto antes de `expiresAt` (o
 hasta un 401). Variables: `SRTM_CATASTRO_ENABLED`, `SRTM_CATASTRO_URL`, `SRTM_CATASTRO_CLIENT_ID`,
-`SRTM_CATASTRO_CLIENT_SECRET`, `SRTM_CATASTRO_TIMEOUT` (por petición). Apagado, o sin url o cuenta, una corrida no
-empieza: **409** «Catastro no configurado». Si la cuenta no puede leer alguno de los cuatro objetos del catastro,
-catastro responde 403 a todo y la corrida queda FALLIDA con ese estado.
+`SRTM_CATASTRO_CLIENT_SECRET`, `SRTM_CATASTRO_TIMEOUT` (por petición) y `SRTM_CATASTRO_ORGANIZACION`. Apagado, o sin
+url o cuenta, una corrida no empieza: **409** «Catastro no configurado». Si la cuenta no puede leer alguno de los
+cuatro objetos del catastro, catastro responde 403 a todo y la corrida queda FALLIDA con ese estado. Si catastro no
+devuelve ningún ítem del año y el padrón tiene predios, la corrida queda FALLIDA («El catastro no devolvió valuaciones
+de 2026…») en vez de dar todo el padrón por SIN_CATASTRO. Los importes se leen como decimales, nunca como `double`.
+
+**Una organización.** La configuración es de la instalación, no de cada organización: `srtm.catastro.organizacion`
+(`SRTM_CATASTRO_ORGANIZACION`, el slug o el id de la organización de srtm) dice de cuál es ese catastro. Una corrida de
+otra organización responde **409** «Catastro no configurado para esta organización»; sin ella, con el catastro
+encendido, ninguna corrida empieza (**409** «Catastro sin organización: fije srtm.catastro.organizacion…»): nunca se
+cruza en silencio el padrón de una organización con el catastro de otra.
 
 **Cruce** (D7). Cada ítem del catastro busca su predio: por código municipal (`predio.codigo`), si no por código CPU
 (`codigo_cpu`), si no por sector, manzana y lote (`sector_catastral`, `manzana_catastral`, `lote`), sin distinguir
-mayúsculas ni espacios en los extremos. Un predio cruza una sola vez: un ítem posterior con la misma llave prueba la
-siguiente. Entre varios predios de la misma llave gana el que tiene DJ del año y luego el de código menor.
+mayúsculas ni espacios en los extremos. El cruce va **por pasadas sobre todos los ítems**, así el orden de los ítems no
+cambia nada: primero todos por código municipal, luego los que quedan por CPU, luego los que quedan por sector, manzana
+y lote. Una llave de respaldo nunca le quita a otro ítem el predio que este nombra por una llave más fuerte. Un predio
+cruza una sola vez. En las dos primeras pasadas, entre varios predios de la misma llave gana el que tiene DJ del año y
+luego el de código menor. Sector, manzana y lote no identifican: cruzan solo cuando a la llave le quedan **un** ítem y
+**un** predio; si la comparten varios ítems o varios predios, ninguno cruza (los ítems quedan OMISO y los predios
+SIN_CATASTRO) antes que emparejarlos al azar.
 
 **Categorías** (una fila de `brecha_predio` por ítem del catastro y por predio del padrón sin catastro). El padrón son
 los predios con alguna DJ **vigente** del año; su autoavalúo declarado es el de `totalesDePredio` (el mayor de cada
@@ -818,8 +832,15 @@ secuencia de uso, una vez).
   impuesto declarado se reparte según el valor afecto guardado de cada predio. Así la suma por predio es exactamente
   la suma por contribuyente.
 
+«Valores iguales no mueven nada» vale para el autoavalúo **de cada DJ**, no solo el del predio. El autoavalúo
+declarado de una secuencia es el mayor de sus titulares (`totalesDePredio`), y el lado catastral da a cada titular la
+parte de su secuencia. Un condómino que declaró **menos** que el mayor de su secuencia se recalcula con ese mayor:
+aunque el catastro coincida con el declarado del predio (COINCIDE, Δ autoavalúo 0), su afecto sube y el predio puede
+llevar un Δ impuesto distinto de 0. Es a propósito: el condómino declaró por debajo del valor de su propio predio.
+
 Un **omiso** no tiene contribuyente: su impuesto se estima liquidando su autoavalúo catastral solo
-(`estimado = true`). Sin los parámetros del impuesto del año (UIT, tramos, mínimo) la corrida queda **FALLIDA** con
+(`estimado = true`). El Δ impuesto del panel es neto: lo que suman los subvaluados menos lo que restan los
+sobrevaluados, más lo estimado de los omisos (`deltaImpuestoOmisosEstimado`, aparte). Sin los parámetros del impuesto del año (UIT, tramos, mínimo) la corrida queda **FALLIDA** con
 `Faltan parámetros del impuesto predial: UIT 2099`.
 
 **Arbitrios.** Para cada predio cruzado y valorizado, `Δ arbitrios = Arbitrios.determinar` del año entero con las DJ
@@ -841,7 +862,10 @@ maquinaria de lotes de la determinación masiva no aporta aquí. Una sola activa
 `BRECHA`): otra responde **409**; una cuyo `latido` tiene más de 10 minutos (su instancia murió) se da por abandonada
 y pasa a FALLIDA. El `latido` late con el reloj de la base (`now()`, como la determinación masiva) tras cada página
 del catastro y entre los pasos largos; antes de escribir cada lote de filas y antes de cerrar, la corrida relee su
-estado y se detiene si ya no está EN_CURSO, así una abandonada nunca pisa a una más nueva.
+estado y se detiene si ya no está EN_CURSO, así una abandonada nunca pisa a una más nueva. La misma regla vale al
+**leer**: `GET /corridas` y `GET /corridas/{id}` devuelven FALLIDA («Abandonada: sin latido desde …», con el reloj de
+la base) la activa cuyo latido venció, y la guardan así si quien lee puede editar corridas; el portal deja de esperarla
+y puede lanzar otra.
 Pide creación y edición sobre `brecha_corrida` y creación sobre `brecha_predio` (**403**); consultar pide lectura
 sobre `brecha_corrida`.
 
@@ -851,8 +875,13 @@ sobre `brecha_corrida`.
 | GET | `/api/srtm/brecha/corridas?anio` | Las corridas, la más reciente primero. |
 | GET | `/api/srtm/brecha/corridas/{id}` | Una corrida, con su avance (`totalPredios`, `procesados`). |
 | GET | `/api/srtm/brecha/{anio}/panel?corrida` | KPIs, por categoría y por sector de la última corrida TERMINADA del año (o de `corrida`); 404 si no hay. |
-| GET | `/api/srtm/brecha/{anio}/predios?categoria&sector&page&size&corrida` | Página de filas; 422 si `categoria` no es una de las seis. |
+| GET | `/api/srtm/brecha/{anio}/predios?categoria&sector&page&size&corrida` | Página de filas por su `orden` (código del predio, luego código catastral); 422 si `categoria` no es una de las seis. |
 | GET | `/api/srtm/brecha/{anio}/lotes?corrida` | GeoJSON `FeatureCollection` (EPSG:4326) con `{categoria, codigo, deltaImpuesto}`. |
+
+**KPIs de autoavalúo.** `autoavaluoDeclarado`, `autoavaluoCatastro` y `deltaAutoavaluo` del panel (y `declarado` y
+`catastro` de la corrida) suman las **mismas filas**: las comparadas (SUBVALUADO, SOBREVALUADO, COINCIDE) y los omisos,
+así declarado + Δ = catastro. SIN_CATASTRO y SIN_VALOR tienen un solo lado y quedan fuera; las sumas de todas las filas
+van aparte, en `autoavaluoDeclaradoTotal` y `autoavaluoCatastroTotal`.
 
 El JSON va en camelCase, como `/liquidacion`. `lote_geom` de `brecha_predio` es un POLYGON 32718 como el de `predio`:
 guarda el lote del predio del padrón o, para un omiso, el del catastro; así `/lotes` lo lee de las filas y la capa gis

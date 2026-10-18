@@ -273,7 +273,8 @@ class ShippedModelTests(unittest.TestCase):
         predio = self.campos("brecha_predio")
         self.assertEqual(list(predio), ["codigo_catastro", "codigo_predio", "categoria", "sector", "manzana", "lote", "uso",
                                         "autoavaluo_declarado", "autoavaluo_catastro", "delta_autoavaluo", "impuesto_declarado",
-                                        "impuesto_catastro", "delta_impuesto", "delta_arbitrios", "estimado", "motivo", "lote_geom"])
+                                        "impuesto_catastro", "delta_impuesto", "delta_arbitrios", "estimado", "motivo", "lote_geom",
+                                        "orden"])
         self.assertEqual(self.model["enums"]["categoria_brecha"],
                          ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE"])
         self.assertEqual(self.relaciones("brecha_predio"), {"corrida": ("brecha_corrida", True), "predio": ("predio", False)})

@@ -43,6 +43,7 @@ import wasichai.core.data.RecordQuery
 import wasichai.core.identity.AuthenticatedUser
 import wasichai.core.identity.CurrentUser
 import wasichai.core.metadata.MetadataService
+import wasichai.core.organization.OrganizationRepository
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -56,7 +57,8 @@ import kotlin.coroutines.cancellation.CancellationException
 // in procesados, until the corrida is TERMINADA (or FALLIDA, with mensaje). ~4 000 predios are a minute or two of one
 // worker: the masiva's lotes (several instances, leases per lote) would buy nothing here. one active corrida per
 // organization and year, under Candado.BRECHA; one whose latido is older than LEASE (its instance died) no longer
-// counts as active and is failed when the next one starts
+// counts as active and is failed when the next one starts, or when it is read (lista, get). catastro-backend is the
+// catastro of one organization (srtm.catastro.organizacion): another's corrida is refused
 @Service
 class BrechaService(
     private val registros: Registros,
@@ -67,13 +69,15 @@ class BrechaService(
     private val arbitrios: ArbitriosService,
     private val parametrosTributarios: ParametrosTributarios,
     private val db: DatabaseClient,
+    private val propiedades: CatastroProperties,
+    private val organizaciones: OrganizationRepository,
     transacciones: ReactiveTransactionManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val transaccion = TransactionalOperator.create(transacciones)
 
     // 202: the corrida PENDIENTE. before anything exists: 403 without the permissions its run uses, 400 for the year,
-    // 409 when catastro is not configured or a corrida of the year is running
+    // 409 when catastro is not configured (or not for the caller's organization) or a corrida of the year is running
     suspend fun lanzar(pedido: PedidoCorrida): Corrida {
         val llamante =
             ReactiveSecurityContextHolder.getContext().awaitFirstOrNull()?.authentication
@@ -84,20 +88,14 @@ class BrechaService(
             throw ValidationException("El año no es válido", "anio", "de ${ArbitriosService.ANIOS.first} a ${ArbitriosService.ANIOS.last}")
         }
         if (!catastro.configurado) throw ConflictException(NO_CONFIGURADO)
+        exigirOrganizacion(usuario)
         val creada =
             transaccion.executeAndAwait {
                 candados.bloquear(Candado.BRECHA, "${usuario.organizationId}|$anio")
                 val ahora = ahora()
                 for (activa in activas(anio)) {
                     if (viva(activa, ahora)) throw ConflictException("Ya hay una corrida de la brecha de $anio en curso: espere a que termine")
-                    actualizar(
-                        UUID.fromString(activa.id),
-                        mapOf(
-                            "estado" to FALLIDA,
-                            "mensaje" to "Abandonada: su instancia dejó de latir",
-                            "terminado" to ahora.toString()
-                        )
-                    )
+                    actualizar(UUID.fromString(activa.id), abandono(activa, ahora))
                 }
                 registros.create(
                     BRECHA_CORRIDA,
@@ -117,17 +115,63 @@ class BrechaService(
         return corridaDe(creada)
     }
 
-    suspend fun lista(anio: Int?): List<Corrida> =
-        registros
-            .all(
+    suspend fun lista(anio: Int?): List<Corrida> {
+        val corridas =
+            registros.all(
                 BRECHA_CORRIDA,
                 RegistroCorrida::class.java,
                 filters = anio?.let { mapOf("anio" to it.toString()) } ?: emptyMap(),
                 sort = "created_at",
                 descending = true
-            ).map(::corridaDe)
+            )
+        if (corridas.none { it.estado in ACTIVAS }) return corridas.map(::corridaDe)
+        val ahora = ahora()
+        return corridas.map { corridaDe(vencida(it, ahora)) }
+    }
 
-    suspend fun get(id: UUID): Corrida = corridaDe(registros.get(BRECHA_CORRIDA, RegistroCorrida::class.java, id))
+    suspend fun get(id: UUID): Corrida {
+        val r = registros.get(BRECHA_CORRIDA, RegistroCorrida::class.java, id)
+        return corridaDe(if (r.estado in ACTIVAS) vencida(r, ahora()) else r)
+    }
+
+    // a corrida still active whose latido is older than LEASE (lanzar's rule, by the db's clock) is abandoned: read, it
+    // is failed too, so whoever waits on it (the portal polls) stops and may start another. written when the reader may
+    // update corridas; a reader who may only read gets it answered FALLIDA, and the next writer's read or POST stores it
+    private suspend fun vencida(
+        r: RegistroCorrida,
+        ahora: Instant
+    ): RegistroCorrida {
+        if (r.estado !in ACTIVAS || viva(r, ahora)) return r
+        val campos = abandono(r, ahora)
+        return try {
+            registros.replace(BRECHA_CORRIDA, RegistroCorrida::class.java, UUID.fromString(r.id), campos)
+        } catch (_: ForbiddenException) {
+            r.copy(estado = FALLIDA, mensaje = campos["mensaje"] as String, terminado = ahora.toString())
+        }
+    }
+
+    private fun abandono(
+        r: RegistroCorrida,
+        ahora: Instant
+    ) = mapOf(
+        "estado" to FALLIDA,
+        "mensaje" to "Abandonada: sin latido desde ${r.latido ?: r.iniciado ?: "su inicio"}",
+        "terminado" to ahora.toString()
+    )
+
+    // catastro-backend's url and account are install-wide: the catastro of one organization. a corrida of another would
+    // measure its padrón against someone else's catastro, so it is refused; with no organization set, every corrida is
+    // refused until one is (never a silent tie to whoever asks first)
+    private suspend fun exigirOrganizacion(usuario: AuthenticatedUser) {
+        val configurada = propiedades.organizacion.trim()
+        val slug =
+            if (configurada.isEmpty() || runCatching { UUID.fromString(configurada) }.isSuccess) {
+                null
+            } else {
+                organizaciones.findById(usuario.organizationId)?.slug
+            }
+        otraOrganizacion(configurada, usuario.organizationId, slug)?.let { throw ConflictException(it) }
+    }
 
     // the corrida a query reads: the one given (404 unless it is of the year), else the latest TERMINADA of the year
     // (404 when there is none)
@@ -149,7 +193,8 @@ class BrechaService(
     // every row of a corrida
     suspend fun filas(corrida: String): List<FilaBrecha> = registros.all(BRECHA_PREDIO, FilaBrecha::class.java, filters = mapOf("corrida" to corrida))
 
-    // a page of a corrida's rows, by categoría and sector when given, by their codes
+    // a page of a corrida's rows, by categoría and sector when given, in their orden (Brecha.ordenadas: the padrón's
+    // code, then the catastro's; unique, so pages never shuffle)
     suspend fun pagina(
         corrida: String,
         categoria: Categoria?,
@@ -164,7 +209,7 @@ class BrechaService(
                 if (sector != null) put("sector", sector)
             }
         return registros
-            .page(BRECHA_PREDIO, FilaBrecha::class.java, RecordQuery(page = PageRequest.of(page, size), sort = "codigo_catastro", filters = filtros))
+            .page(BRECHA_PREDIO, FilaBrecha::class.java, RecordQuery(page = PageRequest.of(page, size), sort = "orden", filters = filtros))
             .map(::predioBrechaDe)
     }
 
@@ -191,6 +236,10 @@ class BrechaService(
                 }
             val padron = padron(anio, contexto)
             latir(id)
+            Brecha.sinValuaciones(anio, valuaciones.items, padron)?.let {
+                fallar(id, it)
+                return
+            }
             val medicion = Brecha.medir(anio, valuaciones.items, padron, parametros, contexto, LocalDate.now(), sinArbitrios)
             if (medicion.faltan.isNotEmpty()) {
                 fallar(id, "Faltan parámetros del impuesto predial: ${medicion.faltan.joinToString("; ")}")
@@ -198,7 +247,7 @@ class BrechaService(
             }
             latir(id, mapOf("total_predios" to medicion.filas.size))
             var procesados = 0
-            for (lote in medicion.filas.chunked(LOTE)) {
+            for (lote in Brecha.ordenadas(medicion.filas).chunked(LOTE)) {
                 exigirEnCurso(id)
                 transaccion.executeAndAwait {
                     registros.createAll(BRECHA_PREDIO, FilaBrecha::class.java, lote.map { Records.attributes(it.copy(corrida = id.toString())) })
