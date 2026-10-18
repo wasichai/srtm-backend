@@ -8,7 +8,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.reactive.awaitFirstOrNull
 import kotlinx.coroutines.reactor.asCoroutineContext
+import kotlinx.coroutines.reactor.awaitSingle
 import org.slf4j.LoggerFactory
+import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.ReactiveTransactionManager
@@ -44,6 +46,7 @@ import wasichai.core.metadata.MetadataService
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -63,6 +66,7 @@ class BrechaService(
     private val catastro: Catastro,
     private val arbitrios: ArbitriosService,
     private val parametrosTributarios: ParametrosTributarios,
+    private val db: DatabaseClient,
     transacciones: ReactiveTransactionManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -83,7 +87,7 @@ class BrechaService(
         val creada =
             transaccion.executeAndAwait {
                 candados.bloquear(Candado.BRECHA, "${usuario.organizationId}|$anio")
-                val ahora = Instant.now()
+                val ahora = ahora()
                 for (activa in activas(anio)) {
                     if (viva(activa, ahora)) throw ConflictException("Ya hay una corrida de la brecha de $anio en curso: espere a que termine")
                     actualizar(
@@ -164,16 +168,18 @@ class BrechaService(
             .map(::predioBrechaDe)
     }
 
-    // in the background, as the caller: catastro's valuations, the padrón, the measure and its rows. what goes wrong
-    // leaves the corrida FALLIDA with why
+    // in the background, as the caller: catastro's valuations, the padrón, the measure and its rows. its latido beats
+    // after every page of catastro and between the long steps; before writing its rows, after each batch and before
+    // ending it reads its estado again and stops if it is no longer EN_CURSO (another POST found it stale and failed
+    // it: an abandoned run never overwrites a newer one). what goes wrong leaves it FALLIDA with why
     private suspend fun correr(
         id: UUID,
         anio: Int
     ) {
         try {
-            latir(id, mapOf("estado" to EN_CURSO))
+            actualizar(id, mapOf("estado" to EN_CURSO, "latido" to ahora().toString()))
             val parametros = parametrosTributarios.todos()
-            val valuaciones = catastro.valuaciones(anio)
+            val valuaciones = catastro.valuaciones(anio) { latir(id) }
             latir(id, mapOf("version_catastro" to valuaciones.version))
             val (contexto, sinArbitrios) =
                 try {
@@ -183,7 +189,9 @@ class BrechaService(
                 } catch (e: Exception) {
                     null to (e.message ?: e.javaClass.simpleName)
                 }
-            val medicion = Brecha.medir(anio, valuaciones.items, padron(anio, contexto), parametros, contexto, LocalDate.now(), sinArbitrios)
+            val padron = padron(anio, contexto)
+            latir(id)
+            val medicion = Brecha.medir(anio, valuaciones.items, padron, parametros, contexto, LocalDate.now(), sinArbitrios)
             if (medicion.faltan.isNotEmpty()) {
                 fallar(id, "Faltan parámetros del impuesto predial: ${medicion.faltan.joinToString("; ")}")
                 return
@@ -191,20 +199,22 @@ class BrechaService(
             latir(id, mapOf("total_predios" to medicion.filas.size))
             var procesados = 0
             for (lote in medicion.filas.chunked(LOTE)) {
+                exigirEnCurso(id)
                 transaccion.executeAndAwait {
                     registros.createAll(BRECHA_PREDIO, FilaBrecha::class.java, lote.map { Records.attributes(it.copy(corrida = id.toString())) })
                 }
                 procesados += lote.size
                 latir(id, mapOf("procesados" to procesados))
             }
-            val corrida = registros.get(BRECHA_CORRIDA, RegistroCorrida::class.java, id)
+            val corrida = exigirEnCurso(id)
             val kpis = Brecha.panel(corrida, medicion.filas).kpis
+            val fin = ahora().toString()
             actualizar(
                 id,
                 mapOf(
                     "estado" to TERMINADA,
-                    "terminado" to Instant.now().toString(),
-                    "latido" to Instant.now().toString(),
+                    "terminado" to fin,
+                    "latido" to fin,
                     "declarado" to kpis.autoavaluoDeclarado,
                     "catastro" to kpis.autoavaluoCatastro,
                     "delta_impuesto" to kpis.deltaImpuesto,
@@ -214,11 +224,33 @@ class BrechaService(
             )
         } catch (e: CancellationException) {
             throw e
+        } catch (e: Abandonada) {
+            log.warn("la corrida de brecha {} dejó de estar EN_CURSO ({}): se detiene sin escribir más", id, e.message)
         } catch (e: Throwable) {
             log.error("la corrida de brecha {} falló", id, e)
             runCatching { fallar(id, e.message ?: e.javaClass.simpleName) }
         }
     }
+
+    // the run stops: its corrida is no longer EN_CURSO
+    private class Abandonada(
+        estado: String?
+    ) : RuntimeException(estado)
+
+    // the corrida as stored, while it is still EN_CURSO
+    private suspend fun exigirEnCurso(id: UUID): RegistroCorrida {
+        val r = registros.get(BRECHA_CORRIDA, RegistroCorrida::class.java, id)
+        if (r.estado != EN_CURSO) throw Abandonada(r.estado)
+        return r
+    }
+
+    // the database's clock, the one every instance shares (DeterminacionMasiva's leases compare with now() too)
+    private suspend fun ahora(): Instant =
+        db
+            .sql("SELECT now() AS ahora")
+            .map { row, _ -> row.get("ahora", OffsetDateTime::class.java)!!.toInstant() }
+            .one()
+            .awaitSingle()
 
     // what Brecha.medir reads of srtm: every predio (the candidates of the cruce) and declaración of the year; for the
     // arbitrios, when their context was read, the contribuyentes' codes and the inafectaciones
@@ -241,24 +273,38 @@ class BrechaService(
             .all(BRECHA_CORRIDA, RegistroCorrida::class.java, filters = mapOf("anio" to "$anio"))
             .filter { it.estado in ACTIVAS }
 
+    // a DATETIME as core reads it back: an instant, with an offset, or a utc local time
+    private fun instante(texto: String): Instant? =
+        runCatching { Instant.parse(texto) }.getOrNull()
+            ?: runCatching { OffsetDateTime.parse(texto).toInstant() }.getOrNull()
+            ?: runCatching {
+                java.time.LocalDateTime
+                    .parse(texto)
+                    .toInstant(java.time.ZoneOffset.UTC)
+            }.getOrNull()
+
     // its instance still beats: its latido is within LEASE
     private fun viva(
         r: RegistroCorrida,
         ahora: Instant
     ): Boolean {
-        val latido = (r.latido ?: r.iniciado)?.let { runCatching { Instant.parse(it) }.getOrNull() } ?: return false
+        val latido = (r.latido ?: r.iniciado)?.let(::instante) ?: return false
         return latido.plus(LEASE).isAfter(ahora)
     }
 
+    // the latido by the database's clock, while the corrida is EN_CURSO
     private suspend fun latir(
         id: UUID,
-        campos: Map<String, Any?>
-    ) = actualizar(id, campos + ("latido" to Instant.now().toString()))
+        campos: Map<String, Any?> = emptyMap()
+    ) {
+        exigirEnCurso(id)
+        actualizar(id, campos + ("latido" to ahora().toString()))
+    }
 
     private suspend fun fallar(
         id: UUID,
         mensaje: String
-    ) = actualizar(id, mapOf("estado" to FALLIDA, "mensaje" to mensaje, "terminado" to Instant.now().toString()))
+    ) = actualizar(id, mapOf("estado" to FALLIDA, "mensaje" to mensaje, "terminado" to ahora().toString()))
 
     private suspend fun actualizar(
         id: UUID,

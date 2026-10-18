@@ -803,13 +803,20 @@ secuencia de uso, una vez).
 - el valor catastral de cada predio cruzado y valorizado se reparte entre sus secuencias de uso según el autoavalúo
   declarado de cada una; si todas declaran 0, según su área construida; si tampoco, en partes iguales (D12), al
   céntimo y la última con el residuo;
-- cada DJ de la secuencia toma esa parte como `valor_autoavaluo` y `condominio` recalcula `valor_condominio` y
-  `valor_afecto`: conserva el % de cada condómino y su `deduccion` (D8: no se aplica ninguna deducción nueva);
-- `Δ impuesto = liquidar(Σ valor_afecto con catastro) − liquidar(Σ valor_afecto declarado)` (el `impuestoAnual`, con
-  sus tramos y el mínimo);
-- ese Δ se reparte entre sus predios en proporción a cuánto movió cada uno su valor afecto (en valor absoluto), y su
-  impuesto declarado en proporción al valor afecto de cada uno. Así la suma por predio es exactamente la suma por
-  contribuyente.
+- las DJ de ese predio se recalculan **dos veces con la misma regla**, `condominio` (el % de cada condómino y su
+  `deduccion`; D8: ninguna deducción nueva): con el autoavalúo declarado y con la parte del catastro. Lo que el
+  catastro mueve es la diferencia entre los dos valores afectos recalculados, nunca entre el afecto guardado y uno
+  recalculado: en el padrón importado el afecto es el del Excel y el % está redondeado, y compararlos daría una brecha
+  aunque los autoavalúos sean iguales. Un predio que el catastro no valorizó es el mismo en los dos lados;
+- **% de condominio vacío** (el importador lo deja vacío cuando el Excel no trae condominio o el autoavalúo es 0): un
+  titular solo de la secuencia tiene el 100 %; entre varios, los que no tienen % se reparten en partes iguales lo que
+  dejan los demás (nunca menos de 0). La corrida cuenta en `mensaje` cuántas DJ se completaron así;
+- `Δ impuesto = liquidar(afecto guardado + lo que mueve el catastro) − liquidar(afecto guardado)`: el lado declarado
+  es exactamente la liquidación de `/liquidacion` (el `impuestoAnual`, con sus tramos y el mínimo);
+- ese Δ se reparte entre sus predios en proporción a lo que movió cada uno: con su signo cuando todos se mueven en el
+  mismo sentido, en valor absoluto cuando unos suben y otros bajan (con signo los pesos podrían sumar casi 0). Su
+  impuesto declarado se reparte según el valor afecto guardado de cada predio. Así la suma por predio es exactamente
+  la suma por contribuyente.
 
 Un **omiso** no tiene contribuyente: su impuesto se estima liquidando su autoavalúo catastral solo
 (`estimado = true`). Sin los parámetros del impuesto del año (UIT, tramos, mínimo) la corrida queda **FALLIDA** con
@@ -817,8 +824,13 @@ Un **omiso** no tiene contribuyente: su impuesto se estima liquidando su autoava
 
 **Arbitrios.** Para cada predio cruzado y valorizado, `Δ arbitrios = Arbitrios.determinar` del año entero con las DJ
 del predio llevando el uso del catastro (su `uso_predio`), su área construida (repartida como el autoavalúo) y su
-frente, **menos** lo mismo con las DJ declaradas. Ninguna cuota cuenta como ya escrita y no hay tope (no se leen las
-del año anterior): es el cargo anual hipotético de ambos lados, y nada se escribe. Si al año le falta la ordenanza o
+frente, **menos** lo mismo con las DJ declaradas. `Calculo` cobra la base `FRONTIS_ML` con el frente de cada DJ, una
+vez por secuencia cobrada: en un año de un PU por predio se cobra una sola secuencia al mes y cada una lleva el frente
+entero del catastro; en uno de un PU por uso se cobran todas, así que el frente del catastro se reparte entre ellas
+(según el frente declarado de cada una, si no como el autoavalúo) y el predio lo paga una vez. Ninguna cuota cuenta
+como ya escrita y no hay tope (no se leen las del año anterior): es el cargo anual hipotético de ambos lados, y nada
+se escribe. Si el año tiene `TOPE_ARBITRIO`, la corrida lo advierte en `mensaje` («Δ arbitrios sin tope: el año
+tiene TOPE_ARBITRIO»). Si al año le falta la ordenanza o
 sus servicios, o el contexto no se pudo leer, no hay Δ arbitrios y la corrida lo dice en `mensaje`; un predio que no se
 puede determinar queda sin Δ y se cuenta en `mensaje`. Un omiso no tiene Δ arbitrios (no tiene zona ni DJ).
 
@@ -826,7 +838,10 @@ puede determinar queda sin Δ y se cuenta en `mensaje`. Un omiso no tiene Δ arb
 quien la lanzó, un solo trabajador lee el catastro y el padrón, calcula y escribe las filas en lotes de 200,
 actualizando `procesados`, hasta TERMINADA (o FALLIDA, con `mensaje`). Unos 4 000 predios son uno o dos minutos: la
 maquinaria de lotes de la determinación masiva no aporta aquí. Una sola activa por organización y año (candado
-`BRECHA`): otra responde **409**; una cuyo `latido` tiene más de 10 minutos (su instancia murió) se da por abandonada.
+`BRECHA`): otra responde **409**; una cuyo `latido` tiene más de 10 minutos (su instancia murió) se da por abandonada
+y pasa a FALLIDA. El `latido` late con el reloj de la base (`now()`, como la determinación masiva) tras cada página
+del catastro y entre los pasos largos; antes de escribir cada lote de filas y antes de cerrar, la corrida relee su
+estado y se detiene si ya no está EN_CURSO, así una abandonada nunca pisa a una más nueva.
 Pide creación y edición sobre `brecha_corrida` y creación sobre `brecha_predio` (**403**); consultar pide lectura
 sobre `brecha_corrida`.
 

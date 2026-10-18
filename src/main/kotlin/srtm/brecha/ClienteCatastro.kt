@@ -42,7 +42,11 @@ data class CatastroProperties(
 interface Catastro {
     val configurado: Boolean
 
-    suspend fun valuaciones(anio: Int): Valuaciones
+    // porPagina runs after each page is read: the corrida beats its latido there
+    suspend fun valuaciones(
+        anio: Int,
+        porPagina: suspend () -> Unit = {}
+    ): Valuaciones
 }
 
 // catastro could not answer: the corrida fails with this message (never the secret nor a token)
@@ -54,7 +58,10 @@ class CatastroException(
 class SinCatastro : Catastro {
     override val configurado = false
 
-    override suspend fun valuaciones(anio: Int): Valuaciones = throw CatastroException(NO_CONFIGURADO)
+    override suspend fun valuaciones(
+        anio: Int,
+        porPagina: suspend () -> Unit
+    ): Valuaciones = throw CatastroException(NO_CONFIGURADO)
 }
 
 const val NO_CONFIGURADO =
@@ -86,7 +93,10 @@ class ClienteCatastro(
 
     override val configurado = true
 
-    override suspend fun valuaciones(anio: Int): Valuaciones {
+    override suspend fun valuaciones(
+        anio: Int,
+        porPagina: suspend () -> Unit
+    ): Valuaciones {
         val items = mutableListOf<ValuacionCatastral>()
         var version: String? = null
         var page = 0
@@ -101,6 +111,7 @@ class ClienteCatastro(
                     .map(::item)
                     .toList()
             items += suyos
+            porPagina()
             val total = pagina.path("total").takeIf { it.isNumber }?.asLong() ?: items.size.toLong()
             // the size catastro served (it may cap the one asked)
             val size = pagina.path("size").takeIf { it.isNumber }?.asInt() ?: TAMANIO_PAGINA

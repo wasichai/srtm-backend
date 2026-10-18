@@ -15,6 +15,8 @@ import tools.jackson.databind.JsonNode
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.net.InetSocketAddress
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 // the brecha end to end against a stub of catastro-backend (the jdk's http server, on the contract of task 5): predios
@@ -174,6 +176,39 @@ class BrechaApiTest : SrtmApiTest() {
     }
 
     @Test
+    fun `a run failed midway (abandoned) neither ends TERMINADA nor writes its rows`() {
+        val org = organizacion()
+        val sufijo = uniqueDocumento()
+        declarar(org, contribuyente(org), predio(org, "Q-$sufijo"), "1000.00")
+        ITEMS.set(listOf(item("Q-$sufijo", "2000.00")))
+        val llego = CountDownLatch(1)
+        val sigue = CountDownLatch(1)
+        BLOQUEO.set(llego to sigue)
+        val id: String
+        try {
+            id = tree(send("POST", "/api/srtm/brecha/corridas", mapOf("anio" to 2026), HttpStatus.ACCEPTED, org))["id"].asString()
+            assertTrue(llego.await(30, TimeUnit.SECONDS), "the run never asked catastro")
+            // what a later POST does to a stale one: FALLIDA, through the generic api (a full replace)
+            val guardada = tree(send("GET", "/api/objects/brecha_corrida/records/$id", null, HttpStatus.OK, org))["attributes"]
+            val attributes = fields(guardada) + mapOf("estado" to FALLIDA, "mensaje" to "Abandonada en la prueba")
+            send("PUT", "/api/objects/brecha_corrida/records/$id", mapOf("attributes" to attributes), HttpStatus.OK, org)
+        } finally {
+            BLOQUEO.set(null)
+            sigue.countDown()
+        }
+        // the run reads catastro's answer, beats, finds its corrida no longer EN_CURSO and stops
+        repeat(20) {
+            Thread.sleep(150)
+            val c = tree(send("GET", "/api/srtm/brecha/corridas/$id", null, HttpStatus.OK, org))
+            assertEquals(FALLIDA, c["estado"].asString(), c.toString())
+            assertEquals("Abandonada en la prueba", c["mensaje"].asString())
+            assertEquals(0, c["procesados"].asInt())
+        }
+        val filas = tree(send("GET", "/api/srtm/brecha/2026/predios?corrida=$id", null, HttpStatus.OK, org))
+        assertEquals(0, filas["totalElements"].asInt())
+    }
+
+    @Test
     fun `starting needs to write the corrida and its predios, reading needs to read the corrida`() {
         val lector = funcionario(listOf(permiso("predio", "READ")))
         send("POST", "/api/srtm/brecha/corridas", mapOf("anio" to 2026), HttpStatus.FORBIDDEN, lector)
@@ -192,6 +227,9 @@ class BrechaApiTest : SrtmApiTest() {
     companion object {
         private val ITEMS = AtomicReference<List<String>>(emptyList())
 
+        // while set, the valuaciones say they were asked (first) and wait (second) before answering
+        private val BLOQUEO = AtomicReference<Pair<CountDownLatch, CountDownLatch>?>(null)
+
         private const val CUADRADO =
             """{"type":"Polygon","coordinates":[[[-75.22,-10.95],[-75.2195,-10.95],[-75.2195,-10.9495],[-75.22,-10.9495],[-75.22,-10.95]]]}"""
 
@@ -203,6 +241,10 @@ class BrechaApiTest : SrtmApiTest() {
                 }
                 createContext("/api/catastro/valuaciones") { ex ->
                     val anio = Regex("anio=(\\d+)").find(ex.requestURI.query)!!.groupValues[1]
+                    BLOQUEO.get()?.let { (llego, sigue) ->
+                        llego.countDown()
+                        sigue.await(30, TimeUnit.SECONDS)
+                    }
                     val items = ITEMS.get()
                     responder(ex, """{"anio":$anio,"version":"valuacion-v1","page":0,"size":500,"total":${items.size},"items":[${items.joinToString(",")}]}""")
                 }

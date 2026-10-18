@@ -54,7 +54,9 @@ data class ImpuestoDelContribuyente(
 
 data class Impuestos(
     val porContribuyente: Map<String, ImpuestoDelContribuyente>,
-    val porPredio: Map<String, ImpuestoDelPredio>
+    val porPredio: Map<String, ImpuestoDelPredio>,
+    // condóminos without a % whose share conPorcentaje filled, on the predios the catastro valued
+    val sinPorcentaje: Int = 0
 )
 
 // the arbitrios' difference of a predio, or why there is none
@@ -75,6 +77,8 @@ sealed interface DeltaArbitrios {
 object Brecha {
     // D10: COINCIDE while |Δ autoavalúo| <= 5 % of the declared one
     val TOLERANCIA = BigDecimal("0.05")
+
+    private val CIEN = BigDecimal(100)
 
     // what the arbitrios' hypothetical cuotas carry (never written)
     private const val OBSERVACION = "Brecha de recaudación"
@@ -158,39 +162,74 @@ object Brecha {
         return secuencias.map { BigDecimal.ONE }
     }
 
-    // a predio's declarations with the catastro's autoavalúo instead of the declared one: split among its secuencias
-    // (D12) and recomputed by condominio, which keeps each titular's % and deducción. in the order they came
+    // a secuencia's condóminos with a % to compute with. an imported declaración may have none (the Excel had no
+    // condominio, or an autoavalúo of 0: model/import_predios.py): a sole titular holds 100 % (condominio does it);
+    // among several, those without one share equally what the others' % leave (never below 0). how many were filled
+    fun conPorcentaje(secuencia: List<Declaracion>): Pair<List<Declaracion>, Int> {
+        if (secuencia.size <= 1) return secuencia to 0
+        val vacios = secuencia.count { it.porcentajeCondominio == null }
+        if (vacios == 0) return secuencia to 0
+        val conocido = secuencia.mapNotNull { it.porcentajeCondominio }.fold(BigDecimal.ZERO, BigDecimal::add)
+        val parte = (CIEN - conocido).max(BigDecimal.ZERO).divide(BigDecimal(vacios), 4, RoundingMode.HALF_UP)
+        return secuencia.map { if (it.porcentajeCondominio == null) it.copy(porcentajeCondominio = parte) else it } to vacios
+    }
+
+    // a predio's declarations recomputed by the same rule on both sides: condominio (each titular's %, filled by
+    // conPorcentaje, and its deducción) over the declared autoavalúo, and over the catastro's split among the secuencias
+    // (D12). the stored valor_afecto is never compared with a recomputed one: only the autoavalúo moves the difference.
+    // in the order they came
+    data class Recalculo(
+        val declarado: List<Declaracion>,
+        val catastro: List<Declaracion>,
+        val sinPorcentaje: Int
+    )
+
+    fun recalcular(
+        declaraciones: List<Declaracion>,
+        autoavaluo: BigDecimal
+    ): Recalculo {
+        val secuencias = declaraciones.groupBy(::grupoDe).values.toList()
+        val declarado = IdentityHashMap<Declaracion, Declaracion>()
+        val catastro = IdentityHashMap<Declaracion, Declaracion>()
+        var sinPorcentaje = 0
+        secuencias.zip(repartir(autoavaluo, pesos(secuencias))).forEach { (secuencia, parte) ->
+            val (completa, llenados) = conPorcentaje(secuencia)
+            sinPorcentaje += llenados
+            secuencia.zip(condominio(completa)).forEach { (antes, despues) -> declarado[antes] = despues }
+            secuencia.zip(condominio(completa.map { it.copy(valorAutoavaluo = parte) })).forEach { (antes, despues) -> catastro[antes] = despues }
+        }
+        return Recalculo(declaraciones.map { declarado.getValue(it) }, declaraciones.map { catastro.getValue(it) }, sinPorcentaje)
+    }
+
+    // the catastro side of recalcular
     fun conCatastro(
         declaraciones: List<Declaracion>,
         autoavaluo: BigDecimal
-    ): List<Declaracion> {
-        val secuencias = declaraciones.groupBy(::grupoDe).values.toList()
-        val nuevas = IdentityHashMap<Declaracion, Declaracion>()
-        secuencias.zip(repartir(autoavaluo, pesos(secuencias))).forEach { (secuencia, parte) ->
-            secuencia.zip(condominio(secuencia.map { it.copy(valorAutoavaluo = parte) })).forEach { (antes, despues) -> nuevas[antes] = despues }
-        }
-        return declaraciones.map { nuevas.getValue(it) }
-    }
+    ): List<Declaracion> = recalcular(declaraciones, autoavaluo).catastro
 
     // the impuesto of each contribuyente with a vigente declaración of the year, as declared and with the catastro's
-    // autoavalúo on the predios it valued (catastro: predio id -> autoavalúo), liquidated by ImpuestoPredial on the sum
-    // of each one's valor afecto. its difference falls on its predios in proportion to how much each one moved its valor
-    // afecto (in absolute value), and its declared impuesto in proportion to each one's valor afecto: each predio's sums
-    // the parts of its contribuyentes, so Σ per predio = Σ per contribuyente. the year's parameters must be there
-    // (medir checks them first)
+    // autoavalúo on the predios it valued (catastro: predio id -> autoavalúo). the declared one is its liquidación
+    // (ImpuestoPredial over the stored valor afecto, as /liquidacion); the catastro's adds to that base what the
+    // catastro moves on each valued predio: recomputed valor afecto with the catastro's autoavalúo minus recomputed with
+    // the declared one (recalcular), so equal values move nothing and a predio not valued is the same on both sides.
+    // the difference falls on its predios in proportion to each one's move: signed when they all go the same way, in
+    // absolute value when they go both ways (signed weights could then add up to ~0). the declared impuesto falls in
+    // proportion to each one's stored valor afecto. each predio sums the parts of its contribuyentes, so Σ per predio =
+    // Σ per contribuyente. the year's parameters must be there (medir checks them first)
     fun impuestos(
         anio: Int,
         vigentes: List<Declaracion>,
         catastro: Map<String, BigDecimal>,
         parametros: List<ParametroTributario>
     ): Impuestos {
-        val nuevas = IdentityHashMap<Declaracion, Declaracion>()
+        val mueve = IdentityHashMap<Declaracion, BigDecimal>()
+        var sinPorcentaje = 0
         vigentes.groupBy { it.predio }.forEach { (predio, suyas) ->
             val valor = predio?.let(catastro::get) ?: return@forEach
-            suyas.zip(conCatastro(suyas, valor)).forEach { (antes, despues) -> nuevas[antes] = despues }
+            val r = recalcular(suyas, valor)
+            sinPorcentaje += r.sinPorcentaje
+            suyas.indices.forEach { i -> mueve[suyas[i]] = afecto(r.catastro[i]) - afecto(r.declarado[i]) }
         }
-
-        fun afecto(d: Declaracion) = d.valorAfecto ?: BigDecimal.ZERO
         val porContribuyente = linkedMapOf<String, ImpuestoDelContribuyente>()
         val declarados = HashMap<String, BigDecimal>()
         val deltas = HashMap<String, BigDecimal>()
@@ -200,7 +239,7 @@ object Brecha {
             .toSortedMap()
             .forEach { (contribuyente, suyas) ->
                 val antes = totalesDeContribuyente(suyas).valorAfecto
-                val despues = suyas.fold(BigDecimal.ZERO) { s, d -> s + afecto(nuevas[d] ?: d) }
+                val despues = (antes + suyas.fold(BigDecimal.ZERO) { s, d -> s + (mueve[d] ?: BigDecimal.ZERO) }).max(BigDecimal.ZERO)
                 val impuesto =
                     ImpuestoDelContribuyente(
                         ImpuestoPredial.liquidar(anio, antes, parametros).impuestoAnual!!,
@@ -213,27 +252,55 @@ object Brecha {
                 val delta =
                     repartir(
                         impuesto.delta,
-                        porPredio.values.map { ds -> ds.fold(BigDecimal.ZERO) { s, d -> s + afecto(nuevas[d] ?: d) - afecto(d) }.abs() }
+                        pesosDelDelta(
+                            porPredio.values.map { ds ->
+                                ds.fold(BigDecimal.ZERO) { s, d ->
+                                    s +
+                                        (mueve[d] ?: BigDecimal.ZERO)
+                                }
+                            }
+                        )
                     )
                 predios.forEachIndexed { i, p ->
                     declarados.merge(p, declarado[i], BigDecimal::add)
                     deltas.merge(p, delta[i], BigDecimal::add)
                 }
             }
-        return Impuestos(porContribuyente, declarados.keys.associateWith { ImpuestoDelPredio(declarados.getValue(it), deltas.getValue(it)) })
+        return Impuestos(
+            porContribuyente,
+            declarados.keys.associateWith { ImpuestoDelPredio(declarados.getValue(it), deltas.getValue(it)) },
+            sinPorcentaje
+        )
     }
+
+    // the weights of a contribuyente's difference: each predio's move, signed when none goes the other way, else in
+    // absolute value
+    fun pesosDelDelta(movimientos: List<BigDecimal>): List<BigDecimal> =
+        if (movimientos.all { it.signum() >= 0 } || movimientos.all { it.signum() <= 0 }) movimientos else movimientos.map { it.abs() }
+
+    private fun afecto(d: Declaracion) = d.valorAfecto ?: BigDecimal.ZERO
 
     // a predio's declarations with what the catastro says of it for the arbitrios: its uso (the uso_predio of that
     // code, when the catalog has it), its área construida split among the secuencias as the autoavalúo (D12), and its
-    // frente (the predio's, whole on each secuencia: a frontis is not shared out)
+    // frente. Calculo charges a FRONTIS_ML base with each declaración's own longitud_frente, once per secuencia
+    // charged: in a year of one PU per predio only one secuencia is charged each month, so each one carries the whole
+    // frente; in a year of one PU per uso every secuencia is, so the frente is split among them (by each one's declared
+    // frente, else D12) and the predio pays it once
     fun conRasgosDelCatastro(
         declaraciones: List<Declaracion>,
         item: ValuacionCatastral,
-        usos: List<UsoPredio>
+        usos: List<UsoPredio>,
+        puPorUso: Boolean = false
     ): List<Declaracion> {
         val uso = llave(item.uso)?.let { codigo -> usos.firstOrNull { llave(it.codigo) == codigo } }
         val secuencias = declaraciones.groupBy(::grupoDe).values.toList()
         val areas = item.areaConstruida?.let { repartir(it, pesos(secuencias)) }
+        val frentes =
+            item.longitudFrente?.let { frente ->
+                if (!puPorUso) return@let secuencias.map { frente }
+                val declarados = secuencias.map { s -> s.mapNotNull { it.longitudFrente }.maxOrNull() ?: BigDecimal.ZERO }
+                repartir(frente, if (declarados.any { it.signum() > 0 }) declarados else pesos(secuencias))
+            }
         val nuevas = IdentityHashMap<Declaracion, Declaracion>()
         secuencias.forEachIndexed { i, secuencia ->
             secuencia.forEach { d ->
@@ -243,7 +310,7 @@ object Brecha {
                         subClaseUso = uso?.subClase ?: d.subClaseUso,
                         uso = uso?.uso ?: d.uso,
                         areaConstruida = areas?.get(i) ?: d.areaConstruida,
-                        longitudFrente = item.longitudFrente ?: d.longitudFrente
+                        longitudFrente = frentes?.get(i) ?: d.longitudFrente
                     )
             }
         }
@@ -262,7 +329,13 @@ object Brecha {
         val anual = p.copy(existentes = emptyList(), anuladas = emptySet(), anteriores = emptyList())
         val declarado = Arbitrios.determinar(c, anual, OBSERVACION, hoy)
         if (declarado.faltan.isNotEmpty()) return DeltaArbitrios.Falta(declarado.faltan.first())
-        val catastro = Arbitrios.determinar(c, anual.copy(declaraciones = conRasgosDelCatastro(anual.declaraciones, item, c.usos)), OBSERVACION, hoy)
+        val catastro =
+            Arbitrios.determinar(
+                c,
+                anual.copy(declaraciones = conRasgosDelCatastro(anual.declaraciones, item, c.usos, c.puPorUso)),
+                OBSERVACION,
+                hoy
+            )
         if (catastro.faltan.isNotEmpty()) return DeltaArbitrios.Falta("con catastro: ${catastro.faltan.first()}")
         return DeltaArbitrios.Es(suma(catastro.cuotas.map { it.monto }) - suma(declarado.cuotas.map { it.monto }))
     }
@@ -317,6 +390,10 @@ object Brecha {
                 }
                 else -> contexto
             }
+        if (arbitrios != null && Arbitrios.conTope(arbitrios)) avisos += "Δ arbitrios sin tope: el año tiene TOPE_ARBITRIO"
+        if (impuestos.sinPorcentaje > 0) {
+            avisos += "${impuestos.sinPorcentaje} declaraciones de condóminos sin % de condominio: se repartió en partes iguales lo que dejan los demás"
+        }
         val inafectaciones = padron.inafectaciones.filter { it.predio != null }.groupBy { it.predio!! }
         val sinDelta = linkedMapOf<String, Int>()
 

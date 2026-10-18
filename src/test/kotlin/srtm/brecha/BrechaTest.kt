@@ -218,6 +218,66 @@ class BrechaTest {
         assertEquals(liquidar("285061.73") - liquidar("253333.33"), a.delta)
     }
 
+    @Test
+    fun `a stored valor afecto that condominio would not compute moves nothing when the catastro agrees`() {
+        // as the padrón imports them: the Excel's afecto and a rounded %
+        val ds =
+            grupo(dj("1", "a", "p", "90000.00", porcentaje = "33.33"), dj("2", "b", "p", "90000.00", porcentaje = "66.67"))
+                .mapIndexed { i, d -> d.copy(valorAfecto = BigDecimal(if (i == 0) "25000.00" else "60000.00")) }
+        val i = Brecha.impuestos(anio, ds, mapOf("p" to BigDecimal("90000.00")), parametros)
+        assertEquals(BigDecimal("0.00"), i.porPredio.getValue("p").delta)
+        assertTrue(i.porContribuyente.values.all { it.delta.signum() == 0 }, i.porContribuyente.toString())
+        // the declared side stays the liquidación of the stored afecto
+        assertEquals(liquidar("25000.00"), i.porContribuyente.getValue("a").declarado)
+    }
+
+    @Test
+    fun `condominos without a percent share equally what the others leave, and are counted`() {
+        // declared at 0: the import leaves the % and the afecto empty
+        val sinPorcentaje = { d: Declaracion -> d.copy(porcentajeCondominio = null, valorCondominio = null, valorAfecto = null) }
+        val ds = listOf(sinPorcentaje(dj("1", "a", "p", "0.00")), sinPorcentaje(dj("2", "b", "p", "0.00")))
+        val i = Brecha.impuestos(anio, ds, mapOf("p" to BigDecimal("100000.00")), parametros)
+        assertEquals(ImpuestoDelContribuyente(BigDecimal("0.00"), liquidar("50000.00")), i.porContribuyente["a"])
+        assertEquals(ImpuestoDelContribuyente(BigDecimal("0.00"), liquidar("50000.00")), i.porContribuyente["b"])
+        assertEquals(2, i.sinPorcentaje)
+        // with a known one: the empty one takes what is left
+        assertEquals(
+            listOf(BigDecimal("70"), BigDecimal("30.0000")),
+            Brecha.conPorcentaje(listOf(dj("1", "a", "p", "1.00", porcentaje = "70"), dj("2", "b", "p", "1.00").copy(porcentajeCondominio = null))).first.map {
+                it.porcentajeCondominio
+            }
+        )
+    }
+
+    @Test
+    fun `a predio declared at 0 by its sole titular pays on the whole catastro value`() {
+        val d = dj("1", "a", "p", "0.00").copy(porcentajeCondominio = null, valorCondominio = null, valorAfecto = null)
+        val i = Brecha.impuestos(anio, listOf(d), mapOf("p" to BigDecimal("80000.00")), parametros)
+        assertEquals(ImpuestoDelContribuyente(BigDecimal("0.00"), liquidar("80000.00")), i.porContribuyente["a"])
+        assertEquals(liquidar("80000.00"), i.porPredio.getValue("p").delta)
+        assertEquals(0, i.sinPorcentaje)
+    }
+
+    @Test
+    fun `the difference falls by signed weights when every predio moves the same way, by absolute ones when not`() {
+        assertEquals(
+            listOf(BigDecimal("-3"), BigDecimal("-1"), BigDecimal("0")),
+            Brecha.pesosDelDelta(listOf(BigDecimal("-3"), BigDecimal("-1"), BigDecimal("0")))
+        )
+        assertEquals(listOf(BigDecimal("3"), BigDecimal("1")), Brecha.pesosDelDelta(listOf(BigDecimal("3"), BigDecimal("-1"))))
+
+        // both down: each predio's part goes down, and they add up
+        val bajan = listOf(dj("1", "a", "p1", "300000.00"), dj("2", "a", "p2", "100000.00"))
+        val b = Brecha.impuestos(anio, bajan, mapOf("p1" to BigDecimal("150000.00"), "p2" to BigDecimal("50000.00")), parametros)
+        assertTrue(b.porPredio.values.all { it.delta.signum() < 0 }, b.porPredio.toString())
+        assertEquals(b.porContribuyente.getValue("a").delta, b.porPredio.values.sumOf { it.delta })
+
+        // one up, one down: the invariant still holds
+        val mixtos = Brecha.impuestos(anio, bajan, mapOf("p1" to BigDecimal("400000.00"), "p2" to BigDecimal("20000.00")), parametros)
+        assertEquals(mixtos.porContribuyente.getValue("a").delta, mixtos.porPredio.values.sumOf { it.delta })
+        assertEquals(liquidar("420000.00") - liquidar("400000.00"), mixtos.porContribuyente.getValue("a").delta)
+    }
+
     // medir: the rows of a corrida
 
     private val propio = predio("p1", codigo = "01-01-0001", sector = "01", manzana = "A", lote = "1")
@@ -358,6 +418,26 @@ class BrechaTest {
         val m = Brecha.medir(anio, listOf(item(municipal = "01-01-0001")), padron(sinUso), parametros, contexto(), hoy, null)
         assertNull(m.filas.first { it.predio == "p1" }.deltaArbitrios)
         assertTrue(m.avisos.single().startsWith("Δ arbitrios sin calcular en 1 predios: Uso del catálogo"), m.avisos.toString())
+    }
+
+    @Test
+    fun `the catastro's frente is paid once per predio in a year of one PU per uso`() {
+        val ds =
+            listOf(
+                dj("1", "a", "p", "1.00", secuencia = "1").copy(longitudFrente = BigDecimal("10")),
+                dj("2", "a", "p", "3.00", secuencia = "2").copy(longitudFrente = BigDecimal("10"))
+            )
+        val item = item().copy(longitudFrente = BigDecimal("30.00"))
+        assertEquals(listOf(BigDecimal("15.00"), BigDecimal("15.00")), Brecha.conRasgosDelCatastro(ds, item, usos, puPorUso = true).map { it.longitudFrente })
+        // one PU per predio: only one secuencia is charged each month, so each one carries the whole frente
+        assertEquals(listOf(BigDecimal("30.00"), BigDecimal("30.00")), Brecha.conRasgosDelCatastro(ds, item, usos, puPorUso = false).map { it.longitudFrente })
+    }
+
+    @Test
+    fun `a year with a tope de arbitrios says its difference has none`() {
+        val c = contexto().let { it.copy(parametros = it.parametros + param(Llaves.TOPE_ARBITRIO, "*", valor = "8")) }
+        val m = Brecha.medir(anio, listOf(item(municipal = "01-01-0001")), padron(casa), parametros, c, hoy, null)
+        assertEquals(listOf("Δ arbitrios sin tope: el año tiene TOPE_ARBITRIO"), m.avisos)
     }
 
     // the panel and the lotes
