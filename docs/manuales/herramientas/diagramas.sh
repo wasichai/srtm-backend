@@ -7,7 +7,13 @@ cd "$(dirname "$0")"
 origen=../recursos/diagramas
 destino=$origen/generados
 mkdir -p "$destino"
+# el chrome-headless-shell de la misma revisión que el Chromium de Playwright: el Chromium con ventana se cuelga al
+# capturar cuando la pantalla del equipo duerme
 chrome=$(node --input-type=module -e "import {chromium} from 'playwright'; console.log(chromium.executablePath())")
+revision=$(echo "$chrome" | sed -E 's|.*/chromium-([0-9]+)/.*|\1|')
+cache=$(echo "$chrome" | sed -E 's|/chromium-[0-9]+/.*||')
+shell=$(find "$cache/chromium_headless_shell-$revision" -name chrome-headless-shell -type f 2>/dev/null | head -1)
+if [ -n "$shell" ]; then chrome=$shell; else echo "diagramas: sin chrome-headless-shell (npx playwright install chromium-headless-shell); uso $chrome" >&2; fi
 temporal=$(mktemp -d)
 trap 'rm -rf "$temporal"' EXIT
 printf '{"executablePath": "%s", "args": ["--no-sandbox"], "protocolTimeout": 180000}\n' "$chrome" > "$temporal/puppeteer.json"
