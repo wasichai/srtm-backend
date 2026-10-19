@@ -1,6 +1,7 @@
 package srtm.emision
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpHeaders
@@ -30,6 +31,26 @@ class PuApiTest : SrtmApiTest() {
         assertTrue(titular["nombre_completo"].asString() in texto, texto)
         assertTrue("ADOBE" in texto, texto)
         assertTrue("S/ 10,000.50" in texto, texto)
+    }
+
+    // #124: a nivel of an external padrón (Ica) has no month and carries the padrón's values, written by the importer
+    // through core's record api: the pu prints its year alone
+    @Test
+    fun `a nivel of an external padron, without its month, prints its year alone`() {
+        val predio = post("/api/srtm/predios", mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO"))
+        val d = declarar(contribuyente("JUNIOR")["id"].asString(), predio["id"].asString())
+        val nivel = post("/api/srtm/declaraciones/$d/niveles", NIVEL - "mes_construccion")
+        val registro = "/api/objects/nivel_construccion/records/${nivel["id"].asString()}"
+        val guardado = fields(tree(send("GET", registro, null, HttpStatus.OK))["attributes"])
+        send("PUT", registro, mapOf("attributes" to guardado + mapOf("valor_unitario" to 402.08, "valor_total" to 48250.75)), HttpStatus.OK)
+
+        val pu = pu(predio["id"].asString(), "anio=2026")
+
+        assertEquals(HttpStatus.OK, pu.status)
+        val texto = texto(pu.cuerpo)
+        assertTrue("ADOBE" in texto, texto)
+        assertTrue("2015" in texto, texto)
+        assertFalse("/2015" in texto, texto)
     }
 
     // the header is the organization's municipalidad record, edited in the admin: the shared test db may already

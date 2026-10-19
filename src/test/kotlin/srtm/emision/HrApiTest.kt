@@ -51,6 +51,26 @@ class HrApiTest : ConParametrosApiTest() {
         assertFalse("Se aplica el mínimo" in texto, texto)
     }
 
+    // #124: a declaración of an external padrón (Ica) carries its own valuation, written by the importer through core's
+    // record api. the hr reads valor_autoavaluo as always
+    @Test
+    fun `the hr of a declaracion with the external padron's values`() {
+        val a = contribuyente()
+        val predio = post("/api/srtm/predios", mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "AV. ICA 10", "tipo_predio" to "PREDIO URBANO"))
+        val d = declarar(a["id"].asString(), predio["id"].asString(), "60000.00")
+        val registro = "/api/objects/declaracion_predial/records/$d"
+        val guardada = fields(tree(send("GET", registro, null, HttpStatus.OK))["attributes"])
+        val ica = mapOf("arancel" to 35.5, "valor_terreno" to 7100, "valor_construccion" to 51700, "valor_otras_instalaciones" to 1200)
+        send("PUT", registro, mapOf("attributes" to guardada + ica), HttpStatus.OK)
+
+        val hr = hr(a["id"].asString(), "anio=2026")
+
+        assertEquals(HttpStatus.OK, hr.status)
+        val texto = texto(hr.cuerpo)
+        assertTrue(predio["codigo"].asString() in texto, texto)
+        assertTrue(soles(liquidacion(a["id"].asString())["base"]) in texto, texto)
+    }
+
     @Test
     fun `a small base says the minimo applies`() {
         val a = contribuyente()
