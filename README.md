@@ -1263,6 +1263,15 @@ hojas: `padron` (una fila por predio y contribuyente) y `construcciones` (una fi
 1. **Organización:** crear Ica en Core (`POST /api/organizations`, como superadministrador) con su usuario
    administrador. Los pasos siguientes usan su cuenta: `--email` y `--password`, o `WASICHAI_EMAIL` y
    `WASICHAI_PASSWORD`.
+
+   ```bash
+   curl -X POST "$WASICHAI_CORE/api/organizations" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"name": "Municipalidad Provincial de Ica", "slug": "ica", "adminEmail": "<correo>", "adminPassword": "<clave>"}'
+   ```
+
+   El login es por correo, así que el administrador de Ica necesita un correo distinto al de las otras organizaciones.
+   Para la brecha se crea la misma organización en catastro-backend (región COSTA) y se configura su entrada
+   `SRTM_CATASTRO_ORGANIZACIONES_ICA_*` (#123).
 2. **Modelo y catálogos:**
 
    ```bash
