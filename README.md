@@ -792,7 +792,8 @@ cruza en silencio el padrón de una organización con el catastro de otra.
 
 **Cruce** (D7). Cada ítem del catastro busca su predio: por código municipal (`predio.codigo`), si no por código CPU
 (`codigo_cpu`), si no por sector, manzana y lote (`sector_catastral`, `manzana_catastral`, `lote`), sin distinguir
-mayúsculas ni espacios en los extremos. El cruce va **por pasadas sobre todos los ítems**, así el orden de los ítems no
+mayúsculas, espacios en los extremos ni ceros a la izquierda de cada tramo de números: `01-01-0006` y `1-1-6` son la
+misma llave, como un lote `08` y `8` (el padrón de Perené escribe los dos). El cruce va **por pasadas sobre todos los ítems**, así el orden de los ítems no
 cambia nada: primero todos por código municipal, luego los que quedan por CPU, luego los que quedan por sector, manzana
 y lote. Una llave de respaldo nunca le quita a otro ítem el predio que este nombra por una llave más fuerte. Un predio
 cruza una sola vez. En las dos primeras pasadas, entre varios predios de la misma llave gana el que tiene DJ del año y
