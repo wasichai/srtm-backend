@@ -83,8 +83,16 @@ object Brecha {
     // what the arbitrios' hypothetical cuotas carry (never written)
     private const val OBSERVACION = "Brecha de recaudación"
 
-    // a code compared as the catastro and the padrón may write it: trimmed, upper case. blank is no code
-    fun llave(codigo: String?): String? = codigo?.trim()?.uppercase()?.ifEmpty { null }
+    private val DIGITOS = Regex("\\d+")
+
+    // a code compared as the catastro and the padrón may write it: trimmed, upper case, and every run of digits without
+    // its leading zeros, so 01-01-0006 and 1-1-6 (or a lote 08 and 8) are one key. blank is no code
+    fun llave(codigo: String?): String? =
+        codigo
+            ?.trim()
+            ?.uppercase()
+            ?.ifEmpty { null }
+            ?.let { DIGITOS.replace(it) { d -> d.value.trimStart('0').ifEmpty { "0" } } }
 
     private fun sml(
         sector: String?,
