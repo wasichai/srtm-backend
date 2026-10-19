@@ -1,0 +1,82 @@
+= Manuales de Rentas municipales: Biblioteca de documentación
+Municipalidad Distrital de Perené
+include::atributos.adoc[]
+:doctype: article
+:imagesdir: recursos
+:stylesdir: estilos
+:docinfodir: estilos/html
+:biblioteca: index.html
+:toc!:
+:sectnums!:
+:docinfo!:
+:nofooter:
+
+[.lead]
+Documentación de {producto} ({producto-largo}), versión {version-producto}: manuales de usuario por perfil, manual del
+administrador y manual técnico. Cada manual está en HTML, para leer en pantalla, y en PDF, para imprimir.
+
+== Manuales de usuario
+
+Un manual por perfil de trabajo. Los perfiles son los que crea la base de demostración; cada municipalidad los adapta
+en la consola de administración (ver el {m-admin}).
+
+[.tarjetas]
+--
+.{m-registrador}
+****
+Contribuyentes, predios, declaraciones juradas, catastro, PU, HR y liquidación del impuesto predial.
+
+xref:usuario/registrador.adoc[HTML] · link:../pdf/usuario/registrador.pdf[PDF]
+****
+
+.{m-arbitrios}
+****
+Tasas del año, consulta y determinación de arbitrios, HLA y emisión masiva de documentos.
+
+xref:usuario/arbitrios-emision.adoc[HTML] · link:../pdf/usuario/arbitrios-emision.pdf[PDF]
+****
+
+.{m-fiscalizador}
+****
+Infracciones administrativas: CUIS, notificaciones previas, actas, descargos, resoluciones y plazos.
+
+xref:usuario/fiscalizador.adoc[HTML] · link:../pdf/usuario/fiscalizador.pdf[PDF]
+****
+
+.{m-anuncios}
+****
+Padrón de anuncios y propaganda: autorización, renovación, cese, retiro y tasas.
+
+xref:usuario/anuncios.adoc[HTML] · link:../pdf/usuario/anuncios.pdf[PDF]
+****
+
+.{m-consulta}
+****
+Consulta de fichas y documentos, y panel de la brecha de recaudación.
+
+xref:usuario/consulta.adoc[HTML] · link:../pdf/usuario/consulta.pdf[PDF]
+****
+--
+
+== Administración y operación
+
+[.tarjetas]
+--
+.{m-admin}
+****
+Usuarios, roles y permisos, parámetros tributarios, catálogos, auditoría, mantenimiento y respaldos.
+
+xref:administrador/manual-administrador.adoc[HTML] · link:../pdf/administrador/manual-administrador.pdf[PDF]
+****
+
+.{m-sistema}
+****
+Arquitectura, instalación, configuración, modelo de datos, API, operación y recuperación.
+
+xref:sistema/manual-sistema.adoc[HTML] · link:../pdf/sistema/manual-sistema.pdf[PDF]
+****
+--
+
+[.tenue]
+Edición {edicion}, {fecha-edicion}. Las capturas de pantalla se tomaron sobre la base de demostración, con datos
+ficticios.

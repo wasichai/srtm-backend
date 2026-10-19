@@ -1,0 +1,7 @@
+flowchart LR
+  A["1. Core arriba<br/>migraciones Flyway"] --> B["2. model/apply.py<br/>objetos, campos, relaciones"]
+  B --> C["3. import_catalogos.py<br/>ubigeo, categorías, obras, usos"]
+  C --> D["4. import_parametros.py<br/>UIT, tramos, tasas"]
+  D --> E["5. import_cuis.py<br/>import_arbitrios.py"]
+  E --> F["6. import_predios.py<br/>padrón (Excel)"]
+  F --> G["7. import_catastro.py<br/>lotes (GeoJSON)"]

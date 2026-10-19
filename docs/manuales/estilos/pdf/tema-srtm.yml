@@ -1,0 +1,363 @@
+# Tema editorial de los manuales en PDF (asciidoctor-pdf 2.3). Comparte la identidad del HTML
+# (estilos/html/manuales.css): los tokens del Portal tributario de srtm-ui y la familia Source de Adobe (OFL).
+# Fuentes incrustadas desde estilos/fuentes/ttf: el PDF no depende de las fuentes del sistema.
+extends: base
+font:
+  catalog:
+    merge: false
+    # solo para los números en círculo de las llamadas (①②③), que la familia Source no trae; viene con asciidoctor-pdf
+    Llamadas:
+      normal: GEM_FONTS_DIR/mplus1mn-regular-subset.ttf
+      italic: GEM_FONTS_DIR/mplus1mn-italic-subset.ttf
+      bold: GEM_FONTS_DIR/mplus1mn-bold-subset.ttf
+      bold_italic: GEM_FONTS_DIR/mplus1mn-bold_italic-subset.ttf
+    Serif:
+      normal: SourceSerif4SmText-Regular.ttf
+      italic: SourceSerif4SmText-It.ttf
+      bold: SourceSerif4SmText-Semibold.ttf
+      bold_italic: SourceSerif4SmText-SemiboldIt.ttf
+    Sans:
+      normal: SourceSans3-Regular.ttf
+      italic: SourceSans3-It.ttf
+      bold: SourceSans3-Semibold.ttf
+      bold_italic: SourceSans3-SemiboldIt.ttf
+    SansFuerte:
+      normal: SourceSans3-Bold.ttf
+      italic: SourceSans3-SemiboldIt.ttf
+      bold: SourceSans3-Bold.ttf
+      bold_italic: SourceSans3-SemiboldIt.ttf
+    Mono:
+      normal: SourceCodePro-Regular.ttf
+      italic: SourceCodePro-It.ttf
+      bold: SourceCodePro-Semibold.ttf
+      bold_italic: SourceCodePro-SemiboldIt.ttf
+  fallbacks: [Sans, Llamadas]
+role:
+  marca:
+    font-color: '#0D5FA8'
+  tenue:
+    font-color: '#6B6B6B'
+  pequeno:
+    font-size: 8.5
+page:
+  size: A4
+  layout: portrait
+  # interior más ancho que el exterior: el libro se puede imprimir a doble cara y encuadernar
+  margin: [24mm, 20mm, 22mm, 20mm]
+  margin-inner: 24mm
+  margin-outer: 18mm
+  numbering:
+    start-at: toc
+base:
+  font-family: Serif
+  font-color: '#2B2B2B'
+  font-size: 10.2
+  line-height-length: 14.6
+  line-height: $base-line-height-length / $base-font-size
+  font-size-large: 12
+  font-size-small: 8.6
+  font-size-min: 7
+  border-color: '#D8D8D8'
+  border-radius: 2
+  border-width: 0.5
+  text-align: left
+  hyphens: false
+vertical-rhythm: $base-line-height-length
+horizontal-rhythm: $base-line-height-length
+link:
+  font-color: '#1569B0'
+codespan:
+  font-family: Mono
+  font-size: 0.86em
+  font-color: '#2F6596'
+  background-color: '#F2F6FA'
+  border-radius: 1.5
+  border-offset: 1.2
+menu:
+  caret-content: ' › '
+  font-family: Sans
+  font-style: bold
+  font-color: '#2F6596'
+button:
+  font-family: Sans
+  font-style: bold
+  font-color: '#0D5FA8'
+  content: '[%s]'
+kbd:
+  font-family: Mono
+  font-size: 0.84em
+  background-color: '#F6F6F6'
+  border-color: '#BDBDBD'
+  border-width: 0.5
+  border-offset: 1.5
+heading:
+  font-family: Sans
+  font-color: '#0D5FA8'
+  font-style: bold
+  text-transform: none
+  line-height: 1.18
+  margin-top: $vertical-rhythm * 0.8
+  margin-bottom: $vertical-rhythm * 0.45
+  min-height-after: 64
+  h1-font-size: 27
+  h2-font-size: 19
+  h3-font-size: 14.5
+  h3-font-color: '#2F6596'
+  h4-font-size: 12
+  h4-font-color: '#2F6596'
+  h5-font-size: 10.5
+  h5-font-color: '#2B2B2B'
+  h6-font-size: 10
+  h6-font-color: '#6B6B6B'
+  chapter:
+    break-before: always
+  part:
+    break-before: always
+chapter:
+  # rótulo «Capítulo N» sobre el título, con un filete de marca
+  title-page: false
+title-page:
+  align: left
+  background-image: image:../../recursos/marca/portada.svg[fit=fill]
+  logo:
+    image: image:../../recursos/marca/monograma-blanco.svg[width=58]
+    top: 9%
+    align: left
+  title:
+    top: 21%
+    font-family: SansFuerte
+    font-size: 34
+    font-color: '#FFFFFF'
+    line-height: 1.08
+    margin-bottom: 10
+  subtitle:
+    font-family: Sans
+    font-style: normal
+    font-size: 15
+    font-color: '#DCEAF7'
+    line-height: 1.25
+    margin-top: 4
+  authors:
+    margin-top: 138
+    font-family: Sans
+    font-style: bold
+    font-size: 12
+    font-color: '#0D5FA8'
+    content: "{author}"
+
+  revision:
+    margin-top: 6
+    font-family: Sans
+    font-size: 10
+    font-color: '#6B6B6B'
+    delimiter: ' · '
+prose:
+  margin-top: 0
+  margin-bottom: $vertical-rhythm * 0.62
+block:
+  margin-top: 0
+  margin-bottom: $vertical-rhythm * 0.85
+caption:
+  font-family: Sans
+  font-style: italic
+  font-size: 8.8
+  font-color: '#555555'
+  align: left
+  margin-inside: $vertical-rhythm / 3
+  margin-outside: 0
+abstract:
+  font-color: '#4A4A4A'
+  font-size: 10.6
+  line-height: 1.45
+  font-style: normal
+  first-line-font-style: normal
+admonition:
+  column-rule-color: '#C9D9E8'
+  column-rule-width: 2
+  padding: [3, 10, 3, 10]
+  label:
+    font-family: Sans
+    font-style: bold
+    text-transform: none
+    font-size: 9
+  icon:
+    note:
+      name: fas-info-circle
+      stroke-color: '#1569B0'
+      size: 20
+    tip:
+      name: fas-lightbulb
+      stroke-color: '#3C763D'
+      size: 20
+    important:
+      name: fas-exclamation-circle
+      stroke-color: '#0D5FA8'
+      size: 20
+    caution:
+      name: fas-exclamation-triangle
+      stroke-color: '#8A6D3B'
+      size: 20
+    warning:
+      name: fas-skull-crossbones
+      stroke-color: '#A94442'
+      size: 20
+quote:
+  font-color: '#4A4A4A'
+  font-size: 10.4
+  border-color: '#9CC3E6'
+  border-width: 0
+  border-left-width: 3
+  padding: [0, 12, 0, 12]
+  cite-font-size: 8.8
+  cite-font-color: '#6B6B6B'
+sidebar:
+  background-color: '#F6F9FC'
+  border-color: '#C9D9E8'
+  border-width: 0.6
+  border-radius: 3
+  padding: [10, 14, 6, 14]
+  title:
+    font-family: Sans
+    font-style: bold
+    font-color: '#0D5FA8'
+    align: left
+# los bloques de ejemplo (====) son los recuadros de «Procedimiento»: objetivo y requisitos previos
+example:
+  background-color: '#EFF6FB'
+  border-color: '#3A78AF'
+  border-width: 0
+  border-left-width: 3
+  border-radius: 0
+  padding: [8, 12, 2, 12]
+code:
+  font-family: Mono
+  font-size: 8.4
+  font-color: '#2B2B2B'
+  line-height: 1.3
+  background-color: '#F6F6F6'
+  border-color: '#DADADA'
+  border-width: 0.5
+  border-radius: 2
+  padding: [7, 9, 7, 9]
+  linenum-font-color: '#9A9A9A'
+callout-list:
+  margin-top-after-code: -4
+conum:
+  font-family: Llamadas
+  font-color: '#0D5FA8'
+  font-size: 9
+  line-height: 1.33
+  glyphs: circled
+list:
+  indent: $base-font-size * 1.6
+  item-spacing: $vertical-rhythm * 0.22
+  marker-font-color: '#3A78AF'
+olist:
+  marker:
+    font-family: Sans
+    font-style: bold
+    font-color: '#0D5FA8'
+description-list:
+  term-font-family: Sans
+  term-font-style: bold
+  term-font-color: '#2F6596'
+  term-spacing: $vertical-rhythm / 6
+  description-indent: $horizontal-rhythm * 1.1
+table:
+  font-family: Sans
+  font-size: 9
+  font-color: '#2B2B2B'
+  line-height: 1.22
+  background-color: transparent
+  border-color: '#BFCAD6'
+  border-width: [0.9, 0, 0.9, 0]
+  grid-color: '#E0E5EB'
+  grid-width: [0.5, 0]
+  cell-padding: [4.2, 5, 4.2, 5]
+  head:
+    font-style: bold
+    font-color: '#0D3F70'
+    background-color: '#EAF2FA'
+    border-bottom-width: 0.9
+    border-bottom-color: '#3A78AF'
+  body:
+    stripe-background-color: '#F8FAFC'
+  foot:
+    background-color: '#F2F2F2'
+  caption:
+    # al pie, como las figuras: arriba quedaba huérfano al final de la página
+    side: bottom
+    max-width: none
+image:
+  align: center
+  border-color: '#D8D8D8'
+  border-width: 0.6
+  caption:
+    end: bottom
+figure:
+  caption:
+    end: bottom
+thematic-break:
+  border-color: '#C9D9E8'
+  border-width: 0.6
+  margin-top: $vertical-rhythm * 0.5
+  margin-bottom: $vertical-rhythm * 0.5
+toc:
+  font-family: Sans
+  font-size: 10
+  font-color: '#2B2B2B'
+  line-height: 1.5
+  indent: 15
+  dot-leader:
+    content: '. '
+    font-color: '#B5B5B5'
+    levels: 2 3
+  h2-font-style: bold
+  h2-font-color: '#0D5FA8'
+  title:
+    font-size: 22
+    font-color: '#0D5FA8'
+index:
+  column-gap: $vertical-rhythm
+footnotes:
+  font-size: 8.4
+  item-spacing: 3
+header:
+  font-family: Sans
+  font-size: 8.4
+  font-color: '#6B6B6B'
+  border-color: '#D8D8D8'
+  border-width: 0.5
+  height: 16mm
+  line-height: 1
+  padding: [0, 0, 5, 0]
+  vertical-align: bottom
+  recto:
+    left:
+      content: '{document-title}'
+    right:
+      content: '*{chapter-title}*'
+  verso:
+    left:
+      content: '*{chapter-title}*'
+    right:
+      content: '{document-title}'
+footer:
+  font-family: Sans
+  font-size: 8.4
+  font-color: '#6B6B6B'
+  border-width: 0
+  height: 15mm
+  line-height: 1
+  padding: [6, 0, 0, 0]
+  vertical-align: top
+  recto:
+    left:
+      content: '{producto} {version-producto} · Edición {edicion}'
+    right:
+      content: '[.marca]*{page-number}*'
+  verso:
+    left:
+      content: '[.marca]*{page-number}*'
+    right:
+      content: '{producto} {version-producto} · Edición {edicion}'

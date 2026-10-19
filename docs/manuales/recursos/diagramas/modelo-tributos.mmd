@@ -1,0 +1,25 @@
+erDiagram
+  parametro_tributario ||--o{ cuota_arbitrio : "tasa aplicada"
+  ordenanza_arbitrio ||--o{ servicio_arbitrio : define
+  servicio_arbitrio ||--o{ cuota_arbitrio : ""
+  predio ||--o{ cuota_arbitrio : ""
+  predio |o--o{ brecha_predio : ""
+  contribuyente ||--o{ cuota_arbitrio : ""
+  cuota_arbitrio ||--o| anulacion_cuota_arbitrio : "se anula con"
+  servicio_arbitrio ||--o{ inafectacion_arbitrio : ""
+  predio ||--o{ inafectacion_arbitrio : ""
+  determinacion_arbitrio_masiva ||--o{ determinacion_arbitrio_lote : ""
+  emision_masiva ||--o{ emision_lote : ""
+  codigo_infraccion ||--o{ papeleta : tipifica
+  notificacion_administrativa ||--o| subsanacion_notificacion : ""
+  notificacion_administrativa |o--o{ papeleta : "precede a"
+  papeleta ||--o| anulacion_papeleta : ""
+  papeleta ||--o{ descargo_papeleta : ""
+  papeleta ||--o{ resolucion_gerencia : ""
+  resolucion_gerencia ||--o{ notificacion_resolucion : ""
+  parametro_tributario ||--o{ papeleta : "UIT"
+  contribuyente ||--o{ papeleta : "obligado"
+  contribuyente ||--o{ anuncio : titular
+  predio |o--o{ anuncio : ""
+  anuncio ||--o{ movimiento_anuncio : ""
+  brecha_corrida ||--o{ brecha_predio : ""

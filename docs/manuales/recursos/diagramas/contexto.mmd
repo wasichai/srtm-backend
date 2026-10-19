@@ -1,0 +1,29 @@
+flowchart LR
+  F["Funcionarios de rentas<br/>(navegador)"]:::persona
+  A["Administrador"]:::persona
+  subgraph UI["srtm-ui · Vite + React"]
+    P["Portal tributario<br/>/"]
+    AD["Consola de administración<br/>/admin"]
+  end
+  subgraph BE["srtm-backend · Spring Boot :8090"]
+    API["API /api/srtm/**<br/>módulos de SRTM"]
+    CORE["wasichai Core<br/>/api/** · JWT · RBAC · auditoría"]
+  end
+  DB[("PostgreSQL 18<br/>+ PostGIS 3.6")]:::datos
+  AL[("Almacén de emisiones<br/>disco local o S3")]:::datos
+  CAT["catastro-backend<br/>(opcional, brecha)"]:::externo
+  PIDE["PIDE RENIEC<br/>(opcional, apagado)"]:::externo
+  OSM["Teselas de OpenStreetMap"]:::externo
+  F --> P
+  A --> AD
+  P -- "HTTPS /api" --> API
+  AD -- "HTTPS /api" --> CORE
+  API --> CORE
+  CORE --> DB
+  API --> AL
+  API -. "cuenta de servicio" .-> CAT
+  API -. "consulta de DNI" .-> PIDE
+  F -. "mapas" .-> OSM
+  classDef persona fill:#EFF6FB,stroke:#3A78AF,color:#0D3F70
+  classDef datos fill:#F6F6F6,stroke:#8A8A8A,color:#2B2B2B
+  classDef externo fill:#FFFFFF,stroke:#8A8A8A,stroke-dasharray:4 3,color:#2B2B2B

@@ -1,0 +1,6 @@
+stateDiagram-v2
+  direction LR
+  [*] --> VIGENTE: Grabar (motivo INSCRIPCIÓN)
+  VIGENTE --> VIGENTE: edición en el portal<br/>(motivo ACTUALIZACIÓN)
+  VIGENTE --> ANULADA: Anular declaración<br/>(motivo obligatorio)
+  ANULADA --> [*]: solo lectura
