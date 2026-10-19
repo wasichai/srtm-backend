@@ -26,6 +26,8 @@
 :experimental:
 :source-highlighter: rouge
 :rouge-style: github
+// colores del código en línea: con linkcss, rouge pediría una hoja rouge-github.css aparte
+:rouge-css: style
 :table-caption: Tabla
 :figure-caption: Figura
 :example-caption: Procedimiento
