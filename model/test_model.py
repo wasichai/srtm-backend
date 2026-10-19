@@ -15,7 +15,7 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.json")
 OPCIONALES = {
     "notif_adm_contribuyente", "notif_adm_predio", "papeleta_contribuyente", "papeleta_predio",
     "papeleta_notificacion_previa", "resolucion_descargo", "notif_resolucion_plazo", "anuncio_predio",
-    "movimiento_parametro",
+    "movimiento_parametro", "brecha_predio_predio",
 }
 
 # object -> (its fields in order, the required ones, the unique ones)
@@ -98,8 +98,8 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 40)
-        self.assertEqual(len(self.model["relationships"]), 42)
+        self.assertEqual(len(names), 42)
+        self.assertEqual(len(self.model["relationships"]), 44)
 
     def test_the_municipalidad_holds_the_documents_header(self):
         # the PU and HR's header, one record per organization edited in the admin (the escudo is a file, not a field)
@@ -262,6 +262,23 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual((relacion["target"], relacion["fieldName"], relacion["required"]),
                          ("determinacion_arbitrio_masiva", "determinacion", True))
 
+    def test_the_brecha_is_a_corrida_and_its_predios(self):
+        # srtm.brecha: one corrida per year at a time, a row per catastro item or padrón predio; the predio is optional
+        # (an omiso has none in the padrón)
+        corrida = self.campos("brecha_corrida")
+        self.assertEqual(list(corrida), ["anio", "estado", "version_catastro", "iniciado", "terminado", "total_predios", "procesados",
+                                         "mensaje", "declarado", "catastro", "delta_impuesto", "delta_arbitrios", "latido"])
+        self.assertEqual({n for n, f in corrida.items() if f.get("required")}, {"anio", "estado"})
+        self.assertEqual(self.model["enums"]["estado_brecha"], ["PENDIENTE", "EN_CURSO", "TERMINADA", "FALLIDA"])
+        predio = self.campos("brecha_predio")
+        self.assertEqual(list(predio), ["codigo_catastro", "codigo_predio", "categoria", "sector", "manzana", "lote", "uso",
+                                        "autoavaluo_declarado", "autoavaluo_catastro", "delta_autoavaluo", "impuesto_declarado",
+                                        "impuesto_catastro", "delta_impuesto", "delta_arbitrios", "estimado", "motivo", "lote_geom",
+                                        "orden"])
+        self.assertEqual(self.model["enums"]["categoria_brecha"],
+                         ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE"])
+        self.assertEqual(self.relaciones("brecha_predio"), {"corrida": ("brecha_corrida", True), "predio": ("predio", False)})
+
     def campos(self, objeto):
         return {f["name"]: f for f in next(o for o in self.model["objects"] if o["name"] == objeto)["fields"]}
 
@@ -354,6 +371,7 @@ class ShippedModelTests(unittest.TestCase):
             ("predio", "lote_geom"): ("POLYGON", 32718),
             ("catastro_fiscal", "lote_geom"): ("POLYGON", 32718),
             ("domicilio", "ubicacion"): ("POINT", 4326),
+            ("brecha_predio", "lote_geom"): ("POLYGON", 32718),
         })
 
     def test_geometry_payload_carries_its_shape(self):

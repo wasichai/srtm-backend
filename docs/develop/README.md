@@ -50,6 +50,7 @@ set -a; source develop/.env; set +a
 | `WASICHAI_EMAIL` / `WASICHAI_PASSWORD` | el admin de desarrollo | login de esos scripts |
 | `WASICHAI_TEST_DB_*` | comentadas | solo para tests de integración contra una base externa (ver 6) |
 | `SRTM_PIDE_RENIEC_*` | comentadas | consulta de DNI a RENIEC por la PIDE; apagada hasta tener las credenciales del convenio (README, "PIDE RENIEC") |
+| `SRTM_CATASTRO_*` | comentadas | valuaciones de catastro-backend para la brecha de recaudación; apagado hasta tener la cuenta de servicio (README, "Brecha de recaudación") |
 
 Todas tienen el mismo valor por defecto en `src/main/resources/application.yml`, así que con la base de `compose.yml`
 el servidor arranca aunque no cargues nada. `develop/.env` sirve para cambiarlas sin tocar el yaml.

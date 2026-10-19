@@ -349,7 +349,9 @@
     "tipo_anuncio": ["AVISO_SIMPLE", "AVISO_LUMINOSO", "AVISO_ILUMINADO", "AVISO_ELECTRONICO"],
     "tipo_movimiento_anuncio": ["AUTORIZACION", "RENOVACION", "CESE", "RETIRO"],
     "paridad_numeracion": ["PAR", "IMPAR", "AMBOS"],
-    "base_arbitrio": ["PREDIO", "FRONTIS_ML", "AREA_CONSTRUIDA_M2"]
+    "base_arbitrio": ["PREDIO", "FRONTIS_ML", "AREA_CONSTRUIDA_M2"],
+    "estado_brecha": ["PENDIENTE", "EN_CURSO", "TERMINADA", "FALLIDA"],
+    "categoria_brecha": ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE"]
   },
   "objects": [
     {
@@ -1253,6 +1255,57 @@
         {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true,
           "description": "servicio|tipo_via|via|manzana|numero_inicial|numero_final|paridad|vigencia_desde: una sola fila por ellos."}
       ]
+    },
+    {
+      "name": "brecha_corrida",
+      "label": "Corrida de brecha de recaudación",
+      "pluralLabel": "Corridas de brecha de recaudación",
+      "description": "Una medición de la brecha de recaudación de un año: el padrón (DJ) contra las valuaciones de catastro-backend, en segundo plano. Una activa por año.",
+      "fields": [
+        {"name": "anio", "label": "Año", "type": "INTEGER", "required": true},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_brecha", "required": true},
+        {"name": "version_catastro", "label": "Versión del catastro", "type": "TEXT", "description": "La version que respondió catastro-backend (su motor de valuación)."},
+        {"name": "iniciado", "label": "Iniciado", "type": "DATETIME"},
+        {"name": "terminado", "label": "Terminado", "type": "DATETIME"},
+        {"name": "total_predios", "label": "Predios", "type": "INTEGER", "description": "Filas de brecha_predio: los ítems del catastro más los predios del padrón sin catastro."},
+        {"name": "procesados", "label": "Procesados", "type": "INTEGER", "description": "Filas escritas hasta ahora."},
+        {"name": "mensaje", "label": "Mensaje", "type": "LONG_TEXT", "description": "Por qué falló, o lo que no se pudo calcular (los arbitrios)."},
+        {"name": "declarado", "label": "Autoavalúo declarado (S/)", "type": "DECIMAL",
+          "description": "De los predios comparados (valorizados en los dos lados): declarado + Δ autoavalúo = catastro."},
+        {"name": "catastro", "label": "Autoavalúo catastral (S/)", "type": "DECIMAL",
+          "description": "De los predios comparados y de los omisos; sin los SIN_VALOR."},
+        {"name": "delta_impuesto", "label": "Δ impuesto predial (S/)", "type": "DECIMAL"},
+        {"name": "delta_arbitrios", "label": "Δ arbitrios (S/)", "type": "DECIMAL", "description": "Vacío si los arbitrios del año no se pudieron calcular (ver mensaje)."},
+        {"name": "latido", "label": "Latido", "type": "DATETIME",
+          "description": "Lease de la instancia que la corre: la renueva mientras trabaja; vencida, la corrida se da por abandonada."}
+      ]
+    },
+    {
+      "name": "brecha_predio",
+      "label": "Predio de la brecha",
+      "pluralLabel": "Predios de la brecha",
+      "description": "Un predio de una corrida de brecha: su categoría (omiso, subvaluado...) y sus diferencias de autoavalúo, impuesto predial y arbitrios.",
+      "fields": [
+        {"name": "codigo_catastro", "label": "Código catastral", "type": "TEXT", "description": "El código municipal del catastro, o su CPU, o sector-manzana-lote."},
+        {"name": "codigo_predio", "label": "Código de predio", "type": "TEXT", "description": "El del predio del padrón, cuando lo hay."},
+        {"name": "categoria", "label": "Categoría", "type": "ENUM", "enum": "categoria_brecha", "required": true},
+        {"name": "sector", "label": "Sector", "type": "TEXT"},
+        {"name": "manzana", "label": "Manzana", "type": "TEXT"},
+        {"name": "lote", "label": "Lote", "type": "TEXT"},
+        {"name": "uso", "label": "Uso", "type": "TEXT", "description": "Código de seis dígitos de uso_predio, el del catastro."},
+        {"name": "autoavaluo_declarado", "label": "Autoavalúo declarado (S/)", "type": "DECIMAL"},
+        {"name": "autoavaluo_catastro", "label": "Autoavalúo catastral (S/)", "type": "DECIMAL"},
+        {"name": "delta_autoavaluo", "label": "Δ autoavalúo (S/)", "type": "DECIMAL"},
+        {"name": "impuesto_declarado", "label": "Impuesto declarado (S/)", "type": "DECIMAL", "description": "La parte del impuesto anual de sus contribuyentes que le toca."},
+        {"name": "impuesto_catastro", "label": "Impuesto con catastro (S/)", "type": "DECIMAL"},
+        {"name": "delta_impuesto", "label": "Δ impuesto predial (S/)", "type": "DECIMAL"},
+        {"name": "delta_arbitrios", "label": "Δ arbitrios (S/)", "type": "DECIMAL"},
+        {"name": "estimado", "label": "Estimado", "type": "BOOLEAN", "description": "El impuesto de un omiso: liquidado solo con su autoavalúo, sin contribuyente."},
+        {"name": "motivo", "label": "Motivo", "type": "TEXT", "description": "Por qué el catastro no lo valoró, o por qué no cruzó."},
+        {"name": "lote_geom", "label": "Lote", "type": "GEOMETRY", "geometryType": "POLYGON", "srid": 32718,
+          "description": "El lote del predio del padrón o, para un omiso, el del catastro (UTM 18S)."},
+        {"name": "orden", "label": "Orden", "type": "INTEGER", "description": "Su lugar en la lista: por código del predio, luego por código catastral."}
+      ]
     }
   ],
   "relationships": [
@@ -1632,6 +1685,24 @@
       "source": "movimiento_anuncio",
       "target": "parametro_tributario",
       "fieldName": "parametro",
+      "required": false
+    },
+    {
+      "name": "brecha_predio_corrida",
+      "label": "Corrida",
+      "inverseLabel": "Predios",
+      "source": "brecha_predio",
+      "target": "brecha_corrida",
+      "fieldName": "corrida",
+      "required": true
+    },
+    {
+      "name": "brecha_predio_predio",
+      "label": "Predio",
+      "inverseLabel": "Brechas",
+      "source": "brecha_predio",
+      "target": "predio",
+      "fieldName": "predio",
       "required": false
     }
   ]
