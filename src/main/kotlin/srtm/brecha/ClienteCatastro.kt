@@ -53,6 +53,20 @@ data class CatastroProperties(
         return todas
     }
 
+    // the organizations two entries of the map name (by their organizacion or their key), with those keys: neither is
+    // read, the environment's order would pick one. the single entry replaced by one of the map is not one of these
+    fun repetidas(): Map<String, List<String>> =
+        organizaciones.keys
+            .groupBy { clave ->
+                organizaciones
+                    .getValue(clave)
+                    .organizacion
+                    .trim()
+                    .ifEmpty { clave.trim() }
+                    .lowercase()
+            }.filterValues { it.size > 1 }
+            .mapValues { it.value.sorted() }
+
     // never the secret: this text may end up in a log
     override fun toString() =
         "CatastroProperties(enabled=$enabled, url=$url, clientId=$clientId, timeout=$timeout, organizacion=$organizacion, " +
@@ -89,23 +103,27 @@ class CatastroException(
 ) : RuntimeException(mensaje)
 
 // the catastros of the install, each its organization's (the key: its id or its slug). a corrida reads its own
-// organization's only, never another's
+// organization's only, never another's. repetidas: the organizations two entries of the map name, with their keys
 class Catastros(
-    porOrganizacion: Map<String, Catastro>
+    porOrganizacion: Map<String, Catastro>,
+    repetidas: Map<String, Collection<String>> = emptyMap()
 ) {
     private val entradas = porOrganizacion.mapKeys { it.key.trim() }
+    private val repetidas = repetidas.mapKeys { it.key.trim() }
 
-    val configurado: Boolean get() = entradas.isNotEmpty()
+    val configurado: Boolean get() = entradas.isNotEmpty() || repetidas.isNotEmpty()
 
     // some key is a slug: the caller's organization has to be read for it
-    val necesitaSlug: Boolean = entradas.keys.any { comoId(it) == null }
+    val necesitaSlug: Boolean = (entradas.keys + repetidas.keys).any { comoId(it) == null }
 
     // this organization's catastro, or null when it has none. a key that is an id matches by id; else by slug
-    // (without case). named twice (by its slug and by its id): 409, never one of the two at random
+    // (without case). named twice (by its slug and by its id, or by two entries of the map): 409, never one of the two
+    // at random
     fun de(
         id: UUID,
         slug: String?
     ): Catastro? {
+        repetidas.entries.firstOrNull { esDe(it.key, id, slug) }?.let { throw ConflictException(dosCatastros(it.value)) }
         val suyas = entradas.filterKeys { esDe(it, id, slug) }
         if (suyas.size > 1) throw ConflictException(dosCatastros(suyas.keys))
         return suyas.values.firstOrNull()
@@ -330,8 +348,12 @@ class CatastroConfig {
         if (properties.organizacion.isBlank() && properties.clientId.isNotBlank()) {
             log.warn("srtm.catastro.client-id sin organizacion: esa cuenta no es de ninguna organización y no se usa")
         }
+        val repetidas = properties.repetidas()
+        for ((organizacion, claves) in repetidas) {
+            log.warn("srtm.catastro.organizaciones: {} nombra dos veces a {}: esa organización no corre la brecha", claves.joinToString(" y "), organizacion)
+        }
         val clientes = linkedMapOf<String, Catastro>()
-        for ((organizacion, cuenta) in properties.cuentas()) {
+        for ((organizacion, cuenta) in properties.cuentas() - repetidas.keys) {
             val faltan = cuenta.faltan
             if (faltan.isEmpty()) {
                 clientes[organizacion] = ClienteCatastro(cuenta)
@@ -339,11 +361,11 @@ class CatastroConfig {
                 log.warn("srtm.catastro: el catastro de {} no tiene {}: esa organización no corre la brecha", organizacion, faltan.joinToString(", "))
             }
         }
-        if (clientes.isEmpty()) {
+        if (clientes.isEmpty() && repetidas.isEmpty()) {
             log.warn("srtm.catastro.enabled sin ninguna organización con url, client-id y client-secret: no se corre la brecha")
         } else {
             log.info("srtm.catastro: catastro de {}", clientes.keys.joinToString(", "))
         }
-        return Catastros(clientes)
+        return Catastros(clientes, repetidas)
     }
 }

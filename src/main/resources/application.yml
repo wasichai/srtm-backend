@@ -61,11 +61,13 @@ srtm:
     enabled: ${SRTM_CATASTRO_ENABLED:false}
     # organizaciones.<slug-or-id>: url, client-id, client-secret and, optional, timeout (else the one below). no entry
     # is declared here: the environment adds them by relaxed binding, SRTM_CATASTRO_ORGANIZACIONES_<KEY>_URL,
-    # _CLIENT_ID, _CLIENT_SECRET, _TIMEOUT. the key arrives lowercase and without dashes, so an id (or a slug with a
-    # dash) goes in the entry's organizacion, under any key: SRTM_CATASTRO_ORGANIZACIONES_ICA_ORGANIZACION=<id>. an
-    # organization without an entry gets 409 SIN_CATASTRO_CONFIGURADO
-    # the single url, client-id, client-secret and organizacion below are one more entry (an entry of the map for the
-    # same organization replaces it): the one-catastro install of before keeps working
+    # _CLIENT_ID, _CLIENT_SECRET, _TIMEOUT. the key arrives lowercase and can carry no dash nor underscore, so an id
+    # (or a slug with either) goes in the entry's organizacion, under any key:
+    # SRTM_CATASTRO_ORGANIZACIONES_ICA_ORGANIZACION=<id>. an organization without an entry gets 409
+    # SIN_CATASTRO_CONFIGURADO; one named by two entries, 409 too (neither is read)
+    # the single url, client-id, client-secret and organizacion below are one more entry (an entry of the map naming
+    # the same organization the same way, both by slug or both by id, replaces it): the one-catastro install of before
+    # keeps working
     url: ${SRTM_CATASTRO_URL:http://localhost:8091}
     client-id: ${SRTM_CATASTRO_CLIENT_ID:}
     client-secret: ${SRTM_CATASTRO_CLIENT_SECRET:}

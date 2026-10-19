@@ -789,8 +789,9 @@ de 2026…») en vez de dar todo el padrón por SIN_CATASTRO. Los importes se le
 de `srtm.catastro.timeout`). srtm guarda un cliente y un token por organización, y una corrida usa el de la
 organización que la lanza. La clave casa como antes: si es un id (UUID), con el id de la organización; si no, con su
 slug, sin distinguir mayúsculas. Por variables de entorno (relaxed binding de Spring) cada propiedad es
-`SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_<PROPIEDAD>`; la clave llega en minúsculas y sin guiones, así que un id o un
-slug con guion va en `organizacion`, bajo una clave cualquiera. Dos organizaciones, Perené por su slug e Ica por su id:
+`SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_<PROPIEDAD>`; la clave llega en minúsculas y no puede llevar guiones ni guiones
+bajos (`_SAN_RAMON_URL` sería la clave `san`), así que un id o un slug con guion o guion bajo va en `organizacion`, bajo
+una clave cualquiera. Dos organizaciones, Perené por su slug e Ica por su id:
 
 ```bash
 SRTM_CATASTRO_ENABLED=true
@@ -806,11 +807,12 @@ SRTM_CATASTRO_ORGANIZACIONES_ICA_TIMEOUT=90s
 
 La forma de antes, de una sola organización (`SRTM_CATASTRO_URL`, `_CLIENT_ID`, `_CLIENT_SECRET`, `_TIMEOUT` y
 `SRTM_CATASTRO_ORGANIZACION` con su slug o su id), sigue valiendo: es una entrada más del mapa, y una entrada del mapa
-para la misma organización la reemplaza. Sin `SRTM_CATASTRO_ORGANIZACION` esa cuenta no es de nadie y no se usa. Una
-entrada sin url, client-id o client-secret se salta (con un aviso en el log al arrancar). Una organización sin
-catastro responde **409** `SIN_CATASTRO_CONFIGURADO` («Catastro no configurado para esta organización: fije
-srtm.catastro.organizaciones.<slug o id>…»), y una nombrada dos veces, por su slug y por su id, **409** «Catastro
-configurado dos veces para esta organización»: nunca se cruza el padrón de una organización con el catastro de otra.
+que nombra igual a la misma organización (las dos por su slug o las dos por su id) la reemplaza. Sin
+`SRTM_CATASTRO_ORGANIZACION` esa cuenta no es de nadie y no se usa. Una entrada sin url, client-id o client-secret se
+salta (con un aviso en el log al arrancar). Una organización sin catastro responde **409** `SIN_CATASTRO_CONFIGURADO`
+(«Catastro no configurado para esta organización: fije srtm.catastro.organizaciones.<slug o id>…»), y una nombrada dos
+veces (por su slug y por su id, o por dos entradas del mapa) **409** «Catastro configurado dos veces para esta
+organización», con las claves que la nombran: nunca se cruza el padrón de una organización con el catastro de otra.
 
 **Cruce** (D7). Cada ítem del catastro busca su predio: por código municipal (`predio.codigo`), si no por código CPU
 (`codigo_cpu`), si no por sector, manzana y lote (`sector_catastral`, `manzana_catastral`, `lote`), sin distinguir

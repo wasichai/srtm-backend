@@ -1,6 +1,7 @@
 package srtm.brecha
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -128,8 +129,8 @@ class CatastrosTest {
         assertNull(catastros.de(UUID.randomUUID(), ica.toString()))
         assertNull(catastros.de(UUID.randomUUID(), null))
         assertNull(catastros.de(UUID.randomUUID(), "ica"))
-        assertTrue(!Catastros(mapOf(ica.toString() to deIca)).necesitaSlug)
-        assertTrue(!Catastros(emptyMap()).configurado)
+        assertFalse(Catastros(mapOf(ica.toString() to deIca)).necesitaSlug)
+        assertFalse(Catastros(emptyMap()).configurado)
     }
 
     @Test
@@ -137,6 +138,33 @@ class CatastrosTest {
         val catastros = Catastros(mapOf("ica" to Falso("a"), ica.toString() to Falso("b")))
         val e = assertThrows(ConflictException::class.java) { catastros.de(ica, "ica") }
         assertEquals(dosCatastros(setOf("ica", ica.toString())), e.message)
+    }
+
+    @Test
+    fun `two entries of the map for one organization are refused, never one of them at random`() {
+        val cuenta = CuentaCatastro(url = "http://perene", clientId = "cid", clientSecret = "s")
+        val p =
+            CatastroProperties(
+                enabled = true,
+                organizaciones =
+                    mapOf(
+                        "perene" to cuenta,
+                        "p2" to cuenta.copy(organizacion = "PERENE", url = "http://otro"),
+                        "ica" to cuenta.copy(organizacion = ica.toString()),
+                        "ica2" to cuenta.copy(organizacion = ica.toString().uppercase())
+                    )
+            )
+        assertEquals(mapOf("perene" to listOf("p2", "perene"), ica.toString() to listOf("ica", "ica2")), p.repetidas())
+        val catastros = CatastroConfig().catastros(p)
+        val porSlug = assertThrows(ConflictException::class.java) { catastros.de(UUID.randomUUID(), "perene") }
+        assertEquals(dosCatastros(listOf("p2", "perene")), porSlug.message)
+        val porId = assertThrows(ConflictException::class.java) { catastros.de(ica, null) }
+        assertEquals(dosCatastros(listOf("ica", "ica2")), porId.message)
+        // the old single entry replaced by one of the map is not a repetition
+        assertEquals(
+            emptyMap<String, List<String>>(),
+            p.copy(organizacion = "ica-vieja", organizaciones = mapOf("x" to cuenta.copy(organizacion = "ica-vieja"))).repetidas()
+        )
     }
 
     @Test
@@ -153,7 +181,7 @@ class CatastrosTest {
         val catastros = CatastroConfig().catastros(p)
         assertTrue(catastros.de(UUID.randomUUID(), "perene") is ClienteCatastro)
         assertNull(catastros.de(UUID.randomUUID(), "ica"))
-        assertTrue(!CatastroConfig().catastros(p.copy(enabled = false)).configurado)
+        assertFalse(CatastroConfig().catastros(p.copy(enabled = false)).configurado)
     }
 
     @Test
@@ -163,7 +191,7 @@ class CatastrosTest {
                 clientSecret = "viejo-secreto",
                 organizaciones = mapOf("ica" to CuentaCatastro(url = "http://ica", clientId = "cid", clientSecret = "nuevo-secreto"))
             )
-        assertTrue(!p.toString().contains("secreto"), p.toString())
-        assertTrue(!p.cuentas().toString().contains("secreto"))
+        assertFalse(p.toString().contains("secreto"), p.toString())
+        assertFalse(p.cuentas().toString().contains("secreto"))
     }
 }

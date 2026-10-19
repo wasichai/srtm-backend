@@ -15,6 +15,7 @@ import tools.jackson.databind.JsonNode
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.net.InetSocketAddress
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -344,8 +345,8 @@ class BrechaApiTest : SrtmApiTest() {
         private val ITEMS_ICA = AtomicReference<List<String>>(emptyList())
 
         // the client-id of each token asked of each catastro
-        private val CUENTAS = java.util.concurrent.CopyOnWriteArrayList<String>()
-        private val CUENTAS_ICA = java.util.concurrent.CopyOnWriteArrayList<String>()
+        private val CUENTAS = CopyOnWriteArrayList<String>()
+        private val CUENTAS_ICA = CopyOnWriteArrayList<String>()
 
         // the organization srtm.catastro.organizacion names, by its slug: created by the first test that needs it
         private val SLUG = "brecha-${java.util.UUID.randomUUID().toString().take(8)}"
