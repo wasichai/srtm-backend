@@ -721,7 +721,7 @@
         {"name": "valor_unitario", "label": "Valor unitario (S/ por m²)", "type": "DECIMAL",
           "description": "Heredado de un padrón externo (Ica): el valor unitario de sus categorías, como lo trae el padrón."},
         {"name": "incremento", "label": "Incremento", "type": "DECIMAL",
-          "description": "Heredado de un padrón externo (Ica): el incremento sobre el valor unitario, como lo trae el padrón."},
+          "description": "Heredado de un padrón externo (Ica): monto en S/ por m2 que se suma al valor unitario (en Ica, el 5 % del valor unitario desde el quinto piso), como lo trae el padrón."},
         {"name": "porcentaje_depreciacion", "label": "% de depreciación", "type": "DECIMAL",
           "description": "Heredado de un padrón externo (Ica)."},
         {"name": "valor_total", "label": "Valor del nivel", "type": "DECIMAL",
