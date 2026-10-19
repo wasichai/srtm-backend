@@ -1,0 +1,325 @@
+{
+    "_comentario": "Capturas de los capítulos comunes (comun/).",
+    "referencias": {
+        "contribuyente": {
+            "get": "/api/srtm/contribuyentes?q=91002704",
+            "campo": "content.0.id"
+        },
+        "predio_contribuyente": {
+            "get": "/api/srtm/contribuyentes/{ref:contribuyente}/declaraciones",
+            "campo": "0.declaracion.predio"
+        },
+        "declaracion_contribuyente": {
+            "get": "/api/srtm/contribuyentes/{ref:contribuyente}/declaraciones",
+            "campo": "0.declaracion.id"
+        }
+    },
+    "capturas": [
+        {
+            "id": "comun-ingreso",
+            "perfil": "anonimo",
+            "archivo": "comun/ingreso.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/login"
+                ],
+                [
+                    "llenar",
+                    "#email",
+                    "registrador@demo.srtm.local"
+                ],
+                [
+                    "llenar",
+                    "#password",
+                    ""
+                ]
+            ],
+            "recorte": "form",
+            "subir": 2,
+            "margen": 24
+        },
+        {
+            "id": "comun-ingreso-error",
+            "perfil": "anonimo",
+            "archivo": "comun/ingreso-error.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/login"
+                ],
+                [
+                    "llenar",
+                    "#email",
+                    "registrador@demo.srtm.local"
+                ],
+                [
+                    "llenar",
+                    "#password",
+                    "clave-equivocada"
+                ],
+                [
+                    "clic",
+                    "button[type=submit]"
+                ],
+                [
+                    "esperar",
+                    "[role=alert]"
+                ]
+            ],
+            "recorte": "form",
+            "subir": 2,
+            "margen": 24
+        },
+        {
+            "id": "comun-inicio",
+            "perfil": "registrador",
+            "archivo": "comun/inicio.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/"
+                ],
+                [
+                    "esperarTexto",
+                    "Atención rápida"
+                ]
+            ]
+        },
+        {
+            "id": "comun-riel",
+            "perfil": "registrador",
+            "archivo": "comun/riel.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/"
+                ],
+                [
+                    "clic",
+                    "[data-ui=riel] button:has-text('Contribuyentes')"
+                ],
+                [
+                    "esperar",
+                    "[data-ui=riel-panel]"
+                ]
+            ],
+            "area": {
+                "x": 0,
+                "y": 0,
+                "width": 720,
+                "height": 520
+            }
+        },
+        {
+            "id": "comun-menu-sesion",
+            "perfil": "registrador",
+            "archivo": "comun/menu-sesion.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/"
+                ],
+                [
+                    "clic",
+                    "button[aria-label$='menú de sesión']"
+                ],
+                [
+                    "esperar",
+                    "[data-ui=menu-sesion-panel]"
+                ]
+            ],
+            "area": {
+                "x": 900,
+                "y": 0,
+                "width": 540,
+                "height": 260
+            }
+        },
+        {
+            "id": "comun-menu-tema",
+            "perfil": "registrador",
+            "archivo": "comun/menu-tema.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/"
+                ],
+                [
+                    "clic",
+                    "button[aria-label^='Tema:']"
+                ],
+                [
+                    "esperar",
+                    "[role=menuitemradio]"
+                ]
+            ],
+            "area": {
+                "x": 900,
+                "y": 0,
+                "width": 540,
+                "height": 300
+            }
+        },
+        {
+            "id": "comun-pasos",
+            "perfil": "registrador",
+            "archivo": "comun/pasos.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/nuevo"
+                ],
+                [
+                    "esperarTexto",
+                    "Paso 1"
+                ]
+            ],
+            "area": {
+                "x": 0,
+                "y": 0,
+                "width": 1440,
+                "height": 360
+            }
+        },
+        {
+            "id": "comun-busqueda-general",
+            "perfil": "registrador",
+            "archivo": "comun/busqueda-general.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/"
+                ],
+                [
+                    "llenar",
+                    "[role=search] input",
+                    "ALISOS"
+                ],
+                [
+                    "tecla",
+                    "Enter"
+                ],
+                [
+                    "esperarTexto",
+                    "Predios"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ]
+            ]
+        },
+        {
+            "id": "comun-fichas-abiertas",
+            "perfil": "registrador",
+            "archivo": "comun/fichas-abiertas.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:contribuyente}"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ],
+                [
+                    "ir",
+                    "/predios/{ref:predio_contribuyente}"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ],
+                [
+                    "ir",
+                    "/declaraciones/{ref:declaracion_contribuyente}"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ]
+            ],
+            "area": {
+                "x": 0,
+                "y": 0,
+                "width": 1440,
+                "height": 200
+            }
+        },
+        {
+            "id": "comun-validacion",
+            "perfil": "registrador",
+            "archivo": "comun/validacion.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/nuevo"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Siguiente')"
+                ],
+                [
+                    "esperarTexto",
+                    "Este dato es obligatorio"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 340,
+                "width": 1336,
+                "height": 600
+            }
+        },
+        {
+            "id": "comun-salir-sin-guardar",
+            "perfil": "registrador",
+            "archivo": "comun/salir-sin-guardar.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:declaracion_contribuyente}"
+                ],
+                [
+                    "llenar",
+                    "[name=folios]",
+                    "3"
+                ],
+                [
+                    "clic",
+                    "[data-ui=riel] a:has-text('Inicio')"
+                ],
+                [
+                    "esperarTexto",
+                    "¿Salir sin guardar?"
+                ]
+            ],
+            "recorte": "[role=dialog], [role=alertdialog]",
+            "margen": 16
+        },
+        {
+            "id": "comun-sin-permiso",
+            "perfil": "consulta",
+            "archivo": "comun/sin-permiso.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/nueva"
+                ],
+                [
+                    "esperarTexto",
+                    "Sin permiso"
+                ],
+                [
+                    "desplazar",
+                    "text=Sin permiso"
+                ]
+            ],
+            "recorte": "text=Sin permiso",
+            "subir": 1,
+            "margen": 12,
+            "anchoMax": 560
+        }
+    ]
+}

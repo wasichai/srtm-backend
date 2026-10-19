@@ -1,0 +1,33 @@
+// Preguntas frecuentes comunes a todos los perfiles. Cada manual de usuario la incluye en su capítulo de preguntas
+// frecuentes, después de las propias del perfil, con include::../comun/faq.adoc[]
+[[faq-comun]]
+=== Preguntas generales
+
+¿Puedo cambiar mi contraseña?::
+No desde el portal. Pídasela al administrador: él asigna una contraseña nueva en la consola de administración.
+
+Olvidé mi contraseña. ¿Qué hago?::
+Lo mismo: el administrador le asigna una nueva. El portal no envía correos de recuperación.
+
+El sistema me devolvió a la pantalla de ingreso mientras trabajaba.::
+Venció la sesión (<<sesion>>). Vuelva a ingresar; lo que no había grabado se perdió.
+
+Un botón está gris y debajo dice «Sin permiso: …».::
+Su rol no permite esa acción (<<permisos-usuario>>). Si su trabajo la necesita, pídale al administrador que la añada a
+su rol.
+
+No encuentro a un contribuyente que sé que existe.::
+Busque solo por el número de documento, sin espacios, o por un solo apellido. La búsqueda encuentra el texto tal como
+lo escribe dentro de los datos del registro, sin distinguir mayúsculas: «AQUINO ALEJANDRO» no encuentra a AQUINO
+ESPINOZA ALEJANDRO, porque esas dos palabras no van seguidas; «AQUINO» sí. Tampoco iguala vocales con y sin tilde.
+
+El mapa sale en blanco.::
+El fondo del mapa se descarga de Internet (OpenStreetMap). Revise la conexión; el resto de la ficha funciona igual.
+
+¿Puedo sacar una lista a Excel?::
+No: las listas del portal no tienen exportación. Los documentos en bloque (HR, PU, HLA) se generan con la emisión
+masiva.
+
+¿Quién ve lo que yo registro?::
+Todos los usuarios de la municipalidad con permiso de lectura sobre ese tipo de registro. Cada registro guarda quién lo
+creó y quién lo modificó por última vez, y la auditoría del sistema conserva cada cambio.

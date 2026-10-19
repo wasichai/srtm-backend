@@ -1,0 +1,88 @@
+// Capítulo común de los manuales de usuario: acceso, sesión y requisitos. Se incluye con include::../comun/acceso.adoc[]
+[[acceso]]
+== Acceso al sistema
+
+[[requisitos-acceso]]
+=== Qué necesita
+
+Una cuenta de usuario:: Un correo y una contraseña que le entrega el administrador del sistema. La cuenta tiene uno o
+más _roles_; el rol decide qué puede consultar y qué puede registrar (<<permisos-usuario>>). Usted no puede crearse
+una cuenta ni cambiar su contraseña desde el portal: las dos cosas las hace el administrador
+(xref:../administrador/manual-administrador.adoc#usuarios[{m-admin}]).
+Un navegador actualizado:: El portal es una aplicación web: no se instala nada en su equipo. Funciona en las versiones
+recientes de Chrome, Edge, Firefox y Safari. Las capturas de este manual se tomaron con Chromium, en una pantalla de
+1440 × 1000 píxeles.
+Acceso a la red:: La dirección del portal la da el área de sistemas de la municipalidad. Los mapas (lotes de catastro,
+ubicación de domicilios y predios) necesitan, además, salida a Internet: el fondo del mapa se descarga de
+OpenStreetMap. Sin ella, el mapa queda en blanco, pero el resto de la ficha funciona.
+
+[[ingresar]]
+=== Ingresar
+
+[[proc-ingresar]]
+.Ingresar al portal
+====
+[horizontal]
+Objetivo:: Abrir una sesión de trabajo con su cuenta.
+Requisitos previos:: Su correo y su contraseña.
+====
+
+. Abra en el navegador la dirección del portal. Aparece la pantalla *Rentas municipales*, con el nombre de la
+  municipalidad (<<fig-ingreso>>).
+. Escriba su correo en *Correo* y su contraseña en *Contraseña*.
+. Pulse btn:[Ingresar] o la tecla kbd:[Enter]. Mientras el sistema comprueba los datos, el botón dice *Ingresando…*.
+
+// fin de los pasos
+Resultado esperado:: Se abre la página *Inicio* (<<fig-inicio>>). Si entró desde un enlace a una ficha, el sistema lo
+lleva directamente a esa ficha.
+Verificación:: En la esquina superior derecha aparecen sus iniciales, su nombre y su condición (*Administrador* o
+*Usuario*).
+Casos especiales::
+* *Correo o contraseña incorrectos*: el correo no tiene cuenta, la cuenta está desactivada o la contraseña no
+  coincide. Revise que no tenga activadas las mayúsculas y vuelva a intentarlo; si se repite, pida al administrador
+  que revise su cuenta (<<fig-ingreso-error>>).
+* *No se pudo iniciar sesión. Inténtalo de nuevo.*: el servidor no respondió. Espere un momento; si persiste, avise al
+  área de sistemas.
+
+[[fig-ingreso]]
+.Pantalla de ingreso
+image::{capturas}/comun/ingreso.png[Tarjeta de ingreso con los campos Correo y Contraseña y el botón Ingresar,600,align=center]
+
+[[fig-ingreso-error]]
+.Mensaje de una contraseña equivocada
+image::{capturas}/comun/ingreso-error.png[La tarjeta de ingreso con el mensaje en rojo «Correo o contraseña incorrectos»,600,align=center]
+
+[[sesion]]
+=== Duración de la sesión
+
+La sesión dura *ocho horas* desde que ingresa (es el valor de fábrica; el área de sistemas puede cambiarlo). Al
+vencer, la siguiente operación lo devuelve a la pantalla de ingreso.
+
+CAUTION: Lo que no haya grabado al vencer la sesión se pierde. En un formulario largo, grabe antes de hacer una pausa.
+
+[[cerrar-sesion]]
+=== Cerrar la sesión
+
+[[proc-cerrar-sesion]]
+.Cerrar la sesión
+====
+[horizontal]
+Objetivo:: Terminar su sesión para que nadie más trabaje con su cuenta en ese equipo.
+Requisitos previos:: Una sesión abierta.
+====
+
+. Pulse su nombre en la esquina superior derecha. Se abre el menú de sesión, con su nombre y su correo
+  (<<fig-menu-sesion>>).
+. Pulse menu:Cerrar sesión[].
+
+// fin de los pasos
+Resultado esperado:: El sistema vuelve a la pantalla de ingreso.
+Verificación:: Al volver a ingresar, la barra de fichas abiertas solo muestra *Inicio*.
+Casos especiales:: Cerrar la sesión cierra también las fichas abiertas (<<fichas-abiertas>>). Si alguien ingresa
+después en el mismo navegador con otra cuenta, no ve las fichas que usted tenía abiertas.
+
+[[fig-menu-sesion]]
+.Menú de sesión
+image::{capturas}/comun/menu-sesion.png[Menú desplegado bajo el nombre del usuario con su correo y la opción Cerrar sesión,520,align=center]
+
+TIP: Cierre la sesión siempre que deje el equipo, sobre todo en una ventanilla de atención compartida.

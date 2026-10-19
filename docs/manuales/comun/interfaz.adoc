@@ -1,0 +1,91 @@
+// Capítulo común de los manuales de usuario: la pantalla, la navegación y los temas.
+[[interfaz]]
+== La pantalla de trabajo
+
+[[partes-pantalla]]
+=== Partes de la pantalla
+
+Todas las pantallas del portal comparten el mismo marco (<<fig-inicio>>):
+
+[horizontal]
+Barra de la municipalidad:: La franja azul superior. A la izquierda, el nombre del sistema y de la municipalidad; al
+centro, la búsqueda general (<<busqueda-general>>); a la derecha, el menú *Tema* (el icono de la paleta) y su menú de
+sesión (<<cerrar-sesion>>).
+Fichas abiertas:: Debajo de la barra, una pestaña por cada ficha que usted abrió, más *Inicio*, que siempre está
+(<<fichas-abiertas>>).
+Riel de módulos:: La columna de iconos de la izquierda. Cada icono abre los trámites de un módulo
+(<<riel-modulos>>).
+Área de trabajo:: El centro de la pantalla: la página o la ficha en la que trabaja.
+Pie:: El nombre de la municipalidad y del sistema.
+
+[[fig-inicio]]
+.Página Inicio
+image::{capturas}/comun/inicio.png[Página Inicio con la barra azul, el riel de módulos, los contadores de contribuyentes, predios y declaraciones, y los accesos rápidos]
+
+La página *Inicio* muestra los totales del padrón del año (contribuyentes, predios y declaraciones), los botones de
+*Atención rápida* y la lista de *Fichas abiertas*. Los botones de atención rápida llevan a los trámites más comunes:
+buscar un contribuyente o un predio, inscribir un contribuyente, registrar un predio o un lote de catastro.
+
+[[riel-modulos]]
+=== El riel de módulos
+
+El riel agrupa los trámites por aquello sobre lo que se hacen. Al pulsar un módulo se abre, a su lado, el panel con sus
+trámites (<<fig-riel>>); al elegir uno, el panel se cierra. La tecla kbd:[Esc] o un clic fuera del panel también lo
+cierran.
+
+[[fig-riel]]
+.Panel del módulo Contribuyentes
+image::{capturas}/comun/riel.png[Riel de módulos con el panel de Contribuyentes abierto: Buscar contribuyentes y Nuevo contribuyente,720,align=center]
+
+.Módulos y trámites del portal
+[cols="1,2,1",options="header"]
+|===
+|Módulo |Trámites |Manual que los explica
+|Contribuyentes |Buscar contribuyentes · Nuevo contribuyente |{m-registrador}
+|Predios |Buscar predios · Nuevo predio |{m-registrador}
+|Declaraciones |Nueva declaración |{m-registrador}
+|Catastro |Nuevo lote |{m-registrador}
+|Arbitrios |Consulta de cuotas · Tasas del año · Determinación masiva |{m-arbitrios}
+|Infracciones |Expedientes · Nueva acta · Notificaciones previas · CUIS · Escalas y plazos |{m-fiscalizador}
+|Anuncios |Padrón de anuncios · Nuevo anuncio · Tasas de anuncios |{m-anuncios}
+|Emisión |Emisión masiva |{m-arbitrios}
+|Fiscalización |Brecha de recaudación |{m-consulta}
+|Administración |Consola de administración (solo para administradores) |{m-admin}
+|===
+
+Todos los usuarios ven todos los módulos, salvo *Administración*. Lo que cada uno puede hacer dentro de ellos lo
+decide su rol (<<permisos-usuario>>).
+
+[[banda-titulo]]
+=== Títulos, pasos e instrucciones
+
+Cada página o ficha empieza con una banda de título: a la izquierda, qué es (*Nuevo contribuyente*, *Contribuyente Nº
+000012*); a la derecha, el nombre del formulario o la ruta por la que llegó. Debajo, a la derecha, los botones de las
+acciones de la página (btn:[Cancelar], btn:[Siguiente], btn:[Ver HR]…).
+
+Los trámites de varios pasos, como la inscripción de un contribuyente, muestran los pasos como una cinta de flechas.
+El paso en curso está resaltado en azul, y una barra de instrucciones dice qué hacer en él (<<fig-pasos>>). Los pasos
+siguientes se habilitan a medida que se completan los anteriores.
+
+[[fig-pasos]]
+.Cinta de pasos y barra de instrucciones de una inscripción
+image::{capturas}/comun/pasos.png[Banda de título Nuevo contribuyente, cinta de pasos con Datos del contribuyente resaltado y la instrucción del paso 1]
+
+Las fichas (de un contribuyente, de un predio, de una declaración) ordenan su contenido en pestañas, en una columna a
+la izquierda. La pestaña abierta queda en la dirección de la página: un enlace copiado a otra persona abre la ficha en
+esa misma pestaña.
+
+[[temas]]
+=== Temas de color
+
+El menú *Tema* de la barra superior cambia el aspecto del portal: *Sistema* (el claro o el oscuro, según su equipo),
+*Claro*, *Oscuro* y *Portal tributario*. El tema se guarda con su cuenta: lo ve igual en cualquier equipo en el que
+ingrese.
+
+[[fig-tema]]
+.Menú Tema
+image::{capturas}/comun/menu-tema.png[Menú Tema desplegado con las opciones Sistema, Claro, Oscuro y Portal tributario,520,align=center]
+
+NOTE: Las capturas de los manuales usan el tema *Portal tributario*. Con *Claro* u *Oscuro*, los módulos aparecen en
+una barra lateral con sus nombres en lugar del riel de iconos y las fichas muestran sus pestañas arriba, pero las
+pantallas, los campos y los botones son los mismos.
