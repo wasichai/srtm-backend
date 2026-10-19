@@ -869,6 +869,11 @@ y puede lanzar otra.
 Pide creación y edición sobre `brecha_corrida` y creación sobre `brecha_predio` (**403**); consultar pide lectura
 sobre `brecha_corrida`.
 
+**Quién la ve.** La brecha la consulta cualquier usuario de la municipalidad (decisión del 2026-10-19), y eso se da por
+roles, no por código: **todo rol** de srtm lleva lectura sobre `brecha_corrida` y `brecha_predio`. Core revisa la
+lectura de cada fila y wasichai no tiene un permiso para «cualquier usuario autenticado», así que un rol nuevo sin esa
+lectura ve el panel con 403. Lanzar una corrida queda para quien tenga creación y edición (arriba).
+
 | Método | Ruta | Responde |
 |---|---|---|
 | POST | `/api/srtm/brecha/corridas` `{anio}` | 202 con la corrida; 400 año inválido; 403; 409 catastro no configurado o corrida en curso. |
@@ -887,10 +892,11 @@ El JSON va en camelCase, como `/liquidacion`. `lote_geom` de `brecha_predio` es 
 guarda el lote del predio del padrón o, para un omiso, el del catastro; así `/lotes` lo lee de las filas y la capa gis
 (`/api/gis/objects/brecha_predio/features`) también puede servirlo.
 
-**Decisiones por confirmar** (valores por defecto del plan de la brecha):
+**Decisiones** (confirmadas por la municipalidad el 2026-10-19, salvo D8):
 - D5: una celda «.....» del cuadro de valores no es cero: el predio queda SIN_VALOR con su motivo.
 - D7: llave de cruce código municipal → CPU → sector, manzana y lote.
-- D8: la deducción Amazonía no se aplica; solo la `deduccion` que ya trae cada DJ.
+- D8: la deducción Amazonía no se aplica (Perené no la tiene hoy); solo la `deduccion` que ya trae cada DJ. Abierta
+  para cuando se cargue una municipalidad de la Amazonía.
 - D10: COINCIDE con |Δ autoavalúo| ≤ 5 %.
 - D11: solo 2026 (el año lo decide catastro; srtm acepta cualquiera con sus parámetros).
 - D12: reparto entre secuencias por autoavalúo declarado, si no por área construida, si no en partes iguales.
