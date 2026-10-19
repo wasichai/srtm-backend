@@ -1583,10 +1583,11 @@ Para los padrones externos (Ica, #124) ganaron campos opcionales, al final de ca
   `porcentaje_depreciacion` y `valor_total` (DECIMAL).
 - **`via` y `unidad_urbana`:** `codigo` (TEXT, no único: los del padrón de Perené no lo tienen).
 
-Además, `nivel_construccion.mes_construccion` dejó de ser obligatorio en Core, porque Ica no lo trae. El portal lo
-sigue pidiendo al registrar un nivel, y la PU imprime solo el año cuando falta. Los DTO del portal no conocen estos
-campos: los escribe el importador por la API de registros de Core, y un guardado del portal no los borra porque se
-fusiona con lo guardado (`Registros.replace`).
+Además, `nivel_construccion.mes_construccion` dejó de ser obligatorio, porque Ica no lo trae: ni Core ni la API del
+portal lo exigen (el formulario del nivel en srtm-ui lo sigue pidiendo), y la PU imprime solo el año cuando falta. Los
+DTO del portal no conocen estos campos: los escribe el importador por la API de registros de Core, y un guardado del
+portal no los borra porque se fusiona con lo guardado (`Registros.replace`). Un condómino agregado desde una
+declaración copia también su valuación y la de sus niveles (`PADRON_EXTERNO_DECLARACION` y `PADRON_EXTERNO_NIVEL`).
 
 **`contribuyente`**: una persona natural, persona jurídica o sucesión. `numero_documento` es único.
 

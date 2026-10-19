@@ -702,7 +702,7 @@
         {"name": "numero_piso", "label": "Número de piso", "type": "INTEGER", "required": true},
         {"name": "anio_construccion", "label": "Año de construcción", "type": "INTEGER", "required": true},
         {"name": "mes_construccion", "label": "Mes de construcción", "type": "INTEGER",
-          "description": "Opcional en Core: un padrón externo (Ica) no lo trae. El portal lo pide al registrar el nivel."},
+          "description": "Opcional: un padrón externo (Ica) no lo trae. El formulario del nivel en srtm-ui lo sigue pidiendo."},
         {"name": "material", "label": "Material predominante", "type": "ENUM", "enum": "material", "required": true},
         {"name": "estado_conservacion", "label": "Estado de conservación", "type": "ENUM", "enum": "estado_conservacion", "required": true},
         {"name": "area_construida", "label": "Área construida (m2)", "type": "DECIMAL", "required": true},

@@ -45,28 +45,39 @@ class PadronExternoApiTest : SrtmApiTest() {
         put("/api/srtm/declaraciones/${declaracion["id"].asString()}", fields(declaracion) + ("area_terreno" to 200))
         put("/api/srtm/niveles/${nivel["id"].asString()}", fields(nivel) + ("area_construida" to 150))
 
-        for ((objeto, registro, ica) in cambios) {
-            val guardado = registro(objeto, registro["id"].asString())
-            for ((campo, valor) in ica) {
-                val leido = guardado[campo]
-                if (valor is BigDecimal) {
-                    assertEquals(0, valor.compareTo(leido.decimalValue()), "$objeto.$campo: $guardado")
-                } else {
-                    assertEquals(valor, leido.asString(), "$objeto.$campo: $guardado")
-                }
-            }
-        }
+        for ((objeto, registro, ica) in cambios) assertImportado(objeto, registro["id"].asString(), ica)
         assertEquals("FRENTE AL MERCADO", registro(PREDIO, predio["id"].asString())["referencia"].asString())
         assertEquals(150.0, registro(NIVEL_CONSTRUCCION, nivel["id"].asString())["area_construida"].asDouble())
     }
 
+    // a condómino's declaración copies what the source declares of the predio: the padrón's valuation and its niveles'
+    // too, although the dtos the copy goes through do not know them
+    @Test
+    fun `a condomino added from an external padron's declaracion keeps its valuation and that of its niveles`() {
+        val origen = nuevaDeclaracion()
+        val nivel = post("/api/srtm/declaraciones/$origen/niveles", NIVEL)
+        importar(DECLARACION, origen, DECLARACION_ICA)
+        importar(NIVEL_CONSTRUCCION, nivel["id"].asString(), NIVEL_ICA)
+
+        val nuevo = post("/api/srtm/declaraciones/$origen/condominos", mapOf("contribuyente" to inscribir(), "porcentaje_condominio" to 25))
+
+        assertImportado(DECLARACION, nuevo["id"].asString(), DECLARACION_ICA)
+        val copias = tree(send("GET", "/api/srtm/declaraciones/${nuevo["id"].asString()}/niveles", null, HttpStatus.OK))
+        assertEquals(1, copias.size(), copias.toString())
+        assertImportado(NIVEL_CONSTRUCCION, copias[0]["id"].asString(), NIVEL_ICA)
+    }
+
     @Test
     fun `a via and a unidad urbana of the catalog carry their code`() {
-        val via = crear(VIA, mapOf("tipo_via" to "JIRON", "nombre" to "ICA ${uniqueDocumento()}", "codigo" to "V0123"))
+        val nombre = "ICA ${uniqueDocumento()}"
+        val via = crear(VIA, mapOf("tipo_via" to "JIRON", "nombre" to nombre, "codigo" to "V0123"))
         val unidad = crear(UNIDAD_URBANA, mapOf("tipo_unidad_urbana" to "URBANIZACION", "nombre" to "ICA ${uniqueDocumento()}", "codigo" to "U045"))
 
         assertEquals("V0123", registro(VIA, via)["codigo"].asString())
         assertEquals("U045", registro(UNIDAD_URBANA, unidad)["codigo"].asString())
+        // the portal's catalog still lists it, by its name
+        val vias = tree(send("GET", "/api/srtm/vias?q=$nombre&tipo=JIRON", null, HttpStatus.OK))["content"]
+        assertEquals(listOf(via), vias.map { it["id"].asString() })
     }
 
     // what the importer does: core's record api, whose update replaces every field (so it sends them all)
@@ -76,6 +87,23 @@ class PadronExternoApiTest : SrtmApiTest() {
         ica: Map<String, Any>
     ) {
         send("PUT", "/api/objects/$objeto/records/$id", mapOf("attributes" to fields(registro(objeto, id)) + ica), HttpStatus.OK)
+    }
+
+    // a decimal is compared by value: core may hand it back with another scale
+    private fun assertImportado(
+        objeto: String,
+        id: String,
+        ica: Map<String, Any>
+    ) {
+        val guardado = registro(objeto, id)
+        for ((campo, valor) in ica) {
+            val leido = guardado[campo]
+            if (valor is BigDecimal) {
+                assertEquals(0, valor.compareTo(leido.decimalValue()), "$objeto.$campo: $guardado")
+            } else {
+                assertEquals(valor, leido.asString(), "$objeto.$campo: $guardado")
+            }
+        }
     }
 
     private fun crear(
