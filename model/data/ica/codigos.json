@@ -1,0 +1,119 @@
+{
+  "_comentario": "Tablas de códigos del padrón de Ica (PADRON_CONSTRUCCION.xlsx) que lee import_padron_ica.py. Ninguna está confirmada por la municipalidad: cada tabla lleva \"confirmado\": false hasta que Ica la confirme. \"evidencia\" dice de dónde sale cada lectura; \"dudosos\" lista los códigos que son una decisión propia y no una lectura de los datos.",
+  "tipo_via": {
+    "confirmado": false,
+    "columna": "tipo_de_via",
+    "evidencia": "El prefijo de direccion_del_predio_completa: 1 AV., 2 JR., 3 CLL., 4 PJE., 7 PRLG. en todas sus filas. Los demás (0, 6 MZ, 14 SEC., 18 A.H., 20 P.J., 21 H.U., 23 FUND., 27 URB., 29, 36) nombran la habilitación o el sector, no una vía.",
+    "por_defecto": "OTROS",
+    "valores": {
+      "1": "AVENIDA",
+      "2": "JIRON",
+      "3": "CALLE",
+      "4": "PASAJE",
+      "7": "PROLONGACION"
+    }
+  },
+  "tipo_documento": {
+    "confirmado": false,
+    "columna": "tipo_documento",
+    "evidencia": "1: 8 dígitos (225 filas con 7, sin el cero inicial: se rellenan a 8). 3: 11 dígitos que empiezan con 20 o 15. 0: sin documento. 7: un número de 9 caracteres. 2 (8 dígitos) y 5 (7 dígitos) no se identifican: van como OTROS.",
+    "dudosos": ["2", "5"],
+    "valores": {
+      "0": "SIN DOCUMENTO",
+      "1": "DNI",
+      "2": "OTROS",
+      "3": "RUC",
+      "5": "OTROS",
+      "7": "PASAPORTE"
+    }
+  },
+  "condicion_propiedad": {
+    "confirmado": false,
+    "columna": "condicion_predio",
+    "evidencia": "La columna condicion_propiedad trae el nombre de cada código: 1 PROPIETARIO ÚNICO, 2 SUCESION INDIVISA, 3 POSEEDOR O TENEDOR, 4 SOCIEDAD CONYUGAL, 5 CONDOMINIO, 6 SUCESION INTESTADA, 8 OTROS, 9 COPROPIETARIOS. Las sucesiones (2 y 6) son un tipo de contribuyente, no una condición; 8 no tiene opción en el enum. Los tres quedan sin condición y la DJ toma la de Condominio.kt: CONDOMINO con más de un titular, PROPIETARIO UNICO con uno.",
+    "sucesion": ["2", "6"],
+    "dudosos": ["8"],
+    "valores": {
+      "1": "PROPIETARIO UNICO",
+      "2": null,
+      "3": "POSEEDOR",
+      "4": "SOCIEDAD CONYUGAL",
+      "5": "CONDOMINO",
+      "6": null,
+      "8": null,
+      "9": "CONDOMINO"
+    }
+  },
+  "uso": {
+    "confirmado": false,
+    "columna": "codigo_uso",
+    "evidencia": "descripcion_del_uso de cada código, llevada al código SRTM más cercano de data/usos_predio.csv. Un código de clase (XX0000) o de sub clase (XXYY00) deja vacío lo que no se sabe: el portal lo pide al editar la DJ. Solo 20 y 4 son seguros.",
+    "dudosos": ["1", "2", "3", "5", "9", "10", "11", "16", "18", "19", "21", "23"],
+    "valores": {
+      "1": { "ica": "COMERCIO", "srtm": "020300" },
+      "2": { "ica": "INDUSTRIA", "srtm": "030000" },
+      "3": { "ica": "SERVICIOS EN GENERAL", "srtm": "020500" },
+      "4": { "ica": "CASA HABITACION", "srtm": "010101" },
+      "5": { "ica": "EDUCA.NO.GRATUITO", "srtm": "050100" },
+      "9": { "ica": "INS.PUB.DESENTRALIZADAS", "srtm": "060100" },
+      "10": { "ica": "HOSPITALES", "srtm": "050200" },
+      "11": { "ica": "EDUC. GRATUITO", "srtm": "050100" },
+      "16": { "ica": "TEMPLO O CONVENTO", "srtm": "060600" },
+      "18": { "ica": "REPRESENTANTES DIPLOMATICOS", "srtm": "060500" },
+      "19": { "ica": "INSTITUCIONES PRIVADAS", "srtm": "060800" },
+      "20": { "ica": "TERR.SIN CONSTRUIR", "srtm": "070101" },
+      "21": { "ica": "AGRICULTURA", "srtm": "030101" },
+      "22": { "ica": "OTROS", "srtm": null },
+      "23": { "ica": "COCHERA", "srtm": "090000" }
+    }
+  },
+  "tipo_predio": {
+    "confirmado": false,
+    "columna": "tipo_predio",
+    "evidencia": "Los 1 467 predios con 2 traen arancel 0 (salvo 3): son los rústicos.",
+    "valores": {
+      "1": "PREDIO URBANO",
+      "2": "PREDIO RUSTICO"
+    }
+  },
+  "material": {
+    "confirmado": false,
+    "columna": "material_predominante",
+    "evidencia": "La columna depreciacion de construcciones cuadra con las tablas 01-04 del RNT (R.M. 172-2016-VIVIENDA) leyendo 1 concreto, 2 ladrillo y 3 adobe (p. ej. clasificación 1, material 3, estado 3: 100 de 100 filas en Adobe/Regular).",
+    "valores": {
+      "1": "CONCRETO",
+      "2": "LADRILLO",
+      "3": "ADOBE"
+    }
+  },
+  "estado_conservacion": {
+    "confirmado": false,
+    "columna": "estado_de_conservacion",
+    "evidencia": "Con la misma tabla del RNT: 1 muy bueno, 2 bueno, 3 regular y 4 malo (clasificación 1, ladrillo, estado 4: 12 de 12 en Malo). Ica no usa MUY MALO.",
+    "valores": {
+      "1": "MUY BUENO",
+      "2": "BUENO",
+      "3": "REGULAR",
+      "4": "MALO"
+    }
+  },
+  "clasificacion": {
+    "confirmado": false,
+    "columna": "clasificacion_construccion",
+    "evidencia": "El código es la tabla de depreciación del RNT: 01 casas habitación, 02 tiendas y depósitos, 03 edificios-oficinas, 04 clínicas, industrias y colegios (3 118 de 3 762 filas cuadran con antigüedad 2025 - año). El 0 (2 filas) no cuadra con ninguna: queda vacío.",
+    "valores": {
+      "1": "CASA HABITACION Y DEPARTAMENTOS PARA VIVIENDA",
+      "2": "TIENDAS DEPOSITOS CENTROS DE RECREACION CLUBES E INSTITUCIONES",
+      "3": "EDIFICIO-OFICINAS",
+      "4": "CLINICAS HOSPITALES CINES INDUSTRIAS COLEGIOS TALLERES"
+    }
+  },
+  "nivel": {
+    "confirmado": false,
+    "columna": "nivel",
+    "evidencia": "1-6 son los pisos. 0 (49 secciones) se lee como sótano.",
+    "valores": {
+      "0": { "tipo_nivel": "SOTANO", "numero_piso": 1 }
+    }
+  }
+}
