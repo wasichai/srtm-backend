@@ -24,13 +24,14 @@ image::{capturas}/comun/inicio.png[Página Inicio con la barra azul, el riel de 
 
 La página *Inicio* muestra los totales del padrón del año (contribuyentes, predios y declaraciones), los botones de
 *Atención rápida* y la lista de *Fichas abiertas*. Los botones de atención rápida llevan a los trámites más comunes:
-buscar un contribuyente o un predio, inscribir un contribuyente, registrar un predio o un lote de catastro.
+btn:[Buscar contribuyente], btn:[Buscar predio], btn:[Nuevo contribuyente], btn:[Nuevo predio] y btn:[Nuevo lote de
+catastro].
 
 [[riel-modulos]]
 === El riel de módulos
 
 El riel agrupa los trámites por aquello sobre lo que se hacen. Al pulsar un módulo se abre, a su lado, el panel con sus
-trámites (<<fig-riel>>); al elegir uno, el panel se cierra. La tecla kbd:[Esc] o un clic fuera del panel también lo
+trámites y el enlace *Ir al inicio* (<<fig-riel>>); al elegir uno, el panel se cierra. La tecla kbd:[Esc] o un clic fuera del panel también lo
 cierran.
 
 [[fig-riel]]

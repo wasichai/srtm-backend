@@ -10,7 +10,7 @@ mkdir -p "$destino"
 chrome=$(node --input-type=module -e "import {chromium} from 'playwright'; console.log(chromium.executablePath())")
 temporal=$(mktemp -d)
 trap 'rm -rf "$temporal"' EXIT
-printf '{"executablePath": "%s", "args": ["--no-sandbox"]}\n' "$chrome" > "$temporal/puppeteer.json"
+printf '{"executablePath": "%s", "args": ["--no-sandbox"], "protocolTimeout": 180000}\n' "$chrome" > "$temporal/puppeteer.json"
 # las mismas fuentes que el manual, para que el texto mida lo mismo en el dibujo que en la página
 # (en data: URI: la página de mmdc no carga file://)
 fuentes=../estilos/fuentes/woff2

@@ -1,0 +1,1532 @@
+= Manual del registrador: Registro tributario, predios y declaraciones juradas
+Municipalidad Distrital de Perené
+include::../atributos.adoc[]
+:description: Manual de usuario de {producto} ({sigla}) para el perfil {p-registrador}: contribuyentes, predios, declaraciones juradas, catastro fiscal y documentos prediales.
+:keywords: srtm, rentas municipales, registrador, contribuyente, predio, declaración jurada, catastro fiscal, PU, HR
+
+[abstract]
+Este manual explica, paso a paso, el trabajo diario del registro tributario en {producto} ({sigla}): inscribir y
+mantener a los contribuyentes, registrar los predios y los lotes del catastro fiscal, recibir las declaraciones
+juradas del impuesto predial con sus niveles, obras y condóminos, anularlas cuando corresponde y emitir el predio
+urbano (PU), la hoja de resumen (HR) y la hoja de liquidación de arbitrios (HLA) de un contribuyente. Está escrito
+para el personal de la ventanilla y del área de registro con el perfil {p-registrador}, que no necesita saber nada
+del funcionamiento interno del sistema. Todas las pantallas que se muestran son reales y se tomaron con datos
+ficticios.
+
+[[presentacion]]
+== Presentación
+
+[[presentacion-sistema]]
+=== Para qué sirve el sistema
+
+{producto} ({sigla}), el {producto-largo} de la {municipalidad}, reúne en un solo portal web el padrón de
+contribuyentes, el padrón de predios y las declaraciones juradas del impuesto predial, junto con los arbitrios, las
+infracciones administrativas y los anuncios. Lo que el registro tributario inscribe es la base de todo lo demás: el
+impuesto predial se calcula con las declaraciones juradas que usted registra, y los arbitrios, las multas y los
+anuncios se cargan a los contribuyentes y predios que usted mantiene.
+
+[[presentacion-manual]]
+=== Para qué sirve este manual y a quién se dirige
+
+Este manual es para quien atiende y registra: el personal de la ventanilla de rentas y del área de registro
+tributario. Supone que usted conoce el trámite (qué es una declaración jurada, un condómino o un transferente), pero
+no el sistema. Cada capítulo responde a una pregunta de trabajo: cómo inscribo a un contribuyente, cómo registro un
+predio, cómo recibo una declaración, cómo la anulo, cómo entrego la HR.
+
+En la demostración con la que se tomaron las capturas, este trabajo lo hace el perfil sugerido *{p-registrador}*
+(«Registrador del padrón»). La municipalidad puede definir otros roles con otros nombres: lo que cuenta es qué
+permisos tiene su cuenta (<<permisos-usuario>>). Con el perfil {p-registrador}, usted puede:
+
+* consultar, inscribir, corregir y eliminar contribuyentes, con sus domicilios, relacionados, medios de contacto y
+  documentos de sustento;
+* consultar, registrar, corregir y eliminar predios y lotes del catastro fiscal;
+* presentar, corregir y anular declaraciones juradas, con sus transferentes, niveles de construcción, obras
+  complementarias, condóminos y otros frentes;
+* ver el PU, la HR y la HLA, y consultar la liquidación del impuesto predial;
+* consultar, sin modificar, los arbitrios, las infracciones y los anuncios de cada contribuyente y predio.
+
+[[presentacion-alcance]]
+=== Qué cubre y qué no
+
+.Alcance de este manual
+[cols="2,3",options="header"]
+|===
+|Tema |Dónde se explica
+|Contribuyentes, predios, declaraciones juradas, catastro fiscal |Este manual.
+|PU, HR y HLA de un contribuyente o predio, y el cálculo del impuesto predial |Este manual (<<documentos>>).
+|Determinación de arbitrios, tasas del año, anulación de cuotas, emisión masiva de HR, PU y HLA |{m-arbitrios}.
+|Actas, notificaciones previas, descargos, resoluciones y el cuadro único de infracciones y sanciones (CUIS)
+|{m-fiscalizador}.
+|Anuncios y propaganda: alta, renovación, cese y retiro |{m-anuncios}.
+|Brecha de recaudación |{m-consulta}.
+|Cuentas de usuario, roles, catálogos y parámetros (UIT, tramos, vías, unidades urbanas) |{m-admin}.
+|===
+
+NOTE: Los perfiles de este manual son los de la demostración. Si su cuenta tiene un rol distinto, algunas acciones
+pueden aparecer deshabilitadas con la línea *Sin permiso: …* (<<permisos-usuario>>), o habilitadas otras que este
+manual no describe.
+
+[[presentacion-leer]]
+=== Cómo leer los procedimientos
+
+Cada tarea importante se describe con el mismo formato:
+
+[horizontal]
+Recuadro inicial:: El *objetivo* de la tarea y los *requisitos previos*: lo que debe tener a mano o haber hecho antes.
+Pasos numerados:: Lo que usted hace, en orden, con el rótulo exacto de cada botón y campo. Las capturas acompañan
+al paso que muestran.
+Resultado esperado:: Lo que debe ver cuando la tarea terminó bien.
+Verificación:: Cómo comprobar, en otra pantalla, que quedó registrado.
+Casos especiales:: Lo que puede pasar fuera del camino habitual y qué hacer.
+
+[[presentacion-convenciones]]
+=== Convenciones tipográficas
+
+.Convenciones de este manual
+[cols="1,2",options="header"]
+|===
+|Se escribe así |Significa
+|btn:[Siguiente] |Un botón de la pantalla, con su rótulo exacto.
+|menu:Predios[Nuevo predio] |Una ruta de navegación: el módulo del riel y, luego, el trámite.
+|kbd:[Enter] |Una tecla.
+|*Domicilios*, *Tipo de documento* |Una pestaña, una sección o un campo, en negrita.
+|`01-01-0001` |Un valor que se escribe o que el sistema muestra tal cual.
+|===
+
+Los avisos tienen cuatro niveles: *Nota* (información complementaria), *Consejo* (una recomendación),
+*Precaución* (afecta a muchos registros o es difícil de revertir) y *Advertencia* (no se puede deshacer).
+
+[[presentacion-siglas]]
+=== Siglas
+
+.Siglas que usa este manual
+[cols="1,4",options="header"]
+|===
+|Sigla |Significado
+|DJ |Declaración jurada (del impuesto predial).
+|PU |Predio urbano: el formulario con lo que un titular declara de un predio.
+|HR |Hoja de resumen: los predios de un contribuyente y su impuesto predial del año.
+|HLA |Hoja de liquidación de arbitrios.
+|UIT |Unidad impositiva tributaria.
+|CPU |Código del predio en el catastro fiscal (código catastral del lote).
+|CUIS |Cuadro único de infracciones y sanciones.
+|DNI, RUC |Documento nacional de identidad; registro único de contribuyentes.
+|RENIEC, PIDE |Registro Nacional de Identificación y Estado Civil; Plataforma de Interoperabilidad del Estado.
+|TUO LTM |Texto único ordenado de la Ley de Tributación Municipal.
+|===
+
+[[presentacion-datos]]
+=== Los datos de las capturas
+
+Las capturas se tomaron en una base de demostración con datos *ficticios*: 40 contribuyentes, 55 predios con sus
+declaraciones juradas de 2026 y sus lotes de catastro, en las urbanizaciones VALLE VERDE y LAS PALMERAS de Perené.
+Los nombres, documentos (los DNI empiezan con `9`) y direcciones no corresponden a personas ni predios reales. Varios
+casos se repiten a lo largo del manual:
+
+* QUISPE ROJAS ROSA ELENA (contribuyente `000001`), que declara cuatro predios, uno de ellos con dos usos;
+* el predio `01-01-0004`, en condominio: 60 % y 40 %;
+* el predio `01-01-0003`, con una declaración anulada;
+* el predio `01-01-0007`, con un transferente y un segundo frente.
+
+Las capturas usan el tema *Portal tributario* (<<temas>>).
+
+include::../comun/acceso.adoc[]
+
+include::../comun/interfaz.adoc[]
+
+include::../comun/busqueda.adoc[]
+
+include::../comun/mensajes.adoc[]
+
+[[contribuyentes]]
+== Contribuyentes
+
+[[contribuyente-que-es]]
+=== El contribuyente en el sistema
+
+Un contribuyente es la persona o entidad obligada: quien declara predios, paga arbitrios o es titular de un anuncio.
+Cada uno tiene un *código de contribuyente* de seis dígitos (`000001`, `000002`…), que el sistema asigna al
+inscribirlo y que no cambia. El *tipo de contribuyente* decide qué datos se piden:
+
+.Tipos de contribuyente
+[cols="2,2,3",options="header"]
+|===
+|Tipo de contribuyente |Se identifica con |Nombre que se registra
+|PERSONA NATURAL |DNI, carné de extranjería, pasaporte, PTP / CPP, CI, otros, o SIN DOCUMENTO
+|*Apellido paterno*, *Apellido materno* y *Nombres*, con estado civil y sexo.
+|SOCIEDAD CONYUGAL |El documento de uno de los cónyuges |Como una persona natural. El otro cónyuge se registra en
+*Relacionados* como CONYUGE.
+|SUCESIÓN INDIVISA |El documento del causante: DNI, pasaporte, carné de extranjería, PTP / CPP, CI o SIN DOCUMENTO;
+nunca RUC |*Razón social* (por ejemplo, SUCESION INDIVISA HUARCAYA LAZO ANSELMO). Los herederos van en
+*Relacionados*.
+|PERSONA JURÍDICA, SOCIEDAD IRREGULAR, OTROS PATRIMONIOS AUTÓNOMOS |RUC, por lo general |*Razón social*. El
+representante legal va en *Relacionados*.
+|===
+
+En las listas, la columna *Tipo* agrupa los tipos en tres: NATURAL (persona natural y sociedad conyugal), SUCESION
+(sucesión indivisa) y JURIDICA (los demás).
+
+[[documento-reglas]]
+.Qué número acepta cada tipo de documento
+[cols="1,3",options="header"]
+|===
+|Tipo de documento |Número
+|DNI |8 dígitos.
+|RUC |11 dígitos, que empiezan con 10, 15, 16, 17 o 20, y con dígito verificador válido.
+|SIN DOCUMENTO |Ninguno: el campo *N° documento* queda gris.
+|Los demás |Hasta 12 letras o dígitos, sin espacios ni guiones.
+|===
+
+Un mismo número de documento no se inscribe dos veces: si ya existe, el sistema lo dice debajo de *N° documento*
+(<<errores>>).
+
+[[reniec]]
+.Los nombres se escriben a mano
+[NOTE]
+====
+El sistema está preparado para consultar los nombres de un DNI en RENIEC a través de la PIDE, pero esa consulta *no
+está activa* en esta instalación: al salir del campo *N° documento* no se rellena nada. Escriba usted los apellidos y
+nombres, tal como figuran en el documento, y deje *Fuente información* en MANUAL.
+
+Si elige PIDE RENIEC a mano, el sistema intenta la consulta y, al no obtener respuesta, vuelve a MANUAL. No marque
+como PIDE RENIEC datos que usted escribió: el sistema rechaza esa fuente sin una consulta reciente que la respalde.
+====
+
+[[proc-buscar-contribuyente]]
+=== Buscar un contribuyente
+
+[[proc-buscar-contribuyente-pasos]]
+.Buscar un contribuyente
+====
+[horizontal]
+Objetivo:: Encontrar la ficha de un contribuyente para atenderlo.
+Requisitos previos:: Un dato del contribuyente: su documento, su nombre o razón social, o su código.
+====
+
+. Elija menu:Contribuyentes[Buscar contribuyentes] en el riel, o pulse btn:[Buscar contribuyente] en *Atención
+  rápida* de la página *Inicio*.
+. Escriba en la caja *DNI, RUC, nombre o razón social*. La lista se filtra mientras escribe (<<fig-lista-contribuyentes>>).
++
+[[fig-lista-contribuyentes]]
+.Lista de contribuyentes filtrada por un apellido
+image::{capturas}/usuario/registrador/lista-contribuyentes.png[Lista Contribuyentes con la búsqueda CASTRO y tres resultados con su documento, nombre, tipo y domicilio fiscal]
+. Pulse la fila o el número de documento del contribuyente para abrir su ficha.
+
+// fin de los pasos
+Resultado esperado:: Se abre la ficha del contribuyente, como una pestaña más de *Fichas abiertas*
+(<<fichas-abiertas>>).
+Verificación:: La banda de título dice *Contribuyente Nº* y el código, seguido del nombre.
+Casos especiales::
+* *Dos personas con el mismo nombre*: en la demostración hay dos CASTRO VARGAS MIGUEL ANGEL con distinto DNI.
+  Confirme siempre por el número de documento y por el domicilio fiscal.
+* *Nada coincide con «…»*: pruebe con el documento solo, o con un solo apellido (<<faq-comun>>).
+* La búsqueda general de la barra superior también encuentra contribuyentes (<<busqueda-general>>).
+
+[[proc-inscribir-contribuyente]]
+=== Inscribir un contribuyente
+
+La inscripción es un trámite de cinco pasos, uno por pestaña: *Datos del contribuyente*, *Domicilios*,
+*Relacionados*, *Medios de contacto* y *Sustento*. El primero crea el contribuyente; los demás se completan en su
+ficha, que se abre sola.
+
+[[proc-inscribir-contribuyente-pasos]]
+.Inscribir un contribuyente
+====
+[horizontal]
+Objetivo:: Dar de alta en el padrón a una persona o entidad que aún no está inscrita.
+Requisitos previos:: El documento de identidad (o la constancia de RUC) y la dirección de su domicilio fiscal.
+Haber buscado antes al contribuyente (<<proc-buscar-contribuyente>>), para no inscribirlo dos veces.
+====
+
+. Elija menu:Contribuyentes[Nuevo contribuyente], o pulse btn:[Nuevo contribuyente] en la lista o en *Inicio*. Se
+  abre *Nuevo contribuyente*, en el paso 1 (<<fig-nuevo-contribuyente>>).
+. En *Datos de la declaración*, elija el *Tipo de contribuyente*. Revise *Medio de presentación* (FÍSICO por omisión)
+  y *Fecha de presentación* (hoy, por omisión). Si el contribuyente tenía un código en el sistema anterior, escríbalo
+  en *Cód. contribuyente anterior*. Los campos grises (código, número de declaración, fecha del registro, motivo,
+  medio de determinación) los completa el sistema.
+. En *Datos de identificación*, elija el *Tipo de documento* y escriba el *N° documento*. Deje *Fuente información*
+  en MANUAL (<<reniec>>).
+. En *Datos personales*, escriba los apellidos y los *Nombres*, y elija *Estado civil* y *Sexo*. Para una persona
+  jurídica o una sucesión, en lugar de esos campos aparece *Razón social* (<<fig-nuevo-juridica>>). *Observación* es
+  libre.
++
+[[fig-nuevo-contribuyente]]
+.Paso 1 de la inscripción, con los datos de una persona natural
+image::{capturas}/usuario/registrador/nuevo-contribuyente.png[Formulario Nuevo contribuyente con la cinta de pasos, el paso 1 resaltado y los datos de una persona natural; el botón Siguiente está marcado]
++
+[[fig-nuevo-juridica]]
+.Persona jurídica: la razón social en lugar de apellidos y nombres
+image::{capturas}/usuario/registrador/nuevo-juridica.png[Sección Datos personales con el campo Razón social lleno y el campo Observación,760,align=center]
+. Pulse btn:[Siguiente]. El sistema revisa el formulario (<<campos>>) y, si todo está bien, inscribe al
+  contribuyente. Mientras graba, el botón dice *Guardando…*.
+. Se abre la ficha del nuevo contribuyente en el paso 2, *Domicilios* (<<fig-inscripcion-domicilios>>). Registre el
+  domicilio fiscal (<<proc-registrar-domicilio>>): mientras no lo haga, los pasos siguientes no se abren.
+. Con el domicilio fiscal registrado, pase a *Relacionados*, *Medios de contacto* y *Sustento*, con la cinta de pasos
+  o con las pestañas, y registre lo que corresponda (<<proc-registrar-relacionado>>, <<medios-contacto>>,
+  <<sustento>>). Cada paso se abre al visitar el anterior; ninguno es obligatorio.
+
+// fin de los pasos
+Resultado esperado:: El contribuyente queda inscrito con su código (el siguiente libre: en la demostración,
+`000041`), número de
+declaración, fecha del registro de hoy y motivo INSCRIPCION.
+Verificación:: Búsquelo por su documento en menu:Contribuyentes[Buscar contribuyentes]: aparece con su domicilio
+fiscal.
+Casos especiales::
+* *El DNI tiene 8 dígitos* y mensajes parecidos debajo de *N° documento*: el número no corresponde al tipo de
+  documento (<<documento-reglas>>, <<fig-documento-error>>).
+* *ya está inscrito: …*: el documento ya pertenece a otro contribuyente, cuyo código y nombre se muestran. No lo
+  inscriba de nuevo: abra esa ficha.
+* *Sin documento*: elija SIN DOCUMENTO en *Tipo de documento*; el número queda gris y vacío.
+* *Sucesión indivisa con RUC*: el sistema la rechaza; una sucesión se registra con el documento del causante.
+* Si pulsa btn:[Cancelar] o sale de la pantalla antes de btn:[Siguiente], nada se graba y lo escrito se pierde, sin
+  pregunta previa (<<salir-sin-guardar>>).
+
+[[fig-documento-error]]
+.Un DNI con siete dígitos
+image::{capturas}/usuario/registrador/documento-error.png[Sección Datos de identificación con el N° documento marcado en rojo y el mensaje El DNI tiene 8 dígitos,760,align=center]
+
+[[proc-registrar-domicilio]]
+=== Registrar los domicilios
+
+Todo contribuyente debe tener *un domicilio fiscal activo*: es el que muestran la ficha, las listas, la HR y la HLA.
+El primer domicilio que se registra es el fiscal; después puede añadir domicilios REAL, PROCESAL u OTRO, pero no un
+segundo fiscal activo.
+
+[[fig-inscripcion-domicilios]]
+.La ficha recién inscrita, en el paso 2: Domicilios
+image::{capturas}/usuario/registrador/inscripcion-domicilios.png[Ficha de un contribuyente con la cinta de pasos en Domicilios, la instrucción del paso 2 y el listado de domicilios con el domicilio fiscal]
+
+[[proc-registrar-domicilio-pasos]]
+.Registrar un domicilio
+====
+[horizontal]
+Objetivo:: Registrar el domicilio fiscal de un contribuyente nuevo, o añadir otro domicilio.
+Requisitos previos:: La ficha del contribuyente abierta en la pestaña *Domicilios*.
+====
+
+. Pulse el botón *+* (*Agregar domicilio*) del *Listado de domicilios*. Se abre *Nuevo domicilio*
+  (<<fig-domicilio-nuevo>>). Si el contribuyente aún no tiene domicilio fiscal, *Tipo de domicilio* viene en FISCAL y
+  en gris; si ya lo tiene, viene en REAL.
+. Revise *Tipo de predio* (PREDIO URBANO por omisión) y *Estado* (ACTIVO).
+. El *Ubigeo* viene en JUNIN, CHANCHAMAYO, PERENE. Para un domicilio en otro distrito, elija *Departamento*, luego
+  *Provincia* y luego *Distrito*: al cambiar uno, los de abajo se vacían.
+. Elija el *Tipo unidad urbana* (URBANIZACION, ASENTAMIENTO HUMANO, ASOCIACION PRO VIVIENDA…) y escriba la
+  *Descripción unidad urbana*. Mientras escribe, el sistema sugiere los nombres que conoce de ese tipo y distrito;
+  elija uno de la lista o termine de escribirlo.
+. Elija el *Tipo de vía* (las más comunes aparecen abreviadas: AV., CA., JR., PSJE., PROL., CARR.) y escriba la
+  *Descripción de la vía*, también con sugerencias. Una dirección puede no tener vía (MZ. y LT. en un asentamiento
+  humano) o no tener unidad urbana: cada descripción solo es obligatoria si eligió su tipo.
+. Complete lo que tenga: *Número principal*, *Manzana*, *Lote*, *Interior*, *Piso*, *Referencia*…
++
+[[fig-domicilio-nuevo]]
+.El diálogo Nuevo domicilio
+image::{capturas}/usuario/registrador/domicilio-nuevo.png[Diálogo Nuevo domicilio con el tipo REAL, el ubigeo de Perené, la urbanización VALLE VERDE, el JR. LOS ALISOS 300 y la descripción armada al pie,760,align=center]
+. Al pie, *Descripción del domicilio* muestra la dirección tal como quedará escrita, en el orden de la municipalidad:
+  vía y número, edificación, manzana y lote, unidad urbana y DEPARTAMENTO-PROVINCIA-DISTRITO. Revísela
+  (<<fig-domicilio-descripcion>>).
++
+[[fig-domicilio-descripcion]]
+.La descripción armada y el botón Buscar dirección
+image::{capturas}/usuario/registrador/domicilio-descripcion.png[Parte inferior del diálogo Nuevo domicilio con la descripción JR. LOS ALISOS, N° 300, URB. VALLE VERDE, JUNIN-CHANCHAMAYO-PERENE y el botón Buscar dirección marcado,760,align=center]
+. Opcional: pulse btn:[Buscar dirección] para marcar el domicilio en el mapa (<<fig-ubicar-domicilio>>). Haga clic
+  donde está el domicilio (otro clic lo mueve) y pulse btn:[Aceptar]. El botón pasa a decir *Ubicado en el mapa*.
++
+[[fig-ubicar-domicilio]]
+.Ubicar el domicilio en el mapa
+image::{capturas}/usuario/registrador/ubicar-domicilio.png[Diálogo Ubicar el domicilio con la dirección como subtítulo, el mapa de Perené y los botones Cancelar y Aceptar,700,align=center]
+. Pulse btn:[Grabar].
+
+// fin de los pasos
+Resultado esperado:: El domicilio aparece en el listado con su código (`001`, `002`…), su tipo y su descripción.
+Uno ubicado en el mapa lleva un icono de punto verde junto a la descripción.
+Verificación:: Si es el fiscal, la banda de la ficha muestra la nueva dirección junto al documento, y la lista de
+contribuyentes la muestra en *Domicilio fiscal*.
+Casos especiales::
+* *(*) Registrar al menos 1 domicilio fiscal*: el aviso rojo sobre el listado indica que el contribuyente no tiene
+  domicilio fiscal activo. Si vino del padrón anterior, el aviso muestra el *Domicilio fiscal del padrón* para que lo
+  registre.
+* *el primer domicilio debe ser el fiscal, activo*: registre primero el fiscal.
+* *ya tiene otro domicilio fiscal activo: actualice ese domicilio*: si el contribuyente se mudó, no agregue otro
+  fiscal: seleccione el que tiene, pulse el lápiz (*Editar domicilio*) y cambie la dirección.
+* El único domicilio fiscal activo no se elimina ni se inactiva, y sigue siendo FISCAL: el botón de la papelera queda
+  deshabilitado cuando lo selecciona.
+* El mapa necesita Internet; sin él queda en blanco, pero el domicilio se graba igual.
+
+[[proc-corregir-fila]]
+=== Corregir o quitar una fila de una lista
+
+Las cuatro listas del contribuyente (y las de la declaración jurada, más adelante) funcionan igual:
+
+. Pulse la fila para seleccionarla (queda resaltada). También puede moverse con las flechas del teclado.
+. Pulse el lápiz (*Editar …*) para cambiarla, o haga doble clic en la fila. Se abre el mismo diálogo, con sus datos.
+  Cambie lo necesario y pulse btn:[Grabar].
+. Para quitarla, pulse la papelera (*Eliminar …*) y confirme en el diálogo *¿Eliminar este …?* («Se quita de la
+  ficha. El historial del registro lo conserva.»).
+
+// fin de los pasos
+Las listas muestran 10 filas por página; *Filas* cambia ese número. El código de cada fila (`001`, `002`…) lo pone
+el sistema y no se renumera al eliminar otra.
+
+TIP: Para dejar constancia de que un dato ya no vale (un teléfono que cambió, un apoderado cuyo poder venció),
+cambie su *Estado* a INACTIVO en lugar de eliminarlo: la fila sigue visible, marcada *Inactivo*.
+
+[[proc-registrar-relacionado]]
+=== Relacionados
+
+Los relacionados son las personas vinculadas al contribuyente: CONYUGE, REPRESENTANTE LEGAL, APODERADO,
+CONVIVIENTE o HEREDERO (<<fig-relacionados>>).
+
+[[fig-relacionados]]
+.Relacionados de una persona jurídica: su representante legal
+image::{capturas}/usuario/registrador/relacionados.png[Listado de relacionados con un representante legal, su DNI, sus apellidos y nombres y su estado Activo]
+
+[[proc-registrar-relacionado-pasos]]
+.Registrar un relacionado
+====
+[horizontal]
+Objetivo:: Registrar al cónyuge, representante, apoderado, conviviente o heredero de un contribuyente.
+Requisitos previos:: La ficha del contribuyente en la pestaña *Relacionados*; el documento de la persona y, si es
+un representante o apoderado, el documento que lo acredita (se registra en *Sustento*).
+====
+
+. Pulse *+* (*Agregar relacionado*). Se abre *Nuevo relacionado* (<<fig-relacionado-nuevo>>).
+. Elija el *Tipo de relacionado*.
+. Elija el *Tipo de documento* (DNI por omisión) y escriba el *N° documento*, que se revisa como el del contribuyente
+  (<<documento-reglas>>). Deje *Fuente información* en MANUAL (<<reniec>>).
+. Escriba los apellidos y los *Nombres*. Con RUC, en su lugar se pide la *Razón social*.
+. Complete, si los tiene, *Fecha de inicio* y *Fecha de fin* del vínculo, teléfonos y *Correo electrónico*.
++
+[[fig-relacionado-nuevo]]
+.El diálogo Nuevo relacionado
+image::{capturas}/usuario/registrador/relacionado-nuevo.png[Diálogo Nuevo relacionado con el tipo REPRESENTANTE LEGAL, el tipo de documento DNI, la fuente MANUAL y los campos de nombres, fechas y contacto,760,align=center]
+. Pulse btn:[Grabar].
+
+// fin de los pasos
+Resultado esperado:: El relacionado aparece en el listado con su código, tipo, documento, nombre o razón social,
+teléfono y correo.
+Verificación:: Su estado es *Activo*.
+Casos especiales:: *Fecha de fallecimiento* está siempre en gris: no se registra en esta pantalla.
+
+[[medios-contacto]]
+=== Medios de contacto
+
+Registre los teléfonos y correos del contribuyente con *+* (*Agregar medio de contacto*): *Tipo* (TELÉFONO CELULAR,
+TELÉFONO FIJO, CORREO ELECTRÓNICO u OTRO), *Número o correo*, *Anexo*, *Principal* (SÍ o NO), *Observación* y
+*Estado*. El primero que registra viene marcado como principal.
+
+[[fig-medios-contacto]]
+.Medios de contacto: un celular principal y un correo
+image::{capturas}/usuario/registrador/medios-contacto.png[Listado de medios de contacto con un teléfono celular principal y un correo electrónico]
+
+NOTE: El sistema no impide marcar dos medios como principales: revise la columna *Principal* al agregar uno nuevo.
+
+[[sustento]]
+=== Documentos de sustento
+
+En *Sustento* se registran los documentos que respaldan la inscripción o los datos del contribuyente: VIGENCIA DE
+PODER, PODER ESPECIAL, PARTIDA REGISTRAL, RECIBO DE SERVICIOS (LUZ, AGUA), PARTIDA DE DEFUNCIÓN, SUCESIÓN INTESTADA,
+TESTAMENTO, DOCUMENTO DE IDENTIDAD u OTROS. Para cada uno, con *+* (*Agregar documento sustento*), indique el
+*Documento*, su *N° documento*, el *Tipo de presentación* (ORIGINAL, COPIA SIMPLE, COPIA LEGALIZADA o COPIA
+FEDATEADA) y los *Folios*.
+
+[[fig-sustento]]
+.Documentos de sustento de una persona jurídica
+image::{capturas}/usuario/registrador/sustento.png[Listado de documentos sustento con una vigencia de poder en copia simple de 3 folios]
+
+NOTE: El sistema registra los datos del documento, no el documento: no se adjuntan archivos escaneados.
+
+[[ficha-contribuyente]]
+=== La ficha del contribuyente
+
+La ficha reúne todo lo del contribuyente. Arriba, la banda con su código y nombre; debajo, su tipo, su documento y su
+domicilio fiscal; a la derecha, el selector *Año* y los botones btn:[Ver HR], btn:[Ver HLA] y btn:[Eliminar]. Las
+pestañas, a la izquierda, se agrupan en dos columnas (<<fig-editar-contribuyente>>):
+
+.Pestañas de la ficha del contribuyente
+[cols="1,1,3",options="header"]
+|===
+|Grupo |Pestaña |Qué muestra
+.5+|Registro tributario |Datos del contribuyente |Los datos de la inscripción, con btn:[Editar] (<<proc-editar-contribuyente>>).
+|Domicilios |<<proc-registrar-domicilio>>.
+|Relacionados |<<proc-registrar-relacionado>>.
+|Medios de contacto |<<medios-contacto>>.
+|Sustento |<<sustento>>.
+.5+|Rentas |Predios |Los predios que declara en el año elegido, con su condición, % de condominio, uso, autoavalúo,
+valor afecto, el número de su DJ y un botón *PU* por fila (<<fig-predios-del-contribuyente>>).
+|Declaraciones |Todas sus declaraciones juradas, de todos los años, con btn:[Nueva declaración]
+(<<fig-declaraciones-del-contribuyente>>).
+|Arbitrios |Sus cuotas de arbitrios del año, solo de consulta (<<otras-pestanas>>).
+|Infracciones |Las actas que lo nombran, solo de consulta.
+|Anuncios |Los anuncios de los que es titular, solo de consulta.
+|===
+
+Bajo las pestañas, el recuadro *Resumen* del año muestra cuántos *Predios* declara, su *Autoavalúo* (en un
+condominio, solo su parte) y su *Valor afecto*. El selector *Año* cambia el año de las cifras, de *Predios* y de los
+documentos; muestra el año en curso y los cuatro anteriores.
+
+[[fig-predios-del-contribuyente]]
+.Pestaña Predios: lo que el contribuyente declara en 2026
+image::{capturas}/usuario/registrador/predios-del-contribuyente.png[Tabla de cinco declaraciones sobre cuatro predios con su condición, porcentaje, uso, autoavalúo, valor afecto, número de DJ y botón PU, y la fila Total 2026]
+
+En la <<fig-predios-del-contribuyente>>, el predio `01-01-0001` aparece dos veces: declara dos usos (una casa y una
+tienda), cada uno en su propia declaración (<<dj-conceptos>>). Una declaración anulada aparece marcada *Anulada* y no
+suma en los totales (<<fig-declaraciones-del-contribuyente>>).
+
+[[fig-declaraciones-del-contribuyente]]
+.Pestaña Declaraciones, con una declaración anulada
+image::{capturas}/usuario/registrador/declaraciones-del-contribuyente.png[Tabla de declaraciones con año, número de DJ, predio, secuencia, uso, autoavalúo y valor afecto; la DJ 5 lleva la marca Anulada; arriba, el botón Nueva declaración]
+
+[[proc-editar-contribuyente]]
+=== Corregir los datos de un contribuyente
+
+[[proc-editar-contribuyente-pasos]]
+.Corregir los datos de un contribuyente
+====
+[horizontal]
+Objetivo:: Corregir el nombre, el documento, el estado civil u otro dato de la inscripción.
+Requisitos previos:: La ficha del contribuyente abierta en *Datos del contribuyente*; el documento que sustenta el
+cambio.
+====
+
+. Pulse btn:[Editar]. Los datos pasan a ser un formulario (<<fig-editar-contribuyente>>).
+. Corrija lo necesario. El código, el número de declaración, la fecha del registro, el motivo y el medio de
+  determinación no se editan.
+. Pulse btn:[Guardar cambios], al pie del formulario. Para desistir, pulse btn:[Cancelar].
+
+// fin de los pasos
+Resultado esperado:: La ficha vuelve a mostrar los datos, ya corregidos.
+Verificación:: *Motivo* pasa a ACTUALIZACION: la inscripción fue modificada. El sistema no guarda una copia de los
+datos anteriores en la ficha, pero la auditoría conserva cada cambio.
+Casos especiales::
+* Para cambiar el domicilio fiscal, use la pestaña *Domicilios*: no se edita aquí.
+* Al cambiar el número de documento, el sistema vuelve a comprobar que no esté inscrito a nombre de otro.
+
+[[fig-editar-contribuyente]]
+.Datos del contribuyente en edición
+image::{capturas}/usuario/registrador/editar-contribuyente.png[Ficha de QUISPE ROJAS ROSA ELENA con las pestañas a la izquierda, el resumen 2026 y los datos del contribuyente como formulario editable]
+
+[[proc-eliminar-contribuyente]]
+=== Eliminar un contribuyente
+
+Eliminar un contribuyente lo borra del padrón con sus domicilios, relacionados, medios de contacto y documentos de
+sustento. Está pensado para corregir una inscripción hecha por error, no para dar de baja a quien vendió sus predios
+(eso se hace anulando sus declaraciones: <<proc-anular-declaracion>>).
+
+[[proc-eliminar-contribuyente-pasos]]
+.Eliminar un contribuyente
+====
+[horizontal]
+Objetivo:: Borrar un contribuyente inscrito por error.
+Requisitos previos:: Que no tenga declaraciones juradas (ni vigentes ni anuladas) ni cuotas de arbitrios.
+====
+
+. En la ficha del contribuyente, pulse btn:[Eliminar].
+. Lea el diálogo *¿Eliminar este contribuyente?* (<<fig-eliminar-contribuyente>>) y pulse btn:[Eliminar] para
+  confirmar, o btn:[Cancelar].
+
+// fin de los pasos
+Resultado esperado:: El contribuyente desaparece y su pestaña de *Fichas abiertas* se cierra.
+Verificación:: Búsquelo por su documento: ya no aparece.
+Casos especiales::
+* *El contribuyente tiene 1 declaración jurada: no se puede eliminar* (o *tiene N declaraciones juradas*): el mensaje
+  aparece en el mismo diálogo y nada se borra. Una declaración, aun anulada, conserva la historia del predio.
+* *El contribuyente tiene N cuotas de arbitrio: no se puede eliminar, una cuota no se borra nunca*: los arbitrios ya
+  determinados a su nombre lo mantienen en el padrón.
+
+WARNING: Eliminar un contribuyente no se puede deshacer.
+
+[[fig-eliminar-contribuyente]]
+.Confirmación antes de eliminar
+image::{capturas}/usuario/registrador/eliminar-contribuyente.png[Diálogo Eliminar este contribuyente con la advertencia de que solo se puede si no tiene declaraciones juradas y los botones Cancelar y Eliminar,480,align=center]
+
+[[predios]]
+== Predios
+
+[[predio-que-es]]
+=== Predio, lote de catastro y declaración
+
+Tres registros distintos describen un inmueble:
+
+[horizontal]
+Predio:: El inmueble en el padrón tributario: su código, su ubicación y su tipo (urbano o rústico). No tiene dueño
+propio: los titulares son quienes lo declaran.
+Lote de catastro fiscal:: El lote en el catastro: su código CPU, su dirección catastral y su polígono en el mapa. Un
+predio se vincula a su lote por el *Código CPU* (<<catastro>>).
+Declaración jurada:: Lo que un titular declara de un predio en un año: la adquisición, el uso, las áreas, los
+niveles, las obras y el autoavalúo (<<declaraciones>>).
+
+Por eso un predio se registra una sola vez y cada año recibe las declaraciones de sus titulares.
+
+[[proc-buscar-predio]]
+=== Buscar un predio
+
+Elija menu:Predios[Buscar predios] (o btn:[Buscar predio] en *Inicio*). La lista *Predios* tiene una caja *Código,
+dirección o habilitación urbana* que filtra mientras escribe (<<fig-lista-predios>>). Para buscar con más datos, o en
+el catastro fiscal, use el botón btn:[Buscar predios] (<<buscar-predios>>).
+
+[[fig-lista-predios]]
+.Lista de predios
+image::{capturas}/usuario/registrador/lista-predios.png[Lista Predios con los botones Buscar predios y Nuevo predio, la caja de búsqueda y la tabla de código, dirección, sector y manzana y condición]
+
+[[buscar-predios]]
+=== El diálogo Buscar predios
+
+El diálogo *Buscar predios* aparece en la lista de predios y en cada formulario de ubicación de un predio (al
+registrar un predio o una declaración). Tiene dos pestañas con los mismos filtros:
+
+* *Buscar en Tributario*: busca en el padrón de predios.
+* *Buscar en Catastro Fiscal*: busca entre los lotes del catastro.
+
+[[proc-buscar-predios-pasos]]
+.Buscar un predio o un lote con el diálogo Buscar predios
+====
+[horizontal]
+Objetivo:: Encontrar un predio del padrón o un lote del catastro por su ubicación o sus códigos.
+Requisitos previos:: La vía donde está, o su código de predio, código CPU o partida registral.
+====
+
+. Pulse btn:[Buscar predios]. El diálogo abre en *Buscar en Tributario*; para el catastro, pulse *Buscar en
+  Catastro Fiscal*.
+. Escriba la *Descripción de la vía* (por ejemplo, `LOS FRESNOS`), o bien el *Código de predio municipal*, el *Código
+  CPU* o la *Partida registral*. Con la vía, puede afinar con *Tipo de vía*, *Zona*, *Descripción de la zona*,
+  *Número principal*, *Manzana*, *Lote* o *Kilómetro*. *Tipo predio* viene en PREDIO URBANO.
+. Pulse btn:[Buscar] (o kbd:[Enter] en un campo). Los resultados salen de 5 en 5; *Filas* cambia ese número.
+. Pulse una fila para seleccionarla: su lote se resalta en rojo en el mapa, bajo la tabla (<<fig-buscar-tributario>>).
+  También puede hacer clic en un lote del mapa para seleccionar su fila.
++
+[[fig-buscar-tributario]]
+.Buscar en Tributario, con un predio seleccionado
+image::{capturas}/usuario/registrador/buscar-predios-tributario.png[Diálogo Buscar predios en la pestaña Buscar en Tributario con la vía LOS FRESNOS, cinco resultados con el predio 01-01-0004 seleccionado y el mapa con su lote en rojo,760,align=center]
+. Pulse btn:[Elegir] (o haga doble clic en la fila).
+
+// fin de los pasos
+Resultado esperado:: Depende de dónde abrió el diálogo:
+* desde la lista de predios, un predio del padrón abre su ficha; un lote del catastro abre la ficha de su predio, si
+  ya existe, o *Nuevo predio* con los datos del lote (<<proc-predio-desde-lote>>);
+* desde un formulario de ubicación, lo elegido llena la ubicación (<<proc-registrar-predio>>, <<proc-nueva-declaracion>>).
+Casos especiales::
+* *Escribe la descripción de la vía, o un código, un código CPU o una partida registral*: falta el dato mínimo de la
+  búsqueda (<<fig-buscar-aviso>>).
+* *No se encontraron resultados*: pruebe con menos filtros o con parte del nombre de la vía. Los textos se buscan
+  contenidos, sin distinguir mayúsculas.
+* *No se pudo buscar*: no hubo respuesta del servidor. Pulse btn:[Reintentar] antes de concluir que el predio no
+  existe: si lo registra de nuevo, quedará duplicado.
+* El botón de la cámara (*Descargar imagen del mapa*) guarda una imagen PNG del mapa en su equipo.
+
+[[fig-buscar-aviso]]
+.Búsqueda sin el dato mínimo
+image::{capturas}/usuario/registrador/buscar-predios-aviso.png[Mensaje rojo Escribe la descripción de la vía, o un código, un código CPU o una partida registral, junto a los botones Limpiar y Buscar]
+
+En *Buscar en Catastro Fiscal*, la tabla muestra el *Código CPU*, la *Dirección de catastro fiscal* y el *Cód.
+predio municipal* de cada lote. Un lote sin código municipal (—) aún no es un predio del padrón. Debajo del mapa, los
+botones btn:[Nuevo lote] y btn:[Editar lote] (este, con un lote seleccionado) abren el editor de lotes
+(<<catastro>>); si abrió el diálogo desde un formulario, se abren en otra pestaña del navegador para no perder lo que
+escribió.
+
+[[fig-buscar-catastro]]
+.Buscar en Catastro Fiscal, con un lote que aún no es predio
+image::{capturas}/usuario/registrador/buscar-predios-catastro.png[Pestaña Buscar en Catastro Fiscal con cinco lotes de LAS MAGNOLIAS, dos sin código de predio municipal; el lote 1203020302007 está seleccionado y resaltado en el mapa; abajo, Nuevo lote, Editar lote, Cancelar y Elegir,760,align=center]
+
+[[proc-registrar-predio]]
+=== Registrar un predio
+
+Un predio nuevo se puede registrar solo (menu:Predios[Nuevo predio]) o al presentar la declaración jurada de su
+primer titular (<<proc-nueva-declaracion>>): el formulario de ubicación es el mismo.
+
+[[proc-registrar-predio-pasos]]
+.Registrar un predio
+====
+[horizontal]
+Objetivo:: Dar de alta en el padrón un predio que no está registrado.
+Requisitos previos:: Haber buscado el predio (<<buscar-predios>>) para no duplicarlo; su dirección y, si existe, su
+código CPU del catastro fiscal.
+====
+
+. Elija menu:Predios[Nuevo predio], o pulse btn:[Nuevo predio] en la lista o en *Inicio* (<<fig-nuevo-predio>>).
+. En *Identificación del predio*, revise el *Tipo de predio*. Si conoce el *Sector* y la *Manzana catastral*,
+  escríbalos: con ellos se arma el código del predio (<<codigo-predio>>).
+. En *Datos de la ubicación del predio*, el ubigeo viene en Perené y la *Región* en SELVA. Elija el *Tipo de vía*,
+  escriba la *Descripción de la vía* y complete número, manzana, lote y lo demás que tenga.
+. Elija la *Zona* (el tipo de habilitación: URBANIZACION, ASOCIACION PRO VIVIENDA…) y escriba la *Descripción de la
+  zona*. Elija, si la conoce, la *Ubicación respecto a áreas verdes* (FRENTE A PARQUE, FRENTE A BERMA…): cuando la
+  ordenanza de arbitrios del año cobra un servicio según esa ubicación, el campo es obligatorio en la declaración.
+. Revise la *Vista previa de la dirección*: así quedará escrita la dirección del predio.
++
+[[fig-nuevo-predio]]
+.Nuevo predio
+image::{capturas}/usuario/registrador/nuevo-predio.png[Formulario Nuevo predio con las secciones Identificación del predio y Datos de la ubicación del predio, el botón Buscar predios y la vista previa de la dirección]
+. En *Predio de catastro fiscal*, escriba el *Código CPU* del lote, o haga clic en su lote en el mapa: el lote pasa a
+  ser el del predio y su código CPU se copia solo. Si el lote no está en el catastro, pulse btn:[Dibujar lote] y
+  dibújelo (<<proc-dibujar-lote>>).
++
+[[fig-nuevo-predio-mapa]]
+.El mapa del predio de catastro fiscal
+image::{capturas}/usuario/registrador/nuevo-predio-mapa.png[Sección Predio de catastro fiscal con el Código CPU, el código municipal autogenerado, la instrucción Elige el lote del catastro con un clic, o dibújalo, el botón Dibujar lote y el mapa con los lotes]
+. Pulse btn:[Registrar predio], al pie del formulario.
+
+// fin de los pasos
+Resultado esperado:: Se abre la ficha del predio, con su código y su *Número de registro de predio* (correlativo).
+Verificación:: La banda de la ficha dice *Predio · Registro Nº* y muestra el código y la dirección armada.
+Casos especiales::
+* *Código CPU* es obligatorio para un predio nuevo.
+* Un predio nuevo aún no tiene titular: queda sin declaraciones hasta que alguien presente la suya
+  (<<proc-nueva-declaracion>>).
+* btn:[Cancelar] descarta el formulario sin preguntar.
+
+[[proc-predio-desde-lote]]
+==== Registrar un predio a partir de un lote del catastro
+
+Si el lote ya está en el catastro fiscal, deje que el sistema copie sus datos:
+
+. En *Datos de la ubicación del predio*, pulse btn:[Buscar predios] y vaya a *Buscar en Catastro Fiscal* (o, desde la
+  lista de predios, use el mismo diálogo).
+. Busque el lote, selecciónelo y pulse btn:[Elegir].
+. El formulario se llena con lo que el catastro sabe del lote: ubigeo, vía, número, manzana, lote, zona, partida
+  registral, código CPU y polígono. Esos campos quedan en gris (<<fig-nuevo-predio-desde-lote>>).
+. Complete lo que falta (región, interior, referencia…). Si un dato del catastro está mal, pulse btn:[Desbloquear]
+  para poder cambiarlo.
+. Pulse btn:[Registrar predio].
+
+// fin de los pasos
+[[fig-nuevo-predio-desde-lote]]
+.Nuevo predio con los datos de un lote del catastro, en gris
+image::{capturas}/usuario/registrador/nuevo-predio-desde-lote.png[Formulario Nuevo predio con la ubicación de AV. LAS MAGNOLIAS 175, MZ. H, LT. 7 traída del catastro en campos grises y el botón Desbloquear marcado]
+
+NOTE: Si el lote elegido ya tiene *Cód. predio municipal* y ese predio existe en el padrón, desde la lista de predios
+se abre directamente su ficha: el predio ya está registrado.
+
+[[codigo-predio]]
+=== Cómo se asigna el código del predio
+
+El código del predio lo asigna el sistema al registrarlo, y no cambia después:
+
+. Con *Sector* y *Manzana catastral*: `SS-MM-NNNN`, el siguiente número libre de esa manzana. Por ejemplo, el
+  siguiente predio del sector `01`, manzana `01`, después de `01-01-0007`, es `01-01-0008`.
+. Sin ellos, el *Código de predio municipal* del lote del catastro cuyo *Código CPU* indicó, si ningún otro predio lo
+  tiene ya.
+. Si tampoco, un código de la serie propia del portal: `P-000001`, `P-000002`…
+
+// fin de los pasos
+El *Número de registro de predio* es otro correlativo, de todos los predios registrados en el portal. Los predios
+que vinieron del padrón anterior conservan su código.
+
+[[ficha-predio]]
+=== La ficha del predio
+
+La ficha del predio muestra en su banda el número de registro, el código y la dirección; debajo, el tipo de predio,
+el sector y la manzana y la habilitación urbana; a la derecha, el selector *Año*, btn:[Ver PU] y btn:[Eliminar]
+(<<fig-ficha-predio>>).
+
+[[fig-ficha-predio]]
+.Ficha del predio
+image::{capturas}/usuario/registrador/ficha-predio.png[Ficha del predio 01-01-0001 con las pestañas Datos de la ubicación, Titulares, Declaraciones, Arbitrios, Infracciones y Anuncios, el resumen 2026 con titulares, autoavalúo y valor afecto, y los datos de identificación y ubicación]
+
+.Pestañas de la ficha del predio
+[cols="1,3",options="header"]
+|===
+|Pestaña |Qué muestra
+|Datos de la ubicación |La identificación, la ubicación y el código CPU del predio, con btn:[Editar]
+(<<proc-editar-predio>>).
+|Titulares |Quienes lo declaran en el año elegido, con su condición, su % de condominio, el uso, el autoavalúo, el
+valor afecto y el número de su DJ (<<fig-titulares-condominio>>).
+|Declaraciones |Todas las declaraciones del predio, de todos los años, con btn:[Nueva declaración].
+|Arbitrios |Las cuotas de arbitrios del predio, solo de consulta (<<otras-pestanas>>).
+|Infracciones, Anuncios |Las actas y los anuncios que nombran el predio, solo de consulta.
+|===
+
+El *Resumen* del año cuenta los *Titulares* y suma el *Autoavalúo* (el del predio, una vez, aunque tenga varios
+condóminos) y el *Valor afecto* (la parte de cada titular).
+
+[[fig-titulares-condominio]]
+.Titulares de un predio en condominio
+image::{capturas}/usuario/registrador/titulares-condominio.png[Pestaña Titulares del predio 01-01-0004 con dos condóminos al 40 y 60 por ciento, el mismo autoavalúo y su valor afecto, y la fila Total 2026]
+
+[[proc-editar-predio]]
+=== Corregir la ubicación de un predio
+
+. En la ficha del predio, pestaña *Datos de la ubicación*, pulse btn:[Editar].
+. Corrija los datos. *Vista previa de la dirección* muestra cómo quedará la dirección; *Dirección actual*, la que
+  tiene ahora.
+. Pulse btn:[Guardar cambios].
+
+// fin de los pasos
+El código y el número de registro no cambian. Un predio que vino del padrón anterior sin *Tipo de vía* conserva la
+dirección del padrón hasta que usted complete su ubicación («Sin tipo de vía se conserva la dirección del padrón.»).
+La misma ubicación se edita desde la pestaña *Datos de la ubicación* de cualquiera de sus declaraciones: es un solo
+registro.
+
+[[proc-eliminar-predio]]
+=== Eliminar un predio
+
+btn:[Eliminar], en la ficha del predio, borra un predio registrado por error. Pide confirmación (*¿Eliminar este
+predio?*) y solo procede si el predio no tiene declaraciones juradas (ni vigentes ni anuladas), cuotas de arbitrios
+ni anulaciones de cuotas. Si las tiene, el diálogo lo dice (*El predio tiene 2 declaraciones juradas: no se puede
+eliminar*) y nada se borra.
+
+WARNING: Eliminar un predio no se puede deshacer.
+
+[[declaraciones]]
+== Declaraciones juradas
+
+[[dj-conceptos]]
+=== Lo que hay que saber antes
+
+Año:: Cada declaración es de un año. Un titular que sigue siendo dueño presenta una nueva cada año en que la
+municipalidad lo pide.
+Secuencia de uso:: Un predio con varios usos (una casa con una tienda en el primer piso) se declara con una
+declaración por uso: secuencia `001`, `002`… El sistema escribe la secuencia con tres dígitos: `1` queda como `001`.
+Titular y condominio:: Las declaraciones vigentes de un mismo predio, año y secuencia son sus titulares. Si hay uno
+solo, es PROPIETARIO ÚNICO (o SOCIEDAD CONYUGAL o POSEEDOR, si así lo declaró) al 100 %. Si hay dos o más, cada uno es
+CONDÓMINO con el % que declara (<<condominos>>). Esto lo decide el sistema.
+Número de declaración:: Correlativo, lo asigna el sistema al presentarla.
+Motivo:: INSCRIPCION al presentarla; ACTUALIZACION en cuanto se corrige; DESCARGO si se anula.
+Estado:: *Vigente* o *Anulada*. Una anulada se conserva, pero no cuenta en nada (<<proc-anular-declaracion>>).
+Valores:: El *Autoavalúo* es el valor del predio (o del uso) declarado. El sistema calcula el *Valor de condominio*
+(el autoavalúo por el % de propiedad) y el *Valor afecto* (el valor de condominio menos la *Deducción*, nunca menos de
+cero). El impuesto predial se calcula con el valor afecto (<<liquidacion>>).
+
+La declaración tiene seis pestañas, en el orden del formulario de la municipalidad: *Datos del predio*, *Datos de la
+ubicación*, *Datos del transferente*, *Características*, *Datos de los condóminos* y *Otros frentes*.
+
+[[proc-nueva-declaracion]]
+=== Presentar una declaración jurada
+
+Una declaración nueva se registra en dos pasos (los datos de la declaración y la ubicación del predio); al pulsar
+btn:[Siguiente] en el segundo, se presenta y recibe su número. Las demás pestañas se completan después, en la
+declaración ya presentada, con el mismo asistente.
+
+[[proc-nueva-declaracion-pasos]]
+.Presentar una declaración jurada
+====
+[horizontal]
+Objetivo:: Registrar la declaración jurada del impuesto predial de un titular sobre un predio.
+Requisitos previos:: El contribuyente inscrito (<<proc-inscribir-contribuyente>>); el formulario de la declaración
+con sus datos, áreas, niveles, obras y autoavalúo; los documentos de la adquisición.
+====
+
+. Abra el asistente de una de tres maneras:
+** desde la ficha del contribuyente, pestaña *Declaraciones*, btn:[Nueva declaración] (el contribuyente ya viene
+   elegido);
+** desde la ficha del predio, pestaña *Declaraciones*, btn:[Nueva declaración] (el predio ya viene elegido);
+** con menu:Declaraciones[Nueva declaración] en el riel.
+. Se abre *Nueva declaración jurada predial*, en el paso 1, *Datos del predio* (<<fig-nueva-dj-paso1>>). Si llegó
+  sin contribuyente, el primer campo es *Contribuyente* (<<fig-nueva-dj-sin-contribuyente>>): escriba su DNI, RUC
+  o nombre y elíjalo de la lista.
++
+[[fig-nueva-dj-paso1]]
+.Paso 1 de una declaración nueva, desde la ficha de un contribuyente
+image::{capturas}/usuario/registrador/nueva-dj-paso1.png[Asistente Nueva declaración jurada predial con la cinta de seis pasos, Datos del predio resaltado y los campos de Datos de predio y Datos de la adquisición]
++
+[[fig-nueva-dj-sin-contribuyente]]
+.Una declaración nueva abierta desde el riel: primero, el contribuyente
+image::{capturas}/usuario/registrador/nueva-dj-sin-contribuyente.png[Paso 1 de Nueva declaración jurada predial con el campo Contribuyente y su buscador DNI, RUC o nombre sobre los datos del predio]
+. En *Datos de predio*, revise el *Tipo de predio*, el *Año* (el actual) y la *Secuencia de uso* (`001`). Para el
+  segundo uso de un predio que el titular ya declara, escriba `002`.
+. En *Datos de la adquisición*, elija el *Tipo de adquisición* (COMPRA, DONACIÓN, HERENCIA…), la *Fecha de
+  adquisición* y el *Tipo de propiedad* (PROPIETARIO ÚNICO por omisión, o SOCIEDAD CONYUGAL o POSEEDOR). Escriba los
+  *Folios* y marque los *Documentos de sustento* que presenta (MINUTA, ESCRITURA PÚBLICA…; puede marcar varios).
+. Si corresponde, complete *Condición del predio* (PENSIONISTA, ADULTO MAYOR NO PENSIONISTA, INAFECTO, EXONERADO,
+  PREDIO EN LITIGIO…, con el documento que la sustenta y sus fechas), *Predio inhabitable* (al escribir el *Número de
+  resolución* se habilitan los demás campos) y *Otros datos*.
+. Pulse btn:[Siguiente]. Se abre el paso 2, *Datos de la ubicación* (<<fig-nueva-dj-paso2>>). Todavía no se grabó
+  nada.
++
+[[fig-nueva-dj-paso2]]
+.Paso 2: la ubicación del predio
+image::{capturas}/usuario/registrador/nueva-dj-paso2.png[Paso 2 Datos de la ubicación con la instrucción, las secciones Identificación del predio y Datos de la ubicación del predio y el botón Buscar predios marcado]
+. Indique el predio:
+** si el predio *ya está en el padrón*, pulse btn:[Buscar predios], búsquelo en *Buscar en Tributario* y pulse
+   btn:[Elegir]. Aparece *La declaración será sobre el predio … del padrón*, con sus datos (y el botón btn:[Registrar
+   un predio nuevo] por si se equivocó);
+** si el predio *es nuevo*, complete su ubicación como en <<proc-registrar-predio>>, o tómela de un lote con
+   *Buscar en Catastro Fiscal*. El predio se registra junto con la declaración.
+. Pulse btn:[Siguiente].
+
+// fin de los pasos
+Resultado esperado:: La declaración queda presentada, con su número, motivo INSCRIPCION y estado *Vigente*. Se abre
+la declaración en el asistente, en la pestaña que falta completar: *Datos del transferente* si la adquisición fue de
+otra persona (compra, donación, herencia…), si no *Características* (<<proc-completar-declaracion>>).
+Verificación:: La declaración aparece en la pestaña *Declaraciones* del contribuyente y en *Titulares* del predio.
+Casos especiales::
+* *El predio ya tiene titular en 2026: …* (<<fig-nueva-dj-predio-con-titular>>): ese predio, año y secuencia ya
+  tienen declaración vigente de otra persona, y btn:[Siguiente] queda deshabilitado. Si el nuevo titular comparte la
+  propiedad, agréguelo como condómino desde *Datos de los condóminos* de esa declaración (el aviso trae el enlace:
+  <<proc-agregar-condomino>>). Si el predio cambió de dueño, anule primero la declaración del anterior
+  (<<proc-anular-declaracion>>) y luego presente la del nuevo.
+* *… ya declara este predio en 2026. Abrir su declaración*: el mismo contribuyente ya lo declaró ese año; corrija
+  esa declaración en lugar de presentar otra.
+* *Elige el contribuyente*: llegó desde el riel o desde un predio y no eligió al contribuyente.
+* Si el sistema rechaza un dato al presentar, el asistente vuelve al paso donde está ese campo y lo marca en rojo.
+* Si sale del asistente con datos escritos, el sistema pregunta *¿Salir sin guardar?* (<<salir-sin-guardar>>).
+
+[[fig-nueva-dj-predio-con-titular]]
+.Un predio del padrón que ya tiene titulares en el año
+image::{capturas}/usuario/registrador/nueva-dj-predio-con-titular.png[Paso 2 con el aviso azul La declaración será sobre el predio 01-01-0004 del padrón y el aviso rojo El predio ya tiene titular en 2026, con el botón Siguiente deshabilitado]
+
+[[proc-completar-declaracion]]
+=== Completar y corregir una declaración
+
+Una declaración presentada se abre en su propia ficha, *Declaración jurada predial - N*, con el contribuyente arriba
+(es un enlace a su ficha), su estado, año, condición, el código del predio y su dirección (<<fig-dj-datos>>).
+
+[[fig-dj-datos]]
+.Ficha de una declaración jurada: Datos del predio
+image::{capturas}/usuario/registrador/dj-datos.png[Ficha de la declaración jurada predial 1 con el estado Vigente, los botones Anular declaración, Cancelar y Guardar, las seis pestañas y los datos del predio y de la adquisición]
+
+Justo después de presentarla, la ficha se abre en modo asistente: la cinta de pasos muestra las seis pestañas, cada
+una con su instrucción, y el botón btn:[Siguiente] graba lo que cambió y pasa a la siguiente. En la última,
+*Otros frentes*, el botón dice btn:[Terminar] (<<fig-dj-asistente>>). Puede saltar a cualquier paso con la cinta.
+
+[[fig-dj-asistente]]
+.La declaración recién presentada, en el asistente
+image::{capturas}/usuario/registrador/dj-asistente.png[Ficha de la declaración 10 con el botón Siguiente, la cinta de pasos en Datos del transferente y la instrucción del paso 3]
+
+[[proc-guardar-dj]]
+==== Guardar los cambios
+
+Las pestañas *Datos del predio*, *Datos de la ubicación* y *Características* son formularios que se editan en el
+lugar y se graban juntos con el botón btn:[Guardar] de la cabecera. Las listas (transferentes, niveles, obras,
+condóminos, otros frentes) se graban fila por fila, con su propio diálogo y su btn:[Grabar].
+
+. Cambie lo necesario en una o varias de esas tres pestañas. Al haber cambios, btn:[Cancelar] y btn:[Guardar] se
+  habilitan (<<fig-dj-cambios>>).
+. Pulse btn:[Guardar]. Mientras graba, dice *Guardando…*; al terminar aparece *Cambios guardados*.
+
+// fin de los pasos
+[[fig-dj-cambios]]
+.Botones de la cabecera con cambios pendientes
+image::{capturas}/usuario/registrador/dj-cambios-pendientes.png[Botones Anular declaración, Cancelar y Guardar habilitados,480,align=center]
+
+btn:[Cancelar] pregunta *¿Descartar los cambios?* y, con btn:[Descartar cambios], devuelve las pestañas a lo
+grabado. Si el sistema rechaza un dato, abre la pestaña donde está y lo marca en rojo. Al grabar, el motivo de la
+declaración pasa a ACTUALIZACION.
+
+[[dj-datos-predio]]
+==== Datos del predio y Datos de la ubicación
+
+*Datos del predio* tiene los mismos campos que el paso 1 (<<proc-nueva-declaracion>>). Algunas reglas:
+
+* *Tipo de propiedad* no ofrece CONDÓMINO: un condómino se agrega desde *Datos de los condóminos*. En un condominio,
+  el campo queda en CONDÓMINO y en gris.
+* *% de propiedad* está en gris con `100` para un titular único; para un condómino muestra su %, que se cambia en
+  *Datos de los condóminos*.
+* *Tipo de predio* se graba en el predio, no en la declaración.
+* Cambiar el *Año* o la *Secuencia de uso* pasa la declaración a ese otro año o uso: si allí ya hay titulares, se suma
+  a su condominio.
+
+*Datos de la ubicación* es la ubicación del predio (<<proc-editar-predio>>): lo que corrija aquí cambia el predio, y
+lo ven todas sus declaraciones.
+
+[[proc-transferente]]
+==== Datos del transferente
+
+El transferente es quien transfirió el predio al declarante (el vendedor, el donante, el causante). Se registra con
+*+* (*Agregar transferente*): *% de propiedad transferido*, documento, apellidos y nombres (o razón social, con RUC),
+datos personales y de contacto, y su *Domicilio* (ubigeo y *Descripción domicilio*, obligatoria)
+(<<fig-dj-transferentes>>). Los nombres se escriben a mano, como los del contribuyente (<<reniec>>).
+
+[[fig-dj-transferentes]]
+.El transferente de una compra
+image::{capturas}/usuario/registrador/dj-transferentes.png[Listado de transferentes con un transferente DNI 95000077 al 100 por ciento y su domicilio]
+
+NOTE: Un transferente es un dueño anterior: registrarlo no cambia el % de nadie ni anula la declaración del
+anterior propietario. Para eso, anule la declaración del vendedor (<<proc-anular-declaracion>>).
+
+[[caracteristicas]]
+==== Características: uso, áreas y valores
+
+La pestaña *Características* tiene, arriba, el formulario del uso y los valores, y debajo las listas de niveles y de
+obras (<<fig-dj-caracteristicas>>).
+
+. En *Características de predio*, elija la *Clase de uso*, luego la *Sub clase de uso* y luego el *Uso del predio*:
+  cada lista ofrece solo lo que corresponde a la anterior.
+. Escriba el *Área del terreno (m2)* (obligatoria), el *Área común del terreno (m2)*, el *Frontis (m)* y la *Cant. de
+  habitantes / Aforo*.
+. En *Valores*, escriba el *Autoavalúo (S/)* que resulta de la declaración, la *Deducción (S/)* si corresponde, y el
+  *Área construida (m2)*.
+. Pulse btn:[Guardar] (o btn:[Siguiente] en el asistente).
+
+// fin de los pasos
+[[fig-dj-caracteristicas]]
+.Uso, áreas y valores de una declaración
+image::{capturas}/usuario/registrador/dj-caracteristicas.png[Secciones Características de predio con clase, sub clase y uso, áreas, frontis y habitantes, y Valores con autoavalúo, valor de condominio, deducción, valor afecto y área construida]
+
+[IMPORTANT]
+====
+* El sistema *no calcula el autoavalúo* a partir de los niveles y las obras: guarda el que usted escribe. Revíselo
+  contra el formulario de la declaración.
+* *Valor de condominio* y *Valor afecto* los calcula el sistema al grabar (<<dj-conceptos>>): lo que escriba en esos
+  dos campos se reemplaza.
+* La *Deducción* tampoco se calcula: escriba el monto que corresponde a la condición del predio (por ejemplo, la de
+  un pensionista).
+====
+
+*Frontis (m)* y *Área construida (m2)* son obligatorios cuando la ordenanza de arbitrios del año cobra según el
+frente o el área construida (en la demostración de 2026, ambos). Los arbitrios se explican en el {m-arbitrios}.
+
+[[proc-nivel]]
+==== Niveles de construcción
+
+Cada piso, sótano, mezanine o azotea es un nivel. El listado muestra el tipo, el piso, el año y mes de construcción,
+las áreas, el material, las siete letras de las categorías y el estado de conservación (<<fig-dj-niveles>>).
+
+[[fig-dj-niveles]]
+.Listado de niveles de construcción
+image::{capturas}/usuario/registrador/dj-niveles.png[Listado de niveles de construcción con un piso de 2006, 105.18 m2, concreto, las letras de las siete categorías y su conservación]
+
+[[proc-nivel-pasos]]
+.Agregar un nivel de construcción
+====
+[horizontal]
+Objetivo:: Registrar un piso (u otro nivel) declarado.
+Requisitos previos:: La declaración abierta en *Características*; los datos del nivel en el formulario.
+====
+
+. Pulse *+* (*Agregar nivel de construcción*). Se abre *Nuevo nivel de construcción* (<<fig-nivel-nuevo>>), con el
+  siguiente *Número de piso* y el año en curso.
+. Complete *Datos del nivel*: *Tipo de nivel*, *Número de piso*, *Año construcción*, *Mes construcción*, *Material
+  predominante*, *Estado de conservación* y *Área construida (m2)*; si tiene, el área común y su %.
+. En *Datos de la categoría*, elija la letra (de A a I) de cada categoría: *Muros y columnas*, *Techos*, *Pisos*,
+  *Puertas y ventanas*, *Revestimientos*, *Baños* e *Instalaciones de E/S*. A la derecha aparece qué significa la
+  letra en el cuadro de valores unitarios.
++
+[[fig-nivel-nuevo]]
+.Nuevo nivel de construcción, con la descripción de la letra elegida
+image::{capturas}/usuario/registrador/nivel-nuevo.png[Diálogo Nuevo nivel de construcción con los datos del nivel de 2015 y la sección Datos de la categoría con Muros y columnas en C y su descripción,760,align=center]
+. Pulse btn:[Grabar].
+
+// fin de los pasos
+Resultado esperado:: El nivel aparece en el listado con sus letras.
+Casos especiales:: Para un nivel construido de 2023 en adelante, solo se piden *Muros y columnas*, *Techos* y
+*Puertas y ventanas*: las otras cuatro quedan en gris, porque los cuadros de valores unitarios oficiales valorizan
+solo esas tres desde ese ejercicio. Antes de 2023 se piden las siete.
+
+[[proc-obra]]
+==== Obras complementarias
+
+Las obras complementarias son las construcciones que no son niveles: cercos, portones, tanques, cisternas, piscinas,
+losas, entre otras (<<fig-dj-obras>>).
+
+[[fig-dj-obras]]
+.Listado de obras complementarias
+image::{capturas}/usuario/registrador/dj-obras.png[Listado de obras complementarias con un muro perimétrico de ladrillo, su cantidad, metrado y total]
+
+. Pulse *+* (*Agregar obra complementaria*). Se abre *Nueva obra complementaria* (<<fig-obra-nueva>>).
+. Elija el *Ingreso*: POR CATEGORÍAS (lo habitual) o CON VALORIZACIÓN (cuando se declara el valor de la obra).
+. Elija *Material predominante*, *Tipo de obra*, *Estado de conservación*, *Año construcción* y *Mes construcción*.
+. Por categorías, elija la *Categoría*: las partidas del instructivo para ese tipo de obra. La partida fija la
+  *Unidad de medida*, que queda en gris. Con valorización, en lugar de la categoría se pide el *Valor (S/)*.
+. Escriba el *Número de piso*, la *Cantidad* y el *Metrado*. *Total metrado*, al pie, muestra cantidad × metrado.
++
+[[fig-obra-nueva]]
+.Nueva obra complementaria, con su total metrado
+image::{capturas}/usuario/registrador/obra-nueva.png[Diálogo Nueva obra complementaria con un muro perimétrico por categorías, la partida 3 elegida, la unidad M2 en gris y el total metrado 32.5 M2,760,align=center]
+. Pulse btn:[Grabar].
+
+// fin de los pasos
+El listado muestra el *Total* de cada obra, que el sistema calcula como cantidad × metrado. Si el tipo de obra no
+tiene partidas cargadas, la categoría se escribe a mano.
+
+[[condominos]]
+==== Datos de los condóminos
+
+Esta pestaña lista a todos los titulares vigentes del predio en el mismo año y secuencia de uso, con su condición,
+el autoavalúo, su % de propiedad, su valor de condominio, su deducción y su valor afecto. Arriba se indica cuánto
+suman los % (<<fig-dj-condominos>>).
+
+[[fig-dj-condominos]]
+.Condominio 60/40
+image::{capturas}/usuario/registrador/dj-condominos.png[Listado de condóminos del año 2026, secuencia 001, que suman 100 por ciento: dos titulares al 40 y 60 por ciento con su valor condominio y valor afecto, el lápiz de cada uno y el botón Agregar]
+
+Las reglas del condominio:
+
+* Un titular solo es PROPIETARIO ÚNICO al 100 %. Con dos o más, todos pasan a CONDÓMINO.
+* Los % de los condóminos no pueden sumar más de 100.
+* Al agregar el primer condómino a un predio de un titular único, el % del nuevo *sale del* 100 % del titular: debe
+  ser mayor que 0 y menor que 100. Si agrega un 40 %, el titular queda con 60 %.
+* Con dos o más condóminos, el nuevo % se suma a los existentes. Si la suma pasaría de 100, primero reduzca el % de
+  alguno con el lápiz.
+* Un contribuyente declara un mismo predio, año y secuencia una sola vez.
+* Cada condómino tiene su propia declaración. La del nuevo copia de esta lo que se declara del predio: año, secuencia,
+  características, autoavalúo, inhabitabilidad, niveles, obras y otros frentes. No copia lo que es de cada titular:
+  la adquisición, los documentos, la condición especial, la deducción ni los transferentes.
+
+[[proc-agregar-condomino]]
+.Agregar un condómino
+====
+[horizontal]
+Objetivo:: Registrar a otro titular que comparte la propiedad del predio.
+Requisitos previos:: El nuevo condómino inscrito como contribuyente; la declaración vigente de un titular actual del
+predio, abierta en *Datos de los condóminos*; el % de propiedad de cada uno.
+====
+
+. Pulse btn:[Agregar]. Se abre *Agregar condómino* (<<fig-agregar-condomino>>).
+. En *Contribuyente*, escriba el DNI, RUC o nombre del nuevo condómino y elíjalo de la lista.
+. Escriba su *% de propiedad*.
++
+[[fig-agregar-condomino]]
+.El diálogo Agregar condómino
+image::{capturas}/usuario/registrador/agregar-condomino.png[Diálogo Agregar condómino con la explicación de cómo se reparte el porcentaje, el buscador de contribuyente y el campo porcentaje de propiedad,600,align=center]
+. Pulse btn:[Grabar].
+
+// fin de los pasos
+Resultado esperado:: El nuevo condómino aparece en la lista, con su declaración (columna *DJ*). Todos quedan como
+CONDÓMINO y el sistema recalcula el valor de condominio y el valor afecto de cada uno.
+Verificación:: La línea de arriba dice *suman 100 % de propiedad* (o lo que corresponda). La pestaña *Titulares* del
+predio muestra a todos.
+Casos especiales::
+* *excede el 100 %*, debajo de *% de propiedad*: la suma pasaría de 100.
+* *debe ser mayor que 0 y menor que 100*: el primer condómino no puede quedarse con todo ni con nada.
+* *Este contribuyente ya declara el predio en ese año y secuencia de uso*: ya es titular; no se agrega dos veces.
+* *Elige un contribuyente*: falta elegirlo en la lista.
+* Para cambiar el % de un condómino, pulse el lápiz de su fila (*% de propiedad de …*), escriba el nuevo % y pulse
+  btn:[Grabar]. Los % no pueden sumar más de 100: para pasar de 60/40 a 50/50, baje primero el 60 y luego suba el 40.
+
+[[otros-frentes]]
+==== Otros frentes
+
+Un predio de esquina, o con salida a dos vías, registra sus frentes adicionales en *Otros frentes*, con *+*
+(*Agregar frente*): *Tipo vía*, *Descripción de la vía*, *N° principal*, *N° alterno*, *Frontis (m)*, *Lote*, *Cuadra*
+y *Lado* (PAR o IMPAR) (<<fig-dj-frentes>>). El frente principal es el de la ubicación del predio.
+
+[[fig-dj-frentes]]
+.El segundo frente de un predio de esquina
+image::{capturas}/usuario/registrador/dj-frentes.png[Listado de otros frentes con el JR. LAS ORQUIDEAS 171, frontis 9.5 y lado IMPAR]
+
+[[proc-anular-declaracion]]
+=== Anular una declaración (descargo)
+
+Anular una declaración es su descargo: deja de valer, pero se conserva en el historial para siempre. Se usa cuando el
+titular dejó de serlo (vendió, donó, falleció y lo suceden otros) o cuando la declaración se registró por error. El
+portal no tiene un botón para eliminar una declaración: se anula.
+
+[[proc-anular-declaracion-pasos]]
+.Anular una declaración jurada
+====
+[horizontal]
+Objetivo:: Dar de baja la declaración de un titular que ya no lo es, o una registrada por error.
+Requisitos previos:: La declaración vigente abierta; el documento que justifica el descargo (por ejemplo, la
+escritura de venta).
+====
+
+. En la cabecera de la declaración, pulse btn:[Anular declaración].
+. Lea el diálogo *Anular la declaración jurada N* (<<fig-anular-declaracion>>).
+. Escriba el *Motivo de la anulación* (obligatorio): qué pasó y con qué documento.
++
+[[fig-anular-declaracion]]
+.El diálogo de anulación
+image::{capturas}/usuario/registrador/anular-declaracion.png[Diálogo Anular la declaración jurada 1 con la explicación de sus consecuencias, el motivo escrito y los botones Cancelar y Anular,520,align=center]
+. Pulse btn:[Anular].
+
+// fin de los pasos
+Resultado esperado:: La declaración queda *Anulada*, con motivo DESCARGO y la fecha de hoy. Sobre sus pestañas
+aparece el aviso *Declaración anulada el …* con el motivo, y todos sus datos pasan a ser de solo lectura
+(<<fig-dj-anulada>>).
+Verificación:: En la pestaña *Declaraciones* del contribuyente y del predio aparece marcada *Anulada*; el *Resumen* y
+los totales ya no la cuentan.
+Casos especiales::
+* *En un condominio*: la anulada sale del grupo y el sistema recalcula a los demás. Si queda un solo titular, vuelve a
+  PROPIETARIO ÚNICO al 100 %.
+* La declaración anulada ya no sale en el PU ni en la HR, y no cuenta en el impuesto predial.
+* Una declaración anulada no se puede corregir ni anular otra vez, y no se le pueden agregar condóminos ni filas.
+
+WARNING: La anulación no se puede deshacer: no hay forma de volver a dejar vigente una declaración anulada. Si se
+equivocó, presente una declaración nueva con los mismos datos.
+
+[[fig-dj-anulada]]
+.Una declaración anulada: solo lectura
+image::{capturas}/usuario/registrador/dj-anulada.png[Ficha de la declaración 5 con el estado Anulada, el aviso rojo Declaración anulada con el motivo y los datos en modo de solo lectura, con motivo DESCARGO]
+
+[[proc-cambio-titular]]
+=== Registrar un cambio de dueño
+
+Cuando un predio se vende (o se dona, o se hereda), el registro se hace en dos movimientos:
+
+. Abra la declaración vigente del dueño anterior y anúlela, con el motivo y el documento de la transferencia
+  (<<proc-anular-declaracion>>).
+. Si el nuevo dueño no está inscrito, inscríbalo (<<proc-inscribir-contribuyente>>).
+. Presente la declaración del nuevo dueño sobre el mismo predio, eligiéndolo con btn:[Buscar predios]
+  (<<proc-nueva-declaracion>>), con el tipo de adquisición que corresponda.
+. En *Datos del transferente*, registre al dueño anterior con el % que transfirió (<<proc-transferente>>).
+
+// fin de los pasos
+Si el dueño anterior vendió solo una parte, no anule su declaración: agregue al comprador como condómino y ajuste los
+% (<<proc-agregar-condomino>>).
+
+[[catastro]]
+== Catastro fiscal
+
+[[catastro-que-es]]
+=== Los lotes del catastro
+
+El catastro fiscal es el registro de los lotes con su *Código CPU*, su dirección catastral y su polígono. El portal lo
+usa de tres maneras: para ubicar un predio en el mapa, para traer su ubicación al registrarlo (<<proc-predio-desde-lote>>)
+y para darle código (<<codigo-predio>>). Mientras la municipalidad no cargue todo el catastro, los lotes que faltan se
+registran a mano aquí.
+
+El vínculo entre un predio y su lote es el *Código CPU* que tiene el predio: se escribe, se toma con un clic en el
+mapa del predio o se trae con *Buscar en Catastro Fiscal*. El *Código de predio municipal* del lote, a su vez, es el
+código que el predio tiene (o tendrá) en el padrón.
+
+[[proc-nuevo-lote]]
+=== Registrar un lote
+
+[[proc-nuevo-lote-pasos]]
+.Registrar un lote del catastro fiscal
+====
+[horizontal]
+Objetivo:: Agregar al catastro un lote que no está, con su polígono.
+Requisitos previos:: Su código CPU y su ubicación; saber reconocerlo en el mapa.
+====
+
+. Elija menu:Catastro[Nuevo lote], o pulse btn:[Nuevo lote de catastro] en *Inicio*, o btn:[Nuevo lote] en *Buscar en
+  Catastro Fiscal*. Se abre *Nuevo lote de catastro fiscal* (<<fig-nuevo-lote>>).
+. En *Datos del lote*, escriba el *Código CPU* (obligatorio y único), el *Código de predio municipal* si ya lo tiene, la
+  *Partida registral* y el *Tipo de predio*.
+. En *Ubicación del lote*, el ubigeo viene en Perené. Complete la vía, el número, la zona, la manzana y el lote, y, si
+  la tiene, la *Dirección de catastro fiscal* tal como la escribe el catastro.
++
+[[fig-nuevo-lote]]
+.Nuevo lote de catastro fiscal
+image::{capturas}/usuario/registrador/nuevo-lote.png[Formulario Nuevo lote de catastro fiscal con las secciones Datos del lote, Ubicación del lote y Polígono del lote con el mapa]
+. Dibuje el polígono (<<proc-dibujar-lote>>).
+. Pulse btn:[Registrar lote].
+
+// fin de los pasos
+Resultado esperado:: Se abre la ficha del lote, *Lote* seguido de su código CPU.
+Verificación:: El lote aparece en *Buscar en Catastro Fiscal* al buscarlo por su código CPU.
+Casos especiales:: *ya es de otro lote del catastro*, debajo de *Código CPU*: ese código ya está registrado; búsquelo
+en lugar de crearlo.
+
+[[proc-dibujar-lote]]
+==== Dibujar el polígono
+
+. Acerque el mapa al lote con la rueda del ratón o los botones *+* y *−*, y arrástrelo para centrarlo.
+. Pulse btn:[Dibujar lote] (en un predio, el mismo botón; si el lote ya tiene polígono, dice btn:[Editar lote]). La
+  instrucción cambia a «Dibuja el lote punto por punto y ciérralo en el primero; luego puedes arrastrar sus vértices.»
+  (<<fig-nuevo-lote-dibujar>>).
+. Haga clic en cada esquina del lote, en orden, y termine con un clic en el primer punto para cerrarlo.
+. Si un vértice quedó mal, arrástrelo a su lugar.
+. Pulse btn:[Terminar].
+
+// fin de los pasos
+[[fig-nuevo-lote-dibujar]]
+.El mapa en modo de dibujo
+image::{capturas}/usuario/registrador/nuevo-lote-dibujar.png[Sección Polígono del lote con la instrucción de dibujo, el botón Terminar y el mapa con los lotes del catastro]
+
+[[ficha-lote]]
+=== La ficha del lote
+
+La ficha del lote es el mismo formulario, con sus datos y su polígono resaltado en rojo sobre los lotes vecinos
+(<<fig-ficha-lote>>). Para corregirlo, cambie los datos o pulse btn:[Editar lote] y mueva los vértices, y luego pulse
+btn:[Guardar cambios]: aparece *Cambios guardados*. A la ficha de un lote se llega con btn:[Editar lote] en *Buscar en
+Catastro Fiscal*.
+
+[[fig-ficha-lote]]
+.El polígono de un lote, resaltado
+image::{capturas}/usuario/registrador/ficha-lote.png[Sección Polígono del lote de la ficha de un lote, con su polígono en rojo junto a los lotes vecinos y el botón Editar lote]
+
+NOTE: Corregir un lote no cambia los predios ya registrados con su código CPU: su ubicación es la del predio. El
+editor de lotes no tiene botón para eliminar un lote.
+
+[[documentos]]
+== Documentos: PU, HR y HLA
+
+[[documentos-que-son]]
+=== Qué documento entregar
+
+.Documentos que se emiten desde las fichas
+[cols="1,2,2,2",options="header"]
+|===
+|Documento |Contiene |Dónde |Cuándo no sale
+|PU |Lo que un titular declara de un predio en el año: sus usos, niveles, obras y valores.
+|btn:[Ver PU] en la ficha del predio; botón *PU* de cada fila en la pestaña *Predios* del contribuyente.
+|El predio no tiene declaración vigente en el año.
+|HR |Los predios del contribuyente en el año y su impuesto predial, con las cuatro cuotas.
+|btn:[Ver HR] en la ficha del contribuyente. |No tiene declaración vigente en el año, o falta un parámetro del año
+(la UIT, por ejemplo).
+|HLA |Las cuotas de arbitrios del año, por predio y mes. |btn:[Ver HLA] en la ficha del contribuyente.
+|Los arbitrios del año no están determinados, o no se le carga ninguna cuota.
+|===
+
+Todos son del año elegido en el selector *Año* de la ficha. Para emitirlos en bloque, para todo el padrón, existe la
+emisión masiva ({m-arbitrios}).
+
+[[proc-ver-documento]]
+=== Ver, imprimir o descargar un documento
+
+[[proc-ver-documento-pasos]]
+.Ver el PU, la HR o la HLA
+====
+[horizontal]
+Objetivo:: Mostrar, imprimir o entregar en archivo el documento del año.
+Requisitos previos:: La ficha del predio (PU) o del contribuyente (HR, HLA) abierta, con el año elegido.
+====
+
+. Elija el *Año* en la ficha.
+. Pulse btn:[Ver PU], btn:[Ver HR] o btn:[Ver HLA]. Se abre una ventana con el documento; mientras se genera, dice
+  *Generando…*.
+. Si el predio tiene más de un titular en el año, btn:[Ver PU] pregunta primero de quién es: en *Elegir el titular*,
+  pulse el nombre (<<fig-elegir-titular>>). El PU es siempre de un titular.
++
+[[fig-elegir-titular]]
+.Elegir el titular de un predio en condominio
+image::{capturas}/usuario/registrador/elegir-titular-pu.png[Diálogo Elegir el titular con el texto El predio tiene más de un titular: la PU es de uno de ellos, dos titulares con su DNI y el botón Cancelar,480,align=center]
+. Use btn:[Imprimir] o btn:[Descargar] de la ventana, y btn:[Cerrar] al terminar.
+
+// fin de los pasos
+Resultado esperado:: El documento se muestra en pantalla. El archivo descargado se llama, por ejemplo,
+`PU-01-01-0001-2026.pdf` o `HR-000001-2026.pdf`.
+Casos especiales::
+* *El predio 01-01-0001 no tiene declaración jurada vigente en 2025*: cambie el año o revise las declaraciones.
+* *El contribuyente 000001 no tiene declaración jurada vigente en 2025*: lo mismo, para la HR.
+* *Faltan parámetros: …*: la HR no puede calcular el impuesto porque falta un parámetro del año (por ejemplo, `UIT
+  2027`); la HLA, porque los arbitrios del año no están completos (por ejemplo, *Predio 01-01-0001: 12 cuotas de
+  arbitrios por determinar*). Avise al administrador o al área de arbitrios.
+* *El contribuyente … no tiene cuotas de arbitrios a su nombre en 2026*: no hay HLA que emitir.
+
+[[pu]]
+=== El PU
+
+El PU tiene la cabecera de la municipalidad (nombre, gerencia, RUC, oficina, fecha y hora de emisión), el título
+*Declaración jurada del impuesto predial — PU*, el año y los números de declaración, y luego:
+
+[horizontal]
+Sección I, Contribuyente:: Código, nombre, documento, domicilio fiscal, condición de propiedad y %.
+Sección II, Ubicación del predio:: Código, dirección, sector, manzana y lote, habilitación urbana y ubigeo.
+Sección III, Uso N.° …:: Una sección por cada uso (secuencia) declarado, con los datos del predio (uso, clasificación,
+áreas, frente), los niveles de construcción con sus siete categorías, las obras complementarias y los valores
+declarados (autoavalúo, valor condominio, deducción y valor afecto).
+
+Muestra los valores tal como se declararon, sin revalorizar. Los niveles y obras inactivos no salen.
+
+[[fig-pdf-pu]]
+.Un PU con dos usos (página 1)
+image::{capturas}/usuario/registrador/pdf-pu.png[Primera página del PU del predio 01-01-0001 de QUISPE ROJAS ROSA ELENA con las secciones Contribuyente, Ubicación del predio y los usos 001 y 002 con sus niveles, obras y valores,600,pdfwidth=75%,align=center]
+
+[[hr]]
+=== La HR
+
+La HR tiene la misma cabecera, el año y el código del contribuyente, y cuatro secciones: *I. Contribuyente* (con su
+domicilio fiscal y la condición especial que declare, como pensionista), *II. Relación de predios* (una fila por
+declaración vigente, con código, dirección, uso, autoavalúo, % de propiedad y valor afecto, y el total),
+*III. Determinación del impuesto* y *IV. Cuotas*, con la línea *Al contado* y la nota «Las cuotas 2 a 4 se reajustan
+por IPM (TUO LTM art. 15)» (<<fig-pdf-hr>>).
+
+[[fig-pdf-hr]]
+.La HR de un contribuyente con cuatro predios
+image::{capturas}/usuario/registrador/pdf-hr.png[HR 2026 del contribuyente 000001 con la relación de cinco declaraciones, la determinación del impuesto por tramos y las cuatro cuotas con su vencimiento,600,pdfwidth=75%,align=center]
+
+[[liquidacion]]
+=== Cómo se calcula el impuesto predial
+
+El impuesto predial que muestra la HR lo calcula el sistema, con los artículos 13 y 15 del TUO de la Ley de
+Tributación Municipal:
+
+. *Base imponible*: la suma del *Valor afecto* de las declaraciones *vigentes* del contribuyente en el año. Cada
+  condómino cuenta solo su parte; una declaración anulada no suma.
+. *Tramos*: la base se reparte en tres tramos, en UIT, y cada parte paga su alícuota:
++
+.Tramos del impuesto predial
+[cols="2,1",options="header"]
+|===
+|Parte de la base |Alícuota
+|Hasta 15 UIT |0.2 %
+|Más de 15 UIT y hasta 60 UIT |0.6 %
+|Más de 60 UIT |1.0 %
+|===
+. *Mínimo*: el impuesto anual no es menor que el 0.6 % de la UIT, si hay base. Con base cero, no hay impuesto. La HR
+  dice *Se aplica el mínimo* cuando corresponde.
+. *Cuotas*: el impuesto anual se divide en cuatro cuotas iguales, redondeadas al céntimo; la cuarta lleva la
+  diferencia del redondeo. Vencen el último día hábil de febrero, mayo, agosto y noviembre (de lunes a viernes, sin
+  feriados nacionales de fecha fija). En 2026: 27 de febrero, 29 de mayo, 31 de agosto y 30 de noviembre. Al
+  contado, todo hasta el primer vencimiento.
+
+// fin de los pasos
+La UIT, los tramos, sus límites y el mínimo son los parámetros vigentes al 1 de enero del año, que mantiene el
+administrador; las cifras de la tabla son las de la ley y las que trae la demostración. El cálculo no incluye el
+reajuste de las cuotas 2 a 4 por el índice de precios al por mayor (IPM), ni el derecho de emisión, ni prórrogas de
+vencimiento por ordenanza.
+
+.Ejemplo: QUISPE ROJAS ROSA ELENA, 2026 (UIT S/ 5,500.00)
+[cols="3,2,1,2",options="header"]
+|===
+|Tramo |Monto gravado |Alícuota |Impuesto
+|Hasta 15 UIT (S/ 82,500.00) |S/ 82,500.00 |0.2 % |S/ 165.00
+|De S/ 82,500.00 a S/ 330,000.00 |S/ 247,500.00 |0.6 % |S/ 1,485.00
+|Más de S/ 330,000.00 |S/ 187,339.52 |1.0 % |S/ 1,873.40
+|*Base imponible* |*S/ 517,339.52* | |*S/ 3,523.40*
+|===
+
+El impuesto calculado (S/ 3,523.40) es mayor que el mínimo (S/ 33.00), así que el impuesto anual es S/ 3,523.40: cuatro
+cuotas de S/ 880.85.
+
+TIP: Si una cifra de la HR no le parece correcta, revise primero el *Valor afecto* de cada declaración (pestaña
+*Predios* de la ficha): es lo único que usted registra de lo que entra en el cálculo.
+
+[[hla]]
+=== La HLA
+
+La HLA muestra, por cada predio por el que el contribuyente paga arbitrios en el año, una tabla de los doce meses
+con el monto de cada servicio (barrido de calles, recolección de residuos sólidos, parques y jardines, serenazgo,
+según la ordenanza), el total del predio y una sección *Cálculo* que explica de dónde sale cada monto. Las cuotas
+salen tal como se determinaron: el registrador no las calcula ni las cambia ({m-arbitrios}).
+
+[[fig-pdf-hla]]
+.Primera página de una HLA
+image::{capturas}/usuario/registrador/pdf-hla.png[Primera página de la HLA 2026 del contribuyente 000001 con los meses de enero a diciembre por servicio de dos predios y el cálculo de cada servicio,600,pdfwidth=75%,align=center]
+
+[[otras-pestanas]]
+== Arbitrios, infracciones y anuncios en las fichas
+
+Las fichas del contribuyente y del predio tienen tres pestañas que el perfil {p-registrador} solo consulta:
+
+Arbitrios:: Las cuotas del año, por servicio y mes, con la fecha en que se determinaron y el total. El botón
+btn:[Determinar arbitrios] del año aparece deshabilitado, con la línea *Sin permiso: determinar pide creación sobre
+las cuotas de arbitrio.* (<<fig-arbitrios-solo-lectura>>). Lo que muestran y cómo se determinan está en el
+{m-arbitrios}.
+Infracciones:: Las actas que nombran al contribuyente o al predio, con su importe, su fase y el estado de la deuda;
+el número abre el expediente ({m-fiscalizador}). Sin actas, dice *Sin infracciones*.
+Anuncios:: Los anuncios de los que es titular el contribuyente (o que están en el predio), con su clase, vigencia y
+estado ({m-anuncios}). Sin anuncios, dice *Sin anuncios*.
+
+[[fig-arbitrios-solo-lectura]]
+.La pestaña Arbitrios, de solo consulta para el registrador
+image::{capturas}/usuario/registrador/arbitrios-solo-lectura.png[Pestaña Arbitrios de la ficha de un contribuyente con el botón Determinar arbitrios 2026 deshabilitado, el aviso Sin permiso y la tabla de cuotas por servicio y mes de su primer predio]
+
+TIP: Lo que usted registra cambia los arbitrios de los años que aún no se determinaron: el uso, el frontis, el área
+construida y la ubicación respecto a áreas verdes de la declaración son datos que la ordenanza usa. Las cuotas ya
+determinadas no cambian solas.
+
+[[errores]]
+== Errores frecuentes
+
+.Mensajes frecuentes del registro tributario
+[cols="3,3,3",options="header"]
+|===
+|Mensaje |Causa |Solución
+
+|El DNI tiene 8 dígitos |El número de DNI no tiene exactamente 8 dígitos. |Revise el documento y escríbalo sin
+espacios.
+|El RUC tiene 11 dígitos y empieza con 10, 15, 16, 17 o 20 |El RUC está incompleto o no es un RUC.
+|Revise la constancia de RUC.
+|El dígito verificador del RUC no es válido |Hay un dígito equivocado. |Compare número por número con el documento.
+|Hasta 12 letras o dígitos |Pasaporte, carné u otro documento con espacios, guiones o más de 12 caracteres.
+|Escríbalo sin separadores.
+|ya está inscrito: 000001 QUISPE ROJAS ROSA ELENA |El documento ya pertenece a otro contribuyente.
+|Abra esa ficha; no inscriba al contribuyente dos veces.
+|Una sucesión indivisa se registra con el documento del causante: DNI, pasaporte, CE, PTP / CPP, CI o S/D
+|Eligió RUC u OTROS para una sucesión indivisa. |Use el documento del causante.
+|PIDE RENIEC exige una consulta reciente del DNI con los mismos apellidos y nombres: vuelva a ingresar el DNI o use
+MANUAL |Marcó la fuente PIDE RENIEC sin una consulta que la respalde. |Elija MANUAL (<<reniec>>).
+|(*) Registrar al menos 1 domicilio fiscal |El contribuyente no tiene domicilio fiscal activo.
+|Registre su domicilio fiscal (<<proc-registrar-domicilio>>).
+|el primer domicilio debe ser el fiscal, activo |Intentó registrar como primer domicilio uno que no es FISCAL o no
+está ACTIVO. |Registre primero el fiscal.
+|ya tiene otro domicilio fiscal activo: actualice ese domicilio |Intentó agregar un segundo domicilio fiscal activo.
+|Edite el domicilio fiscal que ya tiene.
+|es el único domicilio fiscal activo: no se puede inactivar (o: debe seguir siendo FISCAL) |Intentó inactivar o
+cambiar de tipo el único domicilio fiscal. |Cambie su dirección en lugar de darlo de baja.
+|El contribuyente tiene 3 declaraciones juradas: no se puede eliminar |Un contribuyente o predio con declaraciones,
+aun anuladas, no se elimina. |Si dejó de ser titular, anule sus declaraciones (<<proc-anular-declaracion>>); el
+registro se conserva.
+|El predio tiene 12 cuotas de arbitrio: no se puede eliminar, una cuota no se borra nunca |Tiene arbitrios
+determinados. |No se puede eliminar; consúltelo con el área de arbitrios.
+|Escribe la descripción de la vía, o un código, un código CPU o una partida registral |Buscó predios sin el dato
+mínimo. |Escriba la vía o un código (<<buscar-predios>>).
+|ya es de otro lote del catastro |El código CPU ya está registrado. |Busque ese lote en *Buscar en Catastro Fiscal*.
+|El predio ya tiene titular en 2026: … |Otra persona ya declara ese predio, año y secuencia.
+|Agréguelo como condómino o anule antes la declaración del anterior dueño (<<proc-nueva-declaracion>>).
+|excede el 100 % |Los % de los condóminos sumarían más de 100. |Reduzca antes el % de otro condómino.
+|debe ser mayor que 0 y menor que 100 |El primer condómino de un titular único pidió 0 % o 100 % o más.
+|Escriba la parte que adquiere, entre 0 y 100.
+|Este contribuyente ya declara el predio en ese año y secuencia de uso |Ya es titular de ese predio.
+|Abra su declaración.
+|El predio … no tiene declaración jurada vigente en … |No hay PU de ese año. |Cambie el año o registre la
+declaración.
+|Faltan parámetros: … |Falta un parámetro del año (UIT, tramos) o los arbitrios no están determinados.
+|Avise al administrador o al área de arbitrios.
+|Este dato es obligatorio |Falta un campo con asterisco. |Complételo (<<campos>>).
+|No se pudo guardar |El servidor rechazó el cambio sin señalar un campo, o no respondió. |Vuelva a intentarlo; si se
+repite, anote la hora y avise a soporte.
+|===
+
+[[faq]]
+== Preguntas frecuentes
+
+[[faq-registro]]
+=== Preguntas del registro tributario
+
+Escribí el DNI y los nombres no se llenaron solos.::
+La consulta a RENIEC no está activa en esta instalación. Escriba los apellidos y nombres del documento y deje la
+fuente en MANUAL (<<reniec>>).
+
+¿Cómo registro que un predio cambió de dueño?::
+Anule la declaración del dueño anterior y presente la del nuevo, con el anterior como transferente
+(<<proc-cambio-titular>>).
+
+El contribuyente tiene una casa con una tienda. ¿Una declaración o dos?::
+Dos: una por uso, con secuencia `001` y `002` (<<dj-conceptos>>).
+
+Escribí un valor afecto y el sistema puso otro.::
+El valor afecto lo calcula el sistema: valor de condominio (autoavalúo por el % de propiedad) menos la deducción. Lo
+que se escribe es el *Autoavalúo* y la *Deducción* (<<caracteristicas>>).
+
+¿El sistema calcula el autoavalúo con los niveles y las obras?::
+No. Registra los niveles y las obras declarados, pero el autoavalúo es el que usted escribe.
+
+¿Cómo cambio el % de un condómino?::
+En *Datos de los condóminos* de cualquiera de sus declaraciones, con el lápiz de su fila (<<proc-agregar-condomino>>).
+
+Anulé una declaración por error. ¿Puedo revertirlo?::
+No. Presente una declaración nueva con los mismos datos; la anulada queda en el historial.
+
+¿Por qué no puedo eliminar a un contribuyente?::
+Porque tiene declaraciones (aun anuladas) o cuotas de arbitrios: esa historia no se borra
+(<<proc-eliminar-contribuyente>>).
+
+Ver PU me pide elegir un titular.::
+El predio tiene varios titulares en ese año, y cada uno tiene su propio PU (<<proc-ver-documento>>).
+
+La HR dice que el contribuyente no tiene declaración vigente.::
+Revise el año elegido en la ficha y la pestaña *Declaraciones*: todas las de ese año pueden estar anuladas.
+
+El botón Determinar arbitrios está gris.::
+Su perfil no determina arbitrios: lo hace el área de arbitrios ({m-arbitrios}).
+
+¿Puedo registrar la declaración de un año anterior?::
+Sí: cambie el *Año* en *Datos del predio* antes de presentarla. El selector *Año* de las fichas muestra los últimos
+cinco años.
+
+include::../comun/faq.adoc[]
+
+[appendix]
+[[glosario]]
+== Glosario
+
+Este glosario reúne solo los términos de este manual. El glosario completo está en el {m-admin}.
+
+[glossary]
+Autoavalúo:: Valor del predio (o de uno de sus usos) que el titular declara. Lo escribe el registrador.
+Catastro fiscal:: Registro de los lotes del distrito con su código CPU, su dirección catastral y su polígono.
+Código CPU:: Código del lote en el catastro fiscal; vincula el predio con su lote.
+Código de contribuyente:: Número de seis dígitos que el sistema asigna al inscribir a un contribuyente.
+Código del predio:: Código del predio en el padrón: `SS-MM-NNNN` (sector, manzana y número) o `P-NNNNNN`.
+Condómino:: Cada uno de los titulares de un predio que tiene dos o más en el mismo año y secuencia de uso.
+Condominio:: El conjunto de los titulares vigentes de un predio, año y secuencia de uso.
+Declaración jurada (DJ):: Lo que un titular declara de un predio en un año, en el formulario del impuesto predial.
+Deducción:: Monto que se resta del valor de condominio (por ejemplo, el de un pensionista) para obtener el valor
+afecto. Lo escribe el registrador.
+Descargo:: La anulación de una declaración jurada: queda ANULADA, con motivo DESCARGO, y se conserva.
+Domicilio fiscal:: El domicilio que vale para las notificaciones y los documentos del contribuyente. Hay uno activo.
+Ficha:: La pantalla de un registro (contribuyente, predio, declaración, lote) con sus pestañas.
+Lote:: La porción de terreno del catastro fiscal, con su polígono.
+Motivo:: INSCRIPCION, ACTUALIZACION o DESCARGO: qué le pasó por última vez a una inscripción o declaración.
+Obra complementaria:: Construcción que no es un nivel: cercos, portones, tanques, piscinas, losas.
+Predio:: El inmueble en el padrón tributario.
+Relacionado:: Persona vinculada al contribuyente: cónyuge, representante legal, apoderado, conviviente o heredero.
+Secuencia de uso:: Número (`001`, `002`…) de cada uso de un predio que se declara por separado.
+Titular:: Quien declara un predio en un año: propietario único, sociedad conyugal, poseedor o condómino.
+Transferente:: Quien transfirió el predio al declarante.
+Valor afecto:: Valor de condominio menos la deducción, nunca menor que cero. Es la base del impuesto predial.
+Valor de condominio:: El autoavalúo por el % de propiedad del titular.

@@ -35,7 +35,9 @@ image::{capturas}/comun/busqueda-general.png[Página de resultados con un bloque
 
 Las listas del portal (contribuyentes, predios, cuotas, expedientes, anuncios…) comparten el mismo comportamiento:
 
-* Muestran *20 filas por página*. Los controles de página, al pie de la lista, avanzan y retroceden.
+* Las listas de los módulos muestran *20 filas por página*; las listas dentro de una ficha (domicilios, niveles,
+  condóminos…) muestran 10 y tienen un selector *Filas* para cambiarlo. Los controles de página, al pie de la lista,
+  avanzan y retroceden.
 * Los filtros están sobre la lista. Una lista con caja de búsqueda filtra mientras escribe; una con varios filtros
   tiene un botón btn:[Buscar] que los aplica todos juntos.
 * Una fila se abre con un clic: abre la ficha del registro.

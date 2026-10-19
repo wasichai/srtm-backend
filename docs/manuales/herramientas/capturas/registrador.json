@@ -1,0 +1,1552 @@
+{
+    "_comentario": "Capturas del Manual del registrador (usuario/registrador.adoc), con la cuenta del perfil REGISTRADOR. Ninguna graba: los diálogos se abren y se llenan, pero no se confirman.",
+    "referencias": {
+        "reg_rosa": {
+            "get": "/api/srtm/contribuyentes?q=91000101",
+            "campo": "content.0.id"
+        },
+        "reg_mamani": {
+            "get": "/api/srtm/contribuyentes?q=91000238",
+            "campo": "content.0.id"
+        },
+        "reg_juridica": {
+            "get": "/api/srtm/contribuyentes?q=20999000011",
+            "campo": "content.0.id"
+        },
+        "reg_p0001": {
+            "get": "/api/srtm/predios?q=01-01-0001",
+            "campo": "content.0.id"
+        },
+        "reg_p0004": {
+            "get": "/api/srtm/predios?q=01-01-0004",
+            "campo": "content.0.id"
+        },
+        "reg_p0003": {
+            "get": "/api/srtm/predios?q=01-01-0003",
+            "campo": "content.0.id"
+        },
+        "reg_p0007": {
+            "get": "/api/srtm/predios?q=01-01-0007",
+            "campo": "content.0.id"
+        },
+        "reg_dj_0001": {
+            "get": "/api/srtm/predios/{ref:reg_p0001}/declaraciones?anio=2026",
+            "campo": "0.declaracion.id"
+        },
+        "reg_dj_0004": {
+            "get": "/api/srtm/predios/{ref:reg_p0004}/declaraciones?anio=2026",
+            "campo": "0.declaracion.id"
+        },
+        "reg_dj_0007": {
+            "get": "/api/srtm/predios/{ref:reg_p0007}/declaraciones?anio=2026",
+            "campo": "0.declaracion.id"
+        },
+        "reg_dj_anulada": {
+            "get": "/api/srtm/predios/{ref:reg_p0003}/declaraciones?anio=2026",
+            "campo": "1.declaracion.id"
+        },
+        "reg_lote_0001": {
+            "get": "/api/srtm/catastro?codigo_cpu=1203020101001",
+            "campo": "content.0.id"
+        }
+    },
+    "capturas": [
+        {
+            "id": "registrador-lista-contribuyentes",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/lista-contribuyentes.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes?q=CASTRO"
+                ],
+                [
+                    "esperarTexto",
+                    "CASTRO VARGAS"
+                ]
+            ]
+        },
+        {
+            "id": "registrador-nuevo-contribuyente",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/nuevo-contribuyente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/nuevo"
+                ],
+                [
+                    "elegir",
+                    "[name=tipo_contribuyente]",
+                    "PERSONA NATURAL"
+                ],
+                [
+                    "elegir",
+                    "[name=tipo_documento]",
+                    "DNI"
+                ],
+                [
+                    "llenar",
+                    "#field-numero_documento",
+                    "91009999"
+                ],
+                [
+                    "clic",
+                    "#field-apellido_paterno"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ],
+                [
+                    "llenar",
+                    "#field-apellido_paterno",
+                    "PALOMINO"
+                ],
+                [
+                    "llenar",
+                    "#field-apellido_materno",
+                    "RIVERA"
+                ],
+                [
+                    "llenar",
+                    "#field-nombres",
+                    "TERESA"
+                ],
+                [
+                    "elegir",
+                    "[name=estado_civil]",
+                    "CASADO(A)"
+                ],
+                [
+                    "elegir",
+                    "[name=sexo]",
+                    "MUJER"
+                ],
+                [
+                    "llenar",
+                    "#field-fecha_nacimiento",
+                    "1984-06-21"
+                ],
+                [
+                    "clic",
+                    "[data-ui=banda-titulo]"
+                ],
+                [
+                    "arriba"
+                ],
+                [
+                    "marcar",
+                    "button:has-text('Siguiente')"
+                ]
+            ]
+        },
+        {
+            "id": "registrador-nuevo-juridica",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/nuevo-juridica.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/nuevo"
+                ],
+                [
+                    "elegir",
+                    "[name=tipo_contribuyente]",
+                    "PERSONA JURÍDICA"
+                ],
+                [
+                    "elegir",
+                    "[name=tipo_documento]",
+                    "RUC"
+                ],
+                [
+                    "llenar",
+                    "#field-numero_documento",
+                    "20999000099"
+                ],
+                [
+                    "clic",
+                    "#field-razon_social"
+                ],
+                [
+                    "llenar",
+                    "#field-razon_social",
+                    "AGROINDUSTRIAS EL PERENE S.A.C."
+                ]
+            ],
+            "recorte": "#field-razon_social",
+            "subir": 2,
+            "margen": 6
+        },
+        {
+            "id": "registrador-documento-error",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/documento-error.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/nuevo"
+                ],
+                [
+                    "elegir",
+                    "[name=tipo_documento]",
+                    "DNI"
+                ],
+                [
+                    "llenar",
+                    "#field-numero_documento",
+                    "9100999"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Siguiente')"
+                ],
+                [
+                    "esperarTexto",
+                    "El DNI tiene 8 dígitos"
+                ]
+            ],
+            "recorte": "fieldset:has(legend:has-text('Datos de identificación'))",
+            "margen": 16
+        },
+        {
+            "id": "registrador-inscripcion-domicilios",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/inscripcion-domicilios.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_juridica}?tab=domicilios&inscripcion=1"
+                ],
+                [
+                    "esperarTexto",
+                    "Listado de domicilios"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 620
+            }
+        },
+        {
+            "id": "registrador-domicilio-nuevo",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/domicilio-nuevo.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_rosa}?tab=domicilios"
+                ],
+                [
+                    "clic",
+                    "button[aria-label='Agregar domicilio']"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=tipo_domicilio]",
+                    "REAL"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=tipo_unidad_urbana]",
+                    "URBANIZACION"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=unidad_urbana]",
+                    "VALLE VERDE"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=tipo_via]",
+                    "JR."
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=via]",
+                    "LOS ALISOS"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=numero]",
+                    "300"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=referencia]",
+                    "FRENTE AL MERCADO"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] h2"
+                ],
+                [
+                    "desplazar",
+                    "[role=dialog] h2"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0
+        },
+        {
+            "id": "registrador-domicilio-descripcion",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/domicilio-descripcion.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_rosa}?tab=domicilios"
+                ],
+                [
+                    "clic",
+                    "button[aria-label='Agregar domicilio']"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=tipo_domicilio]",
+                    "REAL"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=tipo_unidad_urbana]",
+                    "URBANIZACION"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=unidad_urbana]",
+                    "VALLE VERDE"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=tipo_via]",
+                    "JR."
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=via]",
+                    "LOS ALISOS"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=numero]",
+                    "300"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=referencia]",
+                    "FRENTE AL MERCADO"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] h2"
+                ],
+                [
+                    "desplazar",
+                    "[role=dialog] button:has-text('Grabar')"
+                ],
+                [
+                    "marcar",
+                    "[role=dialog] button:has-text('Buscar dirección')"
+                ]
+            ],
+            "recorte": "[role=dialog] p:has-text('Descripción del domicilio')",
+            "subir": 2,
+            "margen": 12
+        },
+        {
+            "id": "registrador-ubicar-domicilio",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/ubicar-domicilio.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_rosa}?tab=domicilios"
+                ],
+                [
+                    "clic",
+                    "button[aria-label='Agregar domicilio']"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=tipo_domicilio]",
+                    "REAL"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=tipo_unidad_urbana]",
+                    "URBANIZACION"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=unidad_urbana]",
+                    "VALLE VERDE"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=tipo_via]",
+                    "JR."
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=via]",
+                    "LOS ALISOS"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=numero]",
+                    "300"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=referencia]",
+                    "FRENTE AL MERCADO"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] h2"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] button:has-text('Buscar dirección')"
+                ],
+                [
+                    "esperarTexto",
+                    "Ubicar el domicilio"
+                ],
+                [
+                    "pausa",
+                    "3000"
+                ]
+            ],
+            "recorte": "[role=dialog]:has-text('Ubicar el domicilio')",
+            "margen": 0
+        },
+        {
+            "id": "registrador-relacionados",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/relacionados.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_juridica}?tab=relacionados"
+                ],
+                [
+                    "esperarTexto",
+                    "Listado de relacionados"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        },
+        {
+            "id": "registrador-relacionado-nuevo",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/relacionado-nuevo.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_rosa}?tab=relacionados"
+                ],
+                [
+                    "clic",
+                    "button[aria-label='Agregar relacionado']"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=tipo_relacionado]",
+                    "REPRESENTANTE LEGAL"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0
+        },
+        {
+            "id": "registrador-medios-contacto",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/medios-contacto.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_juridica}?tab=contacto"
+                ],
+                [
+                    "esperarTexto",
+                    "Listado de medios de contacto"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        },
+        {
+            "id": "registrador-sustento",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/sustento.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_juridica}?tab=sustento"
+                ],
+                [
+                    "esperarTexto",
+                    "Listado de documentos sustento"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        },
+        {
+            "id": "registrador-editar-contribuyente",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/editar-contribuyente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_rosa}"
+                ],
+                [
+                    "clic",
+                    "[role=tabpanel] button:has-text('Editar')"
+                ],
+                [
+                    "esperarTexto",
+                    "Guardar cambios"
+                ]
+            ]
+        },
+        {
+            "id": "registrador-eliminar-contribuyente",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/eliminar-contribuyente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_rosa}"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Eliminar')"
+                ],
+                [
+                    "esperarTexto",
+                    "¿Eliminar este contribuyente?"
+                ]
+            ],
+            "recorte": "[role=dialog], [role=alertdialog]",
+            "margen": 16
+        },
+        {
+            "id": "registrador-predios-del-contribuyente",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/predios-del-contribuyente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_rosa}?tab=predios"
+                ],
+                [
+                    "esperarTexto",
+                    "Total 2026"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        },
+        {
+            "id": "registrador-declaraciones-del-contribuyente",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/declaraciones-del-contribuyente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_mamani}?tab=declaraciones"
+                ],
+                [
+                    "esperarTexto",
+                    "Anulada"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        },
+        {
+            "id": "registrador-arbitrios-solo-lectura",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/arbitrios-solo-lectura.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_rosa}?tab=arbitrios"
+                ],
+                [
+                    "esperarTexto",
+                    "Sin permiso"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 700
+            }
+        },
+        {
+            "id": "registrador-lista-predios",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/lista-predios.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios"
+                ],
+                [
+                    "esperarTexto",
+                    "01-01-0001"
+                ]
+            ]
+        },
+        {
+            "id": "registrador-buscar-predios-tributario",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/buscar-predios-tributario.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Buscar predios')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "llenar",
+                    "#filtro-via",
+                    "LOS FRESNOS"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] h2"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] button:text-is('Buscar')"
+                ],
+                [
+                    "esperarTexto",
+                    "01-01-0004"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] tr:has-text('01-01-0004')"
+                ],
+                [
+                    "pausa",
+                    "3000"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0
+        },
+        {
+            "id": "registrador-buscar-predios-catastro",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/buscar-predios-catastro.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Buscar predios')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "clic",
+                    "[role=tab]:has-text('Buscar en Catastro Fiscal')"
+                ],
+                [
+                    "llenar",
+                    "#filtro-via",
+                    "LAS MAGNOLIAS"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] h2"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] button:text-is('Buscar')"
+                ],
+                [
+                    "esperarTexto",
+                    "1203020302007"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] tr:has-text('1203020302007')"
+                ],
+                [
+                    "pausa",
+                    "3000"
+                ],
+                [
+                    "desplazar",
+                    "[role=dialog] button:text-is('Elegir')"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0
+        },
+        {
+            "id": "registrador-buscar-predios-aviso",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/buscar-predios-aviso.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Buscar predios')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] button:text-is('Buscar')"
+                ],
+                [
+                    "esperarTexto",
+                    "Escribe la descripción de la vía"
+                ]
+            ],
+            "recorte": "[role=dialog] button:text-is('Limpiar')",
+            "subir": 1,
+            "margen": 10
+        },
+        {
+            "id": "registrador-nuevo-predio",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/nuevo-predio.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios/nuevo"
+                ],
+                [
+                    "esperarTexto",
+                    "Identificación del predio"
+                ]
+            ]
+        },
+        {
+            "id": "registrador-nuevo-predio-mapa",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/nuevo-predio-mapa.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios"
+                ],
+                [
+                    "clic",
+                    "a:has-text('Nuevo predio')"
+                ],
+                [
+                    "esperarTexto",
+                    "Predio de catastro fiscal"
+                ],
+                [
+                    "desplazar",
+                    "fieldset:has(legend:has-text('Predio de catastro fiscal'))"
+                ],
+                [
+                    "pausa",
+                    "3000"
+                ]
+            ],
+            "recorte": "fieldset:has(legend:has-text('Predio de catastro fiscal'))",
+            "margen": 8
+        },
+        {
+            "id": "registrador-nuevo-predio-desde-lote",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/nuevo-predio-desde-lote.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Buscar predios')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "clic",
+                    "[role=tab]:has-text('Buscar en Catastro Fiscal')"
+                ],
+                [
+                    "llenar",
+                    "#filtro-via",
+                    "LAS MAGNOLIAS"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] h2"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] button:text-is('Buscar')"
+                ],
+                [
+                    "esperarTexto",
+                    "1203020302007"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] tr:has-text('1203020302007')"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] button:text-is('Elegir')"
+                ],
+                [
+                    "esperarTexto",
+                    "Desbloquear"
+                ],
+                [
+                    "pausa",
+                    "1500"
+                ],
+                [
+                    "marcar",
+                    "button:has-text('Desbloquear')"
+                ]
+            ]
+        },
+        {
+            "id": "registrador-ficha-predio",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/ficha-predio.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios/{ref:reg_p0001}"
+                ],
+                [
+                    "esperarTexto",
+                    "Identificación del predio"
+                ]
+            ]
+        },
+        {
+            "id": "registrador-titulares-condominio",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/titulares-condominio.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios/{ref:reg_p0004}?tab=titulares"
+                ],
+                [
+                    "esperarTexto",
+                    "Total 2026"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        },
+        {
+            "id": "registrador-elegir-titular-pu",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/elegir-titular-pu.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios/{ref:reg_p0004}"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Ver PU')"
+                ],
+                [
+                    "esperarTexto",
+                    "Elegir el titular"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ]
+            ],
+            "recorte": "[role=dialog], [role=alertdialog]",
+            "margen": 16
+        },
+        {
+            "id": "registrador-nueva-dj-paso1",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/nueva-dj-paso1.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_rosa}/declaraciones/nueva"
+                ],
+                [
+                    "esperarTexto",
+                    "Datos de la adquisición"
+                ]
+            ]
+        },
+        {
+            "id": "registrador-nueva-dj-sin-contribuyente",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/nueva-dj-sin-contribuyente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/nueva"
+                ],
+                [
+                    "esperarTexto",
+                    "Datos de la adquisición"
+                ]
+            ]
+        },
+        {
+            "id": "registrador-nueva-dj-paso2",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/nueva-dj-paso2.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_rosa}/declaraciones/nueva"
+                ],
+                [
+                    "esperarTexto",
+                    "Datos de la adquisición"
+                ],
+                [
+                    "elegir",
+                    "[name=tipo_adquisicion]",
+                    "COMPRA"
+                ],
+                [
+                    "llenar",
+                    "[id$='field-fecha_adquisicion']",
+                    "2026-03-15"
+                ],
+                [
+                    "llenar",
+                    "[name=folios]",
+                    "3"
+                ],
+                [
+                    "clic",
+                    "label:has-text('MINUTA') input"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Siguiente')"
+                ],
+                [
+                    "esperarTexto",
+                    "Datos de la ubicación del predio"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ],
+                [
+                    "marcar",
+                    "button:has-text('Buscar predios')"
+                ]
+            ]
+        },
+        {
+            "id": "registrador-nueva-dj-predio-con-titular",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/nueva-dj-predio-con-titular.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:reg_rosa}/declaraciones/nueva"
+                ],
+                [
+                    "esperarTexto",
+                    "Datos de la adquisición"
+                ],
+                [
+                    "elegir",
+                    "[name=tipo_adquisicion]",
+                    "COMPRA"
+                ],
+                [
+                    "llenar",
+                    "[id$='field-fecha_adquisicion']",
+                    "2026-03-15"
+                ],
+                [
+                    "llenar",
+                    "[name=folios]",
+                    "3"
+                ],
+                [
+                    "clic",
+                    "label:has-text('MINUTA') input"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Siguiente')"
+                ],
+                [
+                    "esperarTexto",
+                    "Datos de la ubicación del predio"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Buscar predios')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "llenar",
+                    "#filtro-via",
+                    "LOS FRESNOS"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] h2"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] button:text-is('Buscar')"
+                ],
+                [
+                    "esperarTexto",
+                    "01-01-0004"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] tr:has-text('01-01-0004')"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] button:text-is('Elegir')"
+                ],
+                [
+                    "esperarTexto",
+                    "El predio ya tiene titular"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 640
+            }
+        },
+        {
+            "id": "registrador-dj-datos",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/dj-datos.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_0001}"
+                ],
+                [
+                    "esperarTexto",
+                    "Datos de la adquisición"
+                ]
+            ]
+        },
+        {
+            "id": "registrador-dj-asistente",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/dj-asistente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_0007}?tab=transferentes&asistente=1"
+                ],
+                [
+                    "esperarTexto",
+                    "Listado de transferentes"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 420
+            }
+        },
+        {
+            "id": "registrador-dj-transferentes",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/dj-transferentes.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_0007}?tab=transferentes"
+                ],
+                [
+                    "esperarTexto",
+                    "Listado de transferentes"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        },
+        {
+            "id": "registrador-dj-caracteristicas",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/dj-caracteristicas.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_0001}?tab=caracteristicas"
+                ],
+                [
+                    "esperarTexto",
+                    "Características de predio"
+                ]
+            ],
+            "recorte": "[role=tabpanel] form",
+            "margen": 12
+        },
+        {
+            "id": "registrador-dj-niveles",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/dj-niveles.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_0001}?tab=caracteristicas"
+                ],
+                [
+                    "esperarTexto",
+                    "Listado de niveles"
+                ],
+                [
+                    "desplazar",
+                    "h3:has-text('Listado de niveles')"
+                ]
+            ],
+            "recorte": "h3:has-text('Listado de niveles')",
+            "subir": 2,
+            "margen": 10,
+            "vista": {
+                "width": 1760,
+                "height": 1000
+            }
+        },
+        {
+            "id": "registrador-nivel-nuevo",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/nivel-nuevo.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_0001}?tab=caracteristicas"
+                ],
+                [
+                    "clic",
+                    "button[aria-label='Agregar nivel de construcción']"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=anio_construccion]",
+                    "2015"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=mes_construccion]",
+                    "MARZO"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] #field-muros_columnas",
+                    "C"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ],
+                [
+                    "desplazar",
+                    "[role=dialog] h2"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0
+        },
+        {
+            "id": "registrador-dj-obras",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/dj-obras.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_0001}?tab=caracteristicas"
+                ],
+                [
+                    "esperarTexto",
+                    "Listado de obras"
+                ],
+                [
+                    "desplazar",
+                    "h3:has-text('Listado de obras')"
+                ]
+            ],
+            "recorte": "h3:has-text('Listado de obras')",
+            "subir": 2,
+            "margen": 10
+        },
+        {
+            "id": "registrador-obra-nueva",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/obra-nueva.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_0001}?tab=caracteristicas"
+                ],
+                [
+                    "clic",
+                    "button[aria-label='Agregar obra complementaria']"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=tipo_obra]",
+                    "MUROS PERIMÉTRICOS O CERCOS"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] #field-categoria",
+                    "3. MURO DE LADRILLO DE ARCILLA O SIMILAR, TARRAJEADO, AMARRE EN SOGA, CON COLUMNAS DE CONCRETO ARMADO Y/O METÁLICAS QUE INCLUYE CIMENTACIÓN, H: MAYOR A 2.40 M."
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=material]",
+                    "LADRILLO"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] [name=estado_conservacion]",
+                    "BUENO"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=cantidad]",
+                    "1"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] [name=metrado]",
+                    "32.5"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] h2"
+                ],
+                [
+                    "desplazar",
+                    "[role=dialog] h2"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0
+        },
+        {
+            "id": "registrador-dj-condominos",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/dj-condominos.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_0004}?tab=condominos"
+                ],
+                [
+                    "esperarTexto",
+                    "Listado de condóminos"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8,
+            "vista": {
+                "width": 1700,
+                "height": 1000
+            }
+        },
+        {
+            "id": "registrador-agregar-condomino",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/agregar-condomino.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_0004}?tab=condominos"
+                ],
+                [
+                    "clic",
+                    "button[aria-label='Agregar condómino']"
+                ],
+                [
+                    "esperarTexto",
+                    "Agregar condómino"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0
+        },
+        {
+            "id": "registrador-dj-frentes",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/dj-frentes.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_0007}?tab=frentes"
+                ],
+                [
+                    "esperarTexto",
+                    "Listado de otros frentes"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        },
+        {
+            "id": "registrador-anular-declaracion",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/anular-declaracion.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_0001}"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Anular declaración')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] textarea",
+                    "Transferencia del predio: el nuevo propietario presentó su declaración"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0
+        },
+        {
+            "id": "registrador-dj-anulada",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/dj-anulada.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_anulada}"
+                ],
+                [
+                    "esperarTexto",
+                    "Declaración anulada el"
+                ]
+            ]
+        },
+        {
+            "id": "registrador-dj-cambios-pendientes",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/dj-cambios-pendientes.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:reg_dj_0001}"
+                ],
+                [
+                    "llenar",
+                    "[name=folios]",
+                    "4"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ]
+            ],
+            "recorte": "[aria-label='Acciones de la declaración']",
+            "margen": 12
+        },
+        {
+            "id": "registrador-nuevo-lote",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/nuevo-lote.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/catastro/nuevo"
+                ],
+                [
+                    "esperarTexto",
+                    "Datos del lote"
+                ]
+            ]
+        },
+        {
+            "id": "registrador-nuevo-lote-dibujar",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/nuevo-lote-dibujar.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/catastro/nuevo"
+                ],
+                [
+                    "desplazar",
+                    "fieldset:has(legend:has-text('Polígono del lote'))"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Dibujar lote')"
+                ],
+                [
+                    "pausa",
+                    "3000"
+                ]
+            ],
+            "recorte": "fieldset:has(legend:has-text('Polígono del lote'))",
+            "margen": 8
+        },
+        {
+            "id": "registrador-ficha-lote",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/ficha-lote.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Buscar predios')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "clic",
+                    "[role=tab]:has-text('Buscar en Catastro Fiscal')"
+                ],
+                [
+                    "llenar",
+                    "#filtro-codigo_cpu",
+                    "1203020101001"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] button:text-is('Buscar')"
+                ],
+                [
+                    "esperarTexto",
+                    "AVENIDA LOS FRESNOS"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] tr:has-text('1203020101001')"
+                ],
+                [
+                    "clic",
+                    "[role=dialog] a:has-text('Editar lote')"
+                ],
+                [
+                    "esperarTexto",
+                    "Polígono del lote"
+                ],
+                [
+                    "desplazar",
+                    "fieldset:has(legend:has-text('Polígono del lote'))"
+                ],
+                [
+                    "pausa",
+                    "3000"
+                ]
+            ],
+            "recorte": "fieldset:has(legend:has-text('Polígono del lote'))",
+            "margen": 8
+        },
+        {
+            "id": "registrador-pdf-pu",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/pdf-pu.png",
+            "pdf": "/api/srtm/predios/{ref:reg_p0001}/pu?anio=2026&contribuyente={ref:reg_rosa}",
+            "pagina": 1,
+            "resolucion": 100
+        },
+        {
+            "id": "registrador-pdf-hr",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/pdf-hr.png",
+            "pdf": "/api/srtm/contribuyentes/{ref:reg_rosa}/hr?anio=2026",
+            "pagina": 1,
+            "resolucion": 100
+        },
+        {
+            "id": "registrador-pdf-hla",
+            "perfil": "registrador",
+            "archivo": "usuario/registrador/pdf-hla.png",
+            "pdf": "/api/srtm/contribuyentes/{ref:reg_rosa}/hla?anio=2026",
+            "pagina": 1,
+            "resolucion": 100
+        }
+    ]
+}

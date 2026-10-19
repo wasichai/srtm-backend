@@ -55,7 +55,8 @@ image::{capturas}/comun/salir-sin-guardar.png[Diálogo Salir sin guardar con los
 
 Las operaciones que no se pueden deshacer editando el registro (determinar arbitrios, anular una cuota, registrar un
 acta, renovar o cesar un anuncio, entre otras) se confirman en un diálogo que pide una *Observación*: el motivo del
-acto, de 5 a 500 caracteres. La observación queda guardada con el acto y explica después por qué se hizo.
+acto, de 5 a 500 caracteres. La observación queda guardada con el acto y explica después por qué se hizo. La
+anulación de una declaración jurada es distinta: pide un *Motivo de la anulación*, obligatorio y sin largo mínimo.
 
 Si al confirmar se corta la comunicación, el diálogo dice *No hubo respuesta del servidor. Vuelva a intentarlo: el
 acto no se registra dos veces.* Puede volver a pulsar el botón sin miedo a duplicar el acto.

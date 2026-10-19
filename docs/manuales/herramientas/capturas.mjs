@@ -36,9 +36,15 @@ if (!/:(8098|8099)\b/.test(CORE) && !entorno.SRTM_DEMO_PERMITIR_OTRO_CORE) {
   process.exit(2)
 }
 
+// cada argumento es un manual (el nombre de su capturas/<manual>.json), un id o, si no es ninguno de los dos, un
+// perfil: «registrador» es el manual del registrador, no todas las capturas con ese perfil
 const filtro = process.argv.slice(2)
+const manuales = new Set(config.capturas.map((c) => c.manual))
+const ids = new Set(config.capturas.map((c) => c.id))
 const elegidas = config.capturas.filter(
-  (c) => filtro.length === 0 || filtro.includes(c.perfil) || filtro.includes(c.id) || filtro.includes(c.manual),
+  (c) =>
+    filtro.length === 0 ||
+    filtro.some((f) => (manuales.has(f) ? c.manual === f : ids.has(f) ? c.id === f : c.perfil === f)),
 )
 
 async function leerEnv(archivo) {
@@ -113,7 +119,8 @@ async function paso(page, p, refs) {
   const a = args.map((x) => sustituir(x, refs))
   switch (accion) {
     case 'ir':
-      await page.goto(`${UI}${a[0]}`, { waitUntil: 'networkidle' })
+      // load y no networkidle: una página con mapa sigue pidiendo teselas; preparar espera la red con un tope
+      await page.goto(`${UI}${a[0]}`, { waitUntil: 'load' })
       return
     case 'clic':
       await page.locator(a[0]).first().click()
@@ -199,7 +206,7 @@ async function preparar(page) {
   await page
     .waitForFunction(() => !document.querySelector('[aria-busy="true"], .animate-spin'), null, { timeout: 15000 })
     .catch(() => {})
-  await page.waitForLoadState('networkidle')
+  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
 }
 
 async function capturarPdf(c, refs) {
