@@ -55,8 +55,9 @@ ese puerto queda en el loopback del servidor: llega por un túnel, `ssh -N -L 54
 | `SRTM_PIDE_RENIEC_DNI_USUARIO` / `_RUC_USUARIO` / `_PASSWORD` | vacías | credenciales del convenio con la PIDE; nunca en el repositorio |
 | `SRTM_PIDE_RENIEC_URL` / `_TIMEOUT` | `https://ws2.pide.gob.pe/Rest/RENIEC/Consultar` / `5s` | servicio REST "Consultar" y cuánto se espera |
 | `SRTM_CATASTRO_ENABLED` | `false` | valuaciones de catastro-backend para la brecha (ver [Brecha de recaudación](#brecha-de-recaudación)) |
-| `SRTM_CATASTRO_URL` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_TIMEOUT` | `http://localhost:8091` / vacías / `60s` | catastro-backend y su cuenta de servicio `srtm`; el secreto nunca en el repositorio |
-| `SRTM_CATASTRO_ORGANIZACION` | vacía | slug o id de la organización de srtm cuyo catastro es; vacía, ninguna corrida de la brecha empieza |
+| `SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_URL` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_TIMEOUT` | sin entradas / `60s` | el catastro-backend de una organización y su cuenta de servicio `srtm`; `<CLAVE>` es su slug, o cualquiera con `_ORGANIZACION` = su id. El secreto nunca en el repositorio |
+| `SRTM_CATASTRO_URL` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_TIMEOUT` | `http://localhost:8091` / vacías / `60s` | la forma de una sola organización: una entrada más del mapa |
+| `SRTM_CATASTRO_ORGANIZACION` | vacía | slug o id de la organización de esa entrada única; vacía, esa cuenta no se usa |
 
 ### Pasar una base existente a PostGIS
 
@@ -777,18 +778,39 @@ y `Arbitrios.determinar`.
 **Configuración.** srtm lee `GET {url}/api/catastro/valuaciones?anio&page&size=500` (todas las páginas) como la
 cuenta de servicio `srtm` de catastro-backend (rol `SRTM_LECTOR`, la crea su `model/crear_cuenta_srtm.py`). El token
 sale de `POST {url}/api/auth/token {clientId, clientSecret}` y se guarda hasta un minuto antes de `expiresAt` (o
-hasta un 401). Variables: `SRTM_CATASTRO_ENABLED`, `SRTM_CATASTRO_URL`, `SRTM_CATASTRO_CLIENT_ID`,
-`SRTM_CATASTRO_CLIENT_SECRET`, `SRTM_CATASTRO_TIMEOUT` (por petición) y `SRTM_CATASTRO_ORGANIZACION`. Apagado, o sin
-url o cuenta, una corrida no empieza: **409** «Catastro no configurado». Si la cuenta no puede leer alguno de los
+hasta un 401). Apagado (`SRTM_CATASTRO_ENABLED`), o sin ninguna organización con url y cuenta, una corrida no
+empieza: **409** «Catastro no configurado». Si la cuenta no puede leer alguno de los
 cuatro objetos del catastro, catastro responde 403 a todo y la corrida queda FALLIDA con ese estado. Si catastro no
 devuelve ningún ítem del año y el padrón tiene predios, la corrida queda FALLIDA («El catastro no devolvió valuaciones
 de 2026…») en vez de dar todo el padrón por SIN_CATASTRO. Los importes se leen como decimales, nunca como `double`.
 
-**Una organización.** La configuración es de la instalación, no de cada organización: `srtm.catastro.organizacion`
-(`SRTM_CATASTRO_ORGANIZACION`, el slug o el id de la organización de srtm) dice de cuál es ese catastro. Una corrida de
-otra organización responde **409** «Catastro no configurado para esta organización»; sin ella, con el catastro
-encendido, ninguna corrida empieza (**409** «Catastro sin organización: fije srtm.catastro.organizacion…»): nunca se
-cruza en silencio el padrón de una organización con el catastro de otra.
+**Un catastro por organización.** Cada organización de srtm lee su propio catastro-backend: el mapa
+`srtm.catastro.organizaciones.<slug-o-id>` con `url`, `client-id`, `client-secret` y, opcional, `timeout` (si no, el
+de `srtm.catastro.timeout`). srtm guarda un cliente y un token por organización, y una corrida usa el de la
+organización que la lanza. La clave casa como antes: si es un id (UUID), con el id de la organización; si no, con su
+slug, sin distinguir mayúsculas. Por variables de entorno (relaxed binding de Spring) cada propiedad es
+`SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_<PROPIEDAD>`; la clave llega en minúsculas y sin guiones, así que un id o un
+slug con guion va en `organizacion`, bajo una clave cualquiera. Dos organizaciones, Perené por su slug e Ica por su id:
+
+```bash
+SRTM_CATASTRO_ENABLED=true
+SRTM_CATASTRO_ORGANIZACIONES_PERENE_URL=http://catastro-perene:8091
+SRTM_CATASTRO_ORGANIZACIONES_PERENE_CLIENT_ID=<clientId de la cuenta srtm del catastro de Perené>
+SRTM_CATASTRO_ORGANIZACIONES_PERENE_CLIENT_SECRET=<clientSecret>
+SRTM_CATASTRO_ORGANIZACIONES_ICA_ORGANIZACION=<id de la organización de srtm de Ica>
+SRTM_CATASTRO_ORGANIZACIONES_ICA_URL=http://catastro-ica:8091
+SRTM_CATASTRO_ORGANIZACIONES_ICA_CLIENT_ID=<clientId de la cuenta srtm del catastro de Ica>
+SRTM_CATASTRO_ORGANIZACIONES_ICA_CLIENT_SECRET=<clientSecret>
+SRTM_CATASTRO_ORGANIZACIONES_ICA_TIMEOUT=90s
+```
+
+La forma de antes, de una sola organización (`SRTM_CATASTRO_URL`, `_CLIENT_ID`, `_CLIENT_SECRET`, `_TIMEOUT` y
+`SRTM_CATASTRO_ORGANIZACION` con su slug o su id), sigue valiendo: es una entrada más del mapa, y una entrada del mapa
+para la misma organización la reemplaza. Sin `SRTM_CATASTRO_ORGANIZACION` esa cuenta no es de nadie y no se usa. Una
+entrada sin url, client-id o client-secret se salta (con un aviso en el log al arrancar). Una organización sin
+catastro responde **409** `SIN_CATASTRO_CONFIGURADO` («Catastro no configurado para esta organización: fije
+srtm.catastro.organizaciones.<slug o id>…»), y una nombrada dos veces, por su slug y por su id, **409** «Catastro
+configurado dos veces para esta organización»: nunca se cruza el padrón de una organización con el catastro de otra.
 
 **Cruce** (D7). Cada ítem del catastro busca su predio: por código municipal (`predio.codigo`), si no por código CPU
 (`codigo_cpu`), si no por sector, manzana y lote (`sector_catastral`, `manzana_catastral`, `lote`), sin distinguir
@@ -877,7 +899,7 @@ lectura ve el panel con 403. Lanzar una corrida queda para quien tenga creación
 
 | Método | Ruta | Responde |
 |---|---|---|
-| POST | `/api/srtm/brecha/corridas` `{anio}` | 202 con la corrida; 400 año inválido; 403; 409 catastro no configurado o corrida en curso. |
+| POST | `/api/srtm/brecha/corridas` `{anio}` | 202 con la corrida; 400 año inválido; 403; 409 catastro no configurado (para la organización) o corrida en curso. |
 | GET | `/api/srtm/brecha/corridas?anio` | Las corridas, la más reciente primero. |
 | GET | `/api/srtm/brecha/corridas/{id}` | Una corrida, con su avance (`totalPredios`, `procesados`). |
 | GET | `/api/srtm/brecha/{anio}/panel?corrida` | KPIs, por categoría y por sector de la última corrida TERMINADA del año (o de `corrida`); 404 si no hay. |
