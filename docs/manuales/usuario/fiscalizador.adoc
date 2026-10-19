@@ -1,0 +1,1290 @@
+= Manual del fiscalizador: Infracciones administrativas y sanciones
+Municipalidad Distrital de Perené
+include::../atributos.adoc[]
+:description: Manual de usuario de {producto} ({sigla}) para el perfil {p-fiscalizador}: CUIS, notificaciones previas, actas de constatación, descargos, resoluciones y su notificación.
+:keywords: srtm, rentas municipales, fiscalizador, infracciones, CUIS, acta de constatación, notificación previa, descargo, RIS, RGR, multa
+
+[abstract]
+Este manual explica, paso a paso, cómo se lleva en {producto} ({sigla}) el procedimiento sancionador de las
+infracciones administrativas: consultar y mantener el cuadro único de infracciones y sanciones (CUIS), registrar las
+notificaciones previas y su subsanación, levantar el acta de constatación con su multa, registrar los descargos del
+administrado, dictar las resoluciones de sanción y de recurso, y registrar su notificación hasta que la multa es
+exigible. Está escrito para el personal de fiscalización con el perfil {p-fiscalizador}, que no necesita saber nada del
+funcionamiento interno del sistema. Todas las pantallas que se muestran son reales y se tomaron con datos ficticios,
+salvo el CUIS, que es el catálogo público de Perené.
+
+[[presentacion]]
+== Presentación
+
+[[presentacion-sistema]]
+=== Para qué sirve el sistema
+
+{producto} ({sigla}), el {producto-largo} de la {municipalidad}, reúne en un solo portal web el padrón de
+contribuyentes y predios, las declaraciones juradas, los arbitrios, los anuncios y las infracciones administrativas.
+En el módulo de infracciones, el sistema guarda cada acto del procedimiento en su orden, calcula la multa con el CUIS y
+la unidad impositiva tributaria (UIT) del día de la infracción, cuenta los plazos en días hábiles y dice en qué fase
+está cada expediente. Lo que no hace es cobrar: la multa queda determinada en el sistema y su cobranza se lleva fuera
+de él (<<despues>>).
+
+[[presentacion-manual]]
+=== Para qué sirve este manual y a quién se dirige
+
+Este manual es para quien fiscaliza y tramita el procedimiento sancionador: inspectores, personal de la subgerencia
+de fiscalización y quien registra las resoluciones de la gerencia. Supone que usted conoce el procedimiento (qué es
+una notificación previa, un descargo o una resolución de sanción), pero no el sistema. Cada capítulo responde a una
+pregunta de trabajo: qué multa corresponde a esta infracción, cómo registro el acta, cómo registro el descargo, cómo
+dicto la resolución, desde cuándo es exigible.
+
+En la demostración con la que se tomaron las capturas, este trabajo lo hace el perfil sugerido *{p-fiscalizador}*
+(«Fiscalización e infracciones»). La municipalidad puede definir otros roles con otros nombres: lo que cuenta es qué
+permisos tiene su cuenta (<<permisos-usuario>>). Con el perfil {p-fiscalizador}, usted puede:
+
+* consultar el CUIS vigente a cualquier fecha y registrar versiones nuevas de sus códigos;
+* registrar notificaciones previas y su subsanación, y consultar las vencidas;
+* registrar actas de constatación y anularlas;
+* registrar descargos y recursos, dictar resoluciones de sanción (RIS) y de recurso (RGR), ver su PDF y registrar su
+  notificación;
+* consultar, sin modificar, los contribuyentes y predios, y las infracciones de cada uno.
+
+[[presentacion-alcance]]
+=== Qué cubre y qué no
+
+.Alcance de este manual
+[cols="2,3",options="header"]
+|===
+|Tema |Dónde se explica
+|El CUIS, las notificaciones previas, las actas, los descargos, las resoluciones y su notificación |Este manual.
+|Los plazos y feriados que el sistema usa para contar los días |Este manual los muestra (<<escalas>>); los carga el
+administrador ({m-admin}).
+|La cobranza de la multa, la resolución de multa y la ejecución coactiva |No están en el sistema (<<despues>>).
+|Contribuyentes, predios y declaraciones juradas |{m-registrador}.
+|Anuncios y propaganda, y su tasa |{m-anuncios}.
+|Cuentas de usuario, roles, la UIT y los demás parámetros |{m-admin}.
+|===
+
+NOTE: Los perfiles de este manual son los de la demostración. Si su cuenta tiene un rol distinto, algunas acciones
+pueden aparecer deshabilitadas con la línea *Sin permiso: …* (<<permisos-usuario>>), o habilitadas otras que este
+manual no describe.
+
+[[presentacion-leer]]
+=== Cómo leer los procedimientos
+
+Cada tarea importante se describe con el mismo formato:
+
+[horizontal]
+Recuadro inicial:: El *objetivo* de la tarea y los *requisitos previos*: lo que debe tener a mano o haber hecho antes.
+Pasos numerados:: Lo que usted hace, en orden, con el rótulo exacto de cada botón y campo. Las capturas acompañan
+al paso que muestran.
+Resultado esperado:: Lo que debe ver cuando la tarea terminó bien.
+Verificación:: Cómo comprobar, en otra pantalla, que quedó registrado.
+Casos especiales:: Lo que puede pasar fuera del camino habitual y qué hacer.
+
+[[presentacion-convenciones]]
+=== Convenciones tipográficas
+
+.Convenciones de este manual
+[cols="1,2",options="header"]
+|===
+|Se escribe así |Significa
+|btn:[Registrar acta] |Un botón de la pantalla, con su rótulo exacto.
+|menu:Infracciones[Nueva acta] |Una ruta de navegación: el módulo del riel y, luego, el trámite.
+|kbd:[Enter] |Una tecla.
+|*Actos del expediente*, *Código CUIS* |Una sección, una columna o un campo, en negrita.
+|`AC-2026-0001` |Un valor que se escribe o que el sistema muestra tal cual.
+|===
+
+Los avisos tienen cuatro niveles: *Nota* (información complementaria), *Consejo* (una recomendación),
+*Precaución* (afecta a muchos registros o es difícil de revertir) y *Advertencia* (no se puede deshacer).
+
+[[presentacion-siglas]]
+=== Siglas
+
+.Siglas que usa este manual
+[cols="1,4",options="header"]
+|===
+|Sigla |Significado
+|CUIS |Cuadro único de infracciones y sanciones: los códigos de infracción con su multa y su base legal.
+|UIT |Unidad impositiva tributaria. Las multas del CUIS son un porcentaje de la UIT.
+|RIS |Resolución de sanción: la resolución administrativa que sanciona el acta. Una por acta.
+|RGR |Resolución de recurso: la que resuelve un descargo o un recurso del administrado. Una por descargo.
+|DNI, RUC |Documento nacional de identidad; registro único de contribuyentes.
+|TUO |Texto único ordenado. La Ley 27444 es la Ley del Procedimiento Administrativo General.
+|===
+
+[[presentacion-datos]]
+=== Los datos de las capturas
+
+Las capturas se tomaron en una base de demostración. El CUIS es el de Perené (la Ordenanza Municipal N.° 006-2026-MDP:
+248 códigos vigentes desde el 7 de mayo de 2026), con la UIT 2026 de S/ 5,500.00. Los plazos (5 y 15 días hábiles) y
+los feriados cargados son datos de demostración, y las personas, los documentos y los expedientes son *ficticios*. El
+«hoy» de la
+demostración es el 20 de octubre de 2026. Varios casos se repiten a lo largo del manual:
+
+* el acta `AC-2026-0001`, que nació de la notificación previa `NP-2026-0001`, vencida, y aún no tiene más actos;
+* el acta `AC-2026-0002`, anulada;
+* el acta `AC-2026-0003`, de BODEGA LA ORQUIDEA E.I.R.L., con un descargo, su resolución de sanción
+  `RIS-2026-000001` y la notificación de esa resolución;
+* la notificación `NP-2026-0002`, subsanada, y la `NP-2026-0003`, que vence hoy.
+
+Las capturas usan el tema *Portal tributario* (<<temas>>).
+
+include::../comun/acceso.adoc[]
+
+include::../comun/interfaz.adoc[]
+
+include::../comun/busqueda.adoc[]
+
+include::../comun/mensajes.adoc[]
+
+[[procedimiento]]
+== El procedimiento sancionador en el sistema
+
+[[procedimiento-piezas]]
+=== Las piezas del expediente
+
+Un expediente de infracción gira alrededor de su *acta de constatación* (en el sistema también se la llama papeleta).
+Antes del acta puede haber una *notificación previa*, que da al administrado un plazo para subsanar. Después del acta
+vienen, en este orden, los *descargos* del administrado, las *resoluciones* de la gerencia y la *notificación* de cada
+resolución. El acta también puede *anularse* (<<ciclo-acta>>).
+
+[[ciclo-acta]]
+.El ciclo de un acta en el sistema
+image::{diagramas}/ciclo-acta.{diagext}[Diagrama: la notificación previa se subsana o sigue hasta el acta; el acta también nace de una constatación directa; del acta salen la anulación, el descargo y la resolución RIS o RGR; la resolución se notifica y queda exigible desde una fecha en días hábiles; la cobranza y la coactiva quedan fuera de SRTM,role=diagrama]
+
+Algunas precisiones sobre el diagrama:
+
+* Una notificación previa *subsanada* ya no origina un acta. Una que no está subsanada sí, aunque su plazo no haya
+  vencido todavía: mientras ese plazo corre, el expediente está en fase *Preventiva* (<<fases>>).
+* Un acta sin notificación previa (una *constatación directa*) es igual de válida.
+* La resolución RIS sanciona el acta; la RGR resuelve un descargo. Las dos se notifican igual.
+* El orden es legal: el sistema no deja fechar un acto antes del que lo origina ni después de hoy
+  (<<orden-actos>>).
+
+Ningún acto se edita ni se borra después de registrado. Cada uno se confirma con una *Observación* que explica por qué
+se hace (<<actos>>).
+
+[[fases]]
+=== Fase del procedimiento y estado de la deuda
+
+En las listas y en la ficha de cada expediente, el sistema muestra dos datos distintos, uno al lado del otro. Los dos
+se calculan cada vez, a la fecha que se indica en la columna (*Fase al 20/10/2026*): nadie los escribe.
+
+.Fase del procedimiento
+[cols="1,3",options="header"]
+|===
+|Fase |Cuándo
+|Preventiva |El acta nació de una notificación previa que, a esa fecha, no está subsanada ni vencida.
+|Constatada |El acta está registrada y aún no tiene su resolución de sanción (RIS).
+|Sancionada |El acta tiene su RIS. Una RGR no sanciona: no cambia la fase.
+|— |El acta está anulada o una resolución dejó sin efecto la multa. El estado de la deuda dice cuál.
+|===
+
+.Estado de la deuda
+[cols="1,3",options="header"]
+|===
+|Estado |Cuándo
+|Pendiente |La multa sigue en pie.
+|Anulada |El acta se anuló (<<proc-anular>>).
+|Dejada sin efecto |Alguna resolución, de cualquier tipo, dejó sin efecto la multa (<<fallo>>).
+|===
+
+NOTE: El sistema no conoce los estados «pagada» ni «en coactiva»: no registra pagos ni la ejecución coactiva
+(<<despues>>).
+
+[[plazos]]
+=== Cómo cuenta los días el sistema
+
+Tres plazos distintos intervienen en el procedimiento, y el sistema los cuenta solo:
+
+[horizontal]
+Notificación previa:: En *días calendario*. Vence el día que resulta de sumar el plazo a su fecha: una notificación del
+13/10/2026 con 7 días vence el 20/10/2026. Ese último día todavía vale; desde el día siguiente está vencida. Sin plazo,
+no vence nunca.
+Descargo:: En *días hábiles*, con el `PLAZO DESCARGO_PAPELETA` vigente el día de la infracción. El sistema toma el día
+hábil siguiente a la infracción y cuenta, a partir de él, los días del plazo. Con 5 días, una infracción del lunes
+06/07/2026 admite descargos hasta el martes 14/07/2026.
+Exigibilidad de una resolución:: En *días hábiles*, con el `PLAZO RG_RECURSO` vigente el día de la diligencia. La
+notificación surte efecto el día hábil siguiente a la diligencia; desde ahí corren los días del plazo para recurrir, y
+la resolución es exigible desde el día siguiente al último (<<exigible>>).
+
+Son días hábiles los de lunes a viernes que no son feriados nacionales ni feriados del año cargados en el sistema
+(`FERIADOS <año>`). Los plazos y los feriados son parámetros que carga el administrador; usted los consulta en
+menu:Infracciones[Escalas y plazos] (<<plazos-cargados>>). Si falta alguno, el acto que lo necesita no se registra y el
+mensaje dice qué falta (por ejemplo, `FERIADOS 2027`).
+
+[[no-implementado]]
+=== Lo que el sistema no hace
+
+Para que no lo busque en la pantalla:
+
+* *No cobra.* La multa queda determinada en el acta, pero el sistema no emite órdenes de pago, no registra pagos ni
+  lleva la ejecución coactiva (<<despues>>).
+* *No reduce multas.* El efecto «Se reduce la multa» aparece en la lista, pero deshabilitado: no hay regla de
+  reducción mientras la ordenanza no la fije (<<fallo>>).
+* *No aplica beneficios.* La fila *Con beneficio* del desglose de la multa siempre está vacía (—).
+* *No firma ni redacta.* El PDF de la resolución sale sin firma digital, para firmarlo a mano, y con los considerandos
+  reservados para que los provea la municipalidad (<<pdf-resolucion>>).
+* *No edita actos.* Un acta, una notificación, un descargo o una resolución registrados no se corrigen: se anula el
+  acta y se registra otra (<<corregir-acta>>).
+
+[[modulo]]
+=== El módulo Infracciones
+
+Todos los trámites de este manual están en el módulo *Infracciones* del riel (<<fig-riel-infracciones>>). Las cinco
+páginas del módulo se enlazan también entre sí con la fila de enlaces que tienen arriba: *Expedientes*, *Nueva acta*,
+*Notificaciones previas*, *CUIS* y *Escalas y plazos*.
+
+[[fig-riel-infracciones]]
+.El panel del módulo Infracciones
+image::{capturas}/usuario/fiscalizador/riel.png[Riel de módulos con el panel Infracciones administrativas abierto: Expedientes, Nueva acta, Notificaciones previas, CUIS y Escalas y plazos,600,align=center]
+
+[[cuis]]
+== El cuadro único de infracciones y sanciones (CUIS)
+
+[[cuis-que-es]]
+=== El CUIS en el sistema
+
+El CUIS reúne los códigos de infracción de la ordenanza. Cada código tiene su descripción, su materia (el área o el
+tema: «Contaminación visual», «Publicidad de comercios»…), el porcentaje de la UIT que se cobra (*% UIT*), y si la
+ordenanza los fija, los porcentajes para la segunda y la tercera vez; su medida complementaria (clausura, decomiso…) y
+su base legal.
+
+Cada código tiene *versiones*, cada una con su vigencia. Un cambio de la ordenanza no corrige la fila del código:
+agrega una versión nueva que rige desde una fecha, y la anterior queda cerrada el día antes. Por eso el CUIS siempre se
+consulta *a una fecha*, y un acta usa siempre la versión vigente el día de la infracción.
+
+[[proc-consultar-cuis]]
+=== Consultar el CUIS vigente a una fecha
+
+[[proc-consultar-cuis-pasos]]
+.Consultar el CUIS
+====
+[horizontal]
+Objetivo:: Ver qué códigos rigen en una fecha y cuánto es su multa.
+Requisitos previos:: Ninguno.
+====
+
+. Elija menu:Infracciones[CUIS]. La página muestra el CUIS vigente hoy (<<fig-cuis>>).
+. Para otra fecha, cambie *Vigentes al*. Para afinar, escriba parte de la *Materia* o, en *Código o descripción*,
+  un código o una palabra de la descripción.
+. Pulse btn:[Buscar].
++
+[[fig-cuis]]
+.El CUIS vigente al 20/10/2026, con sus multas a la UIT 2026
+image::{capturas}/usuario/fiscalizador/cuis.png[Página CUIS con los filtros Vigentes al, Materia y Código o descripción, la línea Multas a la UIT 2026 y la tabla de códigos con su porcentaje, su multa, la medida, la vigencia y la base legal]
+
+// fin de los pasos
+Resultado esperado:: Sobre la tabla, la línea *Multas a la UIT 2026 (S/ 5,500.00), vigente al 20/10/2026* dice con qué
+UIT se calcularon las multas. La tabla muestra, por código, *% UIT*, *Multa S/* (la de la primera vez), *2ª vez* y
+*3ª vez*, la *Medida*, la *Vigencia* de esa versión y su *Base legal*.
+Casos especiales::
+* *—* en una columna de multa: la ordenanza no fija el porcentaje de esa vez (al pasar el ratón dice «El CUIS no fija
+  el % de esta vez»), o no hay UIT para esa fecha («Sin UIT a la fecha»). En el CUIS de Perené cargado en la
+  demostración, ningún código fija los porcentajes de segunda y tercera vez.
+* *Al … falta: UIT 2025*: no hay UIT cargada para esa fecha y no se calculan las multas. Avise al administrador.
+* *Ningún código vigente al …*: en esa fecha no regía ningún código (<<fig-cuis-2025>>). En la demostración, el CUIS
+  rige desde el 07/05/2026.
+
+[[fig-cuis-materia]]
+.Los códigos de una materia
+image::{capturas}/usuario/fiscalizador/cuis-materia.png[Tabla del CUIS filtrada por la materia Publicidad de comercios, con los códigos 240 a 245, su porcentaje, su multa, el decomiso como medida y la base legal]
+
+[[fig-cuis-2025]]
+.El CUIS a una fecha en que no regía ningún código
+image::{capturas}/usuario/fiscalizador/cuis-2025.png[Página CUIS con Vigentes al 01/06/2025, la línea Multas a la UIT 2025 y el aviso Ningún código vigente al 01/06/2025]
+
+[[cuis-multa]]
+=== Cómo se calcula la multa de un código
+
+La multa es un porcentaje de la UIT vigente el día de la infracción:
+
+[horizontal]
+Primera vez:: UIT × *% UIT* ÷ 100. Con la UIT 2026 (S/ 5,500.00), el código `070` (5 %) da S/ 275.00 y el `202`
+(100 %) da S/ 5,500.00.
+Segunda y tercera vez:: UIT × el porcentaje de esa vez ÷ 100, solo si la ordenanza lo fija. Si no lo fija, el
+sistema no cobra el de otra vez: el acta no se registra con ese grado (<<proc-registrar-acta>>).
+
+// fin de los pasos
+El resultado se redondea al céntimo una sola vez. La columna *Multa S/* de esta página es la de hoy (o la de la fecha
+consultada); la de un acta se calcula al registrarla y ya no cambia (<<multa-congelada>>).
+
+[[cuis-versiones]]
+=== Versiones y vigencia
+
+Las reglas de las versiones:
+
+* Una versión nueva empieza *después* de la que está vigente. La vigente se cierra sola el día anterior al que empieza
+  la nueva.
+* Ninguna versión se edita después de registrada. Si una se registró mal, se corrige con otra versión posterior.
+* Un acta ya registrada sigue con la versión que usó, con sus cifras: una versión nueva no la cambia.
+* Un acta nueva usa la versión vigente el día *de la infracción*, no la última. Una versión que rige desde el
+  01/01/2027 no afecta a las infracciones de 2026.
+* Un código derogado deja de aparecer desde el día siguiente a su derogación y puede volver con una versión nueva
+  posterior.
+
+[[proc-version-cuis]]
+=== Registrar una versión nueva de un código
+
+[[proc-version-cuis-pasos]]
+.Registrar una versión nueva de un código del CUIS
+====
+[horizontal]
+Objetivo:: Registrar el cambio que una ordenanza hace en un código: su porcentaje, su descripción, su medida o su base
+legal.
+Requisitos previos:: La norma, con la fecha desde la que rige el cambio. Permiso de creación sobre los códigos de
+infracción.
+====
+
+. En menu:Infracciones[CUIS], busque el código (por ejemplo, `070` en *Código o descripción*) y pulse
+  btn:[Buscar].
+. En su fila, pulse btn:[Nueva versión]. Se abre *Nueva versión de 070*, con los datos de la versión vigente copiados
+  (<<fig-cuis-nueva-version>>). El *Código* no se cambia.
+. Escriba en *Vigente desde* el día en que empieza a regir el cambio.
+. Cambie lo que dispone la norma: *Descripción*, *Materia*, *% UIT*, *% UIT 2ª vez*, *% UIT 3ª vez*, *Medida
+  complementaria* o *Base legal*. *Descripción*, *% UIT* y *Base legal* son obligatorios.
+. Escriba la *Observación*: por qué se versiona, de 5 a 500 caracteres (<<actos>>).
++
+[[fig-cuis-nueva-version]]
+.Una versión nueva del código 070, desde el 01/01/2027
+image::{capturas}/usuario/fiscalizador/cuis-nueva-version.png[Diálogo Nueva versión de 070 con la explicación del cierre de la versión vigente, el código en gris, Vigente desde 01/01/2027, la descripción, la materia, los porcentajes con 10 en % UIT, la medida, la base legal y la observación,460,align=center]
+. Pulse btn:[Crear versión].
+
+// fin de los pasos
+Resultado esperado:: El diálogo dice *Versión de 070 vigente desde el 01/01/2027. Se cerró la anterior (desde el
+07/05/2026): vigente hasta el 31/12/2026.* Pulse btn:[Cerrar].
+Verificación:: Consulte el CUIS con *Vigentes al* en una fecha de cada versión: cada una muestra la suya.
+Casos especiales::
+* *La versión nueva de 070 rige desde el …: no es posterior a la del …*: la fecha no es posterior al inicio de la
+  versión vigente. Una versión nunca pisa a otra.
+* *La versión de 070 desde el … ya existe: un cambio es una versión nueva, con otra vigencia_desde*: ya hay una versión
+  de ese código que empieza ese día.
+* Si la nueva rige desde una fecha pasada, las actas *ya registradas* de esas fechas conservan la versión anterior;
+  las que registre desde ahora con una infracción de esas fechas usarán la nueva.
+
+CAUTION: Revise la fecha *Vigente desde* antes de crear la versión: la versión no se edita y la anterior queda cerrada.
+
+[[proc-codigo-nuevo]]
+=== Registrar un código nuevo
+
+btn:[Nuevo código], arriba a la derecha de la página *CUIS*, abre *Nuevo código del CUIS* con los mismos campos, en
+blanco, y el *Código* editable. Se usa para un código que la ordenanza agrega. Si el código que escribe ya tiene una
+versión vigente, el diálogo hace lo mismo que btn:[Nueva versión]: la cierra el día anterior al que empiece la nueva.
+El código se guarda en mayúsculas.
+
+[[cuis-derogar]]
+=== Derogar un código
+
+El portal no tiene un botón para derogar un código sin darle una versión nueva. La derogación (que un código deje de
+regir desde una fecha, como cuando una ordenanza reemplaza todo el cuadro) la registra el administrador al cargar el
+CUIS de la ordenanza ({m-admin}). Para usted, el efecto se ve al consultar: el código ya no aparece en las fechas
+posteriores a su derogación, y la lista de *Código CUIS* del acta no lo ofrece para esas fechas.
+
+[[notificaciones]]
+== Notificaciones previas
+
+[[notificacion-que-es]]
+=== La notificación previa
+
+La notificación previa es el aviso que el inspector entrega antes del acta, con un plazo para que el administrado
+corrija la situación. Se registra con el *número del formulario* que se entregó, la fecha, la dirección, el motivo y el
+plazo en días. Si el administrado corrige a tiempo, se registra su *subsanación* y la notificación ya no origina un
+acta. Si no, el acta puede nombrarla como su origen (<<proc-registrar-acta>>).
+
+[[proc-consultar-notificaciones]]
+=== Consultar las notificaciones previas
+
+Elija menu:Infracciones[Notificaciones previas]. La lista muestra las notificaciones, la más reciente primero, tal
+como estaban el día de *Vencidas al* (hoy, por omisión) (<<fig-notificaciones>>).
+
+[[fig-notificaciones]]
+.Notificaciones previas al 20/10/2026
+image::{capturas}/usuario/fiscalizador/notificaciones.png[Página Notificaciones previas con los filtros Número, Contribuyente, Desde, Hasta y Vencidas al, y tres notificaciones: una no vencida con el botón Subsanar, una subsanada y una con acta, ambas con Subsanar deshabilitado y su motivo]
+
+.Columnas de la lista de notificaciones previas
+[cols="1,3",options="header"]
+|===
+|Columna |Qué dice
+|Número, Fecha |El número del formulario y la fecha en que se notificó.
+|Administrado |El contribuyente notificado; su nombre abre su ficha.
+|Dirección, Motivo |Dónde se notificó y por qué.
+|Plazo |Los días que se dieron, o *Sin plazo*.
+|Vencimiento |El último día del plazo, o *No vence*.
+|Vencida al … |*Vencida*, *No vencida* o *Sin plazo*, a la fecha de *Vencidas al*.
+|Subsanada |La fecha de la subsanación, o *No*.
+|Acta |El acta que nació de ella (abre el expediente), o *—*.
+|Acciones |El botón btn:[Subsanar] y, si no se puede, por qué.
+|===
+
+Con los filtros puede buscar por *Número* (el número completo, sin distinguir mayúsculas), por *Contribuyente* (escriba su DNI, RUC o nombre y elíjalo
+de la lista), por la fecha de la notificación (*Desde*, *Hasta*), y mirar la lista *a otra fecha*: con *Vencidas al*
+en un día pasado, cada notificación se muestra como estaba ese día. Las notificadas después de ese día no aparecen, y
+una subsanación o un acta posteriores todavía no cuentan (<<fig-notificaciones-al>>).
+
+[[fig-notificaciones-al]]
+.Las mismas notificaciones vistas al 06/10/2026
+image::{capturas}/usuario/fiscalizador/notificaciones-al.png[Lista con Vencidas al 06/10/2026: NP-2026-0002 no vencida porque su plazo vence ese mismo día y NP-2026-0001 vencida con su acta AC-2026-0001; NP-2026-0003 no aparece porque aún no existía]
+
+NOTE: La columna *Vencida al …* dice solo si el plazo ya pasó a esa fecha; no mira la subsanación. Una notificación
+subsanada a tiempo, como `NP-2026-0002`, aparece *Vencida* una vez pasado su plazo: mire también la columna
+*Subsanada*.
+
+[[proc-registrar-notificacion]]
+=== Registrar una notificación previa
+
+[[proc-registrar-notificacion-pasos]]
+.Registrar una notificación previa
+====
+[horizontal]
+Objetivo:: Dejar constancia de la notificación previa que se entregó al administrado.
+Requisitos previos:: El cargo de la notificación, con su número, fecha, dirección, motivo y plazo. Permiso de creación
+sobre las notificaciones administrativas.
+====
+
+. En menu:Infracciones[Notificaciones previas], pulse btn:[Nueva notificación]. Se abre *Nueva notificación previa*
+  (<<fig-notificacion-nueva>>).
+. Escriba el *Número* del formulario y la *Fecha* en que se notificó (hoy, por omisión).
+. Si conoce al notificado, elíjalo en *Contribuyente*: escriba su DNI, RUC o nombre y pulse el que corresponde en la
+  lista. Puede elegir también el *Predio* (por su código o su dirección). Los dos son opcionales; btn:[Quitar] deshace
+  la elección.
+. Escriba la *Dirección* donde se notificó y el *Motivo*.
+. Escriba el *Plazo en días* (calendario) que se dio para subsanar. En blanco, la notificación no vence nunca.
+. Escriba la *Observación* (de 5 a 500 caracteres).
++
+[[fig-notificacion-nueva]]
+.El diálogo Nueva notificación previa
+image::{capturas}/usuario/fiscalizador/notificacion-nueva.png[Diálogo Nueva notificación previa con el número NP-2026-0004, la fecha, el contribuyente y el predio elegidos, la dirección, el motivo, el plazo de 10 días y la observación,460,align=center]
+. Pulse btn:[Registrar].
+
+// fin de los pasos
+Resultado esperado:: El diálogo dice, por ejemplo, *Notificación NP-2026-0004 del 19/10/2026 registrada. Vence el
+29/10/2026.* (o *Sin plazo: no vence.*). Pulse btn:[Cerrar].
+Verificación:: La notificación aparece primera en la lista.
+Casos especiales::
+* *La notificación NP-2026-0004 ya está registrada: el número no se repite*: ese número ya existe. El número se guarda
+  en mayúsculas, así que `np-2026-0004` y `NP-2026-0004` son el mismo.
+* *… no puede fecharse el …: es posterior a hoy*: una notificación no se registra con fecha futura.
+* Una notificación no se edita ni se borra. Si registró un dato mal, avise a su jefatura: el portal no tiene cómo
+  corregirla.
+
+[[proc-subsanar]]
+=== Registrar la subsanación
+
+[[proc-subsanar-pasos]]
+.Registrar la subsanación de una notificación previa
+====
+[horizontal]
+Objetivo:: Dejar constancia de que el administrado corrigió lo notificado dentro del plazo.
+Requisitos previos:: La notificación registrada, sin subsanar, sin acta y no vencida a la fecha de la subsanación.
+Permiso de creación sobre las subsanaciones.
+====
+
+. En la lista de notificaciones previas, pulse btn:[Subsanar] en la fila de la notificación. Se abre *Subsanar la
+  notificación …*, que recuerda su fecha y su vencimiento (<<fig-subsanar>>).
+. En *Fecha de la subsanación*, escriba el día en que el administrado subsanó. En blanco, se toma hoy.
+. Escriba la *Observación*: qué presentó o qué se constató.
++
+[[fig-subsanar]]
+.El diálogo de la subsanación
+image::{capturas}/usuario/fiscalizador/subsanar.png[Diálogo Subsanar la notificación NP-2026-0003 con su fecha y su vencimiento, el campo Fecha de la subsanación en blanco y la observación,460,align=center]
+. Pulse btn:[Subsanar].
+
+// fin de los pasos
+Resultado esperado:: El diálogo se cierra y la columna *Subsanada* muestra la fecha.
+Verificación:: El botón btn:[Subsanar] de esa fila queda deshabilitado, con *Ya se subsanó el …*. La notificación ya
+no aparece entre las que puede nombrar un acta nueva.
+Casos especiales::
+* btn:[Subsanar] deshabilitado, con su motivo debajo: *Ya se subsanó el …*, *Ya originó el acta …: no se subsana.*, o
+  *Vencida al …: fuera de plazo.*
+* *La notificación … venció el …: no se subsana el …*: la fecha de la subsanación es posterior al vencimiento.
+* Una subsanación ocurrida dentro del plazo pero que se registra tarde: ponga en *Vencidas al* un día dentro del plazo,
+  pulse btn:[Buscar] y, en el diálogo, escriba la fecha real de la subsanación.
+* La fecha no puede ser anterior a la notificación ni posterior a hoy.
+
+[[actas]]
+== Actas de constatación
+
+[[acta-que-es]]
+=== Lo que hay que saber antes
+
+Obligado:: Quien responde por la multa. Se elige siempre en el acta: el sistema no lo deduce del contribuyente ni del
+predio.
+Contribuyente y predio:: Lo que el acta nombra: el contribuyente del caso, el predio donde se constató, o los dos. Hace
+falta al menos uno. El obligado puede ser el mismo contribuyente u otra persona (por ejemplo, el conductor del local
+que no es el propietario).
+Código CUIS:: El código de la infracción vigente el día de la infracción (<<cuis-versiones>>).
+Reincidencia:: El grado que declara el inspector: *Primera vez*, *Segunda vez* o *Tercera o más*. El sistema no la
+deduce de las actas anteriores.
+Número de acta:: El del formulario del acta, que usted escribe. No se repite y se guarda en mayúsculas.
+
+[[proc-registrar-acta]]
+=== Registrar un acta
+
+[[proc-registrar-acta-pasos]]
+.Registrar un acta de constatación
+====
+[horizontal]
+Objetivo:: Registrar el acta que levantó el inspector y obtener su multa.
+Requisitos previos:: El acta en papel, con su número, la fecha, la hora y el lugar de la infracción, el código del CUIS
+y el grado de reincidencia; el obligado y el contribuyente o el predio inscritos en el padrón; si la hubo, la
+notificación previa registrada (<<proc-registrar-notificacion>>). Permiso de creación sobre las papeletas.
+====
+
+. Elija menu:Infracciones[Nueva acta], o pulse btn:[Nueva acta] en la página *Expedientes*. Se abre *Nueva acta*,
+  con tres secciones.
+. En *La infracción*, escriba el *Número de acta*, la *Fecha de la infracción* (hoy, por omisión) y, si la tiene, la
+  *Hora*. Escriba el *Lugar*.
+. Elija el *Código CUIS*. La lista ofrece solo los códigos vigentes a la fecha de la infracción («Elija un código
+  vigente al …»): si cambia la fecha, cambie después el código. Al elegirlo, debajo aparecen su descripción, su base
+  legal y su medida complementaria (<<fig-nueva-acta>>).
+. Elija la *Reincidencia* (*Primera vez*, por omisión).
++
+[[fig-nueva-acta]]
+.La infracción: número, fecha, lugar, código y reincidencia
+image::{capturas}/usuario/fiscalizador/nueva-acta.png[Sección La infracción con el número AC-2026-0004, la fecha 19/10/2026, la hora, el lugar, el código 070 elegido con su descripción, base legal y medida complementaria debajo, y la reincidencia Primera vez]
+. En *El administrado*, elija el *Obligado*: escriba su DNI, RUC o nombre y pulse el que corresponde en la lista.
+. Elija el *Contribuyente*, el *Predio* o los dos, de la misma manera (al menos uno). btn:[Cambiar] y btn:[Quitar]
+  corrigen la elección.
+. Si el acta nace de una notificación previa, escriba su número (o parte de él) en *Notificación previa* y elíjala. La
+  lista solo ofrece las no subsanadas y sin acta (<<fig-nueva-acta-administrado>>).
++
+[[fig-nueva-acta-administrado]]
+.El administrado: obligado, contribuyente, predio y notificación previa
+image::{capturas}/usuario/fiscalizador/nueva-acta-administrado.png[Sección El administrado con el obligado, el contribuyente y el predio elegidos y la búsqueda NP-2026 en Notificación previa, que ofrece solo NP-2026-0003]
+. En *El expediente*, escriba si los tiene el *Número de expediente*, el *Inspector* y la *Descripción del hecho*.
+. Escriba la *Observación* (de 5 a 500 caracteres): por qué se registra (<<fig-nueva-acta-expediente>>).
++
+[[fig-nueva-acta-expediente]]
+.El expediente y la observación
+image::{capturas}/usuario/fiscalizador/nueva-acta-expediente.png[Sección El expediente con el número de expediente, el inspector, la descripción del hecho y la observación con su contador de caracteres]
+. Pulse btn:[Registrar acta], al pie. Mientras falte algo, el botón está gris y a su lado dice qué falta
+  (<<fig-nueva-acta-falta>>).
+
+// fin de los pasos
+Resultado esperado:: La página muestra *Acta AC-2026-0004 del 19/10/2026 registrada, con la referencia PAPELETA-…* y,
+debajo, *Multa del acta AC-2026-0004*: el desglose que el sistema calculó (<<multa-congelada>>). El enlace *Ver el
+expediente* abre su ficha; btn:[Registrar otra acta] vuelve al formulario en blanco.
+Verificación:: El acta aparece en menu:Infracciones[Expedientes], en fase *Constatada* (o *Preventiva*, si su
+notificación previa sigue en plazo), y en la pestaña *Infracciones* del obligado, del contribuyente y del predio
+(<<fichas>>).
+Casos especiales::
+* *Ningún código del CUIS está vigente al …: cargue el CUIS o revise la fecha.* (<<fig-nueva-acta-sin-codigo>>): la
+  fecha de la infracción es anterior al CUIS cargado. Revise la fecha.
+* *No se registró el acta. Falta: CUIS 070 porcentaje_uit_segunda. Sin eso no se cifra la multa…*: declaró *Segunda
+  vez* (o *Tercera o más*) y el CUIS no fija el porcentaje de ese grado. El sistema nunca cobra el de otro grado:
+  consulte con su jefatura cómo se aplica la ordenanza en ese caso.
+* *Falta: UIT 2026*: no hay UIT cargada para el año de la infracción. Avise al administrador.
+* *El acta AC-2026-0004 ya está registrada: el número no se repite*: revise el número del formulario.
+* *El código 070 no rige el …*: el código no estaba vigente ese día; el mensaje dice desde y hasta cuándo rigen sus
+  versiones.
+* *La notificación … está subsanada: no origina un acta*: la notificación se subsanó entre tanto.
+* *… no puede fecharse el …: es anterior a la notificación previa …*: la infracción no puede ser anterior a la
+  notificación previa que nombra, ni posterior a hoy.
+* Si sale de la página antes de registrar, lo escrito se pierde sin pregunta previa.
+
+[[fig-nueva-acta-falta]]
+.Lo que falta para registrar el acta
+image::{capturas}/usuario/fiscalizador/nueva-acta-falta.png[Línea Para registrar falta: el código CUIS, el obligado, el contribuyente o el predio, la observación, junto al botón Registrar acta deshabilitado,700,align=center]
+
+[[fig-nueva-acta-sin-codigo]]
+.Una fecha sin CUIS vigente
+image::{capturas}/usuario/fiscalizador/nueva-acta-sin-codigo.png[Sección La infracción con la fecha 01/06/2025, la lista de códigos vacía y el aviso Ningún código del CUIS está vigente al 01/06/2025]
+
+[[multa-congelada]]
+=== La multa: se calcula una vez y queda congelada
+
+Al registrar el acta, el sistema toma la versión del código vigente el día de la infracción y la UIT vigente ese
+mismo día, calcula la multa y la copia en el acta. Desde entonces, esa multa *no se recalcula*: ni una UIT corregida ni
+una versión nueva del CUIS la cambian. La ficha del expediente la muestra en el recuadro *Multa*
+(<<fig-desglose>>):
+
+[[fig-desglose]]
+.El desglose de la multa del acta AC-2026-0001
+image::{capturas}/usuario/fiscalizador/desglose.png[Recuadro Multa con la base imponible S/ 5,500.00, el 5 % de la infracción, el importe S/ 275.00, el 5 % a cobrar, el importe a pagar S/ 275.00, Con beneficio vacío, la fecha de cálculo, la referencia y la nota Cifrada por el sistema y congelada en el acta,520,align=center]
+
+.Filas del desglose de la multa
+[cols="1,3",options="header"]
+|===
+|Fila |Qué es
+|Base imponible (UIT) |La UIT vigente el día de la infracción.
+|% de la infracción |El *% UIT* del código: el de la primera vez.
+|Importe de la infracción |Base imponible × % de la infracción ÷ 100.
+|% a cobrar |El porcentaje del grado de reincidencia declarado.
+|Importe a pagar |Base imponible × % a cobrar ÷ 100: la multa del acta.
+|Con beneficio |Siempre *—*: no hay regla de beneficio.
+|Fecha de cálculo |El día en que se registró el acta.
+|Referencia |`PAPELETA-` seguido del identificador del acta: la referencia estable con la que la cobranza, fuera del
+sistema, identifica esta multa.
+|===
+
+Junto al desglose, el recuadro *Código CUIS aplicado* muestra la versión que se usó: su código, la infracción, el
+*% UIT*, su *Vigencia* y su *Base legal* (<<fig-cuis-aplicado>>).
+
+[[fig-cuis-aplicado]]
+.La versión del CUIS que usó el acta
+image::{capturas}/usuario/fiscalizador/cuis-aplicado.png[Recuadro Código CUIS aplicado con el código 070, la infracción, el 5 %, la vigencia desde el 07/05/2026 y la base legal, y la nota La versión vigente el día de la infracción: una versión posterior no cambia esta acta,520,align=center]
+
+[[corregir-acta]]
+=== Corregir un acta
+
+Un acta no se edita ni se borra. Si se registró con un dato equivocado (el obligado, el código, la fecha), anúlela con
+el motivo (<<proc-anular>>) y registre el acta correcta. El número de la anulada queda tomado: el acta correcta lleva
+el número de su propio formulario.
+
+[[expedientes]]
+== Expedientes
+
+[[proc-buscar-expediente]]
+=== Buscar un expediente
+
+Elija menu:Infracciones[Expedientes]. La página empieza con el panel del ejercicio (<<panel>>) y, debajo, los filtros
+y la lista de actas, la infracción más reciente primero, 20 por página (<<fig-expedientes>>).
+
+[[fig-expedientes]]
+.La página Expedientes
+image::{capturas}/usuario/fiscalizador/expedientes.png[Página Expedientes con el botón Nueva acta, el panel del ejercicio 2026, los filtros y tres actas con su fecha, administrado, código, porcentaje, importe a pagar, medida, fase y estado de la deuda]
+
+Los filtros se aplican juntos con btn:[Buscar]:
+
+[horizontal]
+Número de acta:: El número completo del acta (sin distinguir mayúsculas).
+Administrado:: Parte del documento o del nombre del obligado.
+Código CUIS:: El código completo de la infracción (`070`, no `07`), de cualquier versión.
+Fase:: *Todas*, *Preventiva*, *Constatada* o *Sancionada*. Las anuladas y las dejadas sin efecto no tienen fase: solo
+salen con *Todas*.
+Desde, Hasta:: Las fechas de la infracción.
+
+// fin de los pasos
+La lista muestra, por acta, el *Número* (abre el expediente), la *Fecha* de la infracción, el *Administrado* con su
+documento, el *Código* con su descripción, el *% infracción*, el *Importe a pagar* con la fecha en que se calculó, la
+*Medida* complementaria, la *Fase al …* y el *Estado de la deuda* (<<fases>>). Un clic en cualquier parte de la fila
+abre el expediente.
+
+[[fig-expedientes-fase]]
+.Las actas en fase Sancionada
+image::{capturas}/usuario/fiscalizador/expedientes-fase.png[Filtros con la fase Sancionada y la lista con una sola acta, AC-2026-0003, sancionada y pendiente]
+
+[[panel]]
+=== El panel del ejercicio
+
+Arriba de la página *Expedientes*, el panel *Ejercicio 2026* resume el año que se elija en *Año*
+(<<fig-panel>>). Cada cifra lleva la fecha a la que se calculó.
+
+[[fig-panel]]
+.El panel del ejercicio
+image::{capturas}/usuario/fiscalizador/panel.png[Panel Ejercicio 2026 con Actas levantadas 3, Resoluciones de sanción RIS 1, Notificadas 1, Vencen esta semana 1 del 19/10/2026 al 25/10/2026 y En coactiva No aplica]
+
+.Cifras del panel
+[cols="1,3",options="header"]
+|===
+|Cifra |Qué cuenta
+|Actas levantadas |Las actas con infracción en el año, todas: también las anuladas o dejadas sin efecto, porque se
+levantaron.
+|Resoluciones de sanción (RIS) |Las RIS fechadas en el año. Las RGR no se cuentan: resuelven recursos, no sancionan.
+|Notificadas |De esas RIS, las que tienen una notificación que surtió efecto (Notificado o Rechazado). No cuenta las de
+actas anuladas o dejadas sin efecto.
+|Vencen esta semana |Las notificaciones previas sin subsanar y sin acta cuyo plazo vence de lunes a domingo de la
+semana actual, sea cual sea el año elegido.
+|En coactiva |*No aplica*: el sistema no lleva la cobranza ni la coactiva (<<despues>>).
+|===
+
+[[ficha-expediente]]
+=== La ficha del expediente
+
+La ficha se abre como una pestaña más de *Fichas abiertas*, con el nombre *Acta* y su número (<<fig-expediente>>).
+Su banda dice *Expediente de infracción* y el número del acta; debajo, la *Fase al …*, el *Estado de la deuda* y la
+*Referencia*. A la derecha están las tres acciones: btn:[Registrar descargo], btn:[Dictar resolución] y
+btn:[Anular].
+
+[[fig-expediente]]
+.La ficha del expediente del acta AC-2026-0003
+image::{capturas}/usuario/fiscalizador/expediente.png[Ficha del expediente AC-2026-0003 en fase Sancionada y deuda Pendiente, con Registrar descargo y Anular habilitados, Dictar resolución deshabilitado con su motivo, el recuadro Acta de constatación y el recuadro Multa]
+
+Más abajo, la ficha tiene estos recuadros:
+
+[horizontal]
+Acta de constatación:: Los datos del acta: expediente, número, fecha y hora, lugar, código, reincidencia, medida
+complementaria, el *Obligado* con su *Domicilio fiscal*, el *Contribuyente*, el *Predio*, la notificación previa, el
+inspector y la descripción del hecho. El obligado, el contribuyente y el predio abren su ficha.
+Multa y Código CUIS aplicado:: El desglose congelado y la versión del CUIS usada (<<multa-congelada>>).
+Actos del expediente:: Todos los actos, en orden legal (<<actos-expediente>>).
+Descargos:: Los descargos y recursos registrados (<<proc-descargo>>).
+Resoluciones:: Las resoluciones, con su PDF, sus notificaciones y el botón para notificar (<<proc-notificar>>).
+
+[[actos-expediente]]
+=== Actos del expediente
+
+La tabla *Actos del expediente* lista, numerados, todos los actos en el orden legal: la notificación previa, el acta,
+los descargos, las resoluciones, las notificaciones de las resoluciones y la anulación; dentro de cada tipo, por fecha.
+La columna *Estado* dice qué es cada acto hoy (<<fig-actos>>, <<fig-actos-previa>>).
+
+[[fig-actos]]
+.Los actos de un expediente sancionado y notificado
+image::{capturas}/usuario/fiscalizador/actos.png[Tabla Actos del expediente con el acta AC-2026-0003, el descargo en plazo hasta el 14/07/2026, la resolución de sanción RIS-2026-000001 infundado, se mantiene, notificada el 05/08/2026, y la notificación exigible desde el 29/08/2026]
+
+[[fig-actos-previa]]
+.Un acta que nació de una notificación previa
+image::{capturas}/usuario/fiscalizador/actos-previa.png[Tabla Actos del expediente con la notificación previa NP-2026-0001 vencida el 11/09/2026 y el acta AC-2026-0001]
+
+.Lo que dice la columna Estado
+[cols="1,3",options="header"]
+|===
+|Acto |Estado
+|Notificación previa |*Vence el …*, *Vencida el …*, *Subsanada el …* o *Sin plazo*.
+|Acta de constatación |*Código …, reincidencia …*
+|Descargo, Recurso de reconsideración, Recurso de apelación, Pedido de nulidad |*En plazo (hasta el …)* o *Fuera de
+plazo (venció el …)*.
+|Resolución de sanción, Resolución del recurso |El fallo, si resuelve un descargo, y *Notificada el …*, *Sin notificar*
+o *Sin notificar (N intentos)*.
+|Notificación de la resolución |*Notificado, exigible desde el …*, *Rechazado, exigible desde el …* o *No ubicado*.
+|Anulación |El motivo.
+|===
+
+[[acciones]]
+=== Qué acciones quedan
+
+Los tres botones de la ficha se habilitan según el estado del expediente. En un acta recién registrada, como
+`AC-2026-0001`, los tres están disponibles (<<fig-expediente-acciones>>).
+
+[[fig-expediente-acciones]]
+.Un acta constatada: las tres acciones disponibles
+image::{capturas}/usuario/fiscalizador/expediente-acciones.png[Banda del expediente AC-2026-0001 en fase Constatada y deuda Pendiente, con su referencia y los botones Registrar descargo, Dictar resolución y Anular habilitados]
+
+Cuando una acción no procede, su botón aparece gris y debajo dice por qué, con el mismo texto que daría el sistema al
+intentarlo (<<fig-anulada>>):
+
+.Cuándo no procede cada acción
+[cols="1,3",options="header"]
+|===
+|Acción |No procede cuando…
+|Registrar descargo |El acta está anulada (*El acta está anulada: no queda nada que impugnar*) o una resolución dejó
+sin efecto la multa.
+|Dictar resolución |El acta está anulada o sin efecto, o ya tiene su RIS y ningún descargo espera resolución (*El acta
+ya tiene su RIS, la …, y ningún descargo espera su resolución: solo queda dictar la de un descargo nuevo*).
+|Anular |El acta ya está anulada (*El acta ya está anulada*) o una resolución dejó sin efecto la multa.
+|Notificar (en cada resolución) |El acta está anulada, o la multa se dejó sin efecto y esa resolución no es la que la
+dejó sin efecto.
+|===
+
+Si es su rol el que no permite la acción, la línea empieza con *Sin permiso:* (<<permisos-usuario>>).
+
+[[proc-anular]]
+=== Anular un acta
+
+[[proc-anular-pasos]]
+.Anular un acta
+====
+[horizontal]
+Objetivo:: Dejar sin valor un acta registrada por error o que no debió levantarse.
+Requisitos previos:: El acta no anulada y sin una resolución que haya dejado sin efecto la multa; el documento que
+dispone la anulación. Permiso de creación sobre las anulaciones de papeleta.
+====
+
+. En la ficha del expediente, pulse btn:[Anular]. Se abre *Anular el acta …* (<<fig-anular>>).
+. Escriba el *Motivo* (obligatorio, hasta 500 caracteres): queda en la ficha y en los actos del expediente.
+. En *Fecha de la anulación*, escriba el día de la anulación. En blanco, se toma hoy.
+. Escriba la *Observación* (de 5 a 500 caracteres).
++
+[[fig-anular]]
+.El diálogo de la anulación
+image::{capturas}/usuario/fiscalizador/anular.png[Diálogo Anular el acta AC-2026-0001 con la explicación, el motivo, la fecha de la anulación en blanco y la observación,460,align=center]
+. Pulse btn:[Anular].
+
+// fin de los pasos
+Resultado esperado:: La ficha muestra el aviso *Acta anulada.* con la fecha y el motivo; la fase pasa a *—* y el
+estado de la deuda a *Anulada* (<<fig-anulada>>). Los tres botones quedan deshabilitados, con su motivo.
+Verificación:: En *Expedientes*, el acta aparece con fase *—* y estado *Anulada*; *Actos del expediente* termina con la
+*Anulación*.
+Casos especiales::
+* La fecha de la anulación no puede ser anterior a la infracción ni posterior a hoy.
+* Un acta con RIS se puede anular; desde entonces, ninguna de sus resoluciones se puede notificar («no queda nada que
+  notificar»).
+* El acta anulada sigue contando en *Actas levantadas* del panel.
+
+WARNING: La anulación no se puede deshacer. Si anuló el acta equivocada, registre de nuevo la que correspondía, con
+el número de su formulario.
+
+[[fig-anulada]]
+.Un acta anulada: las acciones, con su motivo
+image::{capturas}/usuario/fiscalizador/anulada.png[Ficha del acta AC-2026-0002 con fase — y deuda Anulada, los tres botones deshabilitados con su motivo y el aviso Acta anulada. El 14/08/2026: Error en la identificación del obligado]
+
+[[descargos]]
+== Descargos y resoluciones
+
+[[proc-descargo]]
+=== Registrar un descargo o un recurso
+
+[[proc-descargo-pasos]]
+.Registrar un descargo
+====
+[horizontal]
+Objetivo:: Registrar el escrito con el que el administrado se defiende del acta o recurre.
+Requisitos previos:: El escrito, con su número de expediente y su fecha de presentación. El acta no anulada ni sin
+efecto. Permiso de creación sobre los descargos de papeleta.
+====
+
+. En la ficha del expediente, pulse btn:[Registrar descargo]. Se abre *Registrar un descargo del acta …*
+  (<<fig-descargo>>).
+. Escriba el *Número de expediente* del escrito y su *Fecha de presentación* (hoy, por omisión).
+. Elija el *Tipo de recurso*: *Descargo*, *Reconsideración*, *Apelación* o *Nulidad*.
+. Escriba el *Sustento*: lo que alega el administrado (hasta 1000 caracteres).
+. Escriba la *Observación* (de 5 a 500 caracteres).
++
+[[fig-descargo]]
+.El diálogo del descargo
+image::{capturas}/usuario/fiscalizador/descargo.png[Diálogo Registrar un descargo del acta AC-2026-0001 con el número de expediente, la fecha de presentación, el tipo Descargo, el sustento y la observación,460,align=center]
+. Pulse btn:[Registrar].
+
+// fin de los pasos
+Resultado esperado:: El diálogo dice *Descargo EXP-… registrado.* con la fecha de presentación, el plazo (por ejemplo,
+`5 DIAS_HABILES`), hasta cuándo se podía presentar y si fue *Presentado dentro del plazo.* o *Fuera de plazo: se
+registra igual y se resuelve improcedente.* Pulse btn:[Cerrar].
+Verificación:: El descargo aparece en el recuadro *Descargos* de la ficha y en *Actos del expediente*
+(<<fig-descargos>>).
+Casos especiales::
+* *Un descargo fuera de plazo se registra igual*: el sistema lo marca *Fuera de plazo*. Lo que corresponde es
+  declararlo improcedente al resolverlo (<<proc-rgr>>).
+* *El expediente … ya está registrado: el número no se repite*: ese número de expediente ya se usó, en esta acta o en
+  otra.
+* *Falta: PLAZO DESCARGO_PAPELETA 2026* (o *FERIADOS 2026*): no está cargado el plazo o los feriados del año de la
+  infracción, y nada se registra. Avise al administrador (<<plazos-cargados>>).
+* La fecha de presentación no puede ser anterior a la infracción ni posterior a hoy.
+* Un acta puede tener varios descargos, también después de su RIS (un recurso contra ella).
+
+[[fig-descargos]]
+.El recuadro Descargos
+image::{capturas}/usuario/fiscalizador/descargos.png[Recuadro Descargos con el expediente EXP-2026-0101, de tipo Descargo, presentado el 09/07/2026, plazo 5 DIAS_HABILES, presentado hasta el 14/07/2026, dentro del plazo, su sustento y resuelto por RIS-2026-000001]
+
+El recuadro muestra, por descargo, su *Nº de expediente*, el *Tipo*, la fecha en que fue *Presentado*, el *Plazo*,
+*Presentado hasta* (el último día del plazo), *En plazo*, el *Sustento* y *Resuelto por* (la resolución que lo resolvió,
+o *—*). El plazo se cuenta como se explica en <<plazos>>, con el plazo y los feriados vigentes el día de la infracción.
+
+[[resoluciones-tipos]]
+=== Los dos tipos de resolución
+
+[horizontal]
+Administrativa (RIS):: La resolución de sanción. Sanciona el acta: con ella, la fase pasa a *Sancionada*. Hay una sola
+por acta. Puede llevar una sanción accesoria.
+De recurso (RGR):: Resuelve un descargo o recurso, con su sentido del fallo y su efecto sobre la multa. Hay una por
+descargo. No sanciona: no cambia la fase.
+
+// fin de los pasos
+El sistema numera cada una al dictarla: `RIS-AAAA-NNNNNN` o `RGR-AAAA-NNNNNN`, con el año de la fecha de la resolución
+y un correlativo propio de cada tipo y año (`RIS-2026-000001`, `RIS-2026-000002`…). Cada una copia el `PLAZO
+RG_RECURSO` vigente a su fecha: es el *Plazo de recurso* que imprime.
+
+[[proc-ris]]
+=== Dictar la resolución de sanción (RIS)
+
+[[proc-ris-pasos]]
+.Dictar la resolución de sanción
+====
+[horizontal]
+Objetivo:: Registrar la resolución que sanciona el acta y obtener su PDF.
+Requisitos previos:: El acta sin RIS, no anulada ni sin efecto; el texto de la resolución. Permiso de creación sobre
+las resoluciones de gerencia.
+====
+
+. En la ficha del expediente, pulse btn:[Dictar resolución]. Se abre *Dictar una resolución del acta …*, con el
+  *Tipo* en *Administrativa (RIS)* (<<fig-resolucion-ris>>).
+. En *Fecha de la resolución*, escriba su fecha. En blanco, se toma hoy.
+. Escriba el *Sustento* (obligatorio, hasta 1000 caracteres).
+. Si la resolución impone una, escriba la *Sanción accesoria* (hasta 200 caracteres).
+. Escriba la *Observación* (de 5 a 500 caracteres).
++
+[[fig-resolucion-ris]]
+.Dictar la RIS de un acta
+image::{capturas}/usuario/fiscalizador/resolucion-ris.png[Diálogo Dictar una resolución del acta AC-2026-0001 con el tipo Administrativa (RIS), la fecha en blanco, el sustento, la sanción accesoria Retiro del letrero y la observación,460,align=center]
+. Pulse btn:[Dictar].
+
+// fin de los pasos
+Resultado esperado:: El diálogo dice *Resolución RIS-2026-000002 dictada el …* y ofrece btn:[Ver PDF]
+(<<pdf-resolucion>>). Al cerrarlo, la fase del expediente es *Sancionada*.
+Verificación:: La resolución aparece en el recuadro *Resoluciones*, *Sin notificar*, y en *Actos del expediente* como
+*Resolución de sanción*.
+Casos especiales::
+* *El acta ya tiene su RIS, la …*: intentó dictar una segunda RIS. Si hay un descargo pendiente, lo que corresponde es
+  la RGR (<<proc-rgr>>).
+* *Falta: PLAZO RG_RECURSO 2026*: no está cargado el plazo para recurrir. Avise al administrador.
+* La fecha no puede ser anterior a la infracción ni posterior a hoy.
+* Sin notificar, la resolución no es exigible (<<proc-notificar>>).
+
+[[proc-rgr]]
+=== Resolver un descargo (RGR)
+
+[[proc-rgr-pasos]]
+.Resolver un descargo con una resolución de recurso
+====
+[horizontal]
+Objetivo:: Registrar la resolución que decide un descargo o recurso del administrado.
+Requisitos previos:: El descargo registrado y sin resolver; el acta no anulada ni sin efecto. Permiso de creación sobre
+las resoluciones de gerencia.
+====
+
+. En la ficha del expediente, pulse btn:[Dictar resolución] y elija *De recurso (RGR)* en *Tipo*. Aparecen los campos
+  del fallo (<<fig-resolucion-rgr>>).
+. En *Descargo que resuelve*, elija el descargo (por su número de expediente, su tipo y su fecha).
+. Elija el *Sentido del fallo* y el *Efecto sobre la multa* (<<fallo>>).
+. Escriba, si no es hoy, la *Fecha de la resolución*, y el *Sustento*.
+. Escriba la *Observación* y pulse btn:[Dictar].
+
+// fin de los pasos
+Resultado esperado:: El diálogo dice *Resolución RGR-2026-… dictada el …* y ofrece btn:[Ver PDF]. En *Descargos*, la
+columna *Resuelto por* muestra el número de la RGR.
+Verificación:: Si el efecto fue *Se deja sin efecto la multa*, el estado de la deuda pasa a *Dejada sin efecto* y la
+fase a *—*.
+Casos especiales::
+* *El acta no tiene descargos: una resolución de recurso resuelve un descargo.*: el aviso aparece en el diálogo y la
+  lista *Descargo que resuelve* está vacía. Registre antes el descargo.
+* *El descargo … ya se resolvió con la …*: cada descargo tiene una sola resolución.
+* La fecha no puede ser anterior a la infracción ni a la presentación del descargo, ni posterior a hoy.
+* Mientras falte algo, el diálogo dice *Para dictar falta: …* y btn:[Dictar] queda gris.
+
+[[fig-resolucion-rgr]]
+.El diálogo con el tipo De recurso (RGR)
+image::{capturas}/usuario/fiscalizador/resolucion-rgr.png[Diálogo Dictar una resolución con el tipo De recurso (RGR), el aviso El acta no tiene descargos, los campos Descargo que resuelve, Sentido del fallo y Efecto sobre la multa, la nota de Se reduce la multa, la fecha, el sustento y la línea Para dictar falta,460,align=center]
+
+[[fallo]]
+=== El sentido del fallo y su efecto sobre la multa
+
+*Sentido del fallo* ofrece *Fundado*, *Fundado en parte*, *Infundado* e *Improcedente*. *Efecto sobre la multa*
+ofrece:
+
+.Efectos sobre la multa
+[cols="1,3",options="header"]
+|===
+|Efecto |Qué pasa con el expediente
+|Se mantiene la multa |Nada cambia: la deuda sigue *Pendiente*.
+|Se deja sin efecto la multa |La deuda pasa a *Dejada sin efecto* y la fase a *—*. Ya no se registran descargos, ni
+otras resoluciones, ni se anula el acta; solo se puede notificar *esta* resolución.
+|Se reduce la multa (no disponible) |Aparece en la lista, pero no se puede elegir. Debajo dice *Se reduce la multa: No
+hay regla de reducción: la fija la ordenanza (D-02b).*
+|===
+
+El sistema no relaciona el sentido con el efecto: usted elige los dos según la resolución. Lo habitual es que un
+descargo *Fundado* deje sin efecto la multa y uno *Infundado* o *Improcedente* la mantenga.
+
+NOTE: En la demostración, la resolución `RIS-2026-000001` resolvió también el descargo `EXP-2026-0101` (*Infundado ·
+Se mantiene la multa*). El sistema admite que una RIS resuelva un descargo, pero el diálogo del portal solo muestra los
+campos del fallo con el tipo *De recurso (RGR)*: desde el portal, el descargo se resuelve con una RGR.
+
+[[pdf-resolucion]]
+=== Ver e imprimir la resolución
+
+Cada resolución tiene su PDF, que el sistema dibuja cada vez con los datos guardados del acta y de la resolución. Se
+abre con btn:[PDF] en su fila del recuadro *Resoluciones*, o con btn:[Ver PDF] al terminar de dictarla. La ventana
+tiene btn:[Imprimir], btn:[Descargar] y btn:[Cerrar].
+
+[[fig-pdf-ris]]
+.El PDF de una resolución de sanción
+image::{capturas}/usuario/fiscalizador/pdf-ris.png[PDF de la resolución RIS-2026-000001 con la cabecera de la municipalidad, el acta de constatación con su multa, el obligado con su domicilio fiscal, el recurso, el párrafo de los considerandos, el fallo con el sustento y el plazo para impugnar, y las líneas de firma de Gerente y Secretario,600,pdfwidth=75%,align=center]
+
+El PDF tiene la cabecera de la municipalidad y el título *Resolución de sanción — RIS* (o *Resolución del recurso —
+RGR*), con su número y su fecha, y luego:
+
+[horizontal]
+Sección I, Acta de constatación:: El número, la fecha y hora, el lugar, el código, la infracción y la base legal de la versión
+del CUIS usada, la reincidencia, la medida complementaria y la multa del acta, con la fecha en que se calculó.
+Sección II, Obligado:: Su nombre, su documento y su domicilio fiscal.
+Sección III, Recurso:: Si la resolución resuelve un descargo: el expediente, el tipo, la fecha de presentación y si se presentó
+dentro del plazo.
+Sección Se resuelve:: El sentido y el efecto (si resuelve un descargo), el sustento y el *Plazo para impugnar*, contado desde el
+día hábil siguiente a la notificación (art. 218.2 del TUO de la Ley 27444).
+
+// fin de los pasos
+Al pie van las líneas de firma de *Gerente* y *Secretario* y la nota *Documento sin firma digital (D-05): se firma a
+mano.* Los considerandos no los redacta el sistema: un párrafo marcado los reserva para que los provea la
+municipalidad.
+
+NOTE: El domicilio fiscal que imprime el PDF es el que el obligado tiene *hoy* en el padrón: el sistema no guarda la
+historia de los domicilios. Si el obligado cambió de domicilio después de la resolución, una reimpresión mostrará el
+nuevo. Todo lo demás (la multa, el código, el plazo) sale tal como se guardó.
+
+[[notificar]]
+== Notificar una resolución
+
+[[proc-notificar]]
+=== Registrar la diligencia de notificación
+
+[[proc-notificar-pasos]]
+.Registrar la notificación de una resolución
+====
+[horizontal]
+Objetivo:: Registrar cada intento de notificar una resolución, y saber desde cuándo es exigible.
+Requisitos previos:: El cargo de la diligencia: fecha, modalidad, resultado, notificador y, si lo hubo, el receptor.
+Permiso de creación sobre las notificaciones de resolución.
+====
+
+. En el recuadro *Resoluciones* de la ficha, pulse btn:[Notificar] en la fila de la resolución. Se abre *Notificar la
+  resolución …* (<<fig-notificar>>).
+. Escriba la *Fecha de la diligencia* (en blanco, hoy).
+. Elija la *Modalidad* (*Personal*, *Cedulón*, *Publicación* o *Correo*) y el *Resultado* (*Notificado*, *No ubicado* o
+  *Rechazado*).
+. Escriba el nombre del *Notificador* (obligatorio).
+. Deje en blanco la *Dirección* para usar el domicilio fiscal del obligado, o escriba la dirección donde se notificó.
+. Complete, si los hay, el *Receptor*, el *Documento del receptor*, su *Vínculo* con el obligado y el *Acuse*.
+. Escriba la *Observación* y pulse btn:[Registrar].
++
+[[fig-notificar]]
+.Un segundo intento, no ubicado
+image::{capturas}/usuario/fiscalizador/notificar.png[Diálogo Notificar la resolución RIS-2026-000001 con la fecha de la diligencia, la modalidad Cedulón, el resultado No ubicado, el notificador, la dirección en blanco, los datos del receptor y la observación,460,align=center]
+
+// fin de los pasos
+Resultado esperado:: El diálogo dice *Intento N registrado.* con la fecha, la dirección usada y el resultado, y, si
+surtió efecto, *Exigible desde el …* con el plazo; si no, *No surte efecto: no ubicado.* Pulse btn:[Cerrar].
+Verificación:: Debajo de la tabla de resoluciones aparece la de sus notificaciones, con cada intento
+(<<fig-resoluciones>>). En *Actos del expediente*, la resolución pasa a *Notificada el …*.
+Casos especiales::
+* *No se puede notificar la resolución …: no se dio la dirección y el obligado … no tiene domicilio fiscal*: escriba la
+  dirección donde se notificó.
+* *Falta: PLAZO RG_RECURSO 2026* (o *FERIADOS 2026*): con un resultado que surte efecto, el sistema necesita el plazo y
+  los feriados para calcular la exigibilidad, y nada se registra. Avise al administrador.
+* *El acta está anulada: no queda nada que notificar*, o *Una resolución dejó sin efecto la multa: esta ya no se
+  notifica*: el botón btn:[Notificar] de esa resolución está gris, con el motivo debajo.
+* La fecha de la diligencia no puede ser anterior a la resolución ni posterior a hoy.
+
+[[fig-resoluciones]]
+.El recuadro Resoluciones, con su notificación
+image::{capturas}/usuario/fiscalizador/resoluciones.png[Recuadro Resoluciones con RIS-2026-000001, administrativa, del 03/08/2026, el descargo, el fallo, el plazo de recurso, 1 intento y los botones PDF y Notificar; debajo, la notificación personal del 05/08/2026, notificada, con su receptor y exigible desde el 29/08/2026]
+
+[[exigible]]
+=== Desde cuándo es exigible
+
+Solo una notificación con resultado *Notificado* o *Rechazado* surte efecto. Con ella, el sistema calcula la fecha
+*Exigible desde*:
+
+. La notificación surte efecto el día hábil siguiente a la diligencia.
+. Desde ese día corren los días hábiles del `PLAZO RG_RECURSO` vigente el día de la diligencia.
+. La resolución es exigible desde el día siguiente al último día del plazo.
+
+// fin de los pasos
+Ejemplo, con el expediente `AC-2026-0003`: la diligencia fue el miércoles 05/08/2026; el jueves 06/08 es feriado
+nacional, así que la notificación surte efecto el viernes 07/08; los 15 días hábiles terminan el viernes 28/08, y la
+resolución es exigible desde el 29/08/2026.
+
+Un intento *No ubicado* queda registrado pero no hace exigible nada: registre otro intento cuando se vuelva a
+notificar. Cada intento se numera solo (*intento 1*, *intento 2*…); la columna *Notificaciones* de la resolución dice
+cuántos tiene.
+
+[[escalas]]
+== Escalas y plazos
+
+La página menu:Infracciones[Escalas y plazos] reúne dos consultas de las notificaciones previas y los plazos con que el
+sistema cuenta los días. Las escalas de las multas (el % de la UIT de cada grado) están en el CUIS (<<cuis>>).
+
+[[vencidas]]
+=== Vencidas sin acta
+
+*Vencidas sin acta* lista las notificaciones previas sin subsanar, sin acta y con el plazo vencido a la *Fecha de corte*
+(hoy, por omisión), la de vencimiento más antiguo primero. Es la lista de trabajo para levantar las actas pendientes.
+Cambie la fecha y pulse btn:[Consultar] (<<fig-vencidas>>).
+
+[[fig-vencidas]]
+.Vencidas sin acta al 15/09/2026
+image::{capturas}/usuario/fiscalizador/vencidas.png[Recuadro Vencidas sin acta con la fecha de corte 15/09/2026 y la notificación NP-2026-0001, vencida el 11/09/2026]
+
+Con una fecha de corte pasada, la lista dice cómo estaban las cosas ese día: un acta o una subsanación posteriores
+al corte no sacan a la notificación. En la <<fig-vencidas>>, `NP-2026-0001` aparece al 15/09/2026 porque su acta es del
+16/09/2026; al 20/10/2026 la lista está vacía (*Ninguna vencida*).
+
+[[por-contribuyente]]
+=== Por contribuyente
+
+*Por contribuyente* lista todas las notificaciones previas de un contribuyente, la más reciente primero, con su plazo,
+su vencimiento, si está vencida hoy, su subsanación y el acta que originaron. Escriba su DNI, RUC o nombre en
+*Contribuyente* y elíjalo de la lista (<<fig-por-contribuyente>>).
+
+[[fig-por-contribuyente]]
+.Las notificaciones previas de un contribuyente
+image::{capturas}/usuario/fiscalizador/por-contribuyente.png[Recuadro Por contribuyente con CASTRO VARGAS MIGUEL ANGEL elegido y su notificación NP-2026-0001, vencida, que originó el acta AC-2026-0001]
+
+TIP: En la demostración hay dos contribuyentes llamados CASTRO VARGAS MIGUEL ANGEL, con distinto DNI. Elija siempre
+por el número de documento.
+
+[[plazos-cargados]]
+=== Plazos cargados
+
+*Plazos cargados* muestra, para el *Año* elegido (el siguiente, el actual y los cuatro anteriores), los plazos y feriados que
+el sistema usará (<<fig-plazos-cargados>>):
+
+[horizontal]
+PLAZO DESCARGO_PAPELETA:: Los días hábiles para presentar un descargo.
+PLAZO RG_RECURSO:: Los días hábiles para recurrir una resolución; también fija desde cuándo es exigible.
+FERIADOS <año>:: Los feriados del año que no son nacionales; se suman a los nacionales.
+
+// fin de los pasos
+Son los vigentes al 1 de enero del año (en el año en curso, los de hoy). Si al año le falta alguno, un aviso lo dice
+(<<fig-plazos-2027>>): los actos que lo necesiten no se registrarán hasta que el administrador lo cargue.
+
+[[fig-plazos-cargados]]
+.Los plazos y feriados de 2026
+image::{capturas}/usuario/fiscalizador/plazos-cargados.png[Recuadro Plazos cargados del año 2026 con PLAZO DESCARGO_PAPELETA de 5 días hábiles, PLAZO RG_RECURSO de 15 días hábiles, los feriados del 02/04/2026 y 03/04/2026 y la explicación de cómo se cargan]
+
+[[fig-plazos-2027]]
+.Un año al que le faltan sus feriados
+image::{capturas}/usuario/fiscalizador/plazos-2027.png[Recuadro Plazos cargados del año 2027 con el aviso Faltan para 2027: FERIADOS 2027 y los dos plazos vigentes]
+
+TIP: Revise *Plazos cargados* del año siguiente antes de que empiece: sin `FERIADOS` del año nuevo, el sistema no
+registrará descargos ni notificaciones cuyo cómputo llegue a ese año.
+
+[[fichas]]
+== Las infracciones en las fichas
+
+Las fichas del contribuyente y del predio tienen la pestaña *Infracciones*. En la del contribuyente salen las actas en
+que es el obligado o el contribuyente; en la del predio, las que lo nombran. Cada fila muestra el número (abre el
+expediente), la fecha, el código, el importe a pagar con su fecha de cálculo, la fase y el estado de la deuda, al día
+que se indica arriba (<<fig-contribuyente-infracciones>>). Sin actas, dice *Sin infracciones*.
+
+[[fig-contribuyente-infracciones]]
+.La pestaña Infracciones de un contribuyente
+image::{capturas}/usuario/fiscalizador/contribuyente-infracciones.png[Pestaña Infracciones de BODEGA LA ORQUIDEA E.I.R.L. con el acta AC-2026-0003, el código 202, S/ 5,500.00, Sancionada y Pendiente]
+
+La misma tabla aparece en la ficha del predio `02-01-0003`, donde se constató la infracción
+(<<fig-predio-infracciones>>). Es una consulta: desde la pestaña no se registra nada. Para buscar la ficha de un
+contribuyente o un predio, use la búsqueda general de la barra superior (<<busqueda-general>>).
+
+[[fig-predio-infracciones]]
+.La pestaña Infracciones de un predio
+image::{capturas}/usuario/fiscalizador/predio-infracciones.png[Pestaña Infracciones del predio 02-01-0003 con la misma acta AC-2026-0003]
+
+[[despues]]
+== Después de la resolución: cobranza y coactiva
+
+El sistema termina su trabajo cuando la resolución está notificada y tiene su fecha *Exigible desde*. Lo que sigue no
+está en {sigla}:
+
+* la orden de cobro y el pago de la multa, que lleva el sistema de caja de la municipalidad (caja-backend), con la
+  referencia `PAPELETA-…` de cada acta (<<multa-congelada>>);
+* la resolución de multa y la ejecución coactiva;
+* el resumen de lo recaudado por multas.
+
+// fin de los pasos
+Por eso el panel dice *En coactiva: No aplica* y el estado de la deuda nunca es «pagada» ni «en coactiva». Para saber
+si una multa se pagó, consulte en caja.
+
+[[errores]]
+== Errores frecuentes
+
+.Mensajes frecuentes de las infracciones
+[cols="3,3,3",options="header"]
+|===
+|Mensaje |Causa |Solución
+
+|Para registrar falta: el código CUIS, el obligado… |Falta un dato obligatorio del acta. |Complete lo que dice la
+línea (<<proc-registrar-acta>>).
+|Ningún código del CUIS está vigente al … |La fecha de la infracción es anterior al CUIS cargado. |Revise la fecha.
+|No se registró el acta. Falta: CUIS 070 porcentaje_uit_segunda |El CUIS no fija el porcentaje del grado de
+reincidencia declarado. |El sistema no cobra el de otro grado; consulte con su jefatura.
+|Falta: UIT 2026 |No hay UIT para el año. |Avise al administrador.
+|El acta … ya está registrada: el número no se repite |El número del acta ya existe. |Revise el número del
+formulario.
+|El código … no rige el … |El código no estaba vigente el día de la infracción. |Elija el código vigente ese día.
+|La notificación … está subsanada: no origina un acta |La notificación previa ya se subsanó. |Registre el acta sin
+notificación previa, si corresponde.
+|… no puede fecharse el …: es anterior a … |Un acto con fecha anterior al acto que lo origina. |Corrija la fecha
+(<<orden-actos>>).
+|… no puede fecharse el …: es posterior a hoy |Una fecha futura. |Corrija la fecha.
+|La notificación … ya está registrada: el número no se repite |El número de la notificación previa ya existe. |Revise
+el número del formulario.
+|La notificación … venció el …: no se subsana el … |La subsanación es posterior al vencimiento. |Si subsanó a tiempo,
+escriba la fecha real (<<proc-subsanar>>).
+|El expediente … ya está registrado: el número no se repite |El número de expediente del descargo ya se usó. |Revise el
+número.
+|Falta: PLAZO DESCARGO_PAPELETA 2026, PLAZO RG_RECURSO 2026 o FERIADOS 2026 |Falta un plazo o los feriados del año.
+|Avise al administrador (<<plazos-cargados>>).
+|El acta ya tiene su RIS, la … |Intentó dictar una segunda RIS. |Si hay un descargo pendiente, dicte una RGR.
+|El descargo … ya se resolvió con la … |El descargo ya tiene su resolución. |Elija otro descargo.
+|El acta está anulada: no queda nada que … |El acta está anulada. |Nada más procede en ese expediente.
+|Una resolución dejó sin efecto la multa: … |La multa se dejó sin efecto. |Solo se notifica la resolución que la dejó
+sin efecto.
+|No se puede notificar la resolución …: no se dio la dirección y el obligado … no tiene domicilio fiscal |Falta la
+dirección. |Escriba la dirección de la diligencia.
+|La versión nueva de … rige desde el …: no es posterior a la del … |La versión nueva no empieza después de la vigente.
+|Corrija *Vigente desde*.
+|No hubo respuesta del servidor. Vuelva a intentarlo: el acto no se registra dos veces. |Se cortó la comunicación.
+|Vuelva a pulsar el botón (<<actos>>).
+|===
+
+[[orden-actos]]
+=== El orden de los actos
+
+Ningún acto se fecha después de hoy ni antes del acto que lo origina; el mismo día sí vale:
+
+* el acta, no antes de su notificación previa;
+* la subsanación, no antes de la notificación;
+* el descargo y la anulación, no antes de la infracción;
+* la resolución, no antes de la infracción ni de la presentación del descargo que resuelve;
+* la notificación de una resolución, no antes de la resolución.
+
+[[faq]]
+== Preguntas frecuentes
+
+[[faq-infracciones]]
+=== Preguntas de las infracciones
+
+Corregí la UIT (o el CUIS) y la multa del acta no cambió.::
+Es lo esperado: la multa se calcula al registrar el acta y queda congelada (<<multa-congelada>>).
+
+Me equivoqué en un dato del acta. ¿Cómo la corrijo?::
+No se corrige: anúlela con el motivo y registre la correcta (<<corregir-acta>>).
+
+¿Por qué no puedo elegir «Se reduce la multa»?::
+Porque no hay regla de reducción hasta que la ordenanza la fije: el sistema no inventa una (<<fallo>>).
+
+El inspector declaró «Segunda vez» y el acta no se registra.::
+El CUIS no fija el porcentaje de la segunda vez para ese código, y el sistema no cobra el de la primera en su lugar
+(<<cuis-multa>>).
+
+El descargo se presentó tarde. ¿Lo registro?::
+Sí: se registra igual, marcado *Fuera de plazo*, y se resuelve improcedente (<<proc-descargo>>).
+
+¿Cuándo está en fase Preventiva un acta?::
+Cuando nació de una notificación previa que todavía no venció ni se subsanó (<<fases>>).
+
+El botón Dictar resolución está gris.::
+Debajo dice por qué: lo más común es que el acta ya tenga su RIS y ningún descargo espere resolución
+(<<acciones>>).
+
+La notificación quedó «No ubicado». ¿Qué hago?::
+Registre otro intento cuando se vuelva a notificar. Solo un intento *Notificado* o *Rechazado* hace exigible la
+resolución (<<exigible>>).
+
+¿Cómo sé si una multa se pagó?::
+El sistema no registra pagos: consulte en caja (<<despues>>).
+
+Una notificación subsanada aparece como «Vencida».::
+La columna dice solo si su plazo ya pasó. Mire la columna *Subsanada* (<<proc-consultar-notificaciones>>).
+
+¿Puedo derogar un código del CUIS?::
+No desde el portal: lo hace el administrador al cargar la ordenanza (<<cuis-derogar>>).
+
+include::../comun/faq.adoc[]
+
+[appendix]
+[[glosario]]
+== Glosario
+
+Este glosario reúne solo los términos de este manual. El glosario completo está en el {m-admin}.
+
+[glossary]
+Acta de constatación:: El acta que levanta el inspector al constatar una infracción. En el sistema también se llama
+papeleta.
+Administrado:: La persona o entidad a la que se dirige el procedimiento.
+Anulación:: El acto que deja sin valor un acta, con su motivo. No se deshace.
+CUIS:: Cuadro único de infracciones y sanciones: los códigos de infracción con su multa, su medida complementaria y su
+base legal, por versiones.
+Descargo:: El escrito con que el administrado se defiende del acta. También se registran así los recursos de
+reconsideración y apelación y los pedidos de nulidad.
+Días hábiles:: De lunes a viernes, sin feriados nacionales ni los feriados del año cargados.
+Estado de la deuda:: Pendiente, Anulada o Dejada sin efecto: qué queda de la multa del acta.
+Exigible desde:: El día desde el que una resolución notificada puede exigirse.
+Fase:: Preventiva, Constatada o Sancionada: dónde está el procedimiento.
+Medida complementaria:: La medida que el CUIS asocia al código: clausura, decomiso, retiro…
+Notificación previa:: El aviso previo al acta, con un plazo para subsanar.
+Obligado:: Quien responde por la multa del acta.
+Referencia:: `PAPELETA-` y el identificador del acta: con ella se identifica la multa fuera del sistema.
+Reincidencia:: El grado que declara el inspector: primera vez, segunda vez o tercera o más.
+RGR:: Resolución de recurso: resuelve un descargo.
+RIS:: Resolución de sanción: sanciona el acta. Una por acta.
+Subsanación:: La corrección, dentro del plazo, de lo notificado en una notificación previa.
+UIT:: Unidad impositiva tributaria, la base de las multas.
+Versión:: Cada estado de un código del CUIS, con su vigencia.

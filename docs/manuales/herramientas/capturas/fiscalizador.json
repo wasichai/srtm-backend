@@ -1,0 +1,1416 @@
+{
+    "_comentario": "Capturas del Manual del fiscalizador (usuario/fiscalizador.adoc), con la cuenta del perfil FISCALIZADOR. Ninguna graba: los diálogos y el formulario del acta se abren y se llenan, pero no se confirman.",
+    "referencias": {
+        "fis_ac1": {
+            "get": "/api/srtm/infracciones/actas?numero=AC-2026-0001",
+            "campo": "content.0.id"
+        },
+        "fis_ac2": {
+            "get": "/api/srtm/infracciones/actas?numero=AC-2026-0002",
+            "campo": "content.0.id"
+        },
+        "fis_ac3": {
+            "get": "/api/srtm/infracciones/actas?numero=AC-2026-0003",
+            "campo": "content.0.id"
+        },
+        "fis_ris": {
+            "get": "/api/srtm/infracciones/actas/{ref:fis_ac3}",
+            "campo": "resoluciones.0.id"
+        },
+        "fis_bodega": {
+            "get": "/api/srtm/contribuyentes?q=20999000020",
+            "campo": "content.0.id"
+        },
+        "fis_predio_bodega": {
+            "get": "/api/srtm/predios?q=02-01-0003",
+            "campo": "content.0.id"
+        }
+    },
+    "capturas": [
+        {
+            "id": "fis-riel",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/riel.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones"
+                ],
+                [
+                    "esperarTexto",
+                    "Ejercicio"
+                ],
+                [
+                    "clic",
+                    "[data-ui=riel] button:has-text('Infracciones')"
+                ],
+                [
+                    "esperar",
+                    "[data-ui=riel-panel]"
+                ]
+            ],
+            "area": {
+                "x": 0,
+                "y": 0,
+                "width": 720,
+                "height": 520
+            }
+        },
+        {
+            "id": "fis-expedientes",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/expedientes.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones"
+                ],
+                [
+                    "esperarTexto",
+                    "AC-2026-0003"
+                ]
+            ]
+        },
+        {
+            "id": "fis-panel",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/panel.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones"
+                ],
+                [
+                    "esperarTexto",
+                    "Actas levantadas"
+                ]
+            ],
+            "recorte": "section[aria-label='Panel de infracciones']",
+            "margen": 8
+        },
+        {
+            "id": "fis-expedientes-fase",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/expedientes-fase.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones"
+                ],
+                [
+                    "esperarTexto",
+                    "AC-2026-0003"
+                ],
+                [
+                    "elegir",
+                    "label:text-is('Fase') + select",
+                    "Sancionada"
+                ],
+                [
+                    "clic",
+                    "form[aria-label='Filtros de los expedientes'] button:has-text('Buscar')"
+                ],
+                [
+                    "pausa",
+                    "1500"
+                ],
+                [
+                    "pausa",
+                    "1500"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 395,
+                "width": 1336,
+                "height": 330
+            }
+        },
+        {
+            "id": "fis-cuis",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/cuis.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/cuis"
+                ],
+                [
+                    "esperarTexto",
+                    "Multas a la UIT"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Vigentes al') + input",
+                    "2026-10-20"
+                ],
+                [
+                    "clic",
+                    "form[aria-label='Filtros del CUIS'] button:has-text('Buscar')"
+                ],
+                [
+                    "pausa",
+                    "1500"
+                ]
+            ]
+        },
+        {
+            "id": "fis-cuis-materia",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/cuis-materia.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/cuis"
+                ],
+                [
+                    "esperarTexto",
+                    "Multas a la UIT"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Vigentes al') + input",
+                    "2026-10-20"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Materia') + input",
+                    "Publicidad de comercios"
+                ],
+                [
+                    "clic",
+                    "form[aria-label='Filtros del CUIS'] button:has-text('Buscar')"
+                ],
+                [
+                    "pausa",
+                    "1500"
+                ],
+                [
+                    "esperarTexto",
+                    "Publicidad de comercios"
+                ]
+            ],
+            "recorte": "table[aria-label^='CUIS vigente']",
+            "margen": 8,
+            "altoMax": 880,
+            "vista": {
+                "width": 1800,
+                "height": 1000
+            }
+        },
+        {
+            "id": "fis-cuis-2025",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/cuis-2025.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/cuis"
+                ],
+                [
+                    "esperarTexto",
+                    "Multas a la UIT"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Vigentes al') + input",
+                    "2025-06-01"
+                ],
+                [
+                    "clic",
+                    "form[aria-label='Filtros del CUIS'] button:has-text('Buscar')"
+                ],
+                [
+                    "esperarTexto",
+                    "Ningún código vigente al 01/06/2025"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 520
+            }
+        },
+        {
+            "id": "fis-cuis-nueva-version",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/cuis-nueva-version.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/cuis?q=070"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Código o descripción') + input",
+                    "070"
+                ],
+                [
+                    "clic",
+                    "form[aria-label='Filtros del CUIS'] button:has-text('Buscar')"
+                ],
+                [
+                    "esperar",
+                    "button[aria-label='Nueva versión de 070']"
+                ],
+                [
+                    "clic",
+                    "button[aria-label='Nueva versión de 070']"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:text-is('Vigente desde') + input",
+                    "2027-01-01"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:text-is('% UIT') + input",
+                    "10"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Observación') + textarea",
+                    "Modificación del porcentaje por la ordenanza que actualiza el CUIEMA (ejemplo)"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0,
+            "vista": {
+                "width": 1440,
+                "height": 1300
+            }
+        },
+        {
+            "id": "fis-notificaciones",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/notificaciones.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/notificaciones"
+                ],
+                [
+                    "esperarTexto",
+                    "NP-2026-0003"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Vencidas al') + input",
+                    "2026-10-20"
+                ],
+                [
+                    "clic",
+                    "form[aria-label='Filtros de las notificaciones'] button:has-text('Buscar')"
+                ],
+                [
+                    "esperarTexto",
+                    "Vencida al 20/10/2026"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ]
+            ],
+            "vista": {
+                "width": 1800,
+                "height": 1000
+            },
+            "area": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 680
+            }
+        },
+        {
+            "id": "fis-notificacion-nueva",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/notificacion-nueva.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/notificaciones"
+                ],
+                [
+                    "esperarTexto",
+                    "NP-2026-0003"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Nueva notificación')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:text-is('Número') + input",
+                    "NP-2026-0004"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:text-is('Fecha') + input",
+                    "2026-10-19"
+                ],
+                [
+                    "escribir",
+                    "[role=dialog] label:has-text('Contribuyente') + div input",
+                    "20999000020"
+                ],
+                [
+                    "esperar",
+                    "ul[aria-label='Resultados de contribuyente'] button"
+                ],
+                [
+                    "clic",
+                    "ul[aria-label='Resultados de contribuyente'] button"
+                ],
+                [
+                    "escribir",
+                    "[role=dialog] label:has-text('Predio') + div input",
+                    "02-01-0003"
+                ],
+                [
+                    "esperar",
+                    "ul[aria-label='Resultados de predio'] button"
+                ],
+                [
+                    "clic",
+                    "ul[aria-label='Resultados de predio'] button"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:text-is('Dirección') + input",
+                    "AV. LOS FRESNOS 225, URB. VALLE VERDE, PERENE"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:text-is('Motivo') + textarea",
+                    "Letrero sin el número de autorización visible"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:text-is('Plazo en días') + input",
+                    "10"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Observación') + textarea",
+                    "Notificación entregada en la inspección del 19/10/2026"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0,
+            "vista": {
+                "width": 1440,
+                "height": 1300
+            }
+        },
+        {
+            "id": "fis-subsanar",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/subsanar.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/notificaciones"
+                ],
+                [
+                    "esperarTexto",
+                    "NP-2026-0003"
+                ],
+                [
+                    "clic",
+                    "button[aria-label='Subsanar NP-2026-0003']"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Observación') + textarea",
+                    "El administrado presentó la licencia de edificación del cerco"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0
+        },
+        {
+            "id": "fis-notificaciones-al",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/notificaciones-al.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/notificaciones"
+                ],
+                [
+                    "esperarTexto",
+                    "NP-2026-0003"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Vencidas al') + input",
+                    "2026-10-06"
+                ],
+                [
+                    "clic",
+                    "form[aria-label='Filtros de las notificaciones'] button:has-text('Buscar')"
+                ],
+                [
+                    "esperarTexto",
+                    "Vencida al 06/10/2026"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ]
+            ],
+            "recorte": "table[aria-label^='Notificaciones previas']",
+            "margen": 8,
+            "vista": {
+                "width": 1800,
+                "height": 1000
+            }
+        },
+        {
+            "id": "fis-vencidas",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/vencidas.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/plazos"
+                ],
+                [
+                    "esperarTexto",
+                    "Vencidas sin acta"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Fecha de corte') + input",
+                    "2026-09-15"
+                ],
+                [
+                    "clic",
+                    "form[aria-label='Corte de las vencidas'] button:has-text('Consultar')"
+                ],
+                [
+                    "esperarTexto",
+                    "NP-2026-0001"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ]
+            ],
+            "recorte": "form[aria-label='Corte de las vencidas']",
+            "subir": 2,
+            "margen": 4
+        },
+        {
+            "id": "fis-por-contribuyente",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/por-contribuyente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/plazos"
+                ],
+                [
+                    "esperarTexto",
+                    "Por contribuyente"
+                ],
+                [
+                    "escribir",
+                    "label:has-text('Contribuyente') + div input",
+                    "91001334"
+                ],
+                [
+                    "esperar",
+                    "ul[aria-label='Resultados de contribuyente'] button:has-text('91001334')"
+                ],
+                [
+                    "clic",
+                    "ul[aria-label='Resultados de contribuyente'] button:has-text('91001334')"
+                ],
+                [
+                    "pausa",
+                    "400"
+                ],
+                [
+                    "esperarTexto",
+                    "AC-2026-0001"
+                ],
+                [
+                    "desplazar",
+                    "h2:has-text('Por contribuyente')"
+                ]
+            ],
+            "recorte": "h2:has-text('Por contribuyente')",
+            "subir": 3,
+            "margen": 4
+        },
+        {
+            "id": "fis-plazos-cargados",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/plazos-cargados.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/plazos"
+                ],
+                [
+                    "esperarTexto",
+                    "PLAZO RG_RECURSO"
+                ],
+                [
+                    "desplazar",
+                    "h2:has-text('Plazos cargados')"
+                ]
+            ],
+            "recorte": "section:has(h2:has-text('Plazos cargados'))",
+            "margen": 12,
+            "vista": {
+                "width": 1440,
+                "height": 1300
+            }
+        },
+        {
+            "id": "fis-plazos-2027",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/plazos-2027.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/plazos"
+                ],
+                [
+                    "esperarTexto",
+                    "PLAZO RG_RECURSO"
+                ],
+                [
+                    "elegir",
+                    "section:has(h2:has-text('Plazos cargados')) select",
+                    "2027"
+                ],
+                [
+                    "esperarTexto",
+                    "Faltan para 2027"
+                ],
+                [
+                    "desplazar",
+                    "h2:has-text('Plazos cargados')"
+                ]
+            ],
+            "recorte": "section:has(h2:has-text('Plazos cargados'))",
+            "margen": 12,
+            "altoMax": 232,
+            "vista": {
+                "width": 1440,
+                "height": 1300
+            }
+        },
+        {
+            "id": "fis-nueva-acta",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/nueva-acta.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/nueva"
+                ],
+                [
+                    "esperarTexto",
+                    "La infracción"
+                ],
+                [
+                    "pausa",
+                    "2500"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Número de acta') + input",
+                    "AC-2026-0004"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Fecha de la infracción') + input",
+                    "2026-10-19"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Hora') + input",
+                    "09:45"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Lugar') + input",
+                    "JR. LAS ORQUIDEAS 171, URB. VALLE VERDE, PERENE"
+                ],
+                [
+                    "pausa",
+                    "2500"
+                ],
+                [
+                    "elegir",
+                    "label:has-text('Código CUIS') + select",
+                    "070 · No mantener en lugar visible del anuncio o aviso publicitario, el número de la autorización, el número de registro y el nombre del propietario."
+                ],
+                [
+                    "pausa",
+                    "500"
+                ]
+            ],
+            "recorte": "form[aria-label='Nueva acta'] > :nth-child(1)",
+            "margen": 8
+        },
+        {
+            "id": "fis-nueva-acta-administrado",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/nueva-acta-administrado.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/nueva"
+                ],
+                [
+                    "esperarTexto",
+                    "El administrado"
+                ],
+                [
+                    "escribir",
+                    "label:has-text('Obligado') + div input",
+                    "20999000020"
+                ],
+                [
+                    "esperar",
+                    "ul[aria-label='Resultados de obligado'] button:has-text('20999000020')"
+                ],
+                [
+                    "clic",
+                    "ul[aria-label='Resultados de obligado'] button:has-text('20999000020')"
+                ],
+                [
+                    "pausa",
+                    "400"
+                ],
+                [
+                    "escribir",
+                    "label:has-text('Contribuyente') + div input",
+                    "20999000020"
+                ],
+                [
+                    "esperar",
+                    "ul[aria-label='Resultados de contribuyente'] button:has-text('20999000020')"
+                ],
+                [
+                    "clic",
+                    "ul[aria-label='Resultados de contribuyente'] button:has-text('20999000020')"
+                ],
+                [
+                    "pausa",
+                    "400"
+                ],
+                [
+                    "escribir",
+                    "label:has-text('Predio') + div input",
+                    "02-01-0003"
+                ],
+                [
+                    "esperar",
+                    "ul[aria-label='Resultados de predio'] button:has-text('02-01-0003')"
+                ],
+                [
+                    "clic",
+                    "ul[aria-label='Resultados de predio'] button:has-text('02-01-0003')"
+                ],
+                [
+                    "pausa",
+                    "400"
+                ],
+                [
+                    "escribir",
+                    "label:has-text('Notificación previa') + div input",
+                    "NP-2026"
+                ],
+                [
+                    "esperar",
+                    "ul[aria-label='Resultados de notificación previa'] button"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ]
+            ],
+            "recorte": "form[aria-label='Nueva acta'] > :nth-child(2)",
+            "margen": 8
+        },
+        {
+            "id": "fis-nueva-acta-expediente",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/nueva-acta-expediente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/nueva"
+                ],
+                [
+                    "esperarTexto",
+                    "La infracción"
+                ],
+                [
+                    "pausa",
+                    "2500"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Número de acta') + input",
+                    "AC-2026-0004"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Fecha de la infracción') + input",
+                    "2026-10-19"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Hora') + input",
+                    "09:45"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Lugar') + input",
+                    "JR. LAS ORQUIDEAS 171, URB. VALLE VERDE, PERENE"
+                ],
+                [
+                    "pausa",
+                    "2500"
+                ],
+                [
+                    "elegir",
+                    "label:has-text('Código CUIS') + select",
+                    "070 · No mantener en lugar visible del anuncio o aviso publicitario, el número de la autorización, el número de registro y el nombre del propietario."
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Número de expediente') + input",
+                    "EXP-2026-0150"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Inspector') + input",
+                    "INSPECTOR DEMO"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Descripción del hecho') + textarea",
+                    "Letrero luminoso sin el número de autorización ni el nombre del propietario."
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Observación') + textarea",
+                    "Acta levantada en la inspección del 19/10/2026"
+                ],
+                [
+                    "desplazar",
+                    "button:has-text('Registrar acta')"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ]
+            ],
+            "recorte": "form[aria-label='Nueva acta'] > :nth-child(3)",
+            "margen": 8
+        },
+        {
+            "id": "fis-nueva-acta-falta",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/nueva-acta-falta.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/nueva"
+                ],
+                [
+                    "esperarTexto",
+                    "La infracción"
+                ],
+                [
+                    "pausa",
+                    "2500"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Número de acta') + input",
+                    "AC-2026-0004"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Fecha de la infracción') + input",
+                    "2026-10-19"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Hora') + input",
+                    "09:45"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Lugar') + input",
+                    "JR. LAS ORQUIDEAS 171, URB. VALLE VERDE, PERENE"
+                ],
+                [
+                    "pausa",
+                    "2500"
+                ],
+                [
+                    "desplazar",
+                    "button:has-text('Registrar acta')"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ]
+            ],
+            "recorte": "text=Para registrar falta",
+            "subir": 1,
+            "margen": 10,
+            "anchoMax": 900
+        },
+        {
+            "id": "fis-nueva-acta-sin-codigo",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/nueva-acta-sin-codigo.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/nueva"
+                ],
+                [
+                    "pausa",
+                    "2500"
+                ],
+                [
+                    "llenar",
+                    "label:has-text('Fecha de la infracción') + input",
+                    "2025-06-01"
+                ],
+                [
+                    "esperarTexto",
+                    "Ningún código del CUIS está vigente"
+                ],
+                [
+                    "clic",
+                    "h1"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ]
+            ],
+            "recorte": "form[aria-label='Nueva acta'] > :nth-child(1)",
+            "margen": 8
+        },
+        {
+            "id": "fis-expediente",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/expediente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac3}"
+                ],
+                [
+                    "esperarTexto",
+                    "Actos del expediente"
+                ]
+            ]
+        },
+        {
+            "id": "fis-expediente-acciones",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/expediente-acciones.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac1}"
+                ],
+                [
+                    "esperarTexto",
+                    "Actos del expediente"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 260
+            }
+        },
+        {
+            "id": "fis-desglose",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/desglose.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac1}"
+                ],
+                [
+                    "esperarTexto",
+                    "Cifrada por el sistema"
+                ]
+            ],
+            "recorte": "table[aria-label^='Desglose de la multa']",
+            "subir": 4,
+            "margen": 4
+        },
+        {
+            "id": "fis-cuis-aplicado",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/cuis-aplicado.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac1}"
+                ],
+                [
+                    "esperarTexto",
+                    "Código CUIS aplicado"
+                ],
+                [
+                    "desplazar",
+                    "dl[aria-label='Código CUIS aplicado']"
+                ]
+            ],
+            "recorte": "dl[aria-label='Código CUIS aplicado']",
+            "subir": 2,
+            "margen": 4
+        },
+        {
+            "id": "fis-actos",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/actos.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac3}"
+                ],
+                [
+                    "esperarTexto",
+                    "Actos del expediente"
+                ],
+                [
+                    "desplazar",
+                    "table[aria-label='Actos del expediente']"
+                ]
+            ],
+            "recorte": "table[aria-label='Actos del expediente']",
+            "subir": 2,
+            "margen": 4
+        },
+        {
+            "id": "fis-actos-previa",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/actos-previa.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac1}"
+                ],
+                [
+                    "esperarTexto",
+                    "Actos del expediente"
+                ],
+                [
+                    "desplazar",
+                    "table[aria-label='Actos del expediente']"
+                ]
+            ],
+            "recorte": "table[aria-label='Actos del expediente']",
+            "subir": 2,
+            "margen": 4
+        },
+        {
+            "id": "fis-anular",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/anular.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac1}"
+                ],
+                [
+                    "esperarTexto",
+                    "Actos del expediente"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Anular')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:text-is('Motivo') + textarea",
+                    "El acta consigna un código que no corresponde al hecho constatado"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Observación') + textarea",
+                    "Anulación dispuesta por la Subgerencia de Fiscalización"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0
+        },
+        {
+            "id": "fis-anulada",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/anulada.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac2}"
+                ],
+                [
+                    "esperarTexto",
+                    "Acta anulada."
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 420
+            }
+        },
+        {
+            "id": "fis-descargo",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/descargo.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac1}"
+                ],
+                [
+                    "esperarTexto",
+                    "Actos del expediente"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Registrar descargo')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Número de expediente') + input",
+                    "EXP-2026-0160"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Fecha de presentación') + input",
+                    "2026-09-21"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Sustento') + textarea",
+                    "El administrado afirma que el letrero sí muestra el número de autorización."
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Observación') + textarea",
+                    "Escrito recibido en mesa de partes"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0,
+            "vista": {
+                "width": 1440,
+                "height": 1300
+            }
+        },
+        {
+            "id": "fis-descargos",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/descargos.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac3}"
+                ],
+                [
+                    "esperar",
+                    "table[aria-label='Descargos']"
+                ],
+                [
+                    "desplazar",
+                    "table[aria-label='Descargos']"
+                ]
+            ],
+            "recorte": "table[aria-label='Descargos']",
+            "subir": 2,
+            "margen": 4,
+            "vista": {
+                "width": 1800,
+                "height": 1000
+            }
+        },
+        {
+            "id": "fis-resolucion-ris",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/resolucion-ris.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac1}"
+                ],
+                [
+                    "esperarTexto",
+                    "Actos del expediente"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Dictar resolución')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Sustento') + textarea",
+                    "Se constató la infracción; el administrado no presentó descargo en el plazo."
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Sanción accesoria') + input",
+                    "Retiro del letrero"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Observación') + textarea",
+                    "Resolución de sanción del acta AC-2026-0001"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0,
+            "vista": {
+                "width": 1440,
+                "height": 1300
+            }
+        },
+        {
+            "id": "fis-resolucion-rgr",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/resolucion-rgr.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac1}"
+                ],
+                [
+                    "esperarTexto",
+                    "Actos del expediente"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Dictar resolución')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] label:has-text('Tipo') + select",
+                    "De recurso (RGR)"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0,
+            "vista": {
+                "width": 1440,
+                "height": 1300
+            }
+        },
+        {
+            "id": "fis-resoluciones",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/resoluciones.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac3}"
+                ],
+                [
+                    "esperar",
+                    "table[aria-label='Resoluciones']"
+                ],
+                [
+                    "desplazar",
+                    "table[aria-label='Notificaciones de las resoluciones']"
+                ]
+            ],
+            "recorte": "table[aria-label='Resoluciones']",
+            "subir": 2,
+            "margen": 4,
+            "vista": {
+                "width": 1800,
+                "height": 1000
+            }
+        },
+        {
+            "id": "fis-notificar",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/notificar.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:fis_ac3}"
+                ],
+                [
+                    "esperar",
+                    "button[aria-label='Notificar RIS-2026-000001']"
+                ],
+                [
+                    "clic",
+                    "button[aria-label='Notificar RIS-2026-000001']"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Fecha de la diligencia') + input",
+                    "2026-10-19"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] label:has-text('Modalidad') + select",
+                    "Cedulón"
+                ],
+                [
+                    "elegir",
+                    "[role=dialog] label:has-text('Resultado') + select",
+                    "No ubicado"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Notificador') + input",
+                    "NOTIFICADOR DEMO"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Observación') + textarea",
+                    "Segundo intento: el local estaba cerrado"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0,
+            "vista": {
+                "width": 1440,
+                "height": 1300
+            }
+        },
+        {
+            "id": "fis-pdf-ris",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/pdf-ris.png",
+            "pasos": [],
+            "pdf": "/api/srtm/infracciones/resoluciones/{ref:fis_ris}/pdf",
+            "pagina": 1,
+            "resolucion": 100
+        },
+        {
+            "id": "fis-contribuyente-infracciones",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/contribuyente-infracciones.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:fis_bodega}?tab=infracciones"
+                ],
+                [
+                    "esperarTexto",
+                    "Fase y estado de la deuda al"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        },
+        {
+            "id": "fis-predio-infracciones",
+            "perfil": "fiscalizador",
+            "archivo": "usuario/fiscalizador/predio-infracciones.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios/{ref:fis_predio_bodega}?tab=infracciones"
+                ],
+                [
+                    "esperarTexto",
+                    "Fase y estado de la deuda al"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        }
+    ]
+}

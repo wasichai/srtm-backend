@@ -1,13 +1,13 @@
 flowchart LR
   N["Notificación previa<br/>(plazo en días)"] -->|subsanada| SU["Subsanación"]
-  N -->|vence sin subsanar| A["Acta<br/>(papeleta)"]
+  N -->|sin subsanar| A["Acta<br/>(papeleta)"]
   A0["Constatación directa"] --> A
   A -->|Anular| AN["Acta anulada"]
   A -->|Registrar descargo| D["Descargo"]
   A -->|Dictar resolución| R["Resolución<br/>RIS (administrativa)<br/>RGR (de recurso)"]
   D --> R
   R -->|Notificar| NR["Notificación de la resolución"]
-  NR --> X["Exigible desde<br/>(días hábiles)"]
+  NR -->|notificado o rechazado| X["Exigible desde<br/>(días hábiles)"]
   X -.-> C["Cobranza y coactiva<br/>(fuera de SRTM: caja-backend)"]
   classDef fuera fill:#FFFFFF,stroke:#8A8A8A,stroke-dasharray:4 3
   class C fuera

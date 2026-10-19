@@ -376,6 +376,31 @@ se vuelvan a hacer, pero no los ya hechos (las cuotas guardan el parámetro con 
 carga como una fila nueva con su propia vigencia, con la doble firma, por el procedimiento técnico de
 <<anio-tributario>>.
 
+[[cuis-admin]]
+=== El CUIS
+
+El cuadro único de infracciones y sanciones (CUIS) se versiona por vigencia: un código nunca se edita, se le agrega
+una versión nueva y la anterior se cierra el día antes. Las versiones nuevas se registran desde el portal
+(*Infracciones › CUIS*, ver el {m-fiscalizador}) o en bloque con `model/import_cuis.py --csv`. Cuando una ordenanza
+*deroga* códigos sin reemplazarlos, el área de sistemas los cierra con `import_cuis.py --csv <archivo> --completo`:
+el archivo es entonces el CUIS completo de la norma, con una sola fecha de vigencia, y se cierran los códigos vigentes
+que no trae. Pruebe siempre antes con `--dry-run`.
+
+[[correcciones]]
+=== Registros que no se corrigen
+
+Las actas, notificaciones, descargos, resoluciones y anuncios solo se agregan: ni el portal ni la consola permiten
+editarlos o borrarlos. Un error se corrige con el acto que corresponde, que queda en el expediente con su observación:
+
+[cols="1,2",options="header"]
+|===
+|Registro equivocado |Cómo se corrige
+|Acta |*Anular* el acta (con su motivo) y registrar la correcta.
+|Anuncio |*Cesar* o *Retirar* el anuncio y registrar el correcto.
+|Notificación previa, descargo, resolución, notificación de resolución |No tienen anulación propia en esta versión: el error queda registrado. Anótelo en la observación del acto siguiente y, si afecta un expediente, anule el acta.
+|Cuota de arbitrio |Anular la cuota y volver a determinar.
+|===
+
 [[catalogos]]
 === Catálogos
 
@@ -516,7 +541,8 @@ Antes de emitir los documentos de un año:
 | |La UIT del año cargada en `parametro_tributario`, con su norma y la doble firma (`import_parametros.py`). |Sistemas, con el área de rentas
 | |Los tramos, el mínimo y las tasas del año vigentes al 1 de enero. |Sistemas
 | |La ordenanza de arbitrios del año ratificada, con sus tasas, zonas, usos y vencimientos cargados. Sin ordenanza ratificada no se determina ni se emite. |Rentas y sistemas
-| |El CUIS y los plazos vigentes, si cambiaron. |Fiscalización y sistemas
+| |El CUIS y los plazos (`PLAZO DESCARGO_PAPELETA`, `PLAZO RG_RECURSO`) vigentes, si cambiaron. |Fiscalización y sistemas
+| |Los feriados movibles del año nuevo (`FERIADOS <año>`), *antes del 1 de enero*: sin esa fila, los descargos y las notificaciones de resoluciones que caen en ese año no se registran (el sistema responde que falta `FERIADOS <año>`). |Sistemas
 | |Las tasas de anuncios del año. |Sistemas
 | |La cabecera de los documentos (<<municipalidad>>) revisada. |Administrador
 | |Las declaraciones juradas del año registradas o actualizadas. |Registradores
@@ -549,6 +575,14 @@ con la aprobación de la gerencia y después de respaldar el estado actual.
 
 El procedimiento completo, con los comandos, está en el {m-sistema}. La base de demostración de estos manuales trae un
 ejemplo reproducible de respaldo, restauración y verificación (`docs/manuales/demo/README.adoc`).
+
+[[zona-horaria]]
+=== Zona horaria del servidor
+
+El servidor fecha los registros con su propia zona horaria, y el portal propone las fechas de los formularios con la
+del navegador. Si el servidor no está en la hora de Lima, cerca de la medianoche las dos fechas difieren en un día (por
+ejemplo, la *Fecha del registro* de un contribuyente y la *Fecha de presentación* que propone el formulario). Pida al
+área de sistemas que arranque el servidor con la zona `America/Lima` (`-Duser.timezone=America/Lima` o `TZ=America/Lima`).
 
 [[monitoreo]]
 === Monitoreo e incidencias
