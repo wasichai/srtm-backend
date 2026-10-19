@@ -869,6 +869,11 @@ y puede lanzar otra.
 Pide creación y edición sobre `brecha_corrida` y creación sobre `brecha_predio` (**403**); consultar pide lectura
 sobre `brecha_corrida`.
 
+**Quién la ve.** La brecha la consulta cualquier usuario de la municipalidad (decisión del 2026-10-19), y eso se da por
+roles, no por código: **todo rol** de srtm lleva lectura sobre `brecha_corrida` y `brecha_predio`. Core revisa la
+lectura de cada fila y wasichai no tiene un permiso para «cualquier usuario autenticado», así que un rol nuevo sin esa
+lectura ve el panel con 403. Lanzar una corrida queda para quien tenga creación y edición (arriba).
+
 | Método | Ruta | Responde |
 |---|---|---|
 | POST | `/api/srtm/brecha/corridas` `{anio}` | 202 con la corrida; 400 año inválido; 403; 409 catastro no configurado o corrida en curso. |
