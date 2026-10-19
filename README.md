@@ -892,10 +892,11 @@ El JSON va en camelCase, como `/liquidacion`. `lote_geom` de `brecha_predio` es 
 guarda el lote del predio del padrón o, para un omiso, el del catastro; así `/lotes` lo lee de las filas y la capa gis
 (`/api/gis/objects/brecha_predio/features`) también puede servirlo.
 
-**Decisiones por confirmar** (valores por defecto del plan de la brecha):
+**Decisiones** (confirmadas por la municipalidad el 2026-10-19, salvo D8):
 - D5: una celda «.....» del cuadro de valores no es cero: el predio queda SIN_VALOR con su motivo.
 - D7: llave de cruce código municipal → CPU → sector, manzana y lote.
-- D8: la deducción Amazonía no se aplica; solo la `deduccion` que ya trae cada DJ.
+- D8: la deducción Amazonía no se aplica (Perené no la tiene hoy); solo la `deduccion` que ya trae cada DJ. Abierta
+  para cuando se cargue una municipalidad de la Amazonía.
 - D10: COINCIDE con |Δ autoavalúo| ≤ 5 %.
 - D11: solo 2026 (el año lo decide catastro; srtm acepta cualquiera con sus parámetros).
 - D12: reparto entre secuencias por autoavalúo declarado, si no por área construida, si no en partes iguales.
