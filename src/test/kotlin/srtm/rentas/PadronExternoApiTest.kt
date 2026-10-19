@@ -76,8 +76,9 @@ class PadronExternoApiTest : SrtmApiTest() {
         assertEquals("V0123", registro(VIA, via)["codigo"].asString())
         assertEquals("U045", registro(UNIDAD_URBANA, unidad)["codigo"].asString())
         // the portal's catalog still lists it, by its name
-        val vias = tree(send("GET", "/api/srtm/vias?q=$nombre&tipo=JIRON", null, HttpStatus.OK))["content"]
-        assertEquals(listOf(via), vias.map { it["id"].asString() })
+        val vias = tree(send("GET", "/api/srtm/vias?q=$nombre&tipo=JIRON", null, HttpStatus.OK))
+        assertEquals(1, vias["totalElements"].asInt(), vias.toString())
+        assertEquals(nombre, vias["content"][0]["nombre"].asString(), vias.toString())
     }
 
     // what the importer does: core's record api, whose update replaces every field (so it sends them all)
