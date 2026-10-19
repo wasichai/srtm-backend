@@ -1890,7 +1890,9 @@ emisión (hora de Lima); la gerencia; la dirección; una línea punteada, y el t
 - **Los datos** salen del registro `municipalidad` de la organización (nombre, oficina, RUC, gerencia y dirección),
   que se edita en el admin: `/admin`, objeto *Municipalidad*.
   - Hay uno por organización. Si hay más, vale el más antiguo y el log lo avisa.
-  - Sin registro, la cabecera solo lleva `srtm.municipalidad.nombre` (`SRTM_MUNICIPALIDAD_NOMBRE`).
+  - Sin registro, la cabecera solo lleva un nombre de respaldo: `srtm.municipalidad.nombre`
+    (`SRTM_MUNICIPALIDAD_NOMBRE`) si se configura; si no, el nombre de la organización en core. Por defecto está vacío,
+    así una instalación con varias municipalidades no imprime el nombre de otra.
   - Una línea vacía no se imprime.
   - Se lee como el usuario que emite, así que su rol necesita permiso de lectura sobre `municipalidad`, como sobre
     `parametro_tributario`.

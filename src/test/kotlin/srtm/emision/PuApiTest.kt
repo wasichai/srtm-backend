@@ -64,6 +64,37 @@ class PuApiTest : SrtmApiTest() {
         assertTrue(Regex("Fecha: \\d{2}/\\d{2}/\\d{4} \\d{2}:\\d{2}").containsMatchIn(texto), texto)
     }
 
+    // an install with several municipalidades: an organization with no municipalidad record (and no
+    // srtm.municipalidad.nombre) prints its own name in core, never another municipalidad's
+    @Test
+    fun `without a municipalidad record the pu opens with the name of the organization`() {
+        val suyo = otraOrganizacion()
+        val nombre = tree(send("GET", "/api/organizations/current", null, HttpStatus.OK, suyo))["name"].asString()
+        val predio =
+            post("/api/srtm/predios", mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO"), suyo)
+        val titular = post("/api/srtm/contribuyentes", personaNatural(uniqueDocumento()), suyo)
+        post(
+            "/api/srtm/declaraciones",
+            mapOf(
+                "contribuyente" to titular["id"].asString(),
+                "predio" to predio["id"].asString(),
+                "anio" to 2026,
+                "secuencia_uso" to "1",
+                "valor_autoavaluo" to 10000.50,
+                "deduccion" to 0
+            ),
+            suyo
+        )
+
+        val pu = pu(predio["id"].asString(), "anio=2026", suyo)
+
+        assertEquals(HttpStatus.OK, pu.status, String(pu.cuerpo))
+        val texto = texto(pu.cuerpo)
+        // the template prints the name in capitals
+        assertTrue(nombre.uppercase() in texto, texto)
+        assertTrue("PERENÉ" !in texto, texto)
+    }
+
     @Test
     fun `a predio without a declaracion that year is a 404`() {
         val predio = predio()
@@ -157,7 +188,8 @@ class PuApiTest : SrtmApiTest() {
 
     private fun pu(
         predio: String,
-        query: String
+        query: String,
+        token: String = this.token
     ): Respuesta {
         val result =
             client

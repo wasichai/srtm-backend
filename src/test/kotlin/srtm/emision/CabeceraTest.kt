@@ -7,10 +7,11 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
+import java.util.UUID
 import javax.imageio.ImageIO
 
 // the PU and HR's header: the organization's municipalidad record (the oldest, if the admin left two), the
-// srtm.municipalidad.nombre fallback without one, and the escudo as a data: uri
+// fallback name without one (srtm.municipalidad.nombre, else the organization's own), and the escudo as a data: uri
 class CabeceraTest {
     @Test
     fun `the municipalidad record makes the header, blanks left out`() {
@@ -36,6 +37,18 @@ class CabeceraTest {
         assertEquals(Cabecera(POR_DEFECTO), cabeceraDe(emptyList(), POR_DEFECTO, null))
         // a record without its nombre (the field is required, but an old row could lack it) falls back too
         assertEquals(POR_DEFECTO, cabeceraDe(listOf(Municipalidad(ruc = "1")), POR_DEFECTO, null).nombre)
+    }
+
+    @Test
+    fun `the fallback name is the configured one, else the organization's name, else its slug`() {
+        assertEquals("CONFIGURADO", nombreDeRespaldo("CONFIGURADO", "Municipalidad de Ica", "ica", ID))
+        assertEquals("CONFIGURADO", nombreDeRespaldo("  CONFIGURADO ", null, null, ID))
+        assertEquals("Municipalidad de Ica", nombreDeRespaldo("", "Municipalidad de Ica", "ica", ID))
+        assertEquals("Municipalidad de Ica", nombreDeRespaldo("  ", " Municipalidad de Ica ", "ica", ID))
+        assertEquals("ica", nombreDeRespaldo("", " ", "ica", ID))
+        assertEquals("ica", nombreDeRespaldo("", null, "ica", ID))
+        // an organization core cannot find: never an empty header
+        assertEquals(ID.toString(), nombreDeRespaldo("", null, null, ID))
     }
 
     @Test
@@ -67,6 +80,7 @@ class CabeceraTest {
     }
 
     private companion object {
+        val ID: UUID = UUID.fromString("00000000-0000-0000-0000-000000000001")
         const val POR_DEFECTO = "MUNICIPALIDAD DISTRITAL DE PERENÉ"
     }
 }
