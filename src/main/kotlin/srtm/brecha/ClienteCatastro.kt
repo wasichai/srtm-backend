@@ -17,35 +17,65 @@ import org.springframework.web.util.UriComponentsBuilder
 import tools.jackson.databind.DeserializationFeature
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
+import wasichai.core.common.ConflictException
 import java.math.BigDecimal
 import java.time.Duration
 import java.time.Instant
+import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
 
-// srtm's access to catastro-backend: its url and the service account that catastro's model/crear_cuenta_srtm.py
-// created (role SRTM_LECTOR). off by default; the secret comes from the environment (application.yml, README).
-// organizacion is the srtm organization (its slug or its id) whose catastro that is: the configuration is the
-// install's, and only that organization's corridas may read it
+// srtm's access to catastro-backend: a catastro per organization of srtm, each its url and the service account that
+// its catastro's model/crear_cuenta_srtm.py created (role SRTM_LECTOR). off by default; the secrets come from the
+// environment (application.yml, README). organizaciones is keyed by the organization (its slug or its id), or by any
+// name when the entry's organizacion says which: an environment variable cannot carry an id's dashes. the single url,
+// client-id, client-secret and organizacion of before are one more entry (cuentas)
 @ConfigurationProperties(prefix = "srtm.catastro")
 data class CatastroProperties(
     val enabled: Boolean = false,
     val url: String = "",
     val clientId: String = "",
     val clientSecret: String = "",
-    // each request: catastro values a page on the fly
-    val timeout: Duration = Duration.ofSeconds(60),
-    val organizacion: String = ""
+    // each request: catastro values a page on the fly. an entry without its own timeout takes this one
+    val timeout: Duration = ClienteCatastro.TIMEOUT,
+    val organizacion: String = "",
+    val organizaciones: Map<String, CuentaCatastro> = emptyMap()
 ) {
-    val completa: Boolean get() = listOf(url, clientId, clientSecret).none { it.isBlank() }
+    // every account by its organization (trimmed, lowercase: a slug matches without case, an id parses either way):
+    // the single properties' when organizacion is set, then the map's, which replaces it for the same organization
+    fun cuentas(): Map<String, CuentaCatastro> {
+        val todas = linkedMapOf<String, CuentaCatastro>()
+        val unica = organizacion.trim()
+        if (unica.isNotEmpty()) todas[unica.lowercase()] = CuentaCatastro(unica, url, clientId, clientSecret, timeout)
+        for ((clave, cuenta) in organizaciones) {
+            val suya = cuenta.organizacion.trim().ifEmpty { clave.trim() }
+            todas[suya.lowercase()] = cuenta.copy(organizacion = suya, timeout = cuenta.timeout ?: timeout)
+        }
+        return todas
+    }
 
     // never the secret: this text may end up in a log
-    override fun toString() = "CatastroProperties(enabled=$enabled, url=$url, clientId=$clientId, timeout=$timeout, organizacion=$organizacion)"
+    override fun toString() =
+        "CatastroProperties(enabled=$enabled, url=$url, clientId=$clientId, timeout=$timeout, organizacion=$organizacion, " +
+            "organizaciones=$organizaciones)"
+}
+
+// one organization's catastro-backend and its service account
+data class CuentaCatastro(
+    val organizacion: String = "",
+    val url: String = "",
+    val clientId: String = "",
+    val clientSecret: String = "",
+    val timeout: Duration? = null
+) {
+    // what it lacks to be read
+    val faltan: List<String>
+        get() = listOf("url" to url, "client-id" to clientId, "client-secret" to clientSecret).filter { it.second.isBlank() }.map { it.first }
+
+    override fun toString() = "CuentaCatastro(organizacion=$organizacion, url=$url, clientId=$clientId, timeout=$timeout)"
 }
 
 // catastro-backend's valuations of a year, every page of them
 interface Catastro {
-    val configurado: Boolean
-
     // porPagina runs after each page is read: the corrida beats its latido there
     suspend fun valuaciones(
         anio: Int,
@@ -58,39 +88,52 @@ class CatastroException(
     mensaje: String
 ) : RuntimeException(mensaje)
 
-// without the configuration: no corrida starts (BrechaService answers 409 before)
-class SinCatastro : Catastro {
-    override val configurado = false
+// the catastros of the install, each its organization's (the key: its id or its slug). a corrida reads its own
+// organization's only, never another's
+class Catastros(
+    porOrganizacion: Map<String, Catastro>
+) {
+    private val entradas = porOrganizacion.mapKeys { it.key.trim() }
 
-    override suspend fun valuaciones(
-        anio: Int,
-        porPagina: suspend () -> Unit
-    ): Valuaciones = throw CatastroException(NO_CONFIGURADO)
+    val configurado: Boolean get() = entradas.isNotEmpty()
+
+    // some key is a slug: the caller's organization has to be read for it
+    val necesitaSlug: Boolean = entradas.keys.any { comoId(it) == null }
+
+    // this organization's catastro, or null when it has none. a key that is an id matches by id; else by slug
+    // (without case). named twice (by its slug and by its id): 409, never one of the two at random
+    fun de(
+        id: UUID,
+        slug: String?
+    ): Catastro? {
+        val suyas = entradas.filterKeys { esDe(it, id, slug) }
+        if (suyas.size > 1) throw ConflictException(dosCatastros(suyas.keys))
+        return suyas.values.firstOrNull()
+    }
+
+    private fun esDe(
+        clave: String,
+        id: UUID,
+        slug: String?
+    ): Boolean {
+        val comoId = comoId(clave)
+        return if (comoId != null) comoId == id else slug != null && slug.equals(clave, ignoreCase = true)
+    }
+
+    private fun comoId(clave: String) = runCatching { UUID.fromString(clave) }.getOrNull()
 }
 
 const val NO_CONFIGURADO =
-    "Catastro no configurado: srtm.catastro necesita enabled, url, client-id y client-secret " +
-        "(SRTM_CATASTRO_ENABLED, SRTM_CATASTRO_URL, SRTM_CATASTRO_CLIENT_ID, SRTM_CATASTRO_CLIENT_SECRET)"
+    "Catastro no configurado: srtm.catastro necesita enabled y, por organización, url, client-id y client-secret " +
+        "(SRTM_CATASTRO_ENABLED; SRTM_CATASTRO_ORGANIZACIONES_<ORGANIZACION>_URL, _CLIENT_ID y _CLIENT_SECRET)"
 
-const val SIN_ORGANIZACION =
-    "Catastro sin organización: fije srtm.catastro.organizacion (SRTM_CATASTRO_ORGANIZACION) con el slug o el id de la " +
-        "organización de srtm cuyo catastro es"
+const val SIN_CATASTRO_CONFIGURADO =
+    "Catastro no configurado para esta organización: fije srtm.catastro.organizaciones.<slug o id> con su url, " +
+        "client-id y client-secret (SRTM_CATASTRO_ORGANIZACIONES_<ORGANIZACION>_URL, _CLIENT_ID y _CLIENT_SECRET)"
 
-const val DE_OTRA_ORGANIZACION = "Catastro no configurado para esta organización: srtm.catastro.organizacion es otra"
-
-// why a corrida of this organization may not read the configured catastro, or null when it may: configurada is
-// srtm.catastro.organizacion, an id or a slug (slug: this organization's, when configurada is not an id)
-fun otraOrganizacion(
-    configurada: String,
-    id: java.util.UUID,
-    slug: String?
-): String? {
-    val valor = configurada.trim()
-    if (valor.isEmpty()) return SIN_ORGANIZACION
-    val comoId = runCatching { java.util.UUID.fromString(valor) }.getOrNull()
-    val es = if (comoId != null) comoId == id else slug != null && slug.equals(valor, ignoreCase = true)
-    return if (es) null else DE_OTRA_ORGANIZACION
-}
+fun dosCatastros(claves: Collection<String>) =
+    "Catastro configurado dos veces para esta organización (srtm.catastro.organizaciones: " +
+        "${claves.sorted().joinToString(" y ")}): deje una sola"
 
 // catastro-backend by rest, as its service account: POST {url}/api/auth/token {clientId, clientSecret} -> {token,
 // expiresAt}, kept until a minute before it expires (and dropped on a 401), then GET {url}/api/catastro/valuaciones
@@ -98,9 +141,11 @@ fun otraOrganizacion(
 // loteGeom its geometry (GeoJSON in EPSG:4326, or null). a service account that may not read any of catastro's four
 // objects gets a 403 for the whole request: the corrida fails with it
 class ClienteCatastro(
-    private val properties: CatastroProperties,
+    private val cuenta: CuentaCatastro,
     private val ahora: () -> Instant = Instant::now
 ) : Catastro {
+    private val timeout = cuenta.timeout ?: TIMEOUT
+
     private val log = LoggerFactory.getLogger(javaClass)
 
     // own builder: boot 4 hands out no WebClient.Builder bean (PideReniec). a page of 500 valued items is well over
@@ -114,8 +159,6 @@ class ClienteCatastro(
     private val candado = Mutex()
     private var token: String? = null
     private var vence: Instant = Instant.MIN
-
-    override val configurado = true
 
     override suspend fun valuaciones(
         anio: Int,
@@ -152,7 +195,7 @@ class ClienteCatastro(
     ): JsonNode {
         val uri =
             UriComponentsBuilder
-                .fromUriString(properties.url.trimEnd('/'))
+                .fromUriString(cuenta.url.trimEnd('/'))
                 .path("/api/catastro/valuaciones")
                 .queryParam("anio", anio)
                 .queryParam("page", page)
@@ -169,7 +212,7 @@ class ClienteCatastro(
                         .accept(MediaType.APPLICATION_JSON)
                         .retrieve()
                         .bodyToMono(String::class.java)
-                        .timeout(properties.timeout)
+                        .timeout(timeout)
                         .awaitSingleOrNull()
                 return DECIMALES.readTree(body.orEmpty())
             } catch (e: CancellationException) {
@@ -198,13 +241,13 @@ class ClienteCatastro(
                 try {
                     client
                         .post()
-                        .uri(properties.url.trimEnd('/') + "/api/auth/token")
+                        .uri(cuenta.url.trimEnd('/') + "/api/auth/token")
                         .contentType(MediaType.APPLICATION_JSON)
                         .accept(MediaType.APPLICATION_JSON)
-                        .bodyValue(mapOf("clientId" to properties.clientId, "clientSecret" to properties.clientSecret))
+                        .bodyValue(mapOf("clientId" to cuenta.clientId, "clientSecret" to cuenta.clientSecret))
                         .retrieve()
                         .bodyToMono(String::class.java)
-                        .timeout(properties.timeout)
+                        .timeout(timeout)
                         .awaitSingleOrNull()
                 } catch (e: CancellationException) {
                     throw e
@@ -216,8 +259,8 @@ class ClienteCatastro(
                             ?.value()
                             ?.let { " ($it)" }
                             .orEmpty()
-                    log.warn("catastro: no se obtuvo el token de la cuenta de servicio {}{}", properties.clientId, estado)
-                    throw CatastroException("catastro-backend no dio el token de la cuenta de servicio ${properties.clientId}$estado")
+                    log.warn("catastro: no se obtuvo el token de la cuenta de servicio {}{}", cuenta.clientId, estado)
+                    throw CatastroException("catastro-backend no dio el token de la cuenta de servicio ${cuenta.clientId}$estado")
                 }
             val nodo = JSON.readTree(respuesta.orEmpty())
             val nuevo = nodo.path("token").texto() ?: throw CatastroException("catastro-backend respondió el token sin token")
@@ -228,6 +271,7 @@ class ClienteCatastro(
 
     companion object {
         const val TAMANIO_PAGINA = 500
+        val TIMEOUT: Duration = Duration.ofSeconds(60)
         private const val TAMANIO_MAXIMO = 32 * 1024 * 1024
         private val MARGEN: Duration = Duration.ofSeconds(60)
         private val JSON = JsonMapper.builder().build()
@@ -274,22 +318,32 @@ class ClienteCatastro(
     }
 }
 
-// catastro-backend when its url and service account are configured, no corrida otherwise
+// a client per organization whose url and service account are set; none when off (no corrida starts)
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(CatastroProperties::class)
 class CatastroConfig {
     private val log = LoggerFactory.getLogger(javaClass)
 
     @Bean
-    fun catastro(properties: CatastroProperties): Catastro {
-        if (!properties.enabled) return SinCatastro()
-        if (!properties.completa) {
-            log.warn("srtm.catastro.enabled sin url, client-id o client-secret: no se corre la brecha")
-            return SinCatastro()
+    fun catastros(properties: CatastroProperties): Catastros {
+        if (!properties.enabled) return Catastros(emptyMap())
+        if (properties.organizacion.isBlank() && properties.clientId.isNotBlank()) {
+            log.warn("srtm.catastro.client-id sin organizacion: esa cuenta no es de ninguna organización y no se usa")
         }
-        if (properties.organizacion.isBlank()) {
-            log.warn("srtm.catastro.enabled sin organizacion: ninguna corrida de la brecha empieza hasta fijarla")
+        val clientes = linkedMapOf<String, Catastro>()
+        for ((organizacion, cuenta) in properties.cuentas()) {
+            val faltan = cuenta.faltan
+            if (faltan.isEmpty()) {
+                clientes[organizacion] = ClienteCatastro(cuenta)
+            } else {
+                log.warn("srtm.catastro: el catastro de {} no tiene {}: esa organización no corre la brecha", organizacion, faltan.joinToString(", "))
+            }
         }
-        return ClienteCatastro(properties)
+        if (clientes.isEmpty()) {
+            log.warn("srtm.catastro.enabled sin ninguna organización con url, client-id y client-secret: no se corre la brecha")
+        } else {
+            log.info("srtm.catastro: catastro de {}", clientes.keys.joinToString(", "))
+        }
+        return Catastros(clientes)
     }
 }

@@ -55,17 +55,24 @@ srtm:
       # how long a consulta backs a save with fuente PIDE RENIEC
       vigencia: 30m
   catastro:
-    # catastro-backend's valuations for the brecha de recaudación, read as its service account srtm (role
-    # SRTM_LECTOR, created by catastro's model/crear_cuenta_srtm.py). off until the url and the account are set in the
-    # environment, never here. off, no corrida starts (409)
+    # catastro-backend's valuations for the brecha de recaudación, a catastro per organization of srtm, each read as
+    # its service account srtm (role SRTM_LECTOR, created by that catastro's model/crear_cuenta_srtm.py). off until the
+    # urls and the accounts are set in the environment, never here. off, no corrida starts (409)
     enabled: ${SRTM_CATASTRO_ENABLED:false}
+    # organizaciones.<slug-or-id>: url, client-id, client-secret and, optional, timeout (else the one below). no entry
+    # is declared here: the environment adds them by relaxed binding, SRTM_CATASTRO_ORGANIZACIONES_<KEY>_URL,
+    # _CLIENT_ID, _CLIENT_SECRET, _TIMEOUT. the key arrives lowercase and without dashes, so an id (or a slug with a
+    # dash) goes in the entry's organizacion, under any key: SRTM_CATASTRO_ORGANIZACIONES_ICA_ORGANIZACION=<id>. an
+    # organization without an entry gets 409 SIN_CATASTRO_CONFIGURADO
+    # the single url, client-id, client-secret and organizacion below are one more entry (an entry of the map for the
+    # same organization replaces it): the one-catastro install of before keeps working
     url: ${SRTM_CATASTRO_URL:http://localhost:8091}
     client-id: ${SRTM_CATASTRO_CLIENT_ID:}
     client-secret: ${SRTM_CATASTRO_CLIENT_SECRET:}
     # each request: catastro values a page of 500 predios on the fly
     timeout: ${SRTM_CATASTRO_TIMEOUT:60s}
-    # the srtm organization (its slug or its id) whose catastro this is: the configuration is the install's, so only
-    # that organization's corridas read it (409 for another's). empty while enabled: no corrida starts (409)
+    # the srtm organization (its slug or its id) whose catastro the single url and account are. empty: they are no
+    # organization's and are not used
     organizacion: ${SRTM_CATASTRO_ORGANIZACION:}
   emision:
     # where the emisiones' files are kept (AlmacenEmision): local, on this server's disk under dir, or s3, in the

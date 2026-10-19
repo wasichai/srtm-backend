@@ -19,18 +19,22 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
-// the brecha end to end against a stub of catastro-backend (the jdk's http server, on the contract of task 5): predios
-// and declaraciones through the portal's api, a corrida started by POST and followed until TERMINADA, and the panel,
-// the rows and the lotes it answers. the catastro is one organization's (srtm.catastro.organizacion): the tests share
-// that one, created once with the slug the property names, and keep apart by year; another organization is refused
+// the brecha end to end against two stubs of catastro-backend (the jdk's http server, on the contract of task 5):
+// predios and declaraciones through the portal's api, a corrida started by POST and followed until TERMINADA, and the
+// panel, the rows and the lotes it answers. a catastro per organization: SLUG's by the single properties of before
+// (srtm.catastro.organizacion), SLUG_ICA's by an entry of srtm.catastro.organizaciones; the tests share them, each
+// created once with its slug, and keep apart by year. an organization without a catastro is refused
 class BrechaApiTest : SrtmApiTest() {
     // the organization of the catastro, with the model and the verified predial parameters: its admin's token
-    private fun organizacion(): String = organizacionDelCatastro ?: crearOrganizacion().also { organizacionDelCatastro = it }
+    private fun organizacion(): String = organizacionDelCatastro ?: crearOrganizacion(SLUG).also { organizacionDelCatastro = it }
 
-    private fun crearOrganizacion(): String {
-        val email = "admin@$SLUG.test"
+    // the organization of the other catastro (the map's entry)
+    private fun organizacionIca(): String = organizacionDeIca ?: crearOrganizacion(SLUG_ICA).also { organizacionDeIca = it }
+
+    private fun crearOrganizacion(slug: String): String {
+        val email = "admin@$slug.test"
         val clave = "clave-de-la-organizacion-del-catastro"
-        post("/api/organizations", mapOf("name" to SLUG, "slug" to SLUG, "adminEmail" to email, "adminPassword" to clave))
+        post("/api/organizations", mapOf("name" to slug, "slug" to slug, "adminEmail" to email, "adminPassword" to clave))
         val suyo = bearer(email, clave)
         aplicarModelo(suyo)
         for (p in Parametros.predial) {
@@ -272,11 +276,40 @@ class BrechaApiTest : SrtmApiTest() {
     }
 
     @Test
-    fun `the catastro is not another organization's`() {
+    fun `an organization without its catastro is refused`() {
         val otra = otraOrganizacion()
         val problema = tree(send("POST", "/api/srtm/brecha/corridas", mapOf("anio" to 2026), HttpStatus.CONFLICT, otra))
-        assertEquals(DE_OTRA_ORGANIZACION, problema["detail"].asString(), problema.toString())
+        assertEquals(SIN_CATASTRO_CONFIGURADO, problema["detail"].asString(), problema.toString())
         assertEquals(0, tree(send("GET", "/api/srtm/brecha/corridas", null, HttpStatus.OK, otra)).size())
+    }
+
+    @Test
+    fun `two organizations, each its corrida reads its own catastro only`() {
+        val perene = organizacion()
+        val ica = organizacionIca()
+        val sufijo = uniqueDocumento()
+        declarar(perene, contribuyente(perene), predio(perene, "P-$sufijo"), "1000.00", anio = 2025)
+        declarar(ica, contribuyente(ica), predio(ica, "I-$sufijo"), "1000.00", anio = 2025)
+        ITEMS.set(listOf(item("P-$sufijo", "2000.00")))
+        ITEMS_ICA.set(listOf(item("I-$sufijo", "3000.00"), item("I2-$sufijo", "500.00")))
+        CUENTAS.clear()
+        CUENTAS_ICA.clear()
+
+        val dePerene = corrida(perene, 2025)
+        val deIca = corrida(ica, 2025)
+        assertEquals(TERMINADA, dePerene["estado"].asString(), dePerene.toString())
+        assertEquals(TERMINADA, deIca["estado"].asString(), deIca.toString())
+        assertEquals("valuacion-v1", dePerene["versionCatastro"].asString())
+        assertEquals("valuacion-ica", deIca["versionCatastro"].asString())
+        val filasPerene = tree(send("GET", "/api/srtm/brecha/2025/predios", null, HttpStatus.OK, perene))["content"]
+        val filasIca = tree(send("GET", "/api/srtm/brecha/2025/predios", null, HttpStatus.OK, ica))["content"]
+        assertEquals(setOf("P-$sufijo"), filasPerene.mapNotNull { it["codigoCatastro"]?.asString() }.toSet())
+        assertEquals(setOf("I-$sufijo", "I2-$sufijo"), filasIca.mapNotNull { it["codigoCatastro"]?.asString() }.toSet())
+        assertEquals(BigDecimal("3500.00"), dec(deIca["catastro"]))
+        // each catastro saw its own service account only (its token is checked by the stub: another's is a 401). the
+        // first organization's token may be cached since an earlier test; the other's is asked once
+        assertTrue(CUENTAS.all { it == "srtm-perene" }, "$CUENTAS")
+        assertEquals(listOf("srtm-ica"), CUENTAS_ICA.toList())
     }
 
     @Test
@@ -308,10 +341,19 @@ class BrechaApiTest : SrtmApiTest() {
 
     companion object {
         private val ITEMS = AtomicReference<List<String>>(emptyList())
+        private val ITEMS_ICA = AtomicReference<List<String>>(emptyList())
+
+        // the client-id of each token asked of each catastro
+        private val CUENTAS = java.util.concurrent.CopyOnWriteArrayList<String>()
+        private val CUENTAS_ICA = java.util.concurrent.CopyOnWriteArrayList<String>()
 
         // the organization srtm.catastro.organizacion names, by its slug: created by the first test that needs it
         private val SLUG = "brecha-${java.util.UUID.randomUUID().toString().take(8)}"
         private var organizacionDelCatastro: String? = null
+
+        // the organization of the map's entry (keyed "ica", its organizacion this slug)
+        private val SLUG_ICA = "ica-${java.util.UUID.randomUUID().toString().take(8)}"
+        private var organizacionDeIca: String? = null
 
         // while set, the valuaciones say they were asked (first) and wait (second) before answering
         private val BLOQUEO = AtomicReference<Pair<CountDownLatch, CountDownLatch>?>(null)
@@ -319,31 +361,46 @@ class BrechaApiTest : SrtmApiTest() {
         private const val CUADRADO =
             """{"type":"Polygon","coordinates":[[[-75.22,-10.95],[-75.2195,-10.95],[-75.2195,-10.9495],[-75.22,-10.9495],[-75.22,-10.95]]]}"""
 
-        // catastro-backend's two endpoints: a token, and the items of ITEMS in one page
-        private val CATASTRO: HttpServer =
+        // catastro-backend's two endpoints: a token (its own, noting the client-id asked), and the items in one page
+        // for that token only (another's: 401)
+        private fun catastro(
+            token: String,
+            version: String,
+            items: AtomicReference<List<String>>,
+            cuentas: MutableList<String>
+        ): HttpServer =
             HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
                 createContext("/api/auth/token") { ex ->
-                    responder(ex, """{"token":"t","expiresAt":"2999-01-01T00:00:00Z","serviceAccount":"srtm"}""")
+                    cuentas += Regex("\"clientId\":\"([^\"]*)\"").find(ex.requestBody.readAllBytes().decodeToString())!!.groupValues[1]
+                    responder(ex, 200, """{"token":"$token","expiresAt":"2999-01-01T00:00:00Z","serviceAccount":"srtm"}""")
                 }
                 createContext("/api/catastro/valuaciones") { ex ->
+                    if (ex.requestHeaders.getFirst("Authorization") != "Bearer $token") {
+                        responder(ex, 401, "{}")
+                        return@createContext
+                    }
                     val anio = Regex("anio=(\\d+)").find(ex.requestURI.query)!!.groupValues[1]
                     BLOQUEO.get()?.let { (llego, sigue) ->
                         llego.countDown()
                         sigue.await(30, TimeUnit.SECONDS)
                     }
-                    val items = ITEMS.get()
-                    responder(ex, """{"anio":$anio,"version":"valuacion-v1","page":0,"size":500,"total":${items.size},"items":[${items.joinToString(",")}]}""")
+                    val todos = items.get()
+                    responder(ex, 200, """{"anio":$anio,"version":"$version","page":0,"size":500,"total":${todos.size},"items":[${todos.joinToString(",")}]}""")
                 }
                 start()
             }
 
+        private val CATASTRO = catastro("t-perene", "valuacion-v1", ITEMS, CUENTAS)
+        private val CATASTRO_ICA = catastro("t-ica", "valuacion-ica", ITEMS_ICA, CUENTAS_ICA)
+
         private fun responder(
             ex: com.sun.net.httpserver.HttpExchange,
+            estado: Int,
             cuerpo: String
         ) {
             val bytes = cuerpo.toByteArray()
             ex.responseHeaders.add("Content-Type", "application/json")
-            ex.sendResponseHeaders(200, bytes.size.toLong())
+            ex.sendResponseHeaders(estado, bytes.size.toLong())
             ex.responseBody.use { it.write(bytes) }
         }
 
@@ -352,13 +409,21 @@ class BrechaApiTest : SrtmApiTest() {
         fun catastro(registro: DynamicPropertyRegistry) {
             registro.add("srtm.catastro.enabled") { true }
             registro.add("srtm.catastro.url") { "http://127.0.0.1:${CATASTRO.address.port}" }
-            registro.add("srtm.catastro.client-id") { "srtm" }
+            registro.add("srtm.catastro.client-id") { "srtm-perene" }
             registro.add("srtm.catastro.client-secret") { "secreto-de-prueba" }
             registro.add("srtm.catastro.organizacion") { SLUG }
+            // the other catastro, an entry of the map under a name, its organization by its slug
+            registro.add("srtm.catastro.organizaciones.ica.organizacion") { SLUG_ICA }
+            registro.add("srtm.catastro.organizaciones.ica.url") { "http://127.0.0.1:${CATASTRO_ICA.address.port}" }
+            registro.add("srtm.catastro.organizaciones.ica.client-id") { "srtm-ica" }
+            registro.add("srtm.catastro.organizaciones.ica.client-secret") { "otro-secreto-de-prueba" }
         }
 
         @JvmStatic
         @AfterAll
-        fun parar() = CATASTRO.stop(0)
+        fun parar() {
+            CATASTRO.stop(0)
+            CATASTRO_ICA.stop(0)
+        }
     }
 }
