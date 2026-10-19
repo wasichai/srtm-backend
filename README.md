@@ -1253,6 +1253,109 @@ Cada predio llega con su ubicación separada como la pide el formulario del SRTM
 `model/reports/nombres_dudosos.csv` lista los nombres cuya separación en apellidos y nombres conviene revisar a mano
 (con coma, con ` Y `, `SN`, menos de 3 palabras o sin nombres). `nombre_completo` siempre guarda el texto original.
 
+## Cargar la Municipalidad de Ica
+
+Ica es una organización aparte en el mismo Core (épica #126). Su padrón llega en `PADRON_CONSTRUCCION.xlsx`, con dos
+hojas: `padron` (una fila por predio y contribuyente) y `construcciones` (una fila por sección de nivel). Lo carga
+`import_padron_ica.py`, que necesita los campos de padrón externo de #124 en el modelo. Cada paso va primero con
+`--dry-run`, y la carga real espera el OK.
+
+1. **Organización:** crear Ica en Core (`POST /api/organizations`, como superadministrador) con su usuario
+   administrador. Los pasos siguientes usan su cuenta: `--email` y `--password`, o `WASICHAI_EMAIL` y
+   `WASICHAI_PASSWORD`.
+2. **Modelo y catálogos:**
+
+   ```bash
+   cd model
+   python3 apply.py --diff && python3 apply.py
+   python3 import_catalogos.py --distrito 110101 --municipalidad-json data/ica/municipalidad.json --dry-run
+   python3 import_catalogos.py --distrito 110101 --municipalidad-json data/ica/municipalidad.json
+   python3 import_parametros.py --dry-run && python3 import_parametros.py
+   ```
+
+   - `import_catalogos.py` va sin `--excel`: las vías y las unidades urbanas de Ica, con su código, las carga
+     `import_padron_ica.py`.
+   - `data/ica/municipalidad.json` trae solo el nombre. El RUC está por confirmar y no se inventa: vacío no se carga, y
+     se completa en el admin.
+   - Las partidas de obras complementarias de `data/obras_complementarias.csv` traen valores de **selva**. Ica es costa,
+     así que esos valores no le sirven. Las descripciones de las letras (`categoria_valor`) son las mismas en las tres
+     regiones.
+3. **Padrón:**
+
+   ```bash
+   python3 -I import_padron_ica.py --excel /ruta/PADRON_CONSTRUCCION.xlsx --dry-run    # lee y transforma, no llama a Core
+   python3 -I import_padron_ica.py --excel /ruta/PADRON_CONSTRUCCION.xlsx --limit 50  # los primeros 50 predios
+   python3 -I import_padron_ica.py --excel /ruta/PADRON_CONSTRUCCION.xlsx             # carga completa
+   ```
+
+   - **Opciones:** `--anio` (default 2026), `--limit N` (los primeros N predios, cada uno con todos sus titulares y sus
+     niveles), `--workers`, `--report` (default `model/reports/padron_ica.csv`), `--codigos`, `--model`, `--core`,
+     `--email` y `--password`.
+   - **`-I`:** el xlsx es un archivo de afuera, así que Python no carga nada del directorio actual. El script agrega
+     solo su propio directorio.
+   - **Salida:** `0` ok; `1` Core rechazó algo (se muestra la fila); `2` el modelo no tiene un campo que el importador
+     llena (falta #124), y no se envía nada.
+
+**Qué crea, en orden.** Lo que Core ya tiene se omite, así que una segunda corrida no crea nada.
+
+1. **Catálogos `via` y `unidad_urbana`:** llevan `codigo`, `tipo`, `nombre` y ubigeo 110101. La llave incluye el
+   código, porque Ica da el mismo nombre a varios códigos de vía.
+2. **`contribuyente`:** la llave es `codigo` (`codigo_contribuyente`).
+   - Un RUC que empieza con 20 es JURIDICA, con `razon_social`.
+   - Es SUCESION (con `tipo_contribuyente` SUCESION INDIVISA) el contribuyente cuyo nombre empieza con SUC o SUCESION,
+     o que tiene alguna DJ con condición 2 o 6.
+   - El resto es NATURAL, con los apellidos y nombres del xlsx.
+   - No se crea domicilio.
+   - Un número de documento que ya tiene otro código se carga sin número: `numero_documento` es único.
+3. **`predio`:** la llave es `codigo`.
+   - Valores fijos: ubigeo 110101, región COSTA y departamento, provincia y distrito ICA.
+   - La dirección es la del xlsx. Si viene vacía, se arma con sus partes.
+   - Se cargan también `codigo_via`, `codigo_unidad_urbana` y las dos llaves de armonización GIS.
+4. **`declaracion_predial`:** la llave es predio + contribuyente + año + secuencia `001`.
+   - `valor_autoavaluo` es `valor_predio`.
+   - **Condominio:** como en `Condominio.kt`. Con varios titulares, cada uno es CONDOMINO con 100/n %: los céntimos que
+     faltan van de a uno a los primeros, así que la suma da 100. Un titular solo conserva su condición si es PROPIETARIO
+     UNICO, SOCIEDAD CONYUGAL o POSEEDOR; si no, queda PROPIETARIO UNICO con 100 %.
+   - `valor_condominio` es el % del autoavalúo, `deduccion` es 0 y `valor_afecto` es igual a `valor_condominio`.
+   - La fecha de adquisición 1900-01-01 es un relleno y se carga vacía.
+   - Se cargan `arancel`, `valor_terreno`, `valor_construccion` y `valor_otras_instalaciones`.
+5. **`nivel_construccion`:** se cuelga de la DJ de su par (predio, contribuyente).
+   - El nivel 0 es SOTANO.
+   - Las siete letras se cargan como vienen.
+   - Se cargan la clasificación, el valor unitario, el incremento, la depreciación y el valor total.
+     `valor_unitario_depreciado` no se carga, porque no cuadra con nada.
+   - No tiene llave natural: se comparan DJ, nivel, año y área, contando las secciones repetidas.
+
+**Tablas de códigos.** Están en `model/data/ica/codigos.json`: vía, documento, condición, uso, tipo de predio,
+material, estado, clasificación y nivel. Ninguna está confirmada (`"confirmado": false`). Cada una dice de dónde sale
+su lectura (`evidencia`) y cuáles códigos son una decisión propia (`dudosos`).
+
+- Material, estado de conservación y clasificación se dedujeron de la columna `depreciacion`, que cuadra con las tablas
+  del RNT.
+- Un código que la tabla no tiene va al reporte. Si el campo es obligatorio en el modelo, la fila se rechaza.
+
+**Reporte** (`--report`, un CSV con `categoria, hoja, fila, codigo_predio, codigo_contribuyente, detalle`). Lleva solo
+códigos, sin nombres ni documentos, pero no se versiona.
+
+| Categoría | Qué es |
+| --- | --- |
+| `rechazada` | La fila no se carga: no encaja en el modelo (por ejemplo, la letra J), es un nivel sin DJ, o cuelga de algo rechazado |
+| `condominio_100_n` | Varios titulares con el mismo valor y sin %: se carga 100/n |
+| `condominio_valores_distintos` | Varios titulares con valores distintos: también 100/n, pero hay que revisarlo |
+| `titulares_en_conflicto` | Un PROPIETARIO ÚNICO comparte el predio con otros titulares (posible transferencia no cerrada) |
+| `condomino_solo` | Un condómino (5 o 9) sin otros titulares en el padrón: se carga PROPIETARIO UNICO con 100 % |
+| `codigo_sin_mapeo` | Un código que `codigos.json` no tiene, una fila por columna y valor |
+| `documento_rellenado`, `documento_sin_numero`, `documento_repetido` | DNI con ceros agregados, tipo sin número, número que ya tiene otro código |
+| `fecha_relleno` | `fecha_adquisicion` 1900-01-01, cargada vacía |
+| `direccion_compuesta` | Predio sin dirección, armada con sus partes |
+| `valor_predio_no_cuadra` | `valor_predio` distinto de terreno + construcción + otras instalaciones |
+| `niveles_vs_padron` | La suma de los niveles de un par no da su `valor_area_construida` o su `area_construida` |
+| `formula_nivel` | `valor_total_nivel` lejos de (valor unitario + incremento) × (1 − depreciación) × área, por más de S/ 1 |
+
+Con el extracto de 2026-10 (7 829 filas del padrón y 3 762 de construcciones), el `--dry-run` da 588 vías, 161
+unidades urbanas, 1 458 contribuyentes, 7 521 predios, 7 829 declaraciones y 3 758 niveles, con 4 filas rechazadas. El
+extracto es parte de un padrón de unas 32 000 filas: hasta tener el completo, la brecha de Ica infla los OMISOS.
+
 ## Normalizar el padrón importado
 
 Un padrón importado antes de que `import_predios.py` separara los tipos se normaliza en Core, sin volver a importar:

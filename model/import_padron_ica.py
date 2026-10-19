@@ -29,10 +29,14 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_UP
 
-from core_client import Client, CoreError
-from import_predios import SUCESION, LoadError, clean_decimal, clean_text, post_all, read_xlsx
-
 HERE = os.path.dirname(os.path.abspath(__file__))
+# under python3 -I (the xlsx is untrusted) neither the cwd nor the script's directory is on sys.path: put back only the
+# latter, for core_client and import_predios
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+from core_client import Client, CoreError  # noqa: E402
+from import_predios import SUCESION, LoadError, clean_decimal, clean_text, post_all, read_xlsx  # noqa: E402
 
 # Ica's district: Ica, provincia Ica, departamento Ica (INEI), on the coast
 UBIGEO = "110101"
@@ -229,3 +233,546 @@ def check(model, name, attributes, relations=False):
         problems += [f"{r['fieldName']} es obligatorio" for r in _relations(model, name)
                      if r.get("required") and attributes.get(r["fieldName"]) is None]
     return problems
+
+
+# ---------------------------------------------------------------------------
+# dataset (pure)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Registro:
+    """A declaración or a nivel: its row, the (predio, contribuyente) it belongs to and its attributes."""
+    fila: int
+    codigo_predio: str
+    codigo_contribuyente: str
+    attributes: dict
+
+
+@dataclass
+class Dataset:
+    vias: dict = field(default_factory=dict)  # (codigo, tipo, nombre, ubigeo) -> attributes
+    unidades: dict = field(default_factory=dict)
+    contribuyentes: dict = field(default_factory=dict)  # codigo -> attributes
+    predios: dict = field(default_factory=dict)  # codigo -> attributes
+    declaraciones: list = field(default_factory=list)
+    niveles: list = field(default_factory=list)
+    filas: dict = field(default_factory=dict)  # ("contribuyente" | "predio", codigo) -> its first row
+    reporte: list = field(default_factory=list)
+    errores: list = field(default_factory=list)  # the model lacks a field: nothing can be loaded
+
+
+def _decimal(value):
+    return Decimal(clean_decimal(value) or "0")
+
+
+class _Builder:
+    def __init__(self, anio, model, codigos, usos):
+        self.anio = anio
+        self.model = model
+        self.codigos = codigos
+        self.usos = usos
+        self.data = Dataset()
+        self.sin_mapeo = Counter()  # (columna, valor) -> rows
+        self.primera = {}  # (columna, valor) -> (hoja, fila)
+        self.campos = defaultdict(set)  # object -> every attribute it was given
+        self.rechazados = set()  # predios that do not fit the model
+
+    def report(self, categoria, hoja, fila, predio=None, contribuyente=None, detalle=""):
+        self.data.reporte.append({"categoria": categoria, "hoja": hoja, "fila": fila, "codigo_predio": predio,
+                                  "codigo_contribuyente": contribuyente, "detalle": detalle})
+
+    def unmapped(self, hoja, row, columna):
+        key = (columna, codigo(row.get(columna)))
+        self.sin_mapeo[key] += 1
+        self.primera.setdefault(key, (hoja, row["_fila"]))
+
+    def mapped(self, hoja, row, tabla, default=None):
+        """The option a code of a table maps to; one the table lacks counts as unmapped and is `default`."""
+        columna = self.codigos[tabla]["columna"]
+        code = codigo(row.get(columna))
+        if code is None:
+            return None
+        valores = self.codigos[tabla]["valores"]
+        if code not in valores:
+            if default is None:
+                self.unmapped(hoja, row, columna)
+            return default
+        return valores[code]
+
+    def valid(self, name, attributes, hoja, row, predio, contribuyente, relations=()):
+        """attributes without the empty ones when they fit the model; None (and the row rejected) when not."""
+        self.campos[name].update(k for k, v in attributes.items() if v is not None)
+        problems = check(self.model, name, attributes) + [r for r in relations if r]
+        if problems:
+            self.report("rechazada", hoja, row["_fila"], predio, contribuyente, f"{name}: " + "; ".join(problems))
+            return None
+        return {k: v for k, v in attributes.items() if v is not None}
+
+    # contribuyentes ----------------------------------------------------------
+
+    def contribuyentes(self, rows):
+        primeras = {}
+        condiciones = defaultdict(set)
+        for row in rows:
+            code = codigo(row.get("codigo_contribuyente"))
+            if code is None:
+                continue
+            primeras.setdefault(code, row)
+            condiciones[code].add(codigo(row.get("condicion_predio")))
+        documentos = {}  # numero -> the codigo that keeps it
+        for code in sorted(primeras):
+            row = primeras[code]
+            tipo, numero, motivo = documento(row.get("tipo_documento"), row.get("nro_documento"), self.codigos)
+            if motivo == "codigo_sin_mapeo":
+                self.unmapped("padron", row, "tipo_documento")
+            elif motivo:
+                self.report(motivo, "padron", row["_fila"], contribuyente=code,
+                            detalle="DNI de menos de 8 dígitos: se rellena con ceros" if motivo == "documento_rellenado"
+                            else "tiene tipo de documento y no número: SIN DOCUMENTO")
+            if numero is not None and numero in documentos:
+                self.report("documento_repetido", "padron", row["_fila"], contribuyente=code,
+                            detalle=f"el número lo tiene el contribuyente {documentos[numero]}: se carga sin número")
+                numero = None
+            elif numero is not None:
+                documentos[numero] = code
+            attributes = self.contribuyente(row, code, tipo, numero, condiciones[code])
+            valid = self.valid("contribuyente", attributes, "padron", row, None, code)
+            if valid is not None:
+                self.data.contribuyentes[code] = valid
+                self.data.filas[("contribuyente", code)] = row["_fila"]
+
+    def contribuyente(self, row, code, tipo, numero, condiciones):
+        paterno, materno, nombres = (clean_text(row.get(k)) for k in ("apellido_paterno", "apellido_materno", "nombres"))
+        nombre = clean_text(row.get("nombre_completo")) or clean_text(" ".join(x for x in (paterno, materno, nombres) if x))
+        persona = tipo_persona(tipo, numero, nombre, condiciones, self.codigos)
+        natural = persona != "JURIDICA"
+        return {
+            "codigo": code,
+            "tipo_persona": persona,
+            "tipo_contribuyente": "SUCESION INDIVISA" if persona == "SUCESION" else None,
+            "tipo_documento": tipo,
+            "numero_documento": numero,
+            "nombre_completo": nombre,
+            "apellido_paterno": paterno if natural else None,
+            "apellido_materno": materno if natural else None,
+            "nombres": nombres if natural else None,
+            "razon_social": nombre if persona != "NATURAL" else None,
+        }
+
+    # predios and catalogs ----------------------------------------------------
+
+    def predios(self, rows):
+        for row in rows:
+            code = codigo(row.get("codigo_predio"))
+            self.catalogos(row)
+            if code is None or ("predio", code) in self.data.filas or code in self.rechazados:
+                continue
+            attributes = self.predio(row, code)
+            valid = self.valid("predio", attributes, "padron", row, code, None)
+            if valid is None:
+                self.rechazados.add(code)
+                continue
+            self.data.predios[code] = valid
+            self.data.filas[("predio", code)] = row["_fila"]
+
+    def predio(self, row, code):
+        tipo_via = self.mapped("padron", row, "tipo_via", default=self.codigos["tipo_via"]["por_defecto"])
+        via, numero, manzana, lote = (clean_text(row.get(k)) for k in ("nombre_de_la_via", "numero", "manzana", "lote"))
+        tipo_zona, zona = clean_text(row.get("tipo_de_unidad_urbana")), clean_text(row.get("nombre_de_unidad_urbana"))
+        direccion = clean_text(row.get("direccion_del_predio_completa"))
+        if direccion is None:
+            partes = [tipo_via if tipo_via != "OTROS" else None, via, numero, manzana and f"MZ {manzana}",
+                      lote and f"LT {lote}", tipo_zona, zona]
+            direccion = clean_text(" ".join(p for p in partes if p)) or code
+            self.report("direccion_compuesta", "padron", row["_fila"], code, None,
+                        "sin direccion_del_predio_completa: se arma con la vía, el número, la manzana, el lote y la unidad urbana")
+        return {
+            "codigo": code,
+            "direccion": direccion,
+            "tipo_predio": self.mapped("padron", row, "tipo_predio"),
+            "tipo_via": tipo_via,
+            "via": via,
+            "numero": numero,
+            "manzana": manzana,
+            "lote": lote,
+            "tipo_zona": tipo_zona,
+            "habilitacion_urbana": zona,
+            **UBICACION,
+            "codigo_via": codigo(row.get("codigo_de_via")),
+            "codigo_unidad_urbana": codigo(row.get("codigo_de_unidad_urbana")),
+            "codigo_hu_armonizacion": codigo(row.get("COD_HU_ARMONIZACION")),
+            "codigo_via_armonizacion": codigo(row.get("COD_VIA_ARMONIZACION")),
+        }
+
+    def catalogos(self, row):
+        """The row's vía and unidad urbana for the catalogs, by code: Ica gives one code to more than one name."""
+        nombre = clean_text(row.get("nombre_de_la_via"))
+        if nombre:
+            tipo = self.codigos["tipo_via"]["valores"].get(codigo(row.get("tipo_de_via")), self.codigos["tipo_via"]["por_defecto"])
+            via = {"codigo": codigo(row.get("codigo_de_via")), "tipo_via": tipo, "nombre": nombre, "ubigeo": UBIGEO}
+            self.data.vias.setdefault((via["codigo"], tipo, nombre, UBIGEO), via)
+        tipo, nombre = clean_text(row.get("tipo_de_unidad_urbana")), clean_text(row.get("nombre_de_unidad_urbana"))
+        if tipo and nombre and tipo in self.model["enums"]["tipo_unidad_urbana"]:
+            unidad = {"codigo": codigo(row.get("codigo_de_unidad_urbana")), "tipo_unidad_urbana": tipo, "nombre": nombre,
+                      "ubigeo": UBIGEO}
+            self.data.unidades.setdefault((unidad["codigo"], tipo, nombre, UBIGEO), unidad)
+
+    # declaraciones -----------------------------------------------------------
+
+    def declaraciones(self, rows):
+        grupos = defaultdict(list)  # the predio's titulares, in the sheet's order
+        for row in rows:
+            grupos[codigo(row.get("codigo_predio"))].append(row)
+        vistos = set()
+        rellenos = []
+        for row in rows:
+            predio, contribuyente = codigo(row.get("codigo_predio")), codigo(row.get("codigo_contribuyente"))
+            grupo = grupos[predio]
+            missing = [f"{nombre} rechazado o sin código" for nombre, ok in (
+                ("predio", predio in self.data.predios), ("contribuyente", contribuyente in self.data.contribuyentes))
+                if not ok]
+            if (predio, contribuyente) in vistos:
+                missing.append("DJ repetida (mismo predio y contribuyente)")
+            vistos.add((predio, contribuyente))
+            try:
+                attributes = self.declaracion(row, grupo.index(row), len(grupo))
+            except (InvalidOperation, ValueError) as e:
+                self.report("rechazada", "padron", row["_fila"], predio, contribuyente, f"declaracion_predial: {e}")
+                continue
+            if attributes["fecha_adquisicion"] is None and clean_text(row.get("fecha_adquisicion")):
+                rellenos.append(row["_fila"])
+            valid = self.valid("declaracion_predial", attributes, "padron", row, predio, contribuyente, missing)
+            if valid is not None:
+                self.data.declaraciones.append(Registro(row["_fila"], predio, contribuyente, valid))
+            self.cuadre(row, predio, contribuyente)
+        for predio, grupo in grupos.items():
+            self.condominio(predio, grupo)
+        for fila in rellenos:
+            self.report("fecha_relleno", "padron", fila, detalle="fecha_adquisicion 1900-01-01: se carga vacía")
+
+    def declaracion(self, row, posicion, titulares):
+        porcentaje = porcentajes(titulares)[posicion]
+        autoavaluo = clean_decimal(row.get("valor_predio"))
+        valor_condominio, valor_afecto = valores_condominio(autoavaluo, porcentaje)
+        uso = uso_ica(row.get("codigo_uso"), self.codigos, self.usos)
+        if uso is None and codigo(row.get("codigo_uso")) is not None:
+            self.unmapped("padron", row, "codigo_uso")
+        return {
+            "anio": self.anio,
+            "secuencia_uso": SECUENCIA,
+            "condicion_propiedad": condicion(row.get("condicion_predio"), titulares, self.codigos),
+            "porcentaje_condominio": str(porcentaje),
+            **(uso or {"clase_uso": None, "sub_clase_uso": None, "uso": None}),
+            "area_terreno": clean_decimal(row.get("area_terreno")),
+            "area_comun_terreno": clean_decimal(row.get("area_terreno_comun")),
+            "area_construida": clean_decimal(row.get("area_construida")),
+            "valor_autoavaluo": autoavaluo,
+            "valor_condominio": valor_condominio,
+            "deduccion": "0.00",
+            "valor_afecto": valor_afecto,
+            "fecha_adquisicion": fecha(row.get("fecha_adquisicion")),
+            "arancel": clean_decimal(row.get("arancel")),
+            "valor_terreno": clean_decimal(row.get("valor_terreno")),
+            "valor_construccion": clean_decimal(row.get("valor_area_construida")),
+            "valor_otras_instalaciones": clean_decimal(row.get("valor_otras_instalaciones")),
+        }
+
+    def cuadre(self, row, predio, contribuyente):
+        partes = sum(_decimal(row.get(k)) for k in ("valor_terreno", "valor_area_construida", "valor_otras_instalaciones"))
+        total = _decimal(row.get("valor_predio"))
+        if abs(partes - total) > TOLERANCIA_VALOR:
+            self.report("valor_predio_no_cuadra", "padron", row["_fila"], predio, contribuyente,
+                        f"valor_predio {total} y terreno + construcción + otras instalaciones {partes}")
+
+    def condominio(self, predio, grupo):
+        fila = grupo[0]["_fila"]
+        codes = [codigo(r.get("condicion_predio")) for r in grupo]
+        if len(grupo) == 1:
+            if self.codigos["condicion_propiedad"]["valores"].get(codes[0]) == CONDOMINO:
+                self.report("condomino_solo", "padron", fila, predio, codigo(grupo[0].get("codigo_contribuyente")),
+                            f"condición {codes[0]} (condómino) sin otros titulares en el padrón: se carga PROPIETARIO UNICO con 100 %")
+            return
+        valores = {clean_decimal(r.get("valor_predio")) for r in grupo}
+        if len(valores) == 1:
+            self.report("condominio_100_n", "padron", fila, predio, None,
+                        f"{len(grupo)} titulares con el mismo valor_predio y sin %: 100/{len(grupo)} cada uno")
+        else:
+            self.report("condominio_valores_distintos", "padron", fila, predio, None,
+                        f"{len(grupo)} titulares con valor_predio distintos ({len(valores)} valores): 100/{len(grupo)} cada uno, revisar")
+        if "1" in codes:
+            self.report("titulares_en_conflicto", "padron", fila, predio, None,
+                        f"PROPIETARIO UNICO con otros titulares (condiciones {', '.join(sorted(set(c or '-' for c in codes)))})")
+
+    # niveles -----------------------------------------------------------------
+
+    def niveles(self, rows, padron):
+        declaradas = {(d.codigo_predio, d.codigo_contribuyente) for d in self.data.declaraciones}
+        en_padron = {(codigo(r.get("codigo_predio")), codigo(r.get("codigo_contribuyente"))): r for r in padron}
+        por_par = defaultdict(list)
+        for row in rows:
+            par = (codigo(row.get("codigo_predio")), codigo(row.get("codigo_contribuyente")))
+            por_par[par].append(row)
+            missing = [] if par in declaradas else [
+                "sin DJ: el par predio-contribuyente no está en el padrón" if par not in en_padron else "su DJ fue rechazada"]
+            try:
+                attributes = self.nivel(row)
+            except (InvalidOperation, ValueError) as e:
+                self.report("rechazada", "construcciones", row["_fila"], *par, f"nivel_construccion: {e}")
+                continue
+            valid = self.valid("nivel_construccion", attributes, "construcciones", row, *par, relations=missing)
+            if valid is not None:
+                self.data.niveles.append(Registro(row["_fila"], *par, valid))
+            self.formula(row, par)
+        for par, secciones in por_par.items():
+            if par in en_padron:
+                self.suma(en_padron[par], par, secciones)
+
+    def nivel(self, row):
+        tipo_nivel, numero_piso = nivel(row.get("nivel"), self.codigos)
+        anio = clean_text(row.get("ano_construccion"))
+        return {
+            "tipo_nivel": tipo_nivel,
+            "numero_piso": numero_piso,
+            "anio_construccion": int(Decimal(anio)) if anio else None,
+            "material": self.mapped("construcciones", row, "material"),
+            "estado_conservacion": self.mapped("construcciones", row, "estado_conservacion"),
+            "clasificacion": self.mapped("construcciones", row, "clasificacion"),
+            "area_construida": clean_decimal(row.get("area_construida_propia")),
+            "area_comun": clean_decimal(row.get("area_construida_comun")),
+            **{campo: clean_text(row.get(columna)) for campo, columna in LETRAS.items()},
+            "valor_unitario": clean_decimal(row.get("valor_unitario")),
+            "incremento": clean_decimal(row.get("incremento_5")),
+            "porcentaje_depreciacion": clean_decimal(row.get("depreciacion")),
+            "valor_total": clean_decimal(row.get("valor_total_nivel")),
+        }
+
+    def formula(self, row, par):
+        calculado = ((_decimal(row.get("valor_unitario")) + _decimal(row.get("incremento_5")))
+                     * (1 - _decimal(row.get("depreciacion")) / CIEN) * _decimal(row.get("area_construida_propia")))
+        total = _decimal(row.get("valor_total_nivel"))
+        if abs(calculado - total) > TOLERANCIA_FORMULA:
+            self.report("formula_nivel", "construcciones", row["_fila"], *par,
+                        f"valor_total_nivel {total} y (valor_unitario + incremento) x (1 - depreciación) x área "
+                        f"{calculado.quantize(CENTIMO, rounding=ROUND_HALF_UP)}")
+
+    def suma(self, padron_row, par, secciones):
+        detalles = []
+        valor = sum(_decimal(r.get("valor_total_nivel")) for r in secciones)
+        if abs(valor - _decimal(padron_row.get("valor_area_construida"))) > TOLERANCIA_VALOR:
+            detalles.append(f"valor de los niveles {valor} y valor_area_construida {_decimal(padron_row.get('valor_area_construida'))}")
+        area = sum(_decimal(r.get("area_construida_propia")) for r in secciones)
+        if abs(area - _decimal(padron_row.get("area_construida"))) > TOLERANCIA_AREA:
+            detalles.append(f"área de los niveles {area} y area_construida {_decimal(padron_row.get('area_construida'))}")
+        if detalles:
+            self.report("niveles_vs_padron", "padron", padron_row["_fila"], *par, "; ".join(detalles))
+
+    # the end -----------------------------------------------------------------
+
+    def finish(self):
+        for (columna, valor), filas in sorted(self.sin_mapeo.items(), key=lambda kv: (kv[0][0], kv[0][1] or "")):
+            hoja, fila = self.primera[(columna, valor)]
+            self.report("codigo_sin_mapeo", hoja, fila, detalle=f"{columna} '{valor}' no está en data/ica/codigos.json: {filas} filas")
+        for name, campos in self.campos.items():
+            for campo in unknown_fields(self.model, name, sorted(campos)):
+                self.data.errores.append(f"{name}: el modelo no tiene el campo {campo}")
+        return self.data
+
+
+def build_dataset(padron, construcciones, anio, model, codigos, usos):
+    """The two sheets' rows -> what to load and what to report. Pure: reads nothing, calls nothing."""
+    builder = _Builder(anio, model, codigos, usos)
+    builder.contribuyentes(padron)
+    builder.predios(padron)
+    builder.declaraciones(padron)
+    builder.niveles(construcciones, padron)
+    return builder.finish()
+
+
+def limit_predios(padron, construcciones, limit):
+    """The padrón rows of the first `limit` predios (each with all its titulares) and the niveles of their DJ."""
+    predios = []
+    for row in padron:
+        code = codigo(row.get("codigo_predio"))
+        if code not in predios:
+            predios.append(code)
+    keep = set(predios[:limit])
+    rows = [r for r in padron if codigo(r.get("codigo_predio")) in keep]
+    pares = {(codigo(r.get("codigo_predio")), codigo(r.get("codigo_contribuyente"))) for r in rows}
+    return rows, [r for r in construcciones if (codigo(r.get("codigo_predio")), codigo(r.get("codigo_contribuyente"))) in pares]
+
+
+def write_report(path, rows):
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=REPORT_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+# ---------------------------------------------------------------------------
+# load
+# ---------------------------------------------------------------------------
+
+def _text(value):
+    return None if value is None else str(value)
+
+
+def _firma(declaracion, attributes):
+    """What tells a nivel from another of the same declaración: a nivel has no key of its own, and a piso may have
+    several sections, so repeated ones are counted."""
+    area = attributes.get("area_construida")
+    return (str(declaracion), attributes.get("tipo_nivel"), _text(attributes.get("numero_piso")),
+            _text(attributes.get("anio_construccion")), clean_decimal(_text(area)) if area is not None else None)
+
+
+def _catalogo_key(attributes):
+    """A vía or unidad urbana by its code, type, name and district: Ica gives one name to more than one code."""
+    tipo = attributes.get("tipo_via") or attributes.get("tipo_unidad_urbana")
+    return attributes.get("codigo"), tipo, attributes.get("nombre"), attributes.get("ubigeo")
+
+
+def _catalogo(client, name, items, workers):
+    key = _catalogo_key
+    existing = {key(r["attributes"]) for r in client.list_all(name)}
+    todo = [(k, i + 1, a) for i, (k, a) in enumerate(items.items()) if key(a) not in existing]
+    new = post_all(client, name, todo, workers)
+    print(f"{name}: {len(new)} created, {len(items) - len(todo)} skipped", flush=True)
+    return len(new), len(items) - len(todo)
+
+
+def load(client, data, anio, workers):
+    """Creates what is missing, in dependency order. Returns (created, skipped)."""
+    created = skipped = 0
+    for name, items in (("via", data.vias), ("unidad_urbana", data.unidades)):
+        new, same = _catalogo(client, name, items, workers)
+        created, skipped = created + new, skipped + same
+
+    records = client.list_all("contribuyente")
+    contribuyentes = {r["attributes"].get("codigo"): r["id"] for r in records if r["attributes"].get("codigo")}
+    documentos = {r["attributes"].get("numero_documento") for r in records} - {None}
+    todo = []
+    sin_numero = 0
+    for code, attributes in data.contribuyentes.items():
+        if code in contribuyentes:
+            continue
+        if attributes.get("numero_documento") in documentos:
+            # numero_documento is unique: Core has it under another code (#125)
+            attributes = {k: v for k, v in attributes.items() if k != "numero_documento"}
+            sin_numero += 1
+        todo.append((code, data.filas[("contribuyente", code)], attributes))
+    new = post_all(client, "contribuyente", todo, workers)
+    contribuyentes.update(new)
+    created, skipped = created + len(new), skipped + len(data.contribuyentes) - len(todo)
+    print(f"contribuyente: {len(new)} created, {len(data.contribuyentes) - len(todo)} skipped", flush=True)
+    if sin_numero:
+        print(f"contribuyente: {sin_numero} sent sin número: Core has their document under another code", flush=True)
+
+    predios = {r["attributes"].get("codigo"): r["id"] for r in client.list_all("predio")}
+    todo = [(code, data.filas[("predio", code)], a) for code, a in data.predios.items() if code not in predios]
+    new = post_all(client, "predio", todo, workers)
+    predios.update(new)
+    created, skipped = created + len(new), skipped + len(data.predios) - len(todo)
+    print(f"predio: {len(new)} created, {len(data.predios) - len(todo)} skipped", flush=True)
+
+    def key(predio_id, contribuyente_id):
+        return str(predio_id), str(contribuyente_id), str(anio), SECUENCIA
+
+    declaraciones = {
+        key(r["attributes"].get("predio"), r["attributes"].get("contribuyente")): r["id"]
+        for r in client.list_all("declaracion_predial", anio=anio) if r["attributes"].get("secuencia_uso") == SECUENCIA
+    }
+    todo = []
+    for d in data.declaraciones:
+        predio_id, contribuyente_id = predios[d.codigo_predio], contribuyentes[d.codigo_contribuyente]
+        k = key(predio_id, contribuyente_id)
+        if k not in declaraciones:
+            todo.append((k, d.fila, {**d.attributes, "predio": predio_id, "contribuyente": contribuyente_id}))
+    new = post_all(client, "declaracion_predial", todo, workers)
+    declaraciones.update(new)
+    created, skipped = created + len(new), skipped + len(data.declaraciones) - len(todo)
+    print(f"declaracion_predial: {len(new)} created, {len(data.declaraciones) - len(todo)} skipped", flush=True)
+
+    existing = Counter(_firma(r["attributes"].get("declaracion"), r["attributes"]) for r in client.list_all("nivel_construccion"))
+    todo = []
+    for i, n in enumerate(data.niveles):
+        declaracion = declaraciones[key(predios[n.codigo_predio], contribuyentes[n.codigo_contribuyente])]
+        firma = _firma(declaracion, n.attributes)
+        if existing[firma]:
+            existing[firma] -= 1
+            continue
+        todo.append((i, n.fila, {**n.attributes, "declaracion": declaracion}))
+    new = post_all(client, "nivel_construccion", todo, workers)
+    created, skipped = created + len(new), skipped + len(data.niveles) - len(todo)
+    print(f"nivel_construccion: {len(new)} created, {len(data.niveles) - len(todo)} skipped", flush=True)
+    return created, skipped
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def _parse_args(argv):
+    p = argparse.ArgumentParser(description="Import Ica's padrón (PADRON_CONSTRUCCION.xlsx) into srtm's wasichai Core.")
+    p.add_argument("--excel", required=True, help="path to PADRON_CONSTRUCCION.xlsx (sheets padron and construcciones)")
+    p.add_argument("--anio", type=int, default=2026, help="year of the declarations (default 2026)")
+    p.add_argument("--model", default=default_model_path())
+    p.add_argument("--codigos", default=default_codigos_path(), help="Ica's code tables (default data/ica/codigos.json)")
+    p.add_argument("--core", default=os.environ.get("WASICHAI_CORE", "http://localhost:8090"))
+    p.add_argument("--email", default=os.environ.get("WASICHAI_EMAIL", "admin@wasichai.local"))
+    p.add_argument("--password", default=os.environ.get("WASICHAI_PASSWORD", "admin"))
+    p.add_argument("--dry-run", action="store_true", help="read and transform only; call nothing")
+    p.add_argument("--limit", type=int, default=None, help="only the first N predios, each with all its titulares")
+    p.add_argument("--workers", type=int, default=4, help="parallel POSTs (default 4)")
+    p.add_argument("--report", default=os.path.join(HERE, "reports", "padron_ica.csv"))
+    return p.parse_args(argv)
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    args = _parse_args(argv)
+
+    padron = read_xlsx(args.excel, "padron")
+    construcciones = read_xlsx(args.excel, "construcciones")
+    if args.limit:
+        padron, construcciones = limit_predios(padron, construcciones, args.limit)
+    data = build_dataset(padron, construcciones, args.anio, load_model(args.model), load_codigos(args.codigos),
+                         read_usos_srtm(default_usos_path()))
+
+    print(f"filas: {len(padron)} del padrón, {len(construcciones)} de construcciones")
+    print(f"vías: {len(data.vias)}")
+    print(f"unidades urbanas: {len(data.unidades)}")
+    print(f"contribuyentes: {len(data.contribuyentes)}")
+    print(f"predios: {len(data.predios)}")
+    print(f"declaraciones: {len(data.declaraciones)}")
+    print(f"niveles: {len(data.niveles)}")
+    categorias = Counter(r["categoria"] for r in data.reporte)
+    print(f"rechazadas: {categorias['rechazada']}")
+    write_report(args.report, data.reporte)
+    print(f"reporte: {len(data.reporte)} filas -> {args.report}")
+    for categoria, n in sorted(categorias.items()):
+        print(f"  {categoria}: {n}")
+
+    if data.errores:
+        for error in data.errores:
+            print(f"error: {error}", file=sys.stderr)
+        print("the model lacks fields the importer fills (apply #124's model.json): nothing was sent to Core", file=sys.stderr)
+        return 2
+    if args.dry_run:
+        return 0
+
+    client = Client(args.core)
+    try:
+        client.login(args.email, args.password)
+        created, skipped = load(client, data, args.anio, args.workers)
+    except LoadError as e:
+        print(f"error POST /api/objects/{e.object_name}/records (fila {e.fila}) -> {e.error.status}\n{e.error.body}", file=sys.stderr)
+        return 1
+    except CoreError as e:
+        print(f"error -> {e.status}\n{e.body}", file=sys.stderr)
+        return 1
+    print(f"done: {created} created, {skipped} skipped")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
