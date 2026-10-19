@@ -71,8 +71,8 @@ fun condominioCon(
 }
 
 // a new condómino's declaración: what the source declares of the predio (its year and secuencia, características,
-// autoavalúo, inhabitabilidad), not what belongs to its titular (adquisición, documentos, condición especial,
-// deducción, otros datos)
+// autoavalúo, inhabitabilidad; the external padrón's valuation is copied apart, PADRON_EXTERNO_DECLARACION), not what
+// belongs to its titular (adquisición, documentos, condición especial, deducción, otros datos)
 fun delPredio(origen: Declaracion) =
     Declaracion(
         predio = origen.predio,
@@ -94,5 +94,10 @@ fun delPredio(origen: Declaracion) =
         subClaseUso = origen.subClaseUso,
         areaComunTerreno = origen.areaComunTerreno
     )
+
+// the valuation an external padrón (Ica) brings (model/model.json), which the dtos do not know: a condómino's copy
+// takes it from the stored records
+val PADRON_EXTERNO_DECLARACION = listOf("arancel", "valor_terreno", "valor_construccion", "valor_otras_instalaciones")
+val PADRON_EXTERNO_NIVEL = listOf("clasificacion", "valor_unitario", "incremento", "porcentaje_depreciacion", "valor_total")
 
 private const val PORCENTAJE = "porcentaje_condominio"
