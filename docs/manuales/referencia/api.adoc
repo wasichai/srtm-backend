@@ -1,0 +1,553 @@
+// Referencia de la API REST de srtm-backend. La incluyen el manual técnico del sistema y el del administrador,
+// como capítulo (include::../referencia/api.adoc[]) o dentro de otro capítulo ([leveloffset=+1]).
+// Empieza en el nivel 2 (==) y no tiene cabecera de documento. Cada ruta está comprobada contra los @GetMapping,
+// @PostMapping, @PutMapping y @DeleteMapping de src/main/kotlin/srtm/** (versión 0.9.0, rama main).
+
+[[ref-api]]
+== API
+
+La API es la superficie que usan el portal y los scripts de carga. Las rutas de este capítulo se comprobaron contra
+las anotaciones de los controladores (`@GetMapping`, `@PostMapping`, `@PutMapping`, `@DeleteMapping`) y, donde fue
+posible, contra un Core en marcha.
+
+[[ref-api-convenciones]]
+=== Convenciones
+
+* *Rutas.* La API propia de {sigla} vive bajo `/api/srtm/**`; la de la plataforma (Core de wasichai) bajo `/api/**`.
+  Ambas las protege el mismo filtro JWT: toda petición lleva `Authorization: Bearer <token>`, salvo
+  `POST /api/auth/login`, `POST /api/auth/token`, `GET /api/health` y `GET /actuator/health/**`.
+* *Cuerpos.* JSON. Los registros usan los nombres de campo del modelo, en `snake_case`, y las relaciones van como id.
+  La liquidación, la brecha y el estado de los trabajos masivos van en `camelCase`. Fechas ISO (`AAAA-MM-DD`); dinero
+  como número.
+* *Errores.* Siempre `application/problem+json` (RFC 7807), con `type` `+https://wasichai.dev/problems/<estado>+`,
+  `title`, `status`, `detail`, `instance` y, cuando aplica, `errors: [{field, message}]` o `faltan: [...]`. Cada
+  respuesta lleva la cabecera `X-Correlation-Id`, que también queda en la auditoría.
+* *Año por omisión.* Donde una ruta acepta `anio` y no se envía, se usa el año en curso.
+* *Filtros.* En las consultas de arbitrios, infracciones, anuncios y brecha, un parámetro desconocido o mal formado es
+  *422* y se nombra en `errors`; nunca se ignora en silencio.
+* *Permisos.* `RecordService` aplica los permisos del rol por objeto y por campo en cada lectura y escritura (403).
+  Los actos de {sigla} piden además, antes de leer nada, el permiso de creación sobre el objeto que escriben
+  (ver la matriz de permisos).
+
+[[ref-api-probar]]
+=== Probar la API desde la terminal
+
+[[proc-token-api]]
+.Obtener un token y llamar a la API
+====
+[horizontal]
+Objetivo:: Probar una ruta desde la terminal.
+Requisitos previos:: El backend corriendo; `curl` y `python3`.
+Efecto:: Solo lee.
+====
+
+. Inicie sesión y guarde el token:
++
+[source,bash]
+----
+TOKEN=$(curl -s -X POST http://localhost:8090/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@wasichai.local","password":"admin"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+----
+. Llame a una ruta:
++
+[source,bash]
+----
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8090/api/srtm/resumen
+----
+
+// fin de los pasos
+Resultado esperado:: `{"anio":2026,"contribuyentes":…,"predios":…,"declaraciones":…}`.
+Casos especiales:: Sin la cabecera, 401 con `WWW-Authenticate: Bearer`. El token vence a las 8 horas
+(`wasichai.security.jwt.ttl`).
+
+[[ref-api-codigos]]
+=== Códigos de estado comunes
+
+[cols="1,4,7",options="header"]
+|===
+|Código |Significado |Ejemplos
+
+|200
+|Lectura, o acto idempotente repetido
+|Reenvío del alta de un anuncio con la misma `Idempotency-Key`; determinación sin nada pendiente (`[]`).
+
+|201
+|Registro creado
+|Inscripción, DJ, acta, cuota anulada, movimiento de anuncio.
+
+|202
+|Trabajo en segundo plano aceptado
+|`POST /emisiones`, `POST /arbitrios/determinaciones`, `POST /brecha/corridas`: se sigue con `GET` hasta TERMINADA
+o FALLIDA.
+
+|204
+|Borrado
+|Baja de un contribuyente, de una fila de lista, de un trabajo masivo.
+
+|400
+|Un campo no es válido
+|Observación de menos de 5 o más de 500 caracteres; porcentaje de condominio que pasa del 100 %; documento ya
+inscrito.
+
+|401
+|Sin token o token vencido
+|Falta la cabecera `Authorization`.
+
+|403
+|Sin permiso
+|El rol no puede crear el objeto del acto; escritura de un objeto de infracciones o anuncios por la API genérica.
+
+|404
+|No existe, o no hay qué emitir
+|Registro inexistente; predio sin DJ vigente en el año; RENIEC sin datos.
+
+|409
+|Conflicto de estado
+|Valor único repetido; baja de un predio con declaraciones; edición de un objeto que solo se agrega; trabajo masivo
+del mismo año en curso; catastro no configurado.
+
+|410
+|El archivo ya no existe
+|Descarga de una emisión cuyo archivo depuró la retención.
+
+|422
+|Falta algo para el acto, o filtro inválido
+|`faltan: ["UIT 2027"]`; acto fuera de orden; `SE_REDUCE`; parámetro de consulta desconocido.
+|===
+
+[[ref-api-core]]
+=== Plataforma (Core de wasichai)
+
+Las rutas de Core que la operación de {sigla} usa. La referencia completa es `docs/api/rest.md` de wasichai
+{version-wasichai}.
+
+[cols="5,6,4",options="header"]
+|===
+|Método y ruta |Qué hace |Respuestas
+
+|`POST /api/auth/login` +
+`{email, password}`
+|Inicio de sesión de un usuario.
+|200 `{token, expiresAt, user}`; 401.
+
+|`POST /api/auth/token` +
+`{clientId, clientSecret}`
+|Token de una cuenta de servicio.
+|200 `{token, expiresAt, serviceAccount}`.
+
+|`POST /api/auth/logout`
+|Cierra la sesión (con `revocation` encendido, invalida los tokens del usuario).
+|204.
+
+|`GET /api/auth/me`, `GET /api/auth/me/permissions`
+|Quién es el usuario y qué puede hacer con cada objeto.
+|200.
+
+|`GET /api/health` +
+`GET /actuator/health` +
+`GET /actuator/health/liveness`, `/readiness`
+|Salud del proceso, sin token.
+|200 `{"status":"UP"}`.
+
+|`GET /api/objects`, `GET /api/relationships`
+|Metadata del modelo. `apply.py` la lee y la escribe.
+|200; escribir pide `MANAGE_METADATA`.
+
+|`GET/POST /api/objects/{objeto}/records`, +
+`GET/PUT/PATCH/DELETE …/records/{id}`
+|API genérica de registros (la usa la consola `/admin`).
+|Los objetos de infracciones y anuncios: POST 403, PUT/DELETE 409.
+
+|`GET /api/objects/{objeto}/records/{id}/history` +
+`GET /api/audit`
+|Historial de un registro y auditoría de la organización. `/api/audit` filtra por `objectName`, `recordId`,
+`operation`, `correlationId`, `from`, `to`, `userId`, y pagina con `limit` y `after`.
+|200.
+
+|`GET/POST /api/roles`, `PUT /api/roles/{rol}/permissions`, +
+`GET/POST /api/users`
+|Roles, permisos por objeto y usuarios.
+|Pide `MANAGE_ORGANIZATION`.
+
+|`GET /api/gis/objects/{objeto}/features`
+|Lotes del área visible, para el mapa (`catastro_fiscal`, `predio`, `brecha_predio`), con `bbox` y
+`geometry=lote_geom`.
+|200 GeoJSON EPSG:4326.
+|===
+
+[[ref-api-rentas]]
+=== Registro tributario (`srtm.rentas`)
+
+Base: `/api/srtm`. Controlador `RentasController`.
+
+[cols="5,6,4",options="header"]
+|===
+|Método y ruta |Qué hace |Respuestas
+
+|`GET /resumen`
+|Totales del padrón del año en curso.
+|200 `{anio, contribuyentes, predios, declaraciones}`.
+
+|`GET /catalogos`
+|Opciones de las listas por objeto y campo, solo de los objetos que el rol puede leer.
+|200.
+
+|`GET /ubigeos`, `/categorias-valor`, `/usos-predio`, +
+`/obras-categorias?tipo_obra`
+|Catálogos completos: INEI, letras del cuadro de valores, usos del SRTM, partidas de obras.
+|200.
+
+|`GET /vias?q&tipo&ubigeo&size`, +
+`/unidades-urbanas?q&tipo&ubigeo&size`
+|Sugerencias de vías y habilitaciones.
+|200.
+
+|`GET /contribuyentes?q&page&size` +
+`POST /contribuyentes`
+|Búsqueda en todos los campos; inscripción (el backend asigna `codigo`, `numero_declaracion`, `fecha_registro`).
+|200; 201; 400 si el documento ya está inscrito.
+
+|`GET /contribuyentes/{id}?anio` +
+`PUT`, `DELETE /contribuyentes/{id}`
+|Ficha con totales del año; edición (pasa el motivo a ACTUALIZACIÓN); baja.
+|200; 204; 409 si tiene declaraciones o cuotas.
+
+|`GET /contribuyentes/{id}/declaraciones?anio`
+|Sus DJ, cada una con su predio.
+|200.
+
+|`GET`, `POST /contribuyentes/{id}/{lista}` +
+`PUT`, `DELETE /{lista}/{id}`
+|Listas del contribuyente: `domicilios`, `relacionados`, `medios-contacto`, `sustentos`.
+|200; 201; 204.
+
+|`GET /predios?q&page&size`, `POST /predios`
+|Búsqueda por texto y alta.
+|200; 201.
+
+|`GET /predios/{id}?anio`, `PUT`, `DELETE /predios/{id}`
+|Ficha con titulares y totales; edición; baja.
+|200; 204; 409 si tiene declaraciones o cuotas.
+
+|`GET /predios/{id}/declaraciones?anio`
+|Sus DJ, cada una con su contribuyente.
+|200.
+
+|`GET /predios/buscar?…`
+|«Buscar en Tributario»: tipo de predio, código, CPU, partida, vía, zona, número, manzana, lote, kilómetro.
+|200, página de 5 por omisión.
+
+|`GET /catastro?…`, `POST /catastro` +
+`GET`, `PUT /catastro/{id}`
+|«Buscar en Catastro Fiscal», alta de un lote, lote y su edición (polígono incluido).
+|200; 201.
+
+|`POST /declaraciones`
+|Alta corta desde la ficha del predio (`contribuyente` y `predio` son ids).
+|201.
+
+|`POST /contribuyentes/{id}/declaraciones-juradas`
+|Presenta una DJ: `{declaracion, predio_id}` sobre un predio existente o `{declaracion, predio}` registrándolo.
+|201; 400 por campo.
+
+|`GET`, `PUT`, `DELETE /declaraciones/{id}`
+|La DJ con su predio y su contribuyente; edición; baja.
+|200; 204; DELETE 409 si alguna lista tiene filas; PUT 400 si está ANULADA.
+
+|`POST /declaraciones/{id}/anular` +
+`{motivo_anulacion}`
+|Descargo: la deja ANULADA, de solo lectura.
+|200; 400 sin motivo.
+
+|`POST /declaraciones/{id}/condominos` +
+`{contribuyente, porcentaje_condominio}`
+|Agrega otro titular del mismo predio, año y secuencia, y recalcula el grupo.
+|201; 400 si los % pasan de 100.
+
+|`GET`, `POST /declaraciones/{id}/{lista}` +
+`PUT`, `DELETE /{lista}/{id}`
+|Listas de la DJ: `transferentes`, `niveles`, `obras`, `frentes`.
+|200; 201; 204.
+|===
+
+[[ref-api-impuesto]]
+=== Impuesto predial y documentos prediales
+
+Base: `/api/srtm`. Controladores `LiquidacionController` (`srtm.impuesto`) y `EmisionController` (`srtm.emision`).
+
+[cols="5,6,4",options="header"]
+|===
+|Método y ruta |Qué hace |Respuestas
+
+|`GET /contribuyentes/{id}/liquidacion?anio`
+|Liquidación del impuesto predial: base, tramos, mínimo, anual y cuatro cuotas con vencimiento.
+|200; con parámetros faltantes, 200 con `faltan` e importes `null`.
+
+|`GET /predios/{id}/pu?anio&contribuyente`
+|PU del predio en PDF, `inline; filename="PU-<codigo>-<anio>.pdf"`.
+|200; 404 sin DJ vigente; 409 con `titulares` si hay varios y falta `contribuyente`.
+
+|`GET /contribuyentes/{id}/hr?anio`
+|HR del contribuyente en PDF, con las mismas cifras de `/liquidacion`.
+|200; 404 sin DJ vigente; 422 con `faltan`.
+|===
+
+[[ref-api-emision]]
+=== Emisión masiva
+
+Base: `/api/srtm/emisiones`. Controlador `EmisionMasivaController`.
+
+[cols="5,6,4",options="header"]
+|===
+|Método y ruta |Qué hace |Respuestas
+
+|`POST /` +
+`{anio?, formato?: PDF\|ZIP, documentos?: [HR, PU, HLA]}`
+|Lanza la emisión del año en segundo plano. Por omisión: año en curso, PDF, `["HR","PU"]`.
+|202 con el trabajo; 400 documento desconocido; 403; 409 otra activa de la organización y año; 422 con `faltan`
+si pide HLA y al año le falta su configuración.
+
+|`GET /?anio`
+|Trabajos, el más reciente primero.
+|200.
+
+|`GET /{id}`
+|Un trabajo: `{id, anio, formato, estado, total, procesados, errores, archivo, tamano, mensaje, iniciado, terminado}`.
+|200; 404.
+
+|`GET /{id}/archivo`
+|Descarga en streaming, `attachment; filename="emision-<anio>-<id>.pdf\|zip"`. En almacén local responde `Range`
+(206, 416); en S3, siempre el archivo entero.
+|200; 409 si no está TERMINADA; 410 depurado; 404 si el almacén no tiene la clave.
+
+|`DELETE /{id}`
+|Borra el trabajo, sus lotes y sus archivos; si corre, lo cancela.
+|204; 403 sin permiso de borrado.
+|===
+
+[[ref-api-arbitrios]]
+=== Arbitrios
+
+Base: `/api/srtm`. Controladores `ArbitriosController`, `HlaController` y `DeterminacionMasivaController`.
+
+[cols="5,6,4",options="header"]
+|===
+|Método y ruta |Qué hace |Respuestas
+
+|`GET /arbitrios/servicios?anio`
+|Servicios vigentes algún día del año, en su orden.
+|200.
+
+|`GET /arbitrios/parametros?anio`
+|Ordenanza, servicios y filas de parámetros vigentes en el año, con `faltan`.
+|Siempre 200.
+
+|`GET /arbitrios?anio&predio&contribuyente&servicio&page&size`
+|Página de cuotas tal como se escribieron (también las anuladas).
+|200; 422 filtro desconocido.
+
+|`GET /predios/{id}/arbitrios?anio`
+|Matriz servicio × mes con titulares, totales, `pendientes`, `faltan` y `faltan_detalle`; cada celda con su
+`desglose` y su `formula`.
+|200.
+
+|`GET /contribuyentes/{id}/arbitrios?anio`
+|Lo mismo por cada predio de sus DJ, solo con las cuotas a su nombre.
+|200.
+
+|`POST /predios/{id}/arbitrios` +
+`{anio, observacion}`
+|Determina el predio (entero o nada) y escribe sus cuotas en una transacción.
+|201 con las cuotas; 200 `[]` sin pendientes; 400; 403; 422 con `faltan`.
+
+|`POST /contribuyentes/{id}/arbitrios` +
+`{anio, observacion}`
+|Determina cada predio de sus DJ; calcula todos antes de escribir.
+|201; 422 que nombra el predio.
+
+|`POST /arbitrios/cuotas/{id}/anulacion` +
+`{motivo, observacion}`
+|Anula una cuota (se agrega una `anulacion_cuota_arbitrio`).
+|201; 400; 403; 409 ya anulada.
+
+|`GET /contribuyentes/{id}/hla?anio`
+|HLA en PDF, inline.
+|200; 404 sin cuotas a su nombre; 422 con `faltan`.
+
+|`POST /arbitrios/determinaciones` +
+`{anio, observacion}`
+|Determinación masiva del año en segundo plano.
+|202; 400; 403; 409 otra del año en curso; 422 con `faltan`.
+
+|`GET /arbitrios/determinaciones?anio`, +
+`GET /arbitrios/determinaciones/{id}`
+|Trabajos de determinación, y uno con `procesados`, `generadas` y `errores`.
+|200.
+
+|`DELETE /arbitrios/determinaciones/{id}`
+|Cancela sus lotes y borra el trabajo; las cuotas escritas quedan.
+|204.
+|===
+
+[[ref-api-infracciones]]
+=== Infracciones administrativas
+
+Base: `/api/srtm/infracciones`. Controladores `InfraccionesController`, `ActasController` y
+`ResolucionesController`. Cada acto pide `observacion` de 5 a 500 caracteres (400) y permiso de creación sobre su
+objeto antes de leer nada (403).
+
+[cols="5,6,4",options="header"]
+|===
+|Método y ruta |Qué hace |Respuestas
+
+|`GET /cuis?vigentes_a&materia&q`
+|CUIS vigente a una fecha, con las multas a la UIT de ese día.
+|Siempre 200; sin UIT, `uit: null` y `faltan`.
+
+|`POST /cuis`
+|Agrega una versión del CUIS y cierra la vigente, en una transacción con candado. La llama `import_cuis.py`.
+|201; 409 versión repetida; 422 no posterior a la vigente.
+
+|`POST /cuis/derogacion` +
+`{familia?, codigo, vigencia_hasta}`
+|Deroga un código sin versión nueva (`import_cuis.py --completo`).
+|200; 404; 409 sin vigente; 422.
+
+|`GET /notificaciones?numero&q&contribuyente&desde&hasta&vencidas_a&page&size`
+|Notificaciones previas como estaban a `vencidas_a`.
+|200.
+
+|`POST /notificaciones`
+|Registra una notificación previa.
+|201; 404; 409 número repetido; 422 fecha futura.
+
+|`POST /notificaciones/{id}/subsanacion`
+|Registra su subsanación.
+|201; 409 ya subsanada; 422 vencida o con acta.
+
+|`GET /notificaciones/vencidas?corte&page&size`, +
+`GET /notificaciones/por-contribuyente?contribuyente&page&size`
+|Padrón de vencidas y padrón por contribuyente.
+|200; 404 contribuyente inexistente.
+
+|`GET /panel?anio`
+|Actas, resoluciones, notificadas y vencimientos de la semana; `coactiva` siempre `null`.
+|200; 403; 422.
+
+|`GET /plazos?anio`
+|Plazos y feriados cargados del año, con `faltan`.
+|Siempre 200; 422 si `anio` no es un año.
+
+|`GET /actas?numero&administrado&codigo&fase&desde&hasta&page&size`, +
+`POST /actas`
+|Grilla de actas; alta del acta con su multa calculada y congelada.
+|200; 201; 404; 409 número repetido; 422 con `faltan` o código que no rige.
+
+|`GET /actas/{id}`
+|Ficha del expediente: actos en orden legal, partes, `acciones`.
+|200; 404.
+
+|`POST /actas/{id}/anulacion`
+|Anula el acta.
+|201; 409 ya anulada; 422 dejada sin efecto.
+
+|`POST /actas/{id}/descargos`
+|Registra un descargo o recurso, con su plazo resuelto y copiado (el tardío se registra).
+|201; 404; 409 expediente repetido; 422 con `faltan`.
+
+|`POST /actas/{id}/resoluciones`
+|Dicta una RIS o una RGR (`RIS-AAAA-NNNNNN`, `RGR-AAAA-NNNNNN`).
+|201; 404; 409 segunda RIS; 422 `SE_REDUCE` o con `faltan`.
+
+|`GET /resoluciones/{id}/pdf`
+|La resolución en PDF, redibujada desde las filas congeladas.
+|200; 403; 404.
+
+|`POST /resoluciones/{id}/notificacion`
+|Registra un intento de notificación; NOTIFICADO o RECHAZADO fijan `exigible_desde`.
+|201; 404; 422.
+|===
+
+En las fichas, bajo `/api/srtm`: `GET /contribuyentes/{id}/infracciones` y `GET /predios/{id}/infracciones`
+responden `{al_dia, actas}` (404 si no existe).
+
+[[ref-api-anuncios]]
+=== Anuncios y propaganda
+
+Base: `/api/srtm`. Controlador `AnunciosController`.
+
+[cols="5,6,4",options="header"]
+|===
+|Método y ruta |Qué hace |Respuestas
+
+|`GET /anuncios?contribuyente&clase&estado&vigentes_a&q&page&size`
+|Padrón de anuncios con su estado a `vigentes_a`.
+|200; 422 filtro inválido.
+
+|`POST /anuncios` +
+cabecera `Idempotency-Key` (hasta 64 caracteres)
+|Alta con su autorización y la tasa del ejercicio.
+|201 `{anuncio, movimiento, ya_existia:false}`; 200 reenvío; 409; 422 con `faltan`.
+
+|`GET /anuncios/{id}`
+|Ficha: movimientos, estado, vigencia, devengado y `acciones`.
+|200; 404.
+
+|`POST /anuncios/{id}/renovacion`, `/cese`, `/retiro`
+|Actos sobre el anuncio.
+|201; 409 acto o ejercicio repetido; 422 fuera de orden o con `faltan`.
+
+|`GET /anuncios/tasas?anio`
+|Tasa de cada clase y las que faltan.
+|200; 422.
+
+|`GET /contribuyentes/{id}/anuncios`, +
+`GET /predios/{id}/anuncios`
+|Anuncios de la ficha, `{al_dia, anuncios}`.
+|200.
+|===
+
+[[ref-api-pide]]
+=== Consulta de documentos (`srtm.pide`)
+
+[cols="5,6,4",options="header"]
+|===
+|Método y ruta |Qué hace |Respuestas
+
+|`GET /api/srtm/documentos/{tipo}/{numero}`
+|Apellidos y nombres que RENIEC da de un DNI de 8 dígitos (solo con PIDE encendida y configurada).
+|200; 404 «RENIEC no devolvió datos del DNI: ingrese los datos a mano».
+|===
+
+[[ref-api-brecha]]
+=== Brecha de recaudación
+
+Base: `/api/srtm/brecha`. Controlador `BrechaController`. Toda consulta pide antes lectura sobre `brecha_corrida`.
+
+[cols="5,6,4",options="header"]
+|===
+|Método y ruta |Qué hace |Respuestas
+
+|`POST /corridas` `{anio}`
+|Lanza una corrida en segundo plano.
+|202; 400 año inválido; 403; 409 catastro no configurado, de otra organización o corrida en curso.
+
+|`GET /corridas?anio`, `GET /corridas/{id}`
+|Corridas (la más reciente primero) y una con su avance. Una activa sin latido por más de 10 minutos se informa
+FALLIDA.
+|200; 404.
+
+|`GET /{anio}/panel?corrida`
+|KPIs, por categoría y por sector, de la última corrida TERMINADA del año (o de `corrida`).
+|200; 404 si no hay.
+
+|`GET /{anio}/predios?categoria&sector&page&size&corrida`
+|Página de filas (25 por omisión).
+|200; 404; 422 categoría inválida.
+
+|`GET /{anio}/lotes?corrida`
+|`FeatureCollection` GeoJSON (EPSG:4326) con `{categoria, codigo, deltaImpuesto}`.
+|200; 404.
+|===

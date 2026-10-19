@@ -1,0 +1,203 @@
+// Referencia de permisos de srtm-backend. La incluyen el manual técnico del sistema y el del administrador,
+// como capítulo (include::../referencia/permisos.adoc[]) o dentro de otro capítulo ([leveloffset=+1]).
+// Empieza en el nivel 2 (==) y no tiene cabecera de documento. Fuentes: srtm/Permisos.kt, las llamadas a
+// requirePermission de los servicios, las lecturas de RecordService y docs/manuales/demo/perfiles.json (la lista
+// canónica de los perfiles de la demo).
+
+[[ref-permisos]]
+== Matriz de permisos
+
+[[ref-permisos-modelo]]
+=== Cómo se decide un permiso
+
+* Un *rol* de wasichai tiene permisos por objeto y acción (`READ`, `CREATE`, `UPDATE`, `DELETE`) y, opcionalmente,
+  por campo (lectura y escritura). Un permiso sin objeto vale para todos los objetos de la organización: así es el rol
+  `ADMIN`, que además tiene `MANAGE_METADATA` (cambiar el modelo) y `MANAGE_ORGANIZATION` (usuarios, roles, cuentas
+  de servicio).
+* *`RecordService`* aplica los permisos del usuario en cada lectura y cada escritura, venga de la API genérica de Core
+  o de la API de {sigla}: un objeto que el rol no puede leer responde 403, y un campo que no puede escribir conserva su
+  valor (`Registros` envía solo los campos permitidos). `GET /api/srtm/catalogos` omite los objetos que el rol no lee.
+* *Los actos de {sigla}* piden además, *antes de leer nada*, el permiso de creación del objeto que escriben
+  (`srtm.Permisos.exigirCrear`, o `requirePermission` en los servicios de trabajos masivos). Así, quien no puede
+  registrar un acta recibe un 403 que nombra el acto y el objeto, no un cálculo que luego no podría guardar:
+  «Registrar un acta exige permiso de creación sobre papeleta».
+* *Las escrituras de los trabajos masivos* (emisión, determinación, brecha) se hacen como el usuario que los lanzó:
+  sus lotes se crean con sus permisos y las transiciones de preparación quedan en la auditoría como su edición. Por
+  eso se exige también `UPDATE` sobre el trabajo.
+
+NOTE: Solo el rol `ADMIN` viene con la instalación (lo crea la semilla de desarrollo o la provisión de la
+organización). Los roles de los funcionarios se crean en la consola de administración (`/admin`) o por
+`POST /api/roles` y `PUT /api/roles/{rol}/permissions`.
+
+[[ref-permisos-explicitos]]
+=== Permisos que el código exige antes de actuar
+
+Estos permisos están escritos en el código y se comprueban antes de cualquier lectura. Sin ellos, 403.
+
+[cols="5,7",options="header"]
+|===
+|Acción (ruta) |Permiso exigido
+
+|Lanzar una emisión masiva +
+`POST /api/srtm/emisiones`
+|`CREATE` y `UPDATE` sobre `emision_masiva`; `CREATE` sobre `emision_lote`.
+
+|Borrar o cancelar una emisión +
+`DELETE /api/srtm/emisiones/{id}`
+|`DELETE` sobre `emision_masiva`.
+
+|Lanzar una determinación masiva +
+`POST /api/srtm/arbitrios/determinaciones`
+|`CREATE` y `UPDATE` sobre `determinacion_arbitrio_masiva`; `CREATE` sobre `determinacion_arbitrio_lote` y
+`cuota_arbitrio`.
+
+|Borrar una determinación masiva +
+`DELETE /api/srtm/arbitrios/determinaciones/{id}`
+|`DELETE` sobre `determinacion_arbitrio_masiva`.
+
+|Determinar un predio o un contribuyente +
+`POST /api/srtm/{predios\|contribuyentes}/{id}/arbitrios`
+|`CREATE` sobre `cuota_arbitrio`.
+
+|Anular una cuota +
+`POST /api/srtm/arbitrios/cuotas/{id}/anulacion`
+|`CREATE` sobre `anulacion_cuota_arbitrio`.
+
+|Agregar o derogar una versión del CUIS +
+`POST /api/srtm/infracciones/cuis`, `…/cuis/derogacion`
+|`CREATE` sobre `codigo_infraccion`.
+
+|Registrar una notificación previa / su subsanación
+|`CREATE` sobre `notificacion_administrativa` / `subsanacion_notificacion`.
+
+|Registrar un acta / anularla
+|`CREATE` sobre `papeleta` / `anulacion_papeleta`.
+
+|Registrar un descargo / dictar una resolución / notificarla
+|`CREATE` sobre `descargo_papeleta` / `resolucion_gerencia` / `notificacion_resolucion`.
+
+|Registrar un anuncio +
+`POST /api/srtm/anuncios`
+|`CREATE` sobre `anuncio` y sobre `movimiento_anuncio`.
+
+|Renovar, cesar o retirar un anuncio
+|`CREATE` sobre `movimiento_anuncio`.
+
+|Lanzar una corrida de la brecha +
+`POST /api/srtm/brecha/corridas`
+|`CREATE` y `UPDATE` sobre `brecha_corrida`; `CREATE` sobre `brecha_predio`.
+
+|Consultar la brecha +
+`GET /api/srtm/brecha/**`
+|`READ` sobre `brecha_corrida` (y `RecordService` exige `READ` sobre `brecha_predio` al servir las filas).
+|===
+
+[[ref-permisos-implicitos]]
+=== Permisos que exigen las lecturas y escrituras
+
+Lo que no está en la tabla anterior lo decide `RecordService` objeto por objeto, según lo que cada acción lee o
+escribe. Esta tabla resume lo que se deduce del código; no es una lista comprobada llamada por llamada. Los
+perfiles de la demostración (más abajo) son el conjunto que se prueba contra la API: `demo/sembrar_demo.py` siembra
+cada parte con su perfil, y `demo/verificar_perfiles.py` comprueba que cada uno reciba 200 en lo que usan sus
+pantallas y 403 en lo demás.
+
+[cols="5,7",options="header"]
+|===
+|Acción |Objetos que lee (`READ`) o escribe
+
+|Consultar el padrón y las fichas
+|`READ` sobre `contribuyente`, `predio`, `declaracion_predial` y sus listas (`domicilio`, `relacionado`,
+`medio_contacto`, `sustento`, `transferente`, `nivel_construccion`, `obra_complementaria`, `otro_frente`), más los
+catálogos (`ubigeo`, `via`, `unidad_urbana`, `categoria_valor`, `obra_categoria`, `uso_predio`).
+
+|Inscribir, editar o dar de baja un contribuyente
+|`CREATE`, `UPDATE` o `DELETE` sobre `contribuyente`. La baja borra también sus listas (`DELETE` sobre ellas) y
+cuenta sus declaraciones y cuotas antes (`READ` sobre `declaracion_predial` y `cuota_arbitrio`).
+
+|Presentar, editar o anular una DJ; agregar un condómino
+|`CREATE` y `UPDATE` sobre `declaracion_predial` (el condominio recalcula las DJ del grupo); `CREATE` sobre `predio`
+si la DJ registra uno; las listas de la DJ con sus propias acciones.
+
+|Catastro fiscal en el portal
+|`READ`, `CREATE` o `UPDATE` sobre `catastro_fiscal`.
+
+|Liquidación del predial, HR
+|`READ` sobre el padrón y `parametro_tributario`; la HR también sobre `municipalidad` (la cabecera se lee como el
+usuario que emite).
+
+|PU
+|`READ` sobre el padrón, las listas de la DJ y `municipalidad`.
+
+|Consultar arbitrios y la HLA
+|`READ` sobre `cuota_arbitrio`, `anulacion_cuota_arbitrio`, `servicio_arbitrio`, `ordenanza_arbitrio`,
+`inafectacion_arbitrio`, `zona_arbitrio_ubicacion`, `parametro_tributario` y el padrón; la HLA también sobre
+`municipalidad`.
+
+|Seguir un trabajo masivo
+|`READ` sobre `emision_masiva` o `determinacion_arbitrio_masiva` (y sus lotes).
+
+|Consultar infracciones y el panel
+|`READ` sobre cada objeto que cuenta o muestra (`papeleta`, `resolucion_gerencia`, `notificacion_resolucion`,
+`notificacion_administrativa`, `subsanacion_notificacion`, `anulacion_papeleta`, `descargo_papeleta`,
+`codigo_infraccion`, `contribuyente`) y sobre `parametro_tributario` (UIT, plazos, feriados).
+
+|Consultar anuncios
+|`READ` sobre `anuncio`, `movimiento_anuncio`, `contribuyente`, `predio` y `parametro_tributario`.
+
+|Cambiar el modelo (`apply.py`)
+|`MANAGE_METADATA`.
+
+|Cargar datos con los importadores
+|`CREATE` y `UPDATE` sobre los objetos que cada script escribe; `import_cuis.py` pasa por la API de {sigla}
+(`CREATE` sobre `codigo_infraccion`). En la práctica se corren con una cuenta `ADMIN`.
+
+|Administrar usuarios y roles
+|`MANAGE_ORGANIZATION`.
+|===
+
+IMPORTANT: Nadie actualiza ni borra cuotas, anulaciones, objetos de infracciones ni de anuncios, aunque su rol
+tenga `UPDATE` o `DELETE`: `appendOnly` y la guardia de escritura responden 409 (también a un ADMIN). Dar esos
+permisos no abre nada; tampoco hace falta darlos.
+
+[[ref-permisos-perfiles]]
+=== Perfiles sugeridos
+
+La instalación no trae más rol que `ADMIN`. La base de demostración de los manuales crea cinco perfiles con una
+cuenta cada uno, que sirven de punto de partida para los roles reales. *La lista canónica de sus permisos es
+`docs/manuales/demo/perfiles.json`*; esta tabla la resume.
+
+[cols="3,5,6",options="header"]
+|===
+|Rol |Para qué |Escribe (además de leer lo que usa)
+
+|`{p-registrador}`
+|Registro tributario: contribuyentes y sus listas, predios, DJ y sus listas, catastro fiscal. Ve la ficha completa
+(arbitrios, infracciones y anuncios en solo lectura), el PU, la HR, la HLA y la liquidación.
+|CRUD completo sobre `contribuyente`, `domicilio`, `relacionado`, `medio_contacto`, `sustento`, `predio`,
+`declaracion_predial`, `transferente`, `nivel_construccion`, `obra_complementaria`, `otro_frente` y
+`catastro_fiscal`.
+
+|`{p-arbitrios}`
+|Determinación de arbitrios (por predio, por contribuyente y masiva), anulación de cuotas, HLA y emisión masiva
+de HR, PU y HLA.
+|`CREATE` sobre `cuota_arbitrio`, `anulacion_cuota_arbitrio`, `determinacion_arbitrio_lote` y `emision_lote`;
+CRUD sobre `determinacion_arbitrio_masiva` y `emision_masiva`.
+
+|`{p-fiscalizador}`
+|Infracciones: CUIS, notificaciones previas y subsanación, actas y anulación, descargos, resoluciones (y su PDF), su
+notificación, panel.
+|`CREATE` sobre los ocho objetos de infracciones.
+
+|`{p-anuncios}`
+|Anuncios y propaganda: alta con su autorización, renovación, cese, retiro, padrón y tasas.
+|`CREATE` sobre `anuncio` y `movimiento_anuncio`.
+
+|`{p-consulta}`
+|Solo lectura del modelo entero, la brecha incluida.
+|Nada: `READ` sobre los 42 objetos.
+|===
+
+Ninguno de los cuatro perfiles operativos lee `brecha_corrida` ni `brecha_predio`: la brecha la consultan
+`{p-consulta}` y `{p-admin}`, y solo un rol con los permisos de la tabla de arriba puede lanzar una corrida. La
+configuración de la ordenanza de arbitrios (ordenanza, servicios, inafectaciones, zonas) y los parámetros
+tributarios se cargan con los importadores: ningún perfil sugerido los escribe.

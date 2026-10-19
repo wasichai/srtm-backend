@@ -1,0 +1,724 @@
+// Referencia del modelo de datos de srtm-backend. La incluyen el manual técnico del sistema y el del administrador,
+// como capítulo (include::../referencia/modelo-datos.adoc[]) o dentro de otro capítulo ([leveloffset=+1]).
+// Empieza en el nivel 2 (==) y no tiene cabecera de documento. Las tablas de objetos y relaciones salen de
+// model/model.json (42 objetos, 44 relaciones, 61 enums); si model.json cambia, se regeneran.
+
+[[ref-modelo-datos]]
+== Modelo de datos
+
+El modelo de {sigla} no está en migraciones SQL propias: es metadata de wasichai, declarada en `model/model.json` y
+cargada por REST con `model/apply.py`. Core guarda la definición (objetos, campos, relaciones, opciones de las listas,
+índices y reglas) en su esquema de metadata y crea, por cada objeto y cada organización, una tabla física de
+registros. `model.json` tiene *42 objetos, 44 relaciones y 61 listas de opciones (enums)*.
+
+[[ref-modelo-almacenamiento]]
+=== Dónde se guarda
+
+[cols="3,9",options="header"]
+|===
+|Esquema |Contenido
+
+|`wasichai`
+|La metadata y la plataforma, creadas por las migraciones Flyway de wasichai al arrancar: `organizations`, `users`,
+`roles`, `user_roles`, `permissions`, `field_permissions`, `custom_objects`, `custom_fields`, `relationships`,
+`audit_log`, `user_preferences`, `object_actions`, `service_accounts`, `org_units`, `user_org_units`,
+`idempotency_keys` y las tablas de los módulos (`workflows`, `document_types`, `document_counters`, `documents`,
+`forms`, `views`, `pages`). Cada módulo lleva su historial de migraciones: `flyway_history_core`,
+`flyway_history_core_seed` (solo si corrió la semilla de desarrollo), `flyway_history_workflow`,
+`flyway_history_documents`, `flyway_history_views`, `flyway_history_forms`, `flyway_history_pages` y
+`flyway_history_gis`.
+
+|`app_data`
+|Una tabla por objeto y organización, llamada `<objeto>__<8 primeros hex del id de la organización>` (por ejemplo
+`cuota_arbitrio__a1b2c3d4`). Cada tabla tiene `id`, `organization_id`, las columnas de sistema de Core y una
+columna por campo; un campo de relación es una columna con el id del destino. Core crea un índice por
+`organization_id`, por cada campo único y por los `indexes` que el objeto declara.
+
+|`public`
+|Las extensiones: `pgcrypto` (Core), `postgis` (wasichai-gis) y `vector` si el servidor la trae (Core la crea solo
+cuando está disponible; nada de {sigla} la usa).
+|===
+
+NOTE: {sigla} no tiene migraciones SQL propias. Lo único que escribe directamente en `app_data`, sin pasar por
+`RecordService`, son los estados de los trabajos y lotes de la emisión masiva y de la determinación masiva
+(`srtm.emision.TablasCore`), con los nombres de tabla y de columna que lee de la metadata de Core.
+
+Consecuencias para la operación:
+
+* Un respaldo útil incluye los dos esquemas, `wasichai` y `app_data`, y las extensiones de `public`: la metadata sin
+  las tablas de registros, o al revés, no sirve.
+* El nombre físico de una tabla depende del id de la organización. Una consulta SQL directa debe buscarlo en
+  `wasichai.custom_objects.physical_table`, no suponerlo.
+* Los nombres de columna también los asigna Core (`wasichai.custom_fields.column_name`).
+
+[[ref-modelo-diagramas]]
+=== Diagramas entidad-relación
+
+.Padrón, registro del contribuyente y declaración jurada
+image::{diagramas}/modelo-padron.{diagext}[Diagrama entidad-relación del padrón: contribuyente, predio, declaración predial y sus listas,role=diagrama]
+
+En el diagrama del padrón, las líneas punteadas hacia `catastro_fiscal`, `ubigeo` y `categoria_valor` no son
+relaciones de Core: el predio guarda el código CPU, el domicilio el código de ubigeo y el nivel la letra de la
+categoría como texto.
+
+.Arbitrios, emisión, infracciones, anuncios y brecha
+image::{diagramas}/modelo-tributos.{diagext}[Diagrama entidad-relación de arbitrios, emisión masiva, infracciones, anuncios y brecha,role=diagrama]
+
+En el diagrama de tributos, `ordenanza_arbitrio → servicio_arbitrio → cuota_arbitrio` resume la cadena: la cuota
+apunta al servicio, y el servicio a su ordenanza. Las relaciones exactas están en <<ref-modelo-relaciones>>.
+
+[[ref-modelo-objetos]]
+=== Objetos por grupo
+
+En las tablas siguientes, *Campos* es el total de campos del objeto sin contar los de relación, y entre paréntesis
+los obligatorios en Core. Muchos campos que el portal exige no son obligatorios en Core, porque los registros
+importados del padrón no los tienen.
+
+[[ref-modelo-padron]]
+==== Padrón
+
+[cols="6,2,6",options="header"]
+|===
+|Objeto y propósito |Campos |Claves, relaciones y reglas
+a|`contribuyente` +
+Contribuyente. Persona natural, persona jurídica o sucesión obligada al pago de tributos municipales.
+|28 (3)
+a|Únicos: `numero_documento`, `codigo`
+a|`predio` +
+Predio. Predio urbano o rústico del distrito: identidad y ubicación. Código `SS-MM-NNNN`, el código municipal de su lote o `P-NNNNNN`.
+|37 (2)
+a|Únicos: `codigo`, `numero_registro` +
+Geometría: `lote_geom` (POLYGON 32718)
+a|`declaracion_predial` +
+Declaración predial. Lo que un contribuyente declara sobre un predio en un año y una secuencia de uso: características, autoavalúo y su parte en el condominio.
+|42 (2)
+a|Únicos: `numero_declaracion` +
+`contribuyente` → `contribuyente` +
+`predio` → `predio`
+|===
+
+[[ref-modelo-registro]]
+==== Registro del contribuyente
+
+[cols="6,2,6",options="header"]
+|===
+|Objeto y propósito |Campos |Claves, relaciones y reglas
+a|`domicilio` +
+Domicilio. Domicilio fiscal, real o procesal del contribuyente. El fiscal activo se copia a `contribuyente.domicilio_fiscal`.
+|31 (5)
+a|Geometría: `ubicacion` (POINT 4326) +
+`contribuyente` → `contribuyente`
+a|`relacionado` +
+Relacionado. Cónyuge, representante legal, apoderado, conviviente o heredero.
+|17 (2)
+a|`contribuyente` → `contribuyente`
+a|`medio_contacto` +
+Medio de contacto. Teléfono o correo del contribuyente.
+|7 (2)
+a|`contribuyente` → `contribuyente`
+a|`sustento` +
+Documento sustento. Documento que respalda la inscripción o un cambio del contribuyente.
+|6 (3)
+a|`contribuyente` → `contribuyente`
+|===
+
+[[ref-modelo-dj]]
+==== Declaración jurada predial
+
+[cols="6,2,6",options="header"]
+|===
+|Objeto y propósito |Campos |Claves, relaciones y reglas
+a|`transferente` +
+Transferente. Quien transfirió el predio al declarante, con el porcentaje transferido.
+|22 (7)
+a|`declaracion` → `declaracion_predial`
+a|`nivel_construccion` +
+Nivel de construcción. Piso, sótano, mezanine o azotea declarado, con las letras de sus siete categorías.
+|17 (7)
+a|`declaracion` → `declaracion_predial`
+a|`obra_complementaria` +
+Obra complementaria. Obra complementaria o instalación fija y permanente declarada.
+|14 (9)
+a|`declaracion` → `declaracion_predial`
+a|`otro_frente` +
+Otro frente. Frente del predio a otra vía, además de la principal.
+|9 (3)
+a|`declaracion` → `declaracion_predial`
+|===
+
+[[ref-modelo-catastro]]
+==== Catastro fiscal
+
+[cols="6,2,6",options="header"]
+|===
+|Objeto y propósito |Campos |Claves, relaciones y reglas
+a|`catastro_fiscal` +
+Lote del catastro fiscal. Lote del catastro fiscal, con su código CPU y su polígono.
+|15 (1)
+a|Únicos: `codigo_cpu` +
+Geometría: `lote_geom` (POLYGON 32718)
+|===
+
+[[ref-modelo-catalogos]]
+==== Catálogos
+
+[cols="6,2,6",options="header"]
+|===
+|Objeto y propósito |Campos |Claves, relaciones y reglas
+a|`ubigeo` +
+Ubigeo. Distritos del INEI (`model/data/ubigeo.csv`).
+|4 (4)
+a|Únicos: `codigo`
+a|`via` +
+Vía. Vías del distrito, sacadas de las direcciones del padrón.
+|3 (2)
+a|Sin campos únicos ni relaciones.
+a|`unidad_urbana` +
+Unidad urbana. Habilitaciones urbanas del distrito, sacadas del padrón.
+|3 (2)
+a|Sin campos únicos ni relaciones.
+a|`categoria_valor` +
+Categoría de valor unitario. Descripción de cada letra (A-I) de las siete columnas del cuadro de valores unitarios.
+|4 (4)
+a|Sin campos únicos ni relaciones.
+a|`obra_categoria` +
+Categoría de obra complementaria. Partidas de obras complementarias del anexo III de la R.M. 277-2025-VIVIENDA, con su valor unitario.
+|6 (4)
+a|Sin campos únicos ni relaciones.
+a|`uso_predio` +
+Uso de predio. Tipos de uso de predio del SRTM: clase, sub clase y uso, con su código de seis dígitos.
+|4 (4)
+a|Únicos: `codigo`
+|===
+
+[[ref-modelo-parametros]]
+==== Parámetros y datos institucionales
+
+[cols="6,2,6",options="header"]
+|===
+|Objeto y propósito |Campos |Claves, relaciones y reglas
+a|`parametro_tributario` +
+Parámetro tributario. Valores normativos con vigencia y doble firma: UIT, tramos, tasas de arbitrios, plazos, feriados, tasas de anuncios. Clave natural: `tipo`, `clave`, `vigencia_desde`.
+|10 (4)
+a|Sin campos únicos ni relaciones.
+a|`municipalidad` +
+Municipalidad. Datos de la cabecera de los documentos emitidos; uno por organización.
+|5 (1)
+a|Sin campos únicos ni relaciones.
+|===
+
+[[ref-modelo-emision]]
+==== Emisión masiva
+
+[cols="6,2,6",options="header"]
+|===
+|Objeto y propósito |Campos |Claves, relaciones y reglas
+a|`emision_masiva` +
+Emisión masiva. Trabajo de emisión masiva de un año (HR, PU, HLA), con su estado, avance y archivo en el almacén.
+|13 (3)
+a|Sin campos únicos ni relaciones.
+a|`emision_lote` +
+Lote de emisión. Tramo de contribuyentes de una emisión masiva, que toma un trabajador de cualquier instancia.
+|10 (3)
+a|`emision` → `emision_masiva`
+|===
+
+[[ref-modelo-arbitrios]]
+==== Arbitrios
+
+[cols="6,2,6",options="header"]
+|===
+|Objeto y propósito |Campos |Claves, relaciones y reglas
+a|`ordenanza_arbitrio` +
+Ordenanza de arbitrios. Ordenanza de arbitrios de un año y su ratificación provincial; una por año.
+|8 (2)
+a|Únicos: `anio`
+a|`servicio_arbitrio` +
+Servicio de arbitrio. Servicio que la ordenanza cobra (barrido, residuos, parques, serenazgo…).
+|5 (3)
+a|Únicos: `codigo` +
+`ordenanza` → `ordenanza_arbitrio`
+a|`inafectacion_arbitrio` +
+Inafectación de arbitrio. Predio que no paga un servicio durante una vigencia.
+|6 (3)
+a|`predio` → `predio` +
+`servicio` → `servicio_arbitrio`
+a|`zona_arbitrio_ubicacion` +
+Zona de arbitrio por ubicación. Zona de arbitrio por vía, tramo de numeración y manzana, opcionalmente de un servicio.
+|13 (7)
+a|Únicos: `clave`
+a|`cuota_arbitrio` +
+Cuota de arbitrio. Lo determinado de un predio, servicio, secuencia de uso y mes, con su desglose. Inmutable.
+|22 (7)
+a|Únicos: `clave` +
+`predio` → `predio` +
+`contribuyente` → `contribuyente` +
+`servicio` → `servicio_arbitrio` +
+`parametro` → `parametro_tributario` +
+`appendOnly`; índices (anio, predio), (anio, contribuyente) +
+Regla de escritura de arbitrios (sin marca).
+a|`anulacion_cuota_arbitrio` +
+Anulación de cuota de arbitrio. Corrección de una cuota: se agrega; la cuota deja de contar.
+|5 (5)
+a|Únicos: `clave` +
+`cuota` → `cuota_arbitrio` +
+`predio` → `predio` +
+`appendOnly`
+a|`determinacion_arbitrio_masiva` +
+Determinación masiva de arbitrios. Trabajo de determinación masiva de arbitrios de un año. No genera archivo.
+|11 (3)
+a|Sin campos únicos ni relaciones.
+a|`determinacion_arbitrio_lote` +
+Lote de determinación de arbitrios. Tramo de predios de una determinación masiva.
+|9 (3)
+a|`determinacion` → `determinacion_arbitrio_masiva`
+|===
+
+[[ref-modelo-sanciones]]
+==== Infracciones administrativas
+
+[cols="6,2,6",options="header"]
+|===
+|Objeto y propósito |Campos |Claves, relaciones y reglas
+a|`codigo_infraccion` +
+Código de infracción. Versión del CUIS de un código, con su vigencia.
+|14 (8)
+a|Únicos: `clave`, `clave_vigente` +
+Solo desde la API de srtm (marca `EscrituraDeSrtm`).
+a|`notificacion_administrativa` +
+Notificación administrativa. Notificación previa a un acta.
+|6 (5)
+a|Únicos: `numero` +
+`contribuyente` → `contribuyente` (opcional) +
+`predio` → `predio` (opcional) +
+Solo desde la API de srtm (marca `EscrituraDeSrtm`).
+a|`subsanacion_notificacion` +
+Subsanación de notificación. Subsanación de una notificación previa; una por notificación.
+|3 (3)
+a|Únicos: `clave` +
+`notificacion` → `notificacion_administrativa` +
+Solo desde la API de srtm (marca `EscrituraDeSrtm`).
+a|`papeleta` +
+Acta de infracción. Acta de infracción, con su multa calculada y congelada.
+|19 (13)
+a|Únicos: `clave` +
+`codigo_infraccion` → `codigo_infraccion` +
+`uit` → `parametro_tributario` +
+`obligado` → `contribuyente` +
+`contribuyente` → `contribuyente` (opcional) +
+`predio` → `predio` (opcional) +
+`notificacion_previa` → `notificacion_administrativa` (opcional) +
+Solo desde la API de srtm (marca `EscrituraDeSrtm`).
+a|`anulacion_papeleta` +
+Anulación de acta. Anulación de un acta; una por acta.
+|4 (4)
+a|Únicos: `clave` +
+`papeleta` → `papeleta` +
+Solo desde la API de srtm (marca `EscrituraDeSrtm`).
+a|`descargo_papeleta` +
+Descargo. Descargo o recurso contra un acta, con su plazo resuelto y copiado.
+|8 (8)
+a|Únicos: `numero_expediente` +
+`papeleta` → `papeleta` +
+`plazo` → `parametro_tributario` +
+Solo desde la API de srtm (marca `EscrituraDeSrtm`).
+a|`resolucion_gerencia` +
+Resolución de gerencia. Resolución que sanciona un acta (RIS) o resuelve un descargo (RGR).
+|13 (8)
+a|Únicos: `numero`, `clave_ris`, `clave_descargo` +
+`papeleta` → `papeleta` +
+`descargo` → `descargo_papeleta` (opcional) +
+`plazo` → `parametro_tributario` +
+Solo desde la API de srtm (marca `EscrituraDeSrtm`).
+a|`notificacion_resolucion` +
+Notificación de resolución. Cada intento de notificar una resolución.
+|14 (8)
+a|Únicos: `clave` +
+`resolucion` → `resolucion_gerencia` +
+`plazo` → `parametro_tributario` (opcional) +
+Solo desde la API de srtm (marca `EscrituraDeSrtm`).
+|===
+
+[[ref-modelo-anuncios]]
+==== Anuncios y propaganda
+
+[cols="6,2,6",options="header"]
+|===
+|Objeto y propósito |Campos |Claves, relaciones y reglas
+a|`anuncio` +
+Anuncio. Anuncio o propaganda autorizado. Su estado se deriva de sus movimientos.
+|19 (11)
+a|Únicos: `numero`, `clave_idempotencia` +
+`contribuyente` → `contribuyente` +
+`predio` → `predio` (opcional) +
+Solo desde la API de srtm (marca `EscrituraDeSrtm`).
+a|`movimiento_anuncio` +
+Movimiento de anuncio. Autorización, renovación, cese o retiro de un anuncio.
+|9 (4)
+a|Únicos: `referencia_cargo`, `clave` +
+`anuncio` → `anuncio` +
+`parametro` → `parametro_tributario` (opcional) +
+Solo desde la API de srtm (marca `EscrituraDeSrtm`).
+|===
+
+[[ref-modelo-brecha]]
+==== Brecha de recaudación
+
+[cols="6,2,6",options="header"]
+|===
+|Objeto y propósito |Campos |Claves, relaciones y reglas
+a|`brecha_corrida` +
+Corrida de brecha de recaudación. Una medición de la brecha de recaudación de un año.
+|13 (2)
+a|Sin campos únicos ni relaciones.
+a|`brecha_predio` +
+Predio de la brecha. Fila de una corrida: categoría y diferencias de autoavalúo, impuesto y arbitrios.
+|18 (1)
+a|Geometría: `lote_geom` (POLYGON 32718) +
+`corrida` → `brecha_corrida` +
+`predio` → `predio` (opcional)
+|===
+
+[[ref-modelo-relaciones]]
+=== Relaciones
+
+`model.json` declara 44 relaciones, todas de muchos a uno: el campo de relación vive en el objeto
+de origen y guarda el id del registro de destino. Las opcionales lo dicen; las demás son obligatorias.
+
+[cols="7,1,5",options="header"]
+|===
+|Origen y campo → destino |Oblig. |Nombre en Core
+a|`declaracion_predial.contribuyente` +
+→ `contribuyente`
+|sí
+|`declaracion_predial_contribuyente`
+a|`declaracion_predial.predio` +
+→ `predio`
+|sí
+|`declaracion_predial_predio`
+a|`domicilio.contribuyente` +
+→ `contribuyente`
+|sí
+|`domicilio_contribuyente`
+a|`relacionado.contribuyente` +
+→ `contribuyente`
+|sí
+|`relacionado_contribuyente`
+a|`medio_contacto.contribuyente` +
+→ `contribuyente`
+|sí
+|`medio_contacto_contribuyente`
+a|`sustento.contribuyente` +
+→ `contribuyente`
+|sí
+|`sustento_contribuyente`
+a|`transferente.declaracion` +
+→ `declaracion_predial`
+|sí
+|`transferente_declaracion`
+a|`nivel_construccion.declaracion` +
+→ `declaracion_predial`
+|sí
+|`nivel_construccion_declaracion`
+a|`obra_complementaria.declaracion` +
+→ `declaracion_predial`
+|sí
+|`obra_complementaria_declaracion`
+a|`otro_frente.declaracion` +
+→ `declaracion_predial`
+|sí
+|`otro_frente_declaracion`
+a|`emision_lote.emision` +
+→ `emision_masiva`
+|sí
+|`emision_lote_emision`
+a|`servicio_arbitrio.ordenanza` +
+→ `ordenanza_arbitrio`
+|sí
+|`servicio_arbitrio_ordenanza`
+a|`inafectacion_arbitrio.predio` +
+→ `predio`
+|sí
+|`inafectacion_arbitrio_predio`
+a|`inafectacion_arbitrio.servicio` +
+→ `servicio_arbitrio`
+|sí
+|`inafectacion_arbitrio_servicio`
+a|`cuota_arbitrio.predio` +
+→ `predio`
+|sí
+|`cuota_arbitrio_predio`
+a|`cuota_arbitrio.contribuyente` +
+→ `contribuyente`
+|sí
+|`cuota_arbitrio_contribuyente`
+a|`cuota_arbitrio.servicio` +
+→ `servicio_arbitrio`
+|sí
+|`cuota_arbitrio_servicio`
+a|`cuota_arbitrio.parametro` +
+→ `parametro_tributario`
+|sí
+|`cuota_arbitrio_parametro`
+a|`determinacion_arbitrio_lote.determinacion` +
+→ `determinacion_arbitrio_masiva`
+|sí
+|`determinacion_arbitrio_lote_masiva`
+a|`anulacion_cuota_arbitrio.cuota` +
+→ `cuota_arbitrio`
+|sí
+|`anulacion_cuota_arbitrio_cuota`
+a|`anulacion_cuota_arbitrio.predio` +
+→ `predio`
+|sí
+|`anulacion_cuota_arbitrio_predio`
+a|`notificacion_administrativa.contribuyente` +
+→ `contribuyente`
+|no
+|`notif_adm_contribuyente`
+a|`notificacion_administrativa.predio` +
+→ `predio`
+|no
+|`notif_adm_predio`
+a|`subsanacion_notificacion.notificacion` +
+→ `notificacion_administrativa`
+|sí
+|`subsanacion_notificacion_rel`
+a|`papeleta.codigo_infraccion` +
+→ `codigo_infraccion`
+|sí
+|`papeleta_codigo`
+a|`papeleta.uit` +
+→ `parametro_tributario`
+|sí
+|`papeleta_uit`
+a|`papeleta.obligado` +
+→ `contribuyente`
+|sí
+|`papeleta_obligado`
+a|`papeleta.contribuyente` +
+→ `contribuyente`
+|no
+|`papeleta_contribuyente`
+a|`papeleta.predio` +
+→ `predio`
+|no
+|`papeleta_predio`
+a|`papeleta.notificacion_previa` +
+→ `notificacion_administrativa`
+|no
+|`papeleta_notificacion_previa`
+a|`anulacion_papeleta.papeleta` +
+→ `papeleta`
+|sí
+|`anulacion_papeleta_rel`
+a|`descargo_papeleta.papeleta` +
+→ `papeleta`
+|sí
+|`descargo_papeleta_rel`
+a|`descargo_papeleta.plazo` +
+→ `parametro_tributario`
+|sí
+|`descargo_plazo`
+a|`resolucion_gerencia.papeleta` +
+→ `papeleta`
+|sí
+|`resolucion_papeleta`
+a|`resolucion_gerencia.descargo` +
+→ `descargo_papeleta`
+|no
+|`resolucion_descargo`
+a|`resolucion_gerencia.plazo` +
+→ `parametro_tributario`
+|sí
+|`resolucion_plazo`
+a|`notificacion_resolucion.resolucion` +
+→ `resolucion_gerencia`
+|sí
+|`notif_resolucion_rel`
+a|`notificacion_resolucion.plazo` +
+→ `parametro_tributario`
+|no
+|`notif_resolucion_plazo`
+a|`anuncio.contribuyente` +
+→ `contribuyente`
+|sí
+|`anuncio_contribuyente`
+a|`anuncio.predio` +
+→ `predio`
+|no
+|`anuncio_predio`
+a|`movimiento_anuncio.anuncio` +
+→ `anuncio`
+|sí
+|`movimiento_anuncio_rel`
+a|`movimiento_anuncio.parametro` +
+→ `parametro_tributario`
+|no
+|`movimiento_parametro`
+a|`brecha_predio.corrida` +
+→ `brecha_corrida`
+|sí
+|`brecha_predio_corrida`
+a|`brecha_predio.predio` +
+→ `predio`
+|no
+|`brecha_predio_predio`
+|===
+
+[[ref-modelo-unicidad]]
+=== Unicidad, inmutabilidad e índices
+
+Core no tiene unicidad compuesta. Cuando una regla de negocio pide «uno por combinación», el modelo guarda las partes
+unidas en un campo `clave` único. Como cada organización tiene su propia tabla, la unicidad es por organización.
+
+[cols="4,8",options="header"]
+|===
+|Campo único |Forma y garantía
+
+|`cuota_arbitrio.clave`
+|`predio\|servicio\|anio\|periodo\|secuencia\|version` (las cuotas anteriores al PU por uso no llevan secuencia). Una
+cuota por predio, servicio, año, mes y secuencia de uso; una corrección es otra versión.
+
+|`anulacion_cuota_arbitrio.clave`
+|El id de la cuota: una anulación por cuota.
+
+|`codigo_infraccion.clave` / `clave_vigente`
+|`familia\|codigo\|vigencia_desde` / `familia\|codigo` mientras la versión rige. Al cerrarse, `clave_vigente` queda
+NULL (nunca `""`): PostgreSQL admite muchos NULL en un único, así que hay una sola versión vigente por código.
+
+|`papeleta.clave`
+|`familia\|numero`.
+
+|`subsanacion_notificacion.clave`, `anulacion_papeleta.clave`
+|El id de la notificación o del acta: una por cosa.
+
+|`resolucion_gerencia.clave_ris` / `clave_descargo`
+|El id del acta (una RIS por acta) / el id del descargo (una resolución por descargo).
+
+|`notificacion_resolucion.clave`
+|`resolucion\|intento`.
+
+|`movimiento_anuncio.clave` / `referencia_cargo`
+|`<anuncio>\|AUTORIZACION`, `\|CESE`, `\|RETIRO`, `\|RENOVACION\|<anio>` / `ANUNCIO-<anuncio>-<anio>`: un ejercicio
+se devenga una vez.
+
+|`anuncio.clave_idempotencia`
+|La cabecera `Idempotency-Key` del alta.
+
+|`zona_arbitrio_ubicacion.clave`
+|`servicio\|tipo_via\|via\|manzana\|numero_inicial\|numero_final\|paridad\|vigencia_desde`.
+|===
+
+Un valor único repetido responde *409* (`srtm.Duplicados`, en castellano y sin `errors[].field`), nunca 500.
+
+[[ref-modelo-appendonly]]
+==== Objetos que solo se agregan
+
+* *`appendOnly` en Core* (ADR-040 de wasichai): `cuota_arbitrio` y `anulacion_cuota_arbitrio`. Core responde 409 a
+  un PUT o DELETE de uno de sus registros, por cualquier vía y para cualquiera, y también al borrar un predio,
+  contribuyente, servicio o parámetro al que apunta una cuota. `apply.py --drop` apaga `appendOnly` antes de
+  borrarlos.
+* *Regla de escritura de {sigla}* (`srtm.GuardiaDeEscritura`): los ocho objetos de infracciones, `anuncio` y
+  `movimiento_anuncio` solo se agregan (cambio, borrado o transición: 409) y solo los escribe la API de {sigla}
+  (sin la marca `EscrituraDeSrtm`, 403 también a un ADMIN). La única edición permitida es cerrar una versión del CUIS.
+  `cuota_arbitrio` también tiene su regla (invariantes al insertar), sin exigir la marca.
+
+[[ref-modelo-indices]]
+==== Índices declarados
+
+`cuota_arbitrio` declara `(anio, predio)` y `(anio, contribuyente)` en `indexes`. Core los crea en la tabla de cada
+organización, también en una que se cree después. Un año trae de 540 000 a 900 000 cuotas; medido en el CI sobre
+505 000 filas, listar un predio pasó de 62 ms a 3,3 ms. Ningún otro objeto declara índices: Core indexa
+`organization_id`, el estado y los campos únicos.
+
+[[ref-modelo-geometrias]]
+=== Geometrías
+
+[cols="4,3,5",options="header"]
+|===
+|Campo |Tipo y SRID guardado |Notas
+
+|`predio.lote_geom`, `catastro_fiscal.lote_geom`
+|POLYGON, EPSG:32718 (UTM 18S)
+|La API los recibe y devuelve en GeoJSON EPSG:4326. Un MultiPolygon de una parte se toma como Polygon al importar.
+
+|`brecha_predio.lote_geom`
+|POLYGON, EPSG:32718
+|El lote del predio del padrón o, para un omiso, el del catastro.
+
+|`domicilio.ubicacion`
+|POINT, EPSG:4326
+|El punto de «Buscar dirección».
+|===
+
+En los DTO del portal una geometría `null` conserva la guardada: el portal la reemplaza, nunca la borra.
+
+[[ref-modelo-enums]]
+=== Listas de opciones que conviene conocer
+
+De las 61 listas, estas gobiernan estados y reglas. Las opciones de Core no admiten comas, barras, paréntesis ni más de
+64 caracteres: por eso algunos nombres oficiales van acortados o con ` - `.
+
+[cols="4,8",options="header"]
+|===
+|Lista |Opciones
+
+|`estado_declaracion`
+|VIGENTE, ANULADA. Una DJ importada sin estado cuenta como VIGENTE.
+
+|`motivo_declaracion`
+|INSCRIPCION, ACTUALIZACION, DESCARGO.
+
+|`estado_emision`
+|PENDIENTE, EN_PROCESO, ENSAMBLANDO, TERMINADA, FALLIDA (también la usa `determinacion_arbitrio_masiva`, que no pasa
+por ENSAMBLANDO).
+
+|`estado_lote`
+|PENDIENTE, EN_PROCESO, TERMINADO, FALLIDO.
+
+|`formato_emision`
+|PDF, ZIP.
+
+|`estado_brecha`
+|PENDIENTE, EN_CURSO, TERMINADA, FALLIDA.
+
+|`categoria_brecha`
+|OMISO, SIN_CATASTRO, SIN_VALOR, SUBVALUADO, SOBREVALUADO, COINCIDE.
+
+|`base_arbitrio`
+|PREDIO, FRONTIS_ML, AREA_CONSTRUIDA_M2.
+
+|`paridad_numeracion`
+|PAR, IMPAR, AMBOS.
+
+|`familia_infraccion`
+|ADMINISTRATIVA (la familia TRANSITO de `rentas` no se trae).
+
+|`tipo_resolucion_gerencia`
+|ADMINISTRATIVA (RIS), RECURSO (RGR).
+
+|`efecto_multa`
+|SE_MANTIENE, SE_DEJA_SIN_EFECTO, SE_REDUCE (SE_REDUCE responde 422: falta la regla de la ordenanza).
+
+|`resultado_notificacion`
+|NOTIFICADO, NO_UBICADO, RECHAZADO.
+
+|`tipo_movimiento_anuncio`
+|AUTORIZACION, RENOVACION, CESE, RETIRO.
+
+|`clase_anuncio`
+|LETRERO, PANEL, TOLDO, BANDEROLA, PANTALLA_DIGITAL, GLOBO_AEROSTATICO.
+
+|`tipo_documento`
+|SIN DOCUMENTO, DNI, CARNET DE EXTRANJERIA, RUC, PASAPORTE, PTP-CPP, CI, OTROS.
+
+|`fuente_informacion`
+|MANUAL, PIDE RENIEC, PIDE SUNAT, PIDE MIGRACIONES.
+
+|`tipo_unidad_urbana`
+|Los 43 tipos del dominio `TIPO_UU` del catastro fiscal (`model/data/tipos_unidad_urbana.csv`).
+|===
+
+`apply.py` sincroniza las opciones: agrega las que faltan y quita las que `model.json` ya no lista si ningún registro
+las usa (la que alguno usa se conserva, con el aviso `keep option …`).
