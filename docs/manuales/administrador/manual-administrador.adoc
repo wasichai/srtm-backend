@@ -308,7 +308,8 @@ agregan, y solo desde el portal, que aplica sus reglas. Desde la consola, una cr
 por su api* (403) y una modificación o un borrado se rechaza (409). El servidor deja en su registro una línea
 `ESCRITURA FUERA DE SRTM RECHAZADA`.
 |Cuotas de arbitrio y sus anulaciones |Solo se agregan: una cuota se corrige anulándola y determinando de nuevo
-(ver el {m-arbitrios}).
+(ver el {m-arbitrios}). El portal no tiene un botón para anular una cuota: lo hace el área de sistemas por la API
+(`POST /api/srtm/arbitrios/cuotas/{id}/anulacion`, con una observación), a pedido del área de arbitrios.
 |===
 
 [[municipalidad]]
@@ -398,7 +399,7 @@ editarlos o borrarlos. Un error se corrige con el acto que corresponde, que qued
 |Acta |*Anular* el acta (con su motivo) y registrar la correcta.
 |Anuncio |*Cesar* o *Retirar* el anuncio y registrar el correcto.
 |Notificación previa, descargo, resolución, notificación de resolución |No tienen anulación propia en esta versión: el error queda registrado. Anótelo en la observación del acto siguiente y, si afecta un expediente, anule el acta.
-|Cuota de arbitrio |Anular la cuota y volver a determinar.
+|Cuota de arbitrio |Anular la cuota (por la API, ver <<registros-consola>>) y volver a determinar.
 |===
 
 [[catalogos]]

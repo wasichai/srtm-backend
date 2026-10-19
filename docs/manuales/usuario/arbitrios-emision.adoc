@@ -1,0 +1,1031 @@
+= Manual de arbitrios y emisión: Determinación de arbitrios, HLA y emisión masiva
+Municipalidad Distrital de Perené
+include::../atributos.adoc[]
+:description: Manual de usuario de {producto} ({sigla}) para el perfil {p-arbitrios}: tasas del año, consulta y determinación de las cuotas de arbitrios, HLA, determinación masiva y emisión masiva de HR, PU y HLA.
+:keywords: srtm, rentas municipales, arbitrios, cuotas, ordenanza, tasas, HLA, determinación masiva, emisión masiva, HR, PU
+
+[abstract]
+Este manual explica, paso a paso, el trabajo del área de arbitrios y de emisión en {producto} ({sigla}): revisar la
+ordenanza y las tasas del año, consultar las cuotas de arbitrios, determinarlas para un predio, para un contribuyente
+o para todo el padrón, entregar la hoja de liquidación de arbitrios (HLA) y emitir en bloque, para todos los
+contribuyentes de un año, la hoja de resumen (HR), el predio urbano (PU) y la HLA. Está escrito para el personal con
+el perfil {p-arbitrios}, que no necesita saber nada del funcionamiento interno del sistema. Todas las pantallas que se
+muestran son reales y se tomaron con datos ficticios, incluida la ordenanza.
+
+[[presentacion]]
+== Presentación
+
+[[presentacion-sistema]]
+=== Para qué sirve el sistema
+
+{producto} ({sigla}), el {producto-largo} de la {municipalidad}, reúne en un solo portal web el padrón de
+contribuyentes y de predios, las declaraciones juradas del impuesto predial, los arbitrios, las infracciones
+administrativas y los anuncios. Los arbitrios se calculan con lo que el registro tributario inscribe (quién declara
+cada predio, su uso, su frontis, su área construida) y con la ordenanza de arbitrios del año, que carga el
+administrador. Este manual empieza donde terminan esas dos cosas: con el padrón y la ordenanza en el sistema, usted
+determina las cuotas y emite los documentos.
+
+[[presentacion-manual]]
+=== Para qué sirve este manual y a quién se dirige
+
+Este manual es para quien determina y emite: el personal del área de arbitrios y de emisión de rentas. Supone que
+usted conoce la ordenanza de arbitrios y el calendario de la emisión, pero no el sistema. Cada capítulo responde a
+una pregunta de trabajo: qué tasas rigen este año, cuánto paga este predio y por qué, cómo determino sus arbitrios,
+cómo determino los de todo el padrón, cómo entrego la HLA, cómo emito los documentos del año.
+
+En la demostración con la que se tomaron las capturas, este trabajo lo hace el perfil sugerido *{p-arbitrios}*
+(«Arbitrios y emisión»). La municipalidad puede definir otros roles con otros nombres: lo que cuenta es qué permisos
+tiene su cuenta (<<permisos-usuario>>). Con el perfil {p-arbitrios}, usted puede:
+
+* consultar la ordenanza de arbitrios del año, sus servicios, sus tasas, zonas, usos y vencimientos;
+* consultar las cuotas de arbitrios de un año, de un predio o de un contribuyente;
+* determinar los arbitrios de un predio, de un contribuyente o, con la determinación masiva, de todo el padrón;
+* ver, imprimir y descargar la HLA, la HR y el PU;
+* lanzar, seguir, descargar y eliminar las emisiones masivas de HR, PU y HLA;
+* consultar, sin modificar, los contribuyentes, los predios, las declaraciones juradas y el catastro fiscal.
+
+El perfil {p-arbitrios} no corrige el padrón (lo hace el registro tributario, {m-registrador}), no carga la
+ordenanza ni sus tasas (lo hace el administrador, {m-admin}) y no ve la brecha de recaudación: su página dice *Sin
+permiso para ver la brecha: pide lectura sobre las corridas de brecha.* ({m-consulta}).
+
+[[presentacion-alcance]]
+=== Qué cubre y qué no
+
+.Alcance de este manual
+[cols="2,3",options="header"]
+|===
+|Tema |Dónde se explica
+|Cómo se calculan los arbitrios, qué datos usan y qué impide calcularlos |Este manual (<<arbitrios>>).
+|Tasas del año, consulta de cuotas, determinación por predio, por contribuyente y masiva |Este manual.
+|HLA de un contribuyente, emisión masiva de HR, PU y HLA |Este manual (<<hla>>, <<emision-masiva>>).
+|La anulación de una cuota |Este manual (<<anular-cuota>>): el portal todavía no tiene un botón para hacerla.
+|Inscribir contribuyentes y predios, recibir y corregir declaraciones juradas; el PU y la HR de una ficha
+|{m-registrador}.
+|La carga de la ordenanza, sus servicios, sus tasas y sus inafectaciones; los parámetros del año |{m-admin}.
+|Actas, notificaciones, resoluciones y el cuadro único de infracciones y sanciones (CUIS) |{m-fiscalizador}.
+|Anuncios y propaganda |{m-anuncios}.
+|Brecha de recaudación |{m-consulta}.
+|===
+
+NOTE: Los perfiles de este manual son los de la demostración. Si su cuenta tiene un rol distinto, algunas acciones
+pueden aparecer deshabilitadas con la línea *Sin permiso: …* (<<permisos-usuario>>), o habilitadas otras que este
+manual no describe.
+
+[[presentacion-leer]]
+=== Cómo leer los procedimientos
+
+Cada tarea importante se describe con el mismo formato:
+
+[horizontal]
+Recuadro inicial:: El *objetivo* de la tarea y los *requisitos previos*: lo que debe tener a mano o haber hecho antes.
+Pasos numerados:: Lo que usted hace, en orden, con el rótulo exacto de cada botón y campo. Las capturas acompañan
+al paso que muestran.
+Resultado esperado:: Lo que debe ver cuando la tarea terminó bien.
+Verificación:: Cómo comprobar, en otra pantalla, que quedó registrado.
+Casos especiales:: Lo que puede pasar fuera del camino habitual y qué hacer.
+
+[[presentacion-convenciones]]
+=== Convenciones tipográficas
+
+.Convenciones de este manual
+[cols="1,2",options="header"]
+|===
+|Se escribe así |Significa
+|btn:[Determinar] |Un botón de la pantalla, con su rótulo exacto.
+|menu:Arbitrios[Tasas del año] |Una ruta de navegación: el módulo del riel y, luego, el trámite.
+|kbd:[Enter] |Una tecla.
+|*Observación*, *Arbitrios* |Una pestaña, una sección o un campo, en negrita.
+|`01-01-0002` |Un valor que se escribe o que el sistema muestra tal cual.
+|===
+
+Los avisos tienen cuatro niveles: *Nota* (información complementaria), *Consejo* (una recomendación),
+*Precaución* (afecta a muchos registros o es difícil de revertir) y *Advertencia* (no se puede deshacer).
+
+[[presentacion-siglas]]
+=== Siglas
+
+.Siglas que usa este manual
+[cols="1,4",options="header"]
+|===
+|Sigla |Significado
+|DJ |Declaración jurada (del impuesto predial).
+|PU |Predio urbano: el formulario con lo que un titular declara de un predio. En arbitrios, «un PU por uso» quiere decir
+que cada uso declarado de un predio se cobra aparte (<<pu-por-uso>>).
+|HR |Hoja de resumen: los predios de un contribuyente y su impuesto predial del año.
+|HLA |Hoja de liquidación de arbitrios: las cuotas de arbitrios del año de un contribuyente, por predio y mes.
+|UIT |Unidad impositiva tributaria.
+|ml, m² |Metro lineal (del frontis); metro cuadrado (del área construida).
+|===
+
+[[presentacion-datos]]
+=== Los datos de las capturas
+
+Las capturas se tomaron en una base de demostración con datos *ficticios*: 40 contribuyentes y 55 predios de las
+urbanizaciones VALLE VERDE y LAS PALMERAS de Perené, con sus declaraciones juradas de 2026. La ordenanza de arbitrios
+2026 de la demostración también es ficticia: se llama «Ordenanza ficticia DEMO 000-2026-MDP» y *ninguna de sus cifras
+es de Perené*. Cobra cuatro servicios: barrido de calles, recolección de residuos sólidos, parques y jardines, y
+serenazgo. Los arbitrios 2026 ya están determinados (una determinación masiva escribió 2 628 cuotas) y hay una emisión
+masiva 2026 terminada con la HR, el PU y la HLA de cada contribuyente. Varios casos se repiten a lo largo del manual:
+
+* QUISPE ROJAS ROSA ELENA (contribuyente `000001`), titular de cuatro predios;
+* el predio `01-01-0002`, cuyo barrido se cobra por una zona fijada para su tramo de calle, distinta de la de su
+  sector, y cuya cuota de barrido de marzo se anuló y se volvió a determinar;
+* el predio `03-02-0006`, inafecto al serenazgo en 2026.
+
+Las capturas usan el tema *Portal tributario* (<<temas>>).
+
+include::../comun/acceso.adoc[]
+
+include::../comun/interfaz.adoc[]
+
+include::../comun/busqueda.adoc[]
+
+include::../comun/mensajes.adoc[]
+
+[[arbitrios]]
+== Los arbitrios
+
+[[arbitrios-que-son]]
+=== Qué son los arbitrios
+
+Los arbitrios son las tasas que la municipalidad cobra por los servicios públicos que presta a cada predio: el barrido
+de calles, la recolección de residuos sólidos, el mantenimiento de parques y jardines y el serenazgo, entre otros. Qué
+servicios se cobran, cuánto y cómo se reparten entre los predios lo dice la *ordenanza de arbitrios* de cada año,
+ratificada por la municipalidad provincial.
+
+En el sistema, los arbitrios de un año son *cuotas mensuales*: una por predio, servicio y mes (y, desde el año en que
+la ordenanza lo dispone, una por cada uso del predio: <<pu-por-uso>>). Cada cuota se cobra al titular del predio de ese
+mes y vence en la fecha que la ordenanza fija para su mes.
+
+El sistema no trae ningún servicio ni ninguna tasa escrita: todo sale de la ordenanza que carga el administrador. Lo
+que este capítulo describe es cómo el sistema aplica esas reglas; las cifras de los ejemplos son las de la ordenanza
+ficticia de la demostración.
+
+[[calculo]]
+=== Cómo se calcula una cuota
+
+Cada cuota es la tasa del servicio multiplicada por su base, con dos ajustes posibles:
+
+----
+cuota = tasa × base × factor de habitantes, redondeada según la ordenanza (y limitada por el tope, si lo hay)
+----
+
+La base:: Lo que la ordenanza mide en cada servicio. *Por predio*: la tasa se cobra una vez al mes. *Por metro
+lineal de frontis*: la tasa se multiplica por el *Frontis (m)* de la declaración jurada. *Por metro cuadrado de área
+construida*: la tasa se multiplica por el *Área construida (m2)* de la declaración jurada.
+La tasa:: La tasa mensual del servicio depende de las características del predio que la ordenanza use para ese
+servicio, una o varias:
+* la *zona*: la de su sector catastral o, si la ordenanza fija zonas por vía y tramo de numeración, la de su tramo de
+  calle, que tiene prioridad;
+* el *uso*: el uso de arbitrio que corresponde al *Uso del predio* declarado (casa habitación, comercio…);
+* la *influencia*: según la *Ubicación respecto a áreas verdes* del predio (frente a parque, frente a berma…);
+* la *afluencia*: un nivel (alta, muy alta…) según el uso del predio.
+El factor de habitantes:: En los servicios en que la ordenanza lo prevé (en la demostración, la recolección de
+residuos de casa habitación), la cuota se ajusta por los habitantes declarados: `(1 + (H − P) × V)`, donde H es la
+*Cant. de habitantes / Aforo* de la declaración, P el promedio de habitantes y V la variación que fija la ordenanza.
+Si la declaración no dice cuántos habitantes hay, se toma el promedio y el factor es 1.
+El redondeo:: La ordenanza dice con cuántos decimales y hacia dónde se redondea (en la demostración, a dos decimales,
+hacia abajo).
+El tope:: Algunas ordenanzas limitan lo que un predio paga en el año a lo que pagó el año anterior más un porcentaje.
+Si el año tiene tope, las cuotas nuevas que lo superan bajan en proporción, y la fórmula de la cuota lo dice al final
+(«… = 33.33, con tope de 8 %: 29.99»). La ordenanza de la demostración no tiene tope.
+
+// fin de la lista
+.Ejemplo: el predio 01-01-0002 en 2026 (ordenanza ficticia de la demostración)
+[cols="2,4,1",options="header"]
+|===
+|Servicio |Cuenta |Cuota mensual
+|Barrido de calles |Por frontis, zona `+ZONA_2+` (la de su tramo de la AV. LOS FRESNOS): 4.2000 S/ por ml × 9.17 ml
+|S/ 38.51
+|Recolección de residuos sólidos |Por área construida, zona `+ZONA_1+` y uso de casa habitación, con 4 habitantes
+declarados y un promedio de 4: 0.0500 S/ por m² × 77.18 m² × (1 + (4 − 4) × 0.3) |S/ 3.85
+|Parques y jardines |Por predio, zona `+ZONA_A+`, frente a parque, afluencia alta |S/ 50.00
+|Serenazgo |Por predio, zona `+AREA_1+` y uso de casa habitación |S/ 25.00
+|*Total del mes* | |*S/ 117.36*
+|===
+
+La misma cuenta aparece en la ficha, al pasar el puntero sobre cada monto (<<fig-desglose>>), y en la sección
+*Cálculo* de la HLA (<<hla>>).
+
+[[titular-mes]]
+=== De quién es cada cuota: el titular de cada mes
+
+Cada mes se decide con la situación del predio el día 1 de ese mes, no el día en que se determina:
+
+* *El titular*: de las declaraciones juradas del año que cubren ese día, la del titular principal: el de mayor % de
+  condominio; si empatan, el de la adquisición más antigua y, luego, el de código de contribuyente menor. Se le cobra
+  la cuota entera, sin prorratear entre condóminos.
+* *Qué días cubre una declaración*: desde el 1 de enero, o desde el día siguiente a la fecha de adquisición si cae en
+  el año; hasta el 31 de diciembre, o hasta la fecha en que se anuló. Una venta el 20 de mayo da: vendedor de enero a
+  mayo, comprador de junio a diciembre.
+* *Un mes sin titular no se cobra*: un predio que aparece en julio no debe de enero a junio.
+
+En un condominio, por eso, las cuotas de un predio van todas a nombre del titular principal; los demás condóminos no
+tienen HLA de ese predio.
+
+[[pu-por-uso]]
+=== Un PU por predio o un PU por uso
+
+Un predio con varios usos (una casa con una tienda) se declara con una declaración por uso (secuencia `001`,
+`002`…). Para los arbitrios, la ordenanza puede tratarlo de dos maneras, y el sistema aplica la que rige el 1 de enero
+de cada año:
+
+Un PU por predio:: Es la forma de siempre: cada mes se cobra solo el uso de la declaración del titular principal, con
+su uso, su área, su frontis y sus habitantes; los demás usos no se miran. Así está la demostración en 2026: el predio
+`01-01-0001` declara una casa (`001`) y una tienda (`002`), y sus arbitrios se calculan solo con la casa.
+Un PU por uso:: Desde el año que el administrador fija (un parámetro del sistema), cada uso declarado se cobra
+aparte, con su propio uso de arbitrio, área, frontis y habitantes. En la ficha, el monto de un mes suma los de cada
+uso, y su detalle los muestra uno por uno («Uso 002: …»).
+
+// fin de la lista
+CAUTION: Si el PU por uso se activa para un año que ya se determinó, los usos que antes no se cobraban quedan *por
+determinar* y la HLA de esos contribuyentes no se emite hasta volver a determinar el año. Pídale al administrador que
+lo active para un año que aún no se haya determinado.
+
+[[inafectaciones]]
+=== Inafectaciones
+
+Un predio puede estar inafecto a un servicio durante un período (por ejemplo, el local de una asociación sin fines de
+lucro que no paga serenazgo). La inafectación la registra el administrador con su motivo y su documento. En esos meses
+el servicio no se cobra: en la ficha aparece el guion *—* («Sin cuota determinada») en lugar del monto
+(<<fig-inafectacion>>). El portal no muestra la lista de inafectaciones: si un servicio sale sin cuota y no sabe por
+qué, consúltelo con el administrador.
+
+[[fig-inafectacion]]
+.Un predio inafecto al serenazgo: sus meses, sin cuota
+image::{capturas}/usuario/arbitrios-emision/inafectacion.png[Tabla de arbitrios 2026 del predio 03-02-0006 con barrido, recolección y parques de enero a diciembre, y la fila Serenazgo con guiones en cada mes y total S/ 0.00]
+
+[[requisitos-dj]]
+=== Lo que el predio y la declaración deben tener
+
+Los arbitrios se calculan con datos que registra el registro tributario. Si falta uno que la ordenanza usa, el
+predio no se puede determinar (<<no-se-puede>>). Revise, según los servicios del año:
+
+.Datos del padrón que usan los arbitrios
+[cols="2,2,3",options="header"]
+|===
+|Dato |Dónde está |Para qué
+|*Sector* |Ficha del predio, *Datos de la ubicación* |La zona de cada servicio, salvo que su tramo de calle tenga zona
+propia.
+|Vía, número y manzana |Ficha del predio, *Datos de la ubicación* |La zona por tramo de calle, cuando la ordenanza la
+tiene.
+|*Ubicación respecto a áreas verdes* |Ficha del predio, *Datos de la ubicación* (<<fig-predio-ubicacion>>) |La
+influencia, cuando un servicio la usa. Entonces el campo es obligatorio en la declaración.
+|*Clase de uso*, *Sub clase de uso*, *Uso del predio* |Declaración, *Características* (<<fig-dj-caracteristicas>>) |El
+uso de arbitrio y la afluencia.
+|*Frontis (m)* |Declaración, *Características* |La base de un servicio por frontis. Obligatorio si el año tiene uno.
+|*Área construida (m2)* |Declaración, *Características*, sección *Valores* |La base de un servicio por área
+construida. Obligatorio si el año tiene uno.
+|*Cant. de habitantes / Aforo* |Declaración, *Características* |El factor de habitantes. Opcional: sin él se toma el
+promedio.
+|Fecha de adquisición, % de condominio, anulación |Declaración |Quién es el titular de cada mes (<<titular-mes>>).
+|===
+
+[[fig-dj-caracteristicas]]
+.Los datos de la declaración que usan los arbitrios
+image::{capturas}/usuario/arbitrios-emision/dj-caracteristicas.png[Sección Características de predio de una declaración con la clase, sub clase y uso del predio, el área del terreno, el frontis de 9.17 m marcado como obligatorio y 4 habitantes,760,align=center]
+
+[[fig-predio-ubicacion]]
+.La ubicación del predio: sector y ubicación respecto a áreas verdes
+image::{capturas}/usuario/arbitrios-emision/predio-ubicacion.png[Ficha del predio 01-01-0002 en Datos de la ubicación con el sector 01, la manzana catastral 01 y la ubicación respecto a áreas verdes FRENTE A PARQUE marcada]
+
+Su perfil consulta estos datos, pero no los corrige: los corrige el registro tributario ({m-registrador}). Las fichas
+de la declaración y del predio muestran sus botones de edición, pero el sistema no le permite grabar cambios.
+
+[[inmutable]]
+=== Una cuota no se edita ni se borra
+
+Una cuota determinada queda tal como se calculó, con la tasa, la zona, el uso y el titular de ese momento, la fecha en
+que se determinó y la *Observación* del acto: nadie la puede editar ni borrar, ni siquiera un administrador. Por eso:
+
+* *Volver a determinar no recalcula*: solo agrega las cuotas que faltan (<<redeterminar>>). Si después se corrige una
+  declaración, las cuotas ya escritas no cambian solas.
+* *Una cuota mal calculada se corrige anulándola* y determinándola de nuevo (<<anular-cuota>>).
+
+[[flujo-anual]]
+=== El año de arbitrios, paso a paso
+
+.Orden de trabajo de un año
+[cols="1,4,2",options="header"]
+|===
+|Paso |Qué se hace |Quién y dónde
+|1 |Cargar la ordenanza ratificada del año, sus servicios, tasas, zonas, usos, vencimientos e inafectaciones.
+|El administrador ({m-admin}).
+|2 |Revisar que al año no le falte nada: *Tasas del año* sin el aviso *Al año … le falta:*. |Usted (<<tasas>>).
+|3 |Tener al día las declaraciones juradas del año: uso, frontis, área construida, habitantes, ubicación.
+|El registro tributario ({m-registrador}).
+|4 |Lanzar la determinación masiva del año y esperar que termine. |Usted (<<determinacion-masiva>>).
+|5 |Revisar los predios sin determinar, pedir que se corrijan sus datos y determinarlos desde su ficha.
+|Usted y el registro tributario (<<determinar>>).
+|6 |Emitir la HR, el PU y la HLA de todos los contribuyentes y descargar el archivo. |Usted
+(<<emision-masiva>>).
+|7 |Durante el año: determinar a quien se inscribe o declara después, y entregar su HLA. |Usted (<<determinar>>,
+<<hla>>).
+|===
+
+[[tasas]]
+== Tasas del año
+
+La página *Tasas de arbitrios* muestra la ordenanza de un año tal como el sistema la aplicará: la ordenanza y su
+ratificación, las tasas mensuales, la zona de cada sector, el uso de arbitrio de cada uso del predio y los
+vencimientos. Es de solo consulta: la ordenanza la carga el administrador.
+
+[[proc-tasas]]
+.Revisar la ordenanza y las tasas de un año
+====
+[horizontal]
+Objetivo:: Comprobar qué ordenanza y qué tasas rigen un año, y que no le falte nada para determinar.
+Requisitos previos:: Ninguno.
+====
+
+. Elija menu:Arbitrios[Tasas del año] en el riel (<<fig-riel-arbitrios>>).
++
+[[fig-riel-arbitrios]]
+.El módulo Arbitrios
+image::{capturas}/usuario/arbitrios-emision/riel.png[Riel de módulos con el panel Arbitrios abierto: Consulta de cuotas, Tasas del año y Determinación masiva,560,align=center]
+. Elija el *Año*, a la derecha del título. El selector muestra el año en curso y los cuatro anteriores.
+. Revise el recuadro *Ordenanza*: su *Número*, su fecha de publicación (*Publicada*) y su *Ratificación* (el
+  acuerdo, la municipalidad que la ratificó y la fecha). Una ordenanza sin acuerdo de ratificación dice *Sin ratificar*
+  (<<fig-tasas>>).
++
+[[fig-tasas]]
+.La ordenanza 2026 y el comienzo de sus tasas mensuales
+image::{capturas}/usuario/arbitrios-emision/tasas.png[Página Tasas de arbitrios 2026 con el recuadro Ordenanza, su número, publicación y ratificación, y la tabla Tasas mensuales con las tasas de barrido y de parques y jardines]
+. Revise las tablas: *Tasas mensuales*, *Zona de cada sector catastral*, *Uso de arbitrio de cada uso del predio* y
+  *Vencimientos* (<<tasas-tablas>>).
+
+// fin de los pasos
+Resultado esperado:: La página muestra la ordenanza del año y sus cuatro tablas, sin el aviso amarillo.
+Casos especiales::
+* *Al año 2025 le falta: …*: al año le falta algo sin lo cual no se determinan sus arbitrios: la ordenanza, sus
+  servicios, sus tasas, sus zonas o sus usos (<<fig-tasas-faltan>>). Avise al administrador; mientras tanto, ningún
+  predio de ese año se puede determinar.
+* *No hay ordenanza de arbitrios de 2025.*: el recuadro *Ordenanza* está vacío.
+* *Ninguna en el año.*: la tabla no tiene filas vigentes en el año.
+
+[[fig-tasas-faltan]]
+.Un año sin ordenanza
+image::{capturas}/usuario/arbitrios-emision/tasas-faltan.png[Página Tasas de arbitrios 2025 con el aviso amarillo Al año 2025 le falta: Ordenanza de arbitrios 2025, servicios, TASA_ARBITRIO, ARBITRIO_ZONA y ARBITRIO_USO; debajo, No hay ordenanza de arbitrios de 2025 y tablas vacías]
+
+[[tasas-tablas]]
+=== Cómo leer las tablas
+
+Todas las tablas tienen, además de su clave, las columnas *Valor*, *Vigencia* (desde y hasta, o *en adelante*) y
+*Norma* (la ordenanza que fija la fila). Los servicios aparecen con su código corto (en la demostración, `BAR`
+barrido, `RRS` recolección, `PYJ` parques y jardines, `SER` serenazgo).
+
+Tasas mensuales:: Una fila por tasa: el servicio, las características de las que depende (la zona, el uso, la
+influencia, la afluencia, según el servicio) y la tasa mensual en soles. Cuidado: la tabla rotula solo tres columnas
+de clave (*Servicio*, *Zona*, *Uso*), y un servicio que depende de menos o de más características corre sus valores.
+En la <<fig-tasas>>, la tasa del barrido (S/ 3.10) aparece bajo *Uso* porque el barrido solo depende de la zona, y las
+de parques y jardines (que dependen de zona, influencia y afluencia) ocupan columnas sin título. Lea cada fila de
+izquierda a derecha: el monto en soles es la tasa.
+Zona de cada sector catastral:: La zona de cada servicio en cada sector, como *Sector* `BAR:01` → *Valor* `+ZONA_1+`:
+el barrido del sector 01 es de la zona 1 (<<fig-tasas-zonas>>). Las zonas fijadas por vía y tramo de numeración, que
+tienen prioridad sobre las del sector, no se listan en esta página.
+Uso de arbitrio de cada uso del predio:: El uso de arbitrio que corresponde a cada código de uso del predio, o a su
+comienzo: `0101` es un código de uso completo; `02`, toda una clase de uso. Gana el código más largo que coincida
+(<<fig-tasas-usos>>).
+Vencimientos:: La fecha de vencimiento de la cuota de cada mes (<<fig-tasas-vencimientos>>). La tabla no sale en el
+orden del calendario (ENERO, OCTUBRE, NOVIEMBRE, DICIEMBRE, FEBRERO…): busque el mes por su nombre.
+
+[[fig-tasas-zonas]]
+.La zona de cada servicio en cada sector catastral
+image::{capturas}/usuario/arbitrios-emision/tasas-zonas.png[Tabla Zona de cada sector catastral con doce filas, del BAR:01 ZONA_1 al SER:03 AREA_1, su vigencia y su norma]
+
+[[fig-tasas-usos]]
+.El uso de arbitrio de cada código de uso
+image::{capturas}/usuario/arbitrios-emision/tasas-usos.png[Tabla Uso de arbitrio de cada uso del predio con los códigos 0100, 0101, 0102, 0103 y 02 y sus valores 1, 2, 9, 15 y 9]
+
+[[fig-tasas-vencimientos]]
+.Los vencimientos de cada mes
+image::{capturas}/usuario/arbitrios-emision/tasas-vencimientos.png[Tabla Vencimientos con los doce meses, de enero a marzo al 27/02/2026, de abril a junio al 29/05/2026, de julio a setiembre al 31/08/2026 y de octubre a diciembre al 30/11/2026]
+
+TIP: Antes de lanzar la determinación masiva de un año, revise esta página con la ordenanza publicada en la mano:
+lo que vea aquí es exactamente lo que el sistema cobrará.
+
+[[consulta-cuotas]]
+== Consulta de cuotas
+
+La página *Consulta de cuotas de arbitrios* lista las cuotas determinadas de un año, mes a mes, de todos los predios.
+Sirve para revisar en bloque; las cuotas de un predio o de un contribuyente se ven mejor en su ficha
+(<<pestana-arbitrios>>).
+
+[[proc-consulta-cuotas]]
+.Consultar las cuotas de un año
+====
+[horizontal]
+Objetivo:: Revisar las cuotas determinadas de un año, de todos los servicios o de uno.
+Requisitos previos:: Ninguno.
+====
+
+. Elija menu:Arbitrios[Consulta de cuotas] en el riel (<<fig-cuotas>>).
+. Elija el *Año* y, si quiere ver un solo servicio, el *Servicio* (*Todos* por omisión).
+. Para ver de dónde sale un monto, pase el puntero sobre él o púlselo: se abren las llaves de la ordenanza con que se
+  calculó (la tasa, la base, los habitantes y el redondeo aplicados) (<<fig-cuotas-servicio>>).
+. Pulse *Ver predio* o *Ver contribuyente* para abrir la pestaña *Arbitrios* de esa ficha.
+
+// fin de los pasos
+Resultado esperado:: La tabla muestra, por cuota, el *Mes*, el *Servicio*, el *Monto*, la fecha en que se determinó
+(*Determinada el*) y los enlaces al *Predio* y al *Contribuyente*, de 20 en 20.
+Casos especiales::
+* *Sin cuotas determinadas en 2025*: el año no tiene ninguna cuota todavía.
+* La lista no se filtra por predio ni por contribuyente: para eso use su ficha.
+
+[[fig-cuotas]]
+.Consulta de cuotas de arbitrios 2026
+image::{capturas}/usuario/arbitrios-emision/cuotas.png[Página Consulta de cuotas de arbitrios con los filtros Año 2026 y Servicio Todos, y la tabla de cuotas de enero con su servicio, monto, fecha de determinación y enlaces Ver predio y Ver contribuyente]
+
+[[fig-cuotas-servicio]]
+.Las cuotas de un servicio y las llaves de una de ellas
+image::{capturas}/usuario/arbitrios-emision/cuotas-servicio.png[Consulta filtrada por Recolección de residuos sólidos con el recuadro de un monto abierto, que muestra TASA_ARBITRIO:RRS:ZONA_2:2, BASE_ARBITRIO:RRS, HABITANTES_PROMEDIO, HABITANTES_VARIACION y REDONDEO_ARBITRIO]
+
+CAUTION: Esta lista muestra las cuotas tal como se escribieron, *también las anuladas*, sin marcarlas: en la
+demostración, el barrido de marzo del predio `01-01-0002` aparece dos veces, la cuota anulada y la que la reemplazó.
+Para saber qué debe un predio, use su ficha o la HLA, que excluyen las anuladas.
+
+[[determinar]]
+== Determinar los arbitrios de un predio o de un contribuyente
+
+[[pestana-arbitrios]]
+=== La pestaña Arbitrios de las fichas
+
+La ficha del predio y la del contribuyente tienen una pestaña *Arbitrios*, con el selector *Año* de la ficha. Las dos
+muestran lo mismo, con una diferencia: la del predio muestra todas sus cuotas, sea quien sea el titular; la del
+contribuyente, solo las que están a su nombre, predio por predio.
+
+En la ficha del predio (<<fig-predio-arbitrios>>):
+
+* el botón btn:[Determinar arbitrios 2026] (con el año elegido);
+* la situación: *Determinados al* y la fecha de la última cuota, y un aviso si faltan cuotas o no se pueden
+  determinar (<<no-se-puede>>);
+* una tabla con una fila por servicio y una columna por mes (de *ENE* a *DIC*), el *Total* de cada servicio y la fila
+  *Total 2026*. Un mes sin cuota muestra *—*;
+* debajo, el titular de cada mes: «ENE–DIC: 000001 · QUISPE ROJAS ROSA ELENA», o *sin titular: ninguna declaración
+  jurada cubre el mes*.
+
+Si la tabla no cabe en la pantalla, se desplaza hacia los lados para ver los últimos meses y el total.
+
+[[fig-predio-arbitrios]]
+.La pestaña Arbitrios de un predio
+image::{capturas}/usuario/arbitrios-emision/predio-arbitrios.png[Pestaña Arbitrios del predio 01-01-0002 con el botón Determinar arbitrios 2026, Determinados al 20/10/2026, la tabla de cuatro servicios de enero a diciembre con su total, el Total 2026 de S/ 1,408.32 y el titular de enero a diciembre]
+
+Cada monto lleva su cuenta: pase el puntero sobre él, o púlselo, y aparece la fórmula, por ejemplo «0.0500 S/ por m²
+× 77.18 m² × (1 + (4 − 4) × 0.3) = 3.85» (<<fig-desglose>>). Si el predio paga un PU por uso, aparece una línea por
+uso.
+
+[[fig-desglose]]
+.La cuenta de una cuota
+image::{capturas}/usuario/arbitrios-emision/desglose.png[Tabla de arbitrios con el recuadro de la cuota de recolección de febrero abierto: 0.0500 S/ por m² × 77.18 m² × (1 + (4 − 4) × 0.3) = 3.85]
+
+En la ficha del contribuyente (<<fig-contribuyente-arbitrios>>), el botón determina todos sus predios y, debajo, cada
+predio que declara en el año tiene su propia tabla, con su código (que abre la ficha del predio) y su dirección. Al
+final, la línea *Arbitrios de 2026 a su nombre:* suma todo lo suyo, con la fecha de la última determinación
+(<<fig-contribuyente-total>>).
+
+[[fig-contribuyente-arbitrios]]
+.La pestaña Arbitrios de un contribuyente con cuatro predios
+image::{capturas}/usuario/arbitrios-emision/contribuyente-arbitrios.png[Ficha de QUISPE ROJAS ROSA ELENA en la pestaña Arbitrios con el botón Determinar arbitrios 2026, la tabla del predio 01-01-0001 de enero a setiembre y el comienzo de la del 01-01-0002]
+
+[[fig-contribuyente-total]]
+.El total del contribuyente
+image::{capturas}/usuario/arbitrios-emision/contribuyente-total.png[Línea Arbitrios de 2026 a su nombre: S/ 5,596.80, determinados al 20/10/2026,760,align=center]
+
+NOTE: La fecha *Determinados al* es la del servidor del sistema al escribir la cuota. Las fechas de la HLA y de las
+emisiones se escriben en la hora de Lima: si el servidor tiene otro huso horario, cerca de la medianoche las dos
+pueden diferir en un día (como en la demostración).
+
+[[proc-determinar-predio]]
+=== Determinar los arbitrios de un predio
+
+[[proc-determinar-predio-pasos]]
+.Determinar los arbitrios de un predio
+====
+[horizontal]
+Objetivo:: Calcular y registrar las cuotas que le faltan a un predio en el año: por ejemplo, un predio que se
+registró después de la determinación masiva, o uno que no se pudo determinar hasta que se corrigieron sus datos.
+Requisitos previos:: La ordenanza del año completa (<<tasas>>); la declaración jurada del año al día
+(<<requisitos-dj>>); el motivo del acto, para la observación.
+====
+
+. Abra la ficha del predio (<<busquedas>>), elija el *Año* y pulse la pestaña *Arbitrios*.
+. Revise la situación: si dice *No se pueden determinar:*, corrija antes lo que falta (<<no-se-puede>>).
+. Pulse btn:[Determinar arbitrios 2026]. Se abre el diálogo *Determinar los arbitrios de 2026*: «Se calculan las
+  cuotas que falten del predio, mes a mes. Las ya determinadas no cambian, y ninguna se puede editar ni borrar
+  después.»
+. Escriba en *Observación* por qué determina, de 5 a 500 caracteres: el contador, entre paréntesis, dice cuántos lleva
+  (<<fig-determinar-predio>>, <<actos>>).
++
+[[fig-determinar-predio]]
+.Determinar los arbitrios de un predio
+image::{capturas}/usuario/arbitrios-emision/determinar-predio.png[Diálogo Determinar los arbitrios de 2026 con la explicación, la observación Se rectificó el frontis en la DJ 2026 (expediente 1234-2026), el contador 60 y los botones Cancelar y Determinar,520,align=center]
+. Pulse btn:[Determinar]. Para desistir, pulse btn:[Cancelar].
+
+// fin de los pasos
+Resultado esperado:: El diálogo dice *Se determinaron N cuotas.* (o *No había cuotas pendientes: nada que determinar.*,
+si el predio ya estaba completo). Pulse btn:[Cerrar]: la tabla muestra las cuotas nuevas.
+Verificación:: La situación dice *Determinados al* con la fecha de hoy, y ya no hay aviso de cuotas por determinar.
+Casos especiales::
+* El botón btn:[Determinar] queda gris mientras la observación tenga menos de 5 caracteres o más de 500
+  (<<fig-observacion-corta>>).
+* *No se pueden determinar los arbitrios de 2026: …*, en rojo dentro del diálogo, seguido de *Falta: …*: el sistema
+  calculó el predio y algo le falta. Nada se graba (<<no-se-puede>>).
+* *Sin permiso: determinar pide creación sobre las cuotas de arbitrio.*: su rol no determina (<<permisos-usuario>>).
+* Si se cortó la comunicación al confirmar, vuelva a pulsar btn:[Determinar]: el acto no se registra dos veces
+  (<<actos>>).
+
+[[proc-determinar-contribuyente]]
+=== Determinar los arbitrios de un contribuyente
+
+Desde la ficha del contribuyente, btn:[Determinar arbitrios 2026] determina cada predio que declara en el año
+(también uno cuya declaración se anuló, porque puede cubrir los meses anteriores a una venta). Funciona como el del
+predio, con dos diferencias:
+
+* *Todos o ninguno*: el sistema calcula todos sus predios antes de escribir; si uno no se puede determinar, no se
+  graba ninguno y el mensaje nombra el predio (*Predio 01-01-0005: …*).
+* *Cuotas a nombre de otro*: si en algún mes el titular principal de uno de sus predios es otra persona, el diálogo lo
+  avisa antes de que confirme: «Las cuotas del predio 01-01-0004 de ENE–MAY quedarán a nombre de 000003 · …: es su
+  titular principal.». Esas cuotas se escriben igual, a nombre de ese titular.
+
+[[fig-observacion-corta]]
+.Determinar los arbitrios de un contribuyente: la observación, todavía corta
+image::{capturas}/usuario/arbitrios-emision/determinar-contribuyente.png[Diálogo Determinar los arbitrios de 2026 de un contribuyente con el texto todos o ninguno, la observación Alta, el contador en 4 y el botón Determinar en gris,520,align=center]
+
+[[redeterminar]]
+=== Volver a determinar
+
+Puede pulsar btn:[Determinar arbitrios …] las veces que quiera: el sistema solo calcula y escribe las cuotas que
+faltan; las que ya existen no se recalculan ni se duplican. Volver a determinar sirve, por eso, para:
+
+* completar los meses que no tenían titular, cuando se registra después una declaración que los cubre;
+* determinar un predio que no se pudo determinar, una vez corregidos sus datos;
+* escribir de nuevo una cuota que se anuló (<<anular-cuota>>): la nueva queda como otra versión de la misma cuota, con
+  la tasa, la zona, el uso y el titular vigentes al determinarla.
+
+No sirve para corregir una cuota ya escrita: si se rectifica la declaración (un frontis mal medido, un uso equivocado),
+las cuotas ya determinadas siguen como estaban, hasta que se anulen.
+
+[[no-se-puede]]
+=== Cuando no se puede determinar
+
+La situación de la pestaña *Arbitrios* avisa, antes de que pulse nada, si algo impide determinar el predio:
+
+* *No se pueden determinar: …* (amarillo): lo que falta, separado por punto y coma (<<fig-predio-faltan>>). Cuando lo
+  arregla un dato de la declaración (su uso, su frontis, su área construida), el texto es un enlace a su pestaña
+  *Características*; cuando lo arregla la ubicación del predio (su sector, su ubicación respecto a áreas verdes), a la
+  ficha del predio. Lo que falta en la ordenanza (una tasa, una zona o un uso de arbitrio) no tiene enlace: avise al
+  administrador.
+* *Aún no se determinan los arbitrios de 2026: N cuotas por determinar.*: nada está determinado todavía.
+* *Faltan determinar N cuotas de 2026.*: hay cuotas, pero faltan otras.
+
+// fin de la lista
+[[fig-predio-faltan]]
+.Un año que no se puede determinar
+image::{capturas}/usuario/arbitrios-emision/predio-faltan.png[Pestaña Arbitrios 2025 de un predio con el aviso No se pueden determinar: Ordenanza de arbitrios 2025; Servicios de arbitrio vigentes en 2025, el texto Sin servicios de arbitrio en 2025 y ENE–DIC sin titular]
+
+.Lo que impide determinar un predio
+[cols="2,3",options="header"]
+|===
+|Lo que falta |Qué hacer
+|Ordenanza de arbitrios 2025, Servicios de arbitrio vigentes en 2025 |El año no tiene ordenanza ratificada o
+servicios: el administrador debe cargarlos.
+|`TASA_ARBITRIO …`, `ARBITRIO_ZONA …`, `ARBITRIO_USO …` |A la ordenanza le falta la tasa, la zona o el uso de arbitrio
+que el predio necesita: avise al administrador con el texto exacto.
+|Sector catastral del predio … |El predio no tiene *Sector* y su calle no tiene zona propia: el registro tributario
+debe completarlo.
+|Uso, frontis o área construida de la declaración |La declaración no tiene el dato que el servicio usa: el registro
+tributario debe corregirla.
+|Ubicación respecto a áreas verdes |Un servicio cobra por influencia y el predio no la tiene: el registro tributario
+debe completarla.
+|Un titular que ninguna declaración cubre |Ningún mes del año tiene titular: el predio no tiene declaración jurada del
+año.
+|===
+
+Un predio se determina entero o no se determina: si falta un dato de un solo servicio, no se escribe ninguna de sus
+cuotas.
+
+[[anular-cuota]]
+== Anular una cuota
+
+Una cuota mal calculada (por un frontis mal medido, un uso equivocado o un titular que no correspondía) no se edita: se
+*anula* y se vuelve a determinar. La anulación:
+
+* se registra con un *motivo* obligatorio y una observación de 5 a 500 caracteres, y tampoco se puede editar ni
+  borrar;
+* hace que la cuota deje de contar en la ficha, en los totales y en la HLA, y vuelva a quedar *por determinar*;
+* se hace una sola vez por cuota;
+* deja que la siguiente determinación del predio escriba la cuota de nuevo, como otra versión, con los datos y la
+  ordenanza vigentes entonces.
+
+En la demostración, el barrido de marzo del predio `01-01-0002` se anuló con el motivo «Frontis mal medido» y se volvió
+a determinar: la ficha y la HLA muestran solo la cuota nueva, mientras que la *Consulta de cuotas* lista las dos
+(<<consulta-cuotas>>).
+
+[[anular-cuota-como]]
+.La anulación de una cuota en esta versión
+[IMPORTANT]
+====
+El portal *todavía no tiene un botón para anular una cuota*: ni la ficha ni la *Consulta de cuotas* lo ofrecen. El
+sistema sí registra la anulación (el perfil {p-arbitrios} tiene el permiso para hacerlo), pero solo a través de su
+interfaz de programación. Mientras el portal no lo incorpore, pida la anulación al área de sistemas con el código del
+predio, el servicio, el mes y el año, el motivo y la observación. Después, determine el predio desde su ficha
+(<<proc-determinar-predio>>).
+====
+
+WARNING: Una anulación no se puede deshacer. Antes de pedirla, corrija la declaración jurada: si la vuelve a
+determinar con los mismos datos, la cuota nueva saldrá igual a la anulada.
+
+[[hla]]
+== La HLA
+
+La hoja de liquidación de arbitrios (HLA) es el documento que se entrega al contribuyente con sus arbitrios del año:
+las cuotas a su nombre, por predio y mes, con la cuenta de cada servicio y el vencimiento de cada cuota. Sale de las
+mismas cuotas que la pestaña *Arbitrios* de su ficha: no se calcula de nuevo.
+
+[[proc-ver-hla]]
+.Ver, imprimir o descargar la HLA de un contribuyente
+====
+[horizontal]
+Objetivo:: Entregar al contribuyente su HLA del año.
+Requisitos previos:: Los arbitrios del año del contribuyente, determinados y completos.
+====
+
+. Abra la ficha del contribuyente y elija el *Año*.
+. Pulse btn:[Ver HLA]. Se abre una ventana con el documento; mientras se genera, dice *Generando…*.
+. Use btn:[Imprimir] o btn:[Descargar] de la ventana, y btn:[Cerrar] al terminar. El archivo se llama, por ejemplo,
+  `HLA-000001-2026.pdf`.
+
+// fin de los pasos
+Resultado esperado:: Se muestra la HLA del año (<<fig-pdf-hla-1>>, <<fig-pdf-hla-2>>).
+Casos especiales::
+* *El contribuyente 000003 no tiene cuotas de arbitrios a su nombre en 2026*: no declara predios ese año, o es un
+  condómino que no es el titular principal (<<titular-mes>>). No hay HLA que emitir.
+* *No se pueden determinar los arbitrios de 2026: …* con *Faltan parámetros: …*: alguno de sus predios tiene cuotas
+  por determinar (*Predio 01-01-0001: 12 cuotas de arbitrios por determinar*), o no se puede determinar, o a un mes le
+  falta su vencimiento (`+ARBITRIO_VENCIMIENTO 3 2026+`). Determine el predio (<<proc-determinar-predio>>) o avise al
+  administrador.
+* La HR y el PU se ven igual, con btn:[Ver HR] y btn:[Ver PU]; se explican en el {m-registrador}.
+
+[[hla-contenido]]
+=== Qué contiene la HLA
+
+La HLA tiene la cabecera de la municipalidad (nombre, gerencia, RUC, oficina, fecha y hora de emisión), el título
+*Hoja de liquidación de arbitrios — HLA*, el año y el código del contribuyente, y luego:
+
+[horizontal]
+Sección I, Contribuyente:: Código, nombre o razón social, documento y domicilio fiscal.
+Sección II, Predio …:: Una sección por cada predio con cuotas a su nombre: la *Zona* (las zonas de sus servicios, separadas
+por barras) y el *Uso de arbitrio*, una tabla de enero a diciembre con el monto de cada servicio, el *Total del
+predio* y la sección *Cálculo*, con la cuenta de cada servicio y los meses en que rigió («Barrido de calles (uso 001),
+ene–dic: 4.2000 S/ por ml × 11.34 ml = 47.62»).
+Sección III, Cuotas mensuales:: El monto de cada mes, sumados todos los predios, con su *Vencimiento*.
+Arbitrios del año:: El total, la fecha en que se determinaron y la ordenanza con su ratificación.
+
+// fin de la lista
+[[fig-pdf-hla-1]]
+.Primera página de una HLA
+image::{capturas}/usuario/arbitrios-emision/pdf-hla-1.png[Primera página de la HLA 2026 del contribuyente 000001 con sus datos, y los predios 01-01-0001 y 01-01-0002 con sus zonas, su uso de arbitrio, la tabla de enero a diciembre por servicio, el total del predio y el cálculo,600,pdfwidth=75%,align=center]
+
+[[fig-pdf-hla-2]]
+.Última página de una HLA: las cuotas mensuales y el total del año
+image::{capturas}/usuario/arbitrios-emision/pdf-hla-2.png[Segunda página de la HLA con los dos últimos predios, la sección III Cuotas mensuales con el monto de cada mes y su vencimiento, y Arbitrios del año S/ 5,596.80 con la ordenanza y su ratificación,600,pdfwidth=75%,align=center]
+
+[[determinacion-masiva]]
+== Determinación masiva
+
+La determinación masiva determina, en segundo plano, todos los predios que tienen alguna declaración jurada del año
+(también una anulada). Es el trabajo de inicio de cada año: con ella se escriben las cuotas del padrón entero, sin
+abrir cada ficha. Escribe cuotas y no genera ningún archivo.
+
+[[proc-determinacion-masiva]]
+=== Lanzar la determinación masiva de un año
+
+[[proc-determinacion-masiva-pasos]]
+.Lanzar la determinación masiva
+====
+[horizontal]
+Objetivo:: Determinar las cuotas que falten de todos los predios declarados en un año.
+Requisitos previos:: La ordenanza del año completa: *Tasas del año* sin el aviso *Al año … le falta:* (<<tasas>>).
+Las declaraciones juradas del año registradas. Ninguna otra determinación masiva de ese año en curso.
+====
+
+. Elija menu:Arbitrios[Determinación masiva] en el riel. Se abre *Determinación masiva de arbitrios*, con el
+  formulario arriba y la lista de las determinaciones abajo (<<fig-determinaciones>>).
+. Elija el *Año*.
+. Escriba en *Observación* por qué determina, de 5 a 500 caracteres (<<fig-determinacion-lanzar>>).
++
+[[fig-determinacion-lanzar]]
+.El formulario de la determinación masiva, listo para lanzar
+image::{capturas}/usuario/arbitrios-emision/determinacion-lanzar.png[Formulario con el Año 2026, la observación Determinación de los arbitrios 2026 tras la carga de la ordenanza ratificada, el contador 76 y el botón Determinar marcado]
+. Pulse btn:[Determinar].
+
+// fin de los pasos
+Resultado esperado:: La determinación aparece primera en la lista, en *Pendiente* y luego *En proceso*. La página se
+actualiza sola cada dos segundos mientras corre: no hace falta recargarla, y puede salir de ella y volver.
+Verificación:: Al terminar, el estado es *Terminada*, *Predios* muestra la barra llena (`55/55`) y *Cuotas*, cuántas
+escribió (<<fig-determinaciones>>).
+Casos especiales::
+* *Ya hay una determinación masiva del año en curso*: hay otra del mismo año corriendo. Espere a que termine.
+* *No se pueden determinar los arbitrios de 2025: …*: al año le falta la ordenanza o parte de ella. Nada se crea.
+* *No tiene permiso: …*: lanzarla pide crear y editar determinaciones masivas, y crear sus lotes y las cuotas.
+* Lanzarla para un año ya determinado no duplica nada: solo escribe lo que falte.
+
+[[fig-determinaciones]]
+.La determinación masiva 2026, terminada
+image::{capturas}/usuario/arbitrios-emision/determinaciones.png[Página Determinación masiva de arbitrios con el formulario y la lista: 2026, Terminada, 55/55 predios, 2628 cuotas, iniciada el 19/10/2026 17:22 y terminada 17:46, con el botón Eliminar]
+
+CAUTION: La determinación masiva escribe miles de cuotas que no se pueden editar ni borrar. Lánzela solo cuando la
+ordenanza esté revisada (<<tasas>>): una tasa equivocada obliga a anular cada cuota que se calculó con ella.
+
+[[estados-determinacion]]
+=== Los estados y las columnas de la lista
+
+La lista muestra todas las determinaciones masivas, de todos los años, la más reciente primero:
+
+[horizontal]
+Año:: El año, con la observación debajo.
+Estado:: *Pendiente* (se están reuniendo los predios), *En proceso* (se determinan, por lotes), *Terminada* o
+*Fallida*.
+Predios:: Una barra con los predios procesados sobre el total (`55/55`).
+Cuotas:: Las cuotas que escribió (mientras corre, las de sus lotes ya terminados).
+Iniciado, Terminado:: Fecha y hora de Lima.
+Acciones:: Los predios sin determinar y el botón btn:[Eliminar].
+
+// fin de la lista
+Una determinación *Fallida* muestra en rojo por qué falló (por ejemplo, porque el proceso que la preparaba se
+interrumpió). Las cuotas que alcanzó a escribir quedan; vuelva a lanzarla para completar el resto.
+
+[[predios-sin-determinar]]
+=== Predios sin determinar
+
+Un predio que no se puede determinar no detiene la determinación: se anota y se sigue con los demás. Al terminar, la
+columna *Acciones* muestra el enlace *1 predio sin determinar* (o *N predios sin determinar*). Púlselo para ver la
+lista, cada uno con su código y lo que le falta, como «01-03-0005: …». Corrija cada caso (<<no-se-puede>>) y
+determínelo desde su ficha (<<proc-determinar-predio>>), o lance otra vez la determinación masiva cuando estén todos
+corregidos.
+
+Si un lote entero de predios no pudo terminar, cada uno de sus predios aparece con el motivo del lote: *lote fallido
+tras 3 intentos* (el sistema lo reintentó y no pudo) o *el usuario que lanzó la determinación ya no existe o está
+deshabilitado*. Esos predios no tienen un problema de datos: vuelva a lanzar la determinación masiva.
+
+[[proc-eliminar-determinacion]]
+=== Eliminar el registro de una determinación
+
+btn:[Eliminar] aparece en cada determinación que no está corriendo. Pide confirmación: *¿Eliminar esta determinación
+masiva?* «Se borra el registro de la determinación 2026. Las cuotas que escribió quedan: una cuota no se borra.»
+(<<fig-determinacion-eliminar>>).
+
+[[fig-determinacion-eliminar]]
+.Eliminar el registro de una determinación masiva
+image::{capturas}/usuario/arbitrios-emision/determinacion-eliminar.png[Diálogo Eliminar esta determinación masiva con el aviso de que las cuotas quedan y los botones Cancelar y Eliminar,480,align=center]
+
+Eliminar solo quita la fila de la lista (y, con ella, su lista de predios sin determinar): no deshace la
+determinación. Consérvela al menos hasta haber revisado sus predios sin determinar.
+
+[[emision-masiva]]
+== Emisión masiva
+
+La emisión masiva genera, en segundo plano, los documentos de todos los contribuyentes de un año en un solo archivo:
+su HR, el PU de cada predio y, si lo pide, su HLA. Es el archivo que se imprime para el reparto de inicio de año.
+
+[[emision-que-produce]]
+=== Qué produce
+
+Quiénes:: Todos los contribuyentes con alguna declaración jurada *vigente* del año, por orden de código, y sus predios
+por orden de código.
+Qué documentos:: Los que marque en *Documentos de cada contribuyente*: *HR (hoja de resumen)*, *PU de cada predio* y
+*HLA (liquidación de arbitrios)*. Por omisión, la HR y los PU. De cada contribuyente salen en ese orden: su HR, sus PU
+y su HLA.
+En qué formato:: *Un solo PDF*, con todos los documentos seguidos; o *ZIP: un PDF por predio y la HR de cada
+contribuyente*: una carpeta por contribuyente (`000001-QUISPE ROJAS ROSA ELENA/`, por ejemplo) con `HR-2026.pdf`,
+`PU-01-01-0001-2026.pdf` por cada predio y `HLA-2026.pdf`.
+La HLA:: Un contribuyente sin cuotas a su nombre no lleva HLA, y no es un error. Uno cuya HLA no se puede hacer (sus
+arbitrios no están completos) sigue con su HR y sus PU, y queda en la lista de errores.
+
+// fin de la lista
+[[proc-emision-masiva]]
+=== Lanzar una emisión masiva
+
+[[proc-emision-masiva-pasos]]
+.Lanzar la emisión masiva de un año
+====
+[horizontal]
+Objetivo:: Generar en un solo archivo los documentos del año de todos los contribuyentes.
+Requisitos previos:: Las declaraciones juradas del año registradas y los parámetros del impuesto del año (para la HR).
+Para la HLA, los arbitrios del año determinados (<<determinacion-masiva>>). Ninguna otra emisión de ese año en curso.
+====
+
+. Elija menu:Emisión[Emisión masiva] en el riel (<<fig-riel-emision>>).
++
+[[fig-riel-emision]]
+.El módulo Emisión
+image::{capturas}/usuario/arbitrios-emision/riel-emision.png[Riel de módulos con el panel Emisión abierto y su trámite Emisión masiva,560,align=center]
+. Elija el *Año*.
+. Elija el *Formato*: *Un solo PDF* o *ZIP: un PDF por predio y la HR de cada contribuyente*.
+. Marque los *Documentos de cada contribuyente* (<<fig-emision-formulario>>).
++
+[[fig-emision-formulario]]
+.Una emisión en ZIP con la HR, el PU y la HLA
+image::{capturas}/usuario/arbitrios-emision/emision-formulario.png[Formulario de la emisión masiva con el Año 2026, el formato ZIP elegido, los documentos HR, PU y HLA marcados y el botón Emitir marcado]
+. Pulse btn:[Emitir].
+
+// fin de los pasos
+Resultado esperado:: La emisión aparece primera en la lista, en *Pendiente*, luego *En proceso* (la barra avanza con
+los contribuyentes generados), *Ensamblando* (dice *Ensamblando el archivo…*) y *Terminada*, con el botón btn:[Descargar].
+La página se actualiza sola cada dos segundos mientras corre.
+Verificación:: La columna *Progreso* muestra todos los contribuyentes (`40/40`) y *Formato* dice el formato y, si no
+eligió los de omisión, los documentos (`HR, PU, HLA`) (<<fig-emisiones>>).
+Casos especiales::
+* Sin ningún documento marcado, btn:[Emitir] queda gris (<<fig-emision-sin-documentos>>).
+* *Ya hay una emisión en proceso*: hay otra emisión del mismo año pendiente, en proceso o ensamblando. Espere a que
+  termine: se emite un año a la vez.
+* *Faltan parámetros tributarios de 2025: …*: marcó la HLA y al año le falta algo que toda HLA necesita (la
+  ordenanza, sus tasas o los vencimientos de los doce meses). Nada se crea.
+* *No tiene permiso para lanzar emisiones masivas*: lanzarla pide crear y editar emisiones masivas, y crear sus lotes
+  (<<permisos-usuario>>).
+
+[[fig-emision-sin-documentos]]
+.Sin documentos, no hay emisión
+image::{capturas}/usuario/arbitrios-emision/emision-sin-documentos.png[Formulario de la emisión masiva con los tres documentos desmarcados y el botón Emitir en gris]
+
+[[fig-emisiones]]
+.La emisión masiva 2026, terminada
+image::{capturas}/usuario/arbitrios-emision/emisiones.png[Página Emisión masiva con el formulario y la lista: 2026, PDF con HR, PU y HLA, Terminada, 40/40, iniciada 19/10/2026 17:47, terminada 17:50, con los botones Descargar (4.3 MB) y Eliminar]
+
+[[estados-emision]]
+=== Los estados de una emisión
+
+.Estados de una emisión masiva
+[cols="1,3",options="header"]
+|===
+|Estado |Qué significa
+|Pendiente |Se están reuniendo los contribuyentes del año y repartiéndolos en lotes.
+|En proceso |Se generan los documentos, por lotes. La barra muestra los contribuyentes procesados sobre el total.
+|Ensamblando |Todo está generado: el sistema une las partes en el archivo final.
+|Terminada |El archivo está listo para descargar.
+|Fallida |La emisión no terminó: el motivo aparece en rojo debajo de las acciones (por ejemplo, *interrumpida: el
+proceso que la corría ya no está*, si el sistema se reinició mientras corría). Vuelva a lanzarla.
+|===
+
+Mientras una emisión está *Pendiente*, *En proceso* o *Ensamblando*, no se puede eliminar ni lanzar otra del mismo
+año.
+
+[[proc-descargar-emision]]
+=== Descargar el archivo
+
+Pulse btn:[Descargar] en la fila de la emisión terminada: el botón dice el tamaño del archivo (*Descargar (4.3 MB)*).
+El archivo se guarda en su equipo como `emision-2026-<identificador>.pdf` (o `.zip`). Un archivo de todo el padrón
+puede pesar mucho: espere a que termine la descarga antes de abrirlo.
+
+WARNING: El archivo tiene los datos personales y tributarios de todo el padrón. Guárdelo en una carpeta de acceso
+restringido y bórrelo de su equipo cuando ya no lo necesite.
+
+[[emision-errores]]
+=== Contribuyentes con error
+
+Un contribuyente cuyos documentos no se pueden generar no detiene la emisión: queda fuera del archivo (o, si lo que
+falla es solo su HLA, sale con su HR y sus PU) y la fila muestra el enlace *1 contribuyente con error* (o *N
+contribuyentes con error*). Púlselo para ver la lista: cada línea dice el código y el motivo, por ejemplo «000012: HLA:
+…». Corrija cada caso y emita sus documentos desde su ficha (btn:[Ver HR], btn:[Ver HLA]) o lance otra emisión.
+
+[[archivo-depurado]]
+=== Archivo depurado
+
+El sistema conserva solo los archivos de las *últimas cinco emisiones terminadas de cada año* (es el valor de fábrica;
+el área de sistemas puede cambiarlo, y fijar también una antigüedad máxima). Al terminar una emisión, los archivos más
+viejos se borran: su fila sigue en la lista, *Terminada*, pero en lugar de btn:[Descargar] dice *Archivo depurado*.
+Para tener otra vez esos documentos, lance una emisión nueva.
+
+[[proc-eliminar-emision]]
+=== Eliminar una emisión
+
+btn:[Eliminar] aparece en cada emisión que no está corriendo. Pide confirmación: *¿Eliminar esta emisión?* «Se borran
+el registro de la emisión 2026 y su archivo. No se puede deshacer.» (<<fig-emision-eliminar>>). Elimine las emisiones
+de prueba o con errores, para que no ocupen el lugar de las cinco que se conservan.
+
+[[fig-emision-eliminar]]
+.Eliminar una emisión
+image::{capturas}/usuario/arbitrios-emision/emision-eliminar.png[Diálogo Eliminar esta emisión con el aviso Se borran el registro de la emisión 2026 y su archivo. No se puede deshacer., y los botones Cancelar y Eliminar,480,align=center]
+
+WARNING: Eliminar una emisión borra su archivo: no se puede deshacer. Los documentos se pueden volver a generar, pero
+con la fecha y la hora de la nueva emisión.
+
+[[errores]]
+== Errores frecuentes
+
+.Mensajes frecuentes de arbitrios y emisión
+[cols="3,3,3",options="header"]
+|===
+|Mensaje |Causa |Solución
+
+|Al año 2025 le falta: … Sin eso no se determinan sus arbitrios. |Al año le falta la ordenanza, sus servicios, sus
+tasas, zonas o usos. |Avise al administrador (<<tasas>>).
+|No se pueden determinar: … |Al predio le falta un dato, o a la ordenanza una fila que el predio necesita.
+|Siga el enlace o avise al administrador (<<no-se-puede>>).
+|No se pueden determinar los arbitrios de 2026: … Falta: … |Lo mismo, al confirmar el diálogo. Nada se grabó.
+|Corrija lo que falta y vuelva a determinar.
+|Predio 01-01-0005: … |Al determinar un contribuyente, uno de sus predios no se puede determinar. Nada se grabó.
+|Corrija ese predio; luego determine el contribuyente.
+|No había cuotas pendientes: nada que determinar. |El predio o el contribuyente ya estaba completo. |Nada: no es un
+error.
+|Sin permiso: determinar pide creación sobre las cuotas de arbitrio. |Su rol no determina arbitrios.
+|Pídalo al administrador (<<permisos-usuario>>).
+|Ya hay una determinación masiva del año en curso |Otra determinación masiva de ese año está corriendo.
+|Espere a que termine.
+|N predios sin determinar |La determinación masiva no pudo determinar esos predios. |Abra la lista y corrija cada
+uno (<<predios-sin-determinar>>).
+|El contribuyente 000003 no tiene cuotas de arbitrios a su nombre en 2026 |No hay HLA: no declara predios ese año o
+no es el titular principal. |Nada que emitir (<<titular-mes>>).
+|Faltan parámetros: Predio 01-01-0001: 12 cuotas de arbitrios por determinar |La HLA no sale porque el predio tiene
+cuotas por determinar. |Determine el predio (<<proc-determinar-predio>>).
+|Ya hay una emisión en proceso |Otra emisión del mismo año está pendiente, en proceso o ensamblando. |Espere a que
+termine.
+|Faltan parámetros tributarios de 2025: … |Pidió la HLA en la emisión y al año le falta la ordenanza, sus tasas o
+sus vencimientos. |Avise al administrador, o emita sin HLA.
+|No tiene permiso para lanzar emisiones masivas |Su rol no lanza emisiones. |Pídalo al administrador.
+|N contribuyentes con error |La emisión no pudo generar sus documentos (o su HLA). |Abra la lista y revise cada
+uno (<<emision-errores>>).
+|Archivo depurado |El archivo se borró para conservar solo los últimos. |Lance una emisión nueva
+(<<archivo-depurado>>).
+|La emisión está en curso: no se puede eliminar mientras corre |Intentó eliminar una emisión que sigue corriendo.
+|Espere a que termine.
+|No hubo respuesta del servidor. Vuelva a intentarlo: el acto no se registra dos veces. |Se cortó la comunicación al
+confirmar un acto. |Vuelva a pulsar el botón (<<actos>>).
+|===
+
+[[faq]]
+== Preguntas frecuentes
+
+[[faq-arbitrios]]
+=== Preguntas de arbitrios y emisión
+
+Corregí la declaración de un predio, pero sus arbitrios no cambiaron.::
+Las cuotas ya determinadas no se recalculan nunca (<<inmutable>>). Para corregirlas hay que anularlas y volver a
+determinar el predio (<<anular-cuota>>).
+
+¿Cómo anulo una cuota?::
+El portal todavía no tiene el botón: pídala al área de sistemas con los datos de la cuota, y después determine el
+predio (<<anular-cuota-como>>).
+
+¿Puedo lanzar la determinación masiva dos veces?::
+Sí: la segunda solo escribe las cuotas que falten. No duplica ni cambia ninguna.
+
+¿Por qué un predio con una casa y una tienda paga solo por la casa?::
+Porque el año cobra un PU por predio: se cobra el uso de la declaración del titular principal (<<pu-por-uso>>).
+
+Un condómino me pide su HLA y el sistema dice que no tiene cuotas.::
+Las cuotas de un predio en condominio van a nombre del titular principal de cada mes (<<titular-mes>>). La HLA de ese
+predio es la de ese titular.
+
+El serenazgo de un predio sale con guiones.::
+El predio está inafecto a ese servicio en esos meses (<<inafectaciones>>), o ningún titular lo cubre ese mes.
+
+¿Por qué la Consulta de cuotas tiene dos cuotas del mismo mes y servicio?::
+Una de ellas está anulada: la lista muestra también las anuladas (<<consulta-cuotas>>). La ficha y la HLA muestran
+solo la vigente.
+
+¿Puedo cambiar una tasa de la ordenanza?::
+No desde su perfil: las tasas las carga el administrador. Las cuotas ya determinadas con la tasa anterior no cambian.
+
+¿Cuántas emisiones puedo descargar?::
+Las últimas cinco terminadas de cada año (valor de fábrica); las anteriores quedan como *Archivo depurado*
+(<<archivo-depurado>>).
+
+¿Puedo emitir solo la HLA?::
+Sí: desmarque la HR y el PU y deje marcada la HLA.
+
+¿Qué pasa si cierro el navegador mientras corre una determinación o una emisión?::
+Nada: corren en el servidor. Al volver a la página, la verá en el estado en que esté.
+
+include::../comun/faq.adoc[]
+
+[appendix]
+[[glosario]]
+== Glosario
+
+Este glosario reúne solo los términos de este manual. El glosario completo está en el {m-admin}.
+
+[glossary]
+Afluencia:: Nivel (alta, muy alta…) que la ordenanza asigna a un uso del predio, para los servicios que lo usan.
+Anulación de una cuota:: El acto que deja sin efecto una cuota mal calculada para volver a determinarla. No se edita
+ni se borra.
+Arbitrios:: Tasas por los servicios públicos que la municipalidad presta a cada predio.
+Base:: Lo que la ordenanza mide en un servicio: el predio, el frontis en metros lineales o el área construida en
+metros cuadrados.
+Cuota:: Lo determinado de un predio, un servicio y un mes (y, con un PU por uso, de un uso).
+Determinar:: Calcular y registrar las cuotas que le faltan a un predio en un año.
+Determinación masiva:: La determinación de todos los predios declarados en un año, en segundo plano.
+Emisión masiva:: La generación, en segundo plano, de la HR, el PU y la HLA de todos los contribuyentes de un año.
+Factor de habitantes:: Ajuste de la cuota según los habitantes declarados: `(1 + (H − P) × V)`.
+HLA:: Hoja de liquidación de arbitrios de un contribuyente y un año.
+Inafectación:: Período en que un predio no paga un servicio.
+Influencia:: Nivel que la ordenanza asigna según la ubicación del predio respecto a las áreas verdes.
+Ordenanza de arbitrios:: La norma del año que fija los servicios, las tasas, las zonas, los usos y los vencimientos.
+PU por uso:: La forma de cobro en que cada uso declarado de un predio paga sus propios arbitrios.
+Tasa:: El monto mensual de un servicio por unidad de su base.
+Titular principal:: El titular de un predio a quien se cobra la cuota de un mes: el de mayor % de condominio.
+Tope:: El aumento máximo, sobre lo pagado el año anterior, que la ordenanza permite en un año.
+Uso de arbitrio:: La categoría de la ordenanza que corresponde al uso declarado del predio.
+Vencimiento:: La fecha en que vence la cuota de cada mes.
+Zona:: El área de la ordenanza en que está un predio para un servicio: la de su sector catastral o la de su tramo de
+calle.

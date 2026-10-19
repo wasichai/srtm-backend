@@ -251,8 +251,9 @@ async function main() {
     }
     let contexto = sesiones.get(c.perfil)
     if (!contexto) {
+      // la vista de siempre: la de una captura (c.vista) se fija en su página, no en el contexto del perfil
       contexto = await navegador.newContext({
-        viewport: c.vista ?? vista,
+        viewport: vista,
         deviceScaleFactor: config.escala ?? 1,
         locale: 'es-PE',
         timezoneId: 'America/Lima',

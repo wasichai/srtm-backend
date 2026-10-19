@@ -53,9 +53,9 @@ image::{capturas}/comun/salir-sin-guardar.png[Diálogo Salir sin guardar con los
 [[actos]]
 === Actos con observación
 
-Las operaciones que no se pueden deshacer editando el registro (determinar arbitrios, anular una cuota, registrar un
-acta, renovar o cesar un anuncio, entre otras) piden una *Observación*: el motivo del acto, de 5 a 500 caracteres.
-Unas la piden en un diálogo de confirmación (determinar, anular, renovar); otras, como *Nueva acta* y *Nuevo anuncio*,
+Las operaciones que no se pueden deshacer editando el registro (determinar arbitrios, registrar un acta, renovar o
+cesar un anuncio, entre otras) piden una *Observación*: el motivo del acto, de 5 a 500 caracteres.
+Unas la piden en un diálogo de confirmación (determinar, renovar, cesar); otras, como *Nueva acta* y *Nuevo anuncio*,
 en el propio formulario. La observación queda guardada con el acto y explica después por qué se hizo. La
 anulación de una declaración jurada es distinta: pide un *Motivo de la anulación*, obligatorio y sin largo mínimo.
 
@@ -66,16 +66,17 @@ acto no se registra dos veces.* Puede volver a pulsar el botón sin miedo a dupl
 === Lo que su rol le permite
 
 Cada cuenta tiene uno o más roles, y cada rol dice qué tipos de registro puede consultar, crear, modificar o eliminar.
-El portal no esconde las acciones que su rol no permite: el botón aparece deshabilitado, con una línea que empieza con
-*Sin permiso:* y dice qué permiso falta (<<fig-sin-permiso>>). Si necesita esa acción para su trabajo, pídasela al
-administrador.
+El portal no esconde las acciones que su rol no permite. En los actos de infracciones y anuncios, la determinación de
+arbitrios y la brecha, el botón aparece deshabilitado, con una línea que empieza con *Sin permiso:* y dice qué permiso
+falta (<<fig-sin-permiso>>). Si necesita esa acción para su trabajo, pídasela al administrador.
 
 [[fig-sin-permiso]]
 .Una acción que el rol no permite
 image::{capturas}/comun/sin-permiso.png[Botón deshabilitado con el texto Sin permiso: registrar un acta pide creación sobre las papeletas]
 
-Algunas operaciones no tienen botón deshabilitado y el servidor es quien las rechaza: entonces el mensaje aparece al
-intentar la operación (por ejemplo, *No tiene permiso para lanzar emisiones masivas*).
+En las demás pantallas (los formularios del registro tributario, la emisión masiva y la eliminación de procesos
+masivos) los botones se ven habilitados aunque el rol no permita la operación: es el servidor quien la rechaza al
+grabar, con un mensaje (por ejemplo, *No tiene permiso para lanzar emisiones masivas*), y nada se guarda.
 
 [[errores-pagina]]
 === Páginas que no se pueden mostrar

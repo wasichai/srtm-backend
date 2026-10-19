@@ -1,0 +1,405 @@
+{
+    "_comentario": "Capturas del Manual de consulta (usuario/consulta.adoc), con la cuenta del perfil CONSULTA, que solo lee. Ninguna graba datos ni pulsa un botón que escribe: muestran las pantallas y los botones deshabilitados con su «Sin permiso». La brecha se muestra tal como está en la demo: sin corridas, porque el catastro no está configurado.",
+    "referencias": {
+        "con_rosa": {
+            "get": "/api/srtm/contribuyentes?q=91000101",
+            "campo": "content.0.id"
+        },
+        "con_p0004": {
+            "get": "/api/srtm/predios?q=01-01-0004",
+            "campo": "content.0.id"
+        },
+        "con_p0001": {
+            "get": "/api/srtm/predios?q=01-01-0001",
+            "campo": "content.0.id"
+        },
+        "con_dj_0001": {
+            "get": "/api/srtm/predios/{ref:con_p0001}/declaraciones?anio=2026",
+            "campo": "0.declaracion.id"
+        },
+        "con_lote_0001": {
+            "get": "/api/srtm/catastro?codigo_cpu=1203020101001",
+            "campo": "content.0.id"
+        },
+        "con_acta": {
+            "get": "/api/objects/papeleta/records?numero=AC-2026-0003",
+            "campo": "content.0.id"
+        },
+        "con_ris": {
+            "get": "/api/objects/resolucion_gerencia/records?numero=RIS-2026-000001",
+            "campo": "content.0.id"
+        },
+        "con_anuncio": {
+            "get": "/api/objects/anuncio/records?clave_idempotencia=demo-anuncio-01",
+            "campo": "content.0.id"
+        }
+    },
+    "capturas": [
+        {
+            "id": "con-riel-fiscalizacion",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/riel-fiscalizacion.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/"
+                ],
+                [
+                    "clic",
+                    "[data-ui=riel] button:has-text('Fiscalización')"
+                ],
+                [
+                    "esperar",
+                    "[data-ui=riel-panel]"
+                ]
+            ],
+            "area": {
+                "x": 0,
+                "y": 0,
+                "width": 720,
+                "height": 700
+            }
+        },
+        {
+            "id": "con-contribuyente",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/contribuyente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:con_rosa}"
+                ],
+                [
+                    "esperarTexto",
+                    "Datos de identificación"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 760
+            }
+        },
+        {
+            "id": "con-predios-del-contribuyente",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/predios-del-contribuyente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:con_rosa}?tab=predios"
+                ],
+                [
+                    "esperarTexto",
+                    "Total 2026"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        },
+        {
+            "id": "con-titulares",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/titulares.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios/{ref:con_p0004}?tab=titulares"
+                ],
+                [
+                    "esperarTexto",
+                    "Total 2026"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        },
+        {
+            "id": "con-declaracion",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/declaracion.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:con_dj_0001}"
+                ],
+                [
+                    "esperarTexto",
+                    "Datos del predio"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 640
+            }
+        },
+        {
+            "id": "con-lote",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/lote.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/catastro/{ref:con_lote_0001}"
+                ],
+                [
+                    "esperarTexto",
+                    "Lote 1203020101001"
+                ],
+                [
+                    "pausa",
+                    "3000"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 855
+            }
+        },
+        {
+            "id": "con-arbitrios",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/arbitrios.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:con_rosa}?tab=arbitrios"
+                ],
+                [
+                    "esperarTexto",
+                    "Sin permiso"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 700
+            }
+        },
+        {
+            "id": "con-cuotas",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/cuotas.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/arbitrios"
+                ],
+                [
+                    "esperarTexto",
+                    "Ver contribuyente"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 420
+            }
+        },
+        {
+            "id": "con-determinacion-sin-permiso",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/determinacion-sin-permiso.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/arbitrios/determinaciones"
+                ],
+                [
+                    "esperarTexto",
+                    "Terminada"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 440
+            }
+        },
+        {
+            "id": "con-emisiones",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/emisiones.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/emisiones"
+                ],
+                [
+                    "esperarTexto",
+                    "Terminada"
+                ],
+                [
+                    "marcar",
+                    "button:has-text('Descargar')"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 340
+            }
+        },
+        {
+            "id": "con-expedientes",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/expedientes.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones"
+                ],
+                [
+                    "esperarTexto",
+                    "AC-2026-0003"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 700
+            }
+        },
+        {
+            "id": "con-expediente",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/expediente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/{ref:con_acta}"
+                ],
+                [
+                    "esperarTexto",
+                    "Acta de constatación"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 760
+            }
+        },
+        {
+            "id": "con-pdf-resolucion",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/pdf-resolucion.png",
+            "pdf": "/api/srtm/infracciones/resoluciones/{ref:con_ris}/pdf",
+            "pagina": 1,
+            "resolucion": 100
+        },
+        {
+            "id": "con-notificaciones",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/notificaciones.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/infracciones/notificaciones"
+                ],
+                [
+                    "esperarTexto",
+                    "NP-2026-0001"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 560
+            }
+        },
+        {
+            "id": "con-anuncios",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/anuncios.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios"
+                ],
+                [
+                    "esperarTexto",
+                    "AN-2026-000001"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 640
+            }
+        },
+        {
+            "id": "con-anuncio",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/anuncio.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios/{ref:con_anuncio}"
+                ],
+                [
+                    "esperarTexto",
+                    "Datos del anuncio"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 520
+            }
+        },
+        {
+            "id": "con-brecha",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/brecha.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/brecha"
+                ],
+                [
+                    "esperarTexto",
+                    "Aún no se ha calculado la brecha"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 400
+            }
+        },
+        {
+            "id": "con-brecha-sin-permiso",
+            "perfil": "consulta",
+            "archivo": "usuario/consulta/brecha-sin-permiso.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/brecha"
+                ],
+                [
+                    "esperarTexto",
+                    "Sin permiso"
+                ]
+            ],
+            "recorte": "form:has(button:has-text('Calcular brecha'))",
+            "subir": 1,
+            "margen": 8
+        }
+    ]
+}
