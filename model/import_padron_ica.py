@@ -36,7 +36,7 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 from core_client import Client, CoreError  # noqa: E402
-from import_predios import SUCESION, LoadError, clean_decimal, clean_text, post_all, read_xlsx  # noqa: E402
+from import_predios import LoadError, clean_decimal, clean_text, post_all, read_xlsx  # noqa: E402
 
 # Ica's district: Ica, provincia Ica, departamento Ica (INEI), on the coast
 UBIGEO = "110101"
@@ -61,6 +61,8 @@ LETRAS = {
     "muros_columnas": "muros_y_columnas", "techos": "techos", "pisos": "pisos", "puertas_ventanas": "puertas_y_ventanas",
     "revestimientos": "revestimientos", "banos": "banos", "instalaciones": "instalaciones_electricas_y_sanitarias",
 }
+# a name that says it is a sucesión: SUC., SUC or SUCESION (not SUCRE)
+SUCESION = re.compile(r"^SUC(\.|\s|ESI[OÓ]N\b)")
 REPORT_COLUMNS = ["categoria", "hoja", "fila", "codigo_predio", "codigo_contribuyente", "detalle"]
 
 
@@ -159,17 +161,21 @@ def condicion(code, titulares, codigos):
 
 
 def fecha(value):
-    """An ISO date from the xlsx's text ('2004-01-01 00:00:00') or an Excel serial. The 1900-01-01 filler is None."""
+    """An ISO date from the xlsx's text ('2004-01-01 00:00:00' or '31/12/2004') or an Excel serial. The 1900-01-01
+    filler is None."""
     text = clean_text(value)
     if text is None:
         return None
+    iso, dmy = re.match(r"(\d{4})-(\d{2})-(\d{2})", text), re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{4})", text)
     if re.fullmatch(r"\d+(\.\d+)?", text):
         parsed = EXCEL_EPOCH + timedelta(days=int(Decimal(text)))
+    elif iso:
+        parsed = date(*map(int, iso.groups()))
+    elif dmy:
+        dia, mes, anio = map(int, dmy.groups())
+        parsed = date(anio, mes, dia)
     else:
-        match = re.match(r"(\d{4})-(\d{2})-(\d{2})", text)
-        if not match:
-            raise ValueError(f"fecha '{text}' no es una fecha")
-        parsed = date(*map(int, match.groups()))
+        raise ValueError(f"fecha '{text}' no es una fecha")
     return None if parsed <= FECHA_RELLENO else parsed.isoformat()
 
 
@@ -197,6 +203,8 @@ def nivel(value, codigos):
     especial = codigos["nivel"]["valores"].get(code)
     if especial:
         return especial["tipo_nivel"], especial["numero_piso"]
+    if not code.isdigit() or int(code) < 1:
+        raise ValueError(f"nivel '{code}' no es un piso")
     return "PISO", int(code)
 
 
@@ -262,7 +270,15 @@ class Dataset:
 
 
 def _decimal(value):
-    return Decimal(clean_decimal(value) or "0")
+    """A number of the xlsx for the checks of the report: empty is 0, unreadable is None (its row is rejected)."""
+    try:
+        return Decimal(clean_decimal(value) or "0")
+    except InvalidOperation:
+        return None
+
+
+def _sum(values):
+    return None if any(v is None for v in values) else sum(values, Decimal(0))
 
 
 class _Builder:
@@ -286,17 +302,16 @@ class _Builder:
         self.sin_mapeo[key] += 1
         self.primera.setdefault(key, (hoja, row["_fila"]))
 
-    def mapped(self, hoja, row, tabla, default=None):
-        """The option a code of a table maps to; one the table lacks counts as unmapped and is `default`."""
+    def mapped(self, hoja, row, tabla):
+        """The option a code of a table maps to; one the table lacks counts as unmapped and is None."""
         columna = self.codigos[tabla]["columna"]
         code = codigo(row.get(columna))
         if code is None:
             return None
         valores = self.codigos[tabla]["valores"]
         if code not in valores:
-            if default is None:
-                self.unmapped(hoja, row, columna)
-            return default
+            self.unmapped(hoja, row, columna)
+            return None
         return valores[code]
 
     def valid(self, name, attributes, hoja, row, predio, contribuyente, relations=()):
@@ -320,7 +335,8 @@ class _Builder:
             primeras.setdefault(code, row)
             condiciones[code].add(codigo(row.get("condicion_predio")))
         documentos = {}  # numero -> the codigo that keeps it
-        for code in sorted(primeras):
+        # the lowest code keeps a shared document: numeric codes by their value
+        for code in sorted(primeras, key=lambda c: (len(c), c)):
             row = primeras[code]
             tipo, numero, motivo = documento(row.get("tipo_documento"), row.get("nro_documento"), self.codigos)
             if motivo == "codigo_sin_mapeo":
@@ -376,7 +392,7 @@ class _Builder:
             self.data.filas[("predio", code)] = row["_fila"]
 
     def predio(self, row, code):
-        tipo_via = self.mapped("padron", row, "tipo_via", default=self.codigos["tipo_via"]["por_defecto"])
+        tipo_via = self.mapped("padron", row, "tipo_via") or self.codigos["tipo_via"]["por_defecto"]
         via, numero, manzana, lote = (clean_text(row.get(k)) for k in ("nombre_de_la_via", "numero", "manzana", "lote"))
         tipo_zona, zona = clean_text(row.get("tipo_de_unidad_urbana")), clean_text(row.get("nombre_de_unidad_urbana"))
         direccion = clean_text(row.get("direccion_del_predio_completa"))
@@ -410,43 +426,54 @@ class _Builder:
         if nombre:
             tipo = self.codigos["tipo_via"]["valores"].get(codigo(row.get("tipo_de_via")), self.codigos["tipo_via"]["por_defecto"])
             via = {"codigo": codigo(row.get("codigo_de_via")), "tipo_via": tipo, "nombre": nombre, "ubigeo": UBIGEO}
-            self.data.vias.setdefault((via["codigo"], tipo, nombre, UBIGEO), via)
+            key = (via["codigo"], tipo, nombre, UBIGEO)
+            if key not in self.data.vias:
+                self.data.vias[key] = via
+                self.data.filas[("via", key)] = row["_fila"]
         tipo, nombre = clean_text(row.get("tipo_de_unidad_urbana")), clean_text(row.get("nombre_de_unidad_urbana"))
         if tipo and nombre and tipo in self.model["enums"]["tipo_unidad_urbana"]:
             unidad = {"codigo": codigo(row.get("codigo_de_unidad_urbana")), "tipo_unidad_urbana": tipo, "nombre": nombre,
                       "ubigeo": UBIGEO}
-            self.data.unidades.setdefault((unidad["codigo"], tipo, nombre, UBIGEO), unidad)
+            key = (unidad["codigo"], tipo, nombre, UBIGEO)
+            if key not in self.data.unidades:
+                self.data.unidades[key] = unidad
+                self.data.filas[("unidad_urbana", key)] = row["_fila"]
 
     # declaraciones -----------------------------------------------------------
 
     def declaraciones(self, rows):
-        grupos = defaultdict(list)  # the predio's titulares, in the sheet's order
+        # the predio's titulares, each once, in the sheet's order: a repeated row is rejected and is no titular
+        grupos = defaultdict(dict)  # codigo_predio -> codigo_contribuyente -> its first row
         for row in rows:
-            grupos[codigo(row.get("codigo_predio"))].append(row)
-        vistos = set()
+            grupos[codigo(row.get("codigo_predio"))].setdefault(codigo(row.get("codigo_contribuyente")), row)
         rellenos = []
         for row in rows:
             predio, contribuyente = codigo(row.get("codigo_predio")), codigo(row.get("codigo_contribuyente"))
-            grupo = grupos[predio]
+            titulares = list(grupos[predio])
             missing = [f"{nombre} rechazado o sin código" for nombre, ok in (
                 ("predio", predio in self.data.predios), ("contribuyente", contribuyente in self.data.contribuyentes))
                 if not ok]
-            if (predio, contribuyente) in vistos:
+            if grupos[predio][contribuyente] is not row:
                 missing.append("DJ repetida (mismo predio y contribuyente)")
-            vistos.add((predio, contribuyente))
             try:
-                attributes = self.declaracion(row, grupo.index(row), len(grupo))
+                attributes = self.declaracion(row, titulares.index(contribuyente), len(titulares))
             except (InvalidOperation, ValueError) as e:
                 self.report("rechazada", "padron", row["_fila"], predio, contribuyente, f"declaracion_predial: {e}")
                 continue
-            if attributes["fecha_adquisicion"] is None and clean_text(row.get("fecha_adquisicion")):
-                rellenos.append(row["_fila"])
+            try:
+                attributes["fecha_adquisicion"] = fecha(row.get("fecha_adquisicion"))
+                if attributes["fecha_adquisicion"] is None and clean_text(row.get("fecha_adquisicion")):
+                    rellenos.append(row["_fila"])
+            except ValueError as e:
+                attributes["fecha_adquisicion"] = None
+                self.report("fecha_invalida", "padron", row["_fila"], predio, contribuyente, f"{e}: se carga vacía")
             valid = self.valid("declaracion_predial", attributes, "padron", row, predio, contribuyente, missing)
             if valid is not None:
                 self.data.declaraciones.append(Registro(row["_fila"], predio, contribuyente, valid))
             self.cuadre(row, predio, contribuyente)
-        for predio, grupo in grupos.items():
-            self.condominio(predio, grupo)
+        for predio, titulares in grupos.items():
+            if predio is not None:
+                self.condominio(predio, list(titulares.values()))
         for fila in rellenos:
             self.report("fecha_relleno", "padron", fila, detalle="fecha_adquisicion 1900-01-01: se carga vacía")
 
@@ -470,7 +497,6 @@ class _Builder:
             "valor_condominio": valor_condominio,
             "deduccion": "0.00",
             "valor_afecto": valor_afecto,
-            "fecha_adquisicion": fecha(row.get("fecha_adquisicion")),
             "arancel": clean_decimal(row.get("arancel")),
             "valor_terreno": clean_decimal(row.get("valor_terreno")),
             "valor_construccion": clean_decimal(row.get("valor_area_construida")),
@@ -478,28 +504,29 @@ class _Builder:
         }
 
     def cuadre(self, row, predio, contribuyente):
-        partes = sum(_decimal(row.get(k)) for k in ("valor_terreno", "valor_area_construida", "valor_otras_instalaciones"))
+        partes = _sum([_decimal(row.get(k)) for k in ("valor_terreno", "valor_area_construida", "valor_otras_instalaciones")])
         total = _decimal(row.get("valor_predio"))
-        if abs(partes - total) > TOLERANCIA_VALOR:
+        if partes is not None and total is not None and abs(partes - total) > TOLERANCIA_VALOR:
             self.report("valor_predio_no_cuadra", "padron", row["_fila"], predio, contribuyente,
                         f"valor_predio {total} y terreno + construcción + otras instalaciones {partes}")
 
     def condominio(self, predio, grupo):
         fila = grupo[0]["_fila"]
         codes = [codigo(r.get("condicion_predio")) for r in grupo]
+        condiciones = self.codigos["condicion_propiedad"]["valores"]
         if len(grupo) == 1:
-            if self.codigos["condicion_propiedad"]["valores"].get(codes[0]) == CONDOMINO:
+            if condiciones.get(codes[0]) == CONDOMINO:
                 self.report("condomino_solo", "padron", fila, predio, codigo(grupo[0].get("codigo_contribuyente")),
                             f"condición {codes[0]} (condómino) sin otros titulares en el padrón: se carga PROPIETARIO UNICO con 100 %")
             return
-        valores = {clean_decimal(r.get("valor_predio")) for r in grupo}
+        valores = {_decimal(r.get("valor_predio")) for r in grupo}
         if len(valores) == 1:
             self.report("condominio_100_n", "padron", fila, predio, None,
                         f"{len(grupo)} titulares con el mismo valor_predio y sin %: 100/{len(grupo)} cada uno")
         else:
             self.report("condominio_valores_distintos", "padron", fila, predio, None,
                         f"{len(grupo)} titulares con valor_predio distintos ({len(valores)} valores): 100/{len(grupo)} cada uno, revisar")
-        if "1" in codes:
+        if any(condiciones.get(c) == PROPIETARIO_UNICO for c in codes):
             self.report("titulares_en_conflicto", "padron", fila, predio, None,
                         f"PROPIETARIO UNICO con otros titulares (condiciones {', '.join(sorted(set(c or '-' for c in codes)))})")
 
@@ -507,7 +534,9 @@ class _Builder:
 
     def niveles(self, rows, padron):
         declaradas = {(d.codigo_predio, d.codigo_contribuyente) for d in self.data.declaraciones}
-        en_padron = {(codigo(r.get("codigo_predio")), codigo(r.get("codigo_contribuyente"))): r for r in padron}
+        en_padron = {}
+        for r in padron:
+            en_padron.setdefault((codigo(r.get("codigo_predio")), codigo(r.get("codigo_contribuyente"))), r)
         por_par = defaultdict(list)
         for row in rows:
             par = (codigo(row.get("codigo_predio")), codigo(row.get("codigo_contribuyente")))
@@ -547,22 +576,27 @@ class _Builder:
         }
 
     def formula(self, row, par):
-        calculado = ((_decimal(row.get("valor_unitario")) + _decimal(row.get("incremento_5")))
-                     * (1 - _decimal(row.get("depreciacion")) / CIEN) * _decimal(row.get("area_construida_propia")))
-        total = _decimal(row.get("valor_total_nivel"))
+        unitario, incremento, depreciacion, area, total = (_decimal(row.get(k)) for k in (
+            "valor_unitario", "incremento_5", "depreciacion", "area_construida_propia", "valor_total_nivel"))
+        if None in (unitario, incremento, depreciacion, area, total):
+            return
+        calculado = (unitario + incremento) * (1 - depreciacion / CIEN) * area
         if abs(calculado - total) > TOLERANCIA_FORMULA:
             self.report("formula_nivel", "construcciones", row["_fila"], *par,
                         f"valor_total_nivel {total} y (valor_unitario + incremento) x (1 - depreciación) x área "
                         f"{calculado.quantize(CENTIMO, rounding=ROUND_HALF_UP)}")
 
     def suma(self, padron_row, par, secciones):
+        """The padrón's construction against its niveles; a pair with an unreadable number is left out (its rows are
+        rejected)."""
         detalles = []
-        valor = sum(_decimal(r.get("valor_total_nivel")) for r in secciones)
-        if abs(valor - _decimal(padron_row.get("valor_area_construida"))) > TOLERANCIA_VALOR:
-            detalles.append(f"valor de los niveles {valor} y valor_area_construida {_decimal(padron_row.get('valor_area_construida'))}")
-        area = sum(_decimal(r.get("area_construida_propia")) for r in secciones)
-        if abs(area - _decimal(padron_row.get("area_construida"))) > TOLERANCIA_AREA:
-            detalles.append(f"área de los niveles {area} y area_construida {_decimal(padron_row.get('area_construida'))}")
+        for columna, padron_columna, tolerancia, que in (
+                ("valor_total_nivel", "valor_area_construida", TOLERANCIA_VALOR, "valor"),
+                ("area_construida_propia", "area_construida", TOLERANCIA_AREA, "área")):
+            niveles = _sum([_decimal(r.get(columna)) for r in secciones])
+            declarado = _decimal(padron_row.get(padron_columna))
+            if niveles is not None and declarado is not None and abs(niveles - declarado) > tolerancia:
+                detalles.append(f"{que} de los niveles {niveles} y {padron_columna} {declarado}")
         if detalles:
             self.report("niveles_vs_padron", "padron", padron_row["_fila"], *par, "; ".join(detalles))
 
@@ -590,12 +624,8 @@ def build_dataset(padron, construcciones, anio, model, codigos, usos):
 
 def limit_predios(padron, construcciones, limit):
     """The padrón rows of the first `limit` predios (each with all its titulares) and the niveles of their DJ."""
-    predios = []
-    for row in padron:
-        code = codigo(row.get("codigo_predio"))
-        if code not in predios:
-            predios.append(code)
-    keep = set(predios[:limit])
+    predios = dict.fromkeys(codigo(r.get("codigo_predio")) for r in padron)
+    keep = set(list(predios)[:limit])
     rows = [r for r in padron if codigo(r.get("codigo_predio")) in keep]
     pares = {(codigo(r.get("codigo_predio")), codigo(r.get("codigo_contribuyente"))) for r in rows}
     return rows, [r for r in construcciones if (codigo(r.get("codigo_predio")), codigo(r.get("codigo_contribuyente"))) in pares]
@@ -631,39 +661,41 @@ def _catalogo_key(attributes):
     return attributes.get("codigo"), tipo, attributes.get("nombre"), attributes.get("ubigeo")
 
 
-def _catalogo(client, name, items, workers):
-    key = _catalogo_key
-    existing = {key(r["attributes"]) for r in client.list_all(name)}
-    todo = [(k, i + 1, a) for i, (k, a) in enumerate(items.items()) if key(a) not in existing]
+def _catalogo(client, name, items, filas, workers):
+    existing = {_catalogo_key(r["attributes"]) for r in client.list_all(name)}
+    todo = [(k, filas[(name, k)], a) for k, a in items.items() if _catalogo_key(a) not in existing]
     new = post_all(client, name, todo, workers)
     print(f"{name}: {len(new)} created, {len(items) - len(todo)} skipped", flush=True)
     return len(new), len(items) - len(todo)
 
 
 def load(client, data, anio, workers):
-    """Creates what is missing, in dependency order. Returns (created, skipped)."""
+    """Creates what is missing, in dependency order. Returns (created, skipped). A contribuyente sent without its
+    document goes to data.reporte."""
     created = skipped = 0
     for name, items in (("via", data.vias), ("unidad_urbana", data.unidades)):
-        new, same = _catalogo(client, name, items, workers)
+        new, same = _catalogo(client, name, items, data.filas, workers)
         created, skipped = created + new, skipped + same
 
     records = client.list_all("contribuyente")
     contribuyentes = {r["attributes"].get("codigo"): r["id"] for r in records if r["attributes"].get("codigo")}
     documentos = {r["attributes"].get("numero_documento") for r in records} - {None}
     todo = []
-    sin_numero = 0
     for code, attributes in data.contribuyentes.items():
         if code in contribuyentes:
             continue
         if attributes.get("numero_documento") in documentos:
             # numero_documento is unique: Core has it under another code (#125)
             attributes = {k: v for k, v in attributes.items() if k != "numero_documento"}
-            sin_numero += 1
+            data.reporte.append({"categoria": "documento_en_core", "hoja": "padron", "fila": data.filas[("contribuyente", code)],
+                                 "codigo_predio": None, "codigo_contribuyente": code,
+                                 "detalle": "Core ya tiene su número de documento con otro código: se envía sin número"})
         todo.append((code, data.filas[("contribuyente", code)], attributes))
     new = post_all(client, "contribuyente", todo, workers)
     contribuyentes.update(new)
     created, skipped = created + len(new), skipped + len(data.contribuyentes) - len(todo)
     print(f"contribuyente: {len(new)} created, {len(data.contribuyentes) - len(todo)} skipped", flush=True)
+    sin_numero = sum(1 for r in data.reporte if r["categoria"] == "documento_en_core")
     if sin_numero:
         print(f"contribuyente: {sin_numero} sent sin número: Core has their document under another code", flush=True)
 
@@ -765,11 +797,14 @@ def main(argv=None):
         client.login(args.email, args.password)
         created, skipped = load(client, data, args.anio, args.workers)
     except LoadError as e:
+        write_report(args.report, data.reporte)
         print(f"error POST /api/objects/{e.object_name}/records (fila {e.fila}) -> {e.error.status}\n{e.error.body}", file=sys.stderr)
         return 1
     except CoreError as e:
+        write_report(args.report, data.reporte)
         print(f"error -> {e.status}\n{e.body}", file=sys.stderr)
         return 1
+    write_report(args.report, data.reporte)  # with what the load added
     print(f"done: {created} created, {skipped} skipped")
     return 0
 

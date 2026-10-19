@@ -3,14 +3,24 @@
   "tipo_via": {
     "confirmado": false,
     "columna": "tipo_de_via",
-    "evidencia": "El prefijo de direccion_del_predio_completa: 1 AV., 2 JR., 3 CLL., 4 PJE., 7 PRLG. en todas sus filas. Los demás (0, 6 MZ, 14 SEC., 18 A.H., 20 P.J., 21 H.U., 23 FUND., 27 URB., 29, 36) nombran la habilitación o el sector, no una vía.",
+    "evidencia": "El prefijo de direccion_del_predio_completa: 1 AV., 2 JR., 3 CLL., 4 PJE., 7 PRLG. en todas sus filas. Los demás (0, 6 MZ, 14 SEC., 18 A.H., 20 P.J., 21 H.U., 23 FUND., 27 URB., 29, 36) nombran la habilitación o el sector, no una vía: van como OTROS. Un código que no está en la tabla también va como OTROS, y al reporte.",
     "por_defecto": "OTROS",
     "valores": {
       "1": "AVENIDA",
       "2": "JIRON",
       "3": "CALLE",
       "4": "PASAJE",
-      "7": "PROLONGACION"
+      "7": "PROLONGACION",
+      "0": "OTROS",
+      "6": "OTROS",
+      "14": "OTROS",
+      "18": "OTROS",
+      "20": "OTROS",
+      "21": "OTROS",
+      "23": "OTROS",
+      "27": "OTROS",
+      "29": "OTROS",
+      "36": "OTROS"
     }
   },
   "tipo_documento": {

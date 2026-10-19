@@ -113,6 +113,10 @@ class PersonaTests(unittest.TestCase):
         self.assertEqual(ipi.tipo_persona("DNI", "12345678", "SUC. PEREZ PEREZ JUAN", set()), "SUCESION")
         self.assertEqual(ipi.tipo_persona("DNI", "12345678", "PEREZ PEREZ JUAN", {"1", "6"}), "SUCESION")
         self.assertEqual(ipi.tipo_persona("DNI", "12345678", "PEREZ PEREZ JUAN", {"2"}), "SUCESION")
+        self.assertEqual(ipi.tipo_persona("DNI", "12345678", "SUC PEREZ PEREZ JUAN", set()), "SUCESION")
+        self.assertEqual(ipi.tipo_persona("DNI", "12345678", "SUCESION PEREZ PEREZ JUAN", set()), "SUCESION")
+        # a surname that starts like it is no sucesión
+        self.assertEqual(ipi.tipo_persona("DNI", "12345678", "SUCRE PEREZ JUAN", set()), "NATURAL")
 
     def test_a_ruc_20_is_never_a_sucesion(self):
         self.assertEqual(ipi.tipo_persona("RUC", "20123456789", "EMPRESA FICTICIA SAC", {"6"}), "JURIDICA")
@@ -161,6 +165,7 @@ class FechaTests(unittest.TestCase):
         self.assertEqual(ipi.fecha("2018-06-30"), "2018-06-30")
         self.assertEqual(ipi.fecha("45292"), "2024-01-01")
         self.assertIsNone(ipi.fecha("1"))  # 1900-01-01 as a serial
+        self.assertEqual(ipi.fecha("31/12/2004"), "2004-12-31")
 
     def test_garbage_is_an_error(self):
         with self.assertRaises(ValueError):
@@ -190,6 +195,11 @@ class NivelTests(unittest.TestCase):
     def test_others_are_pisos(self):
         self.assertEqual(ipi.nivel("1", CODIGOS), ("PISO", 1))
         self.assertEqual(ipi.nivel("6.0", CODIGOS), ("PISO", 6))
+
+    def test_a_negative_or_unreadable_nivel_is_an_error(self):
+        for value in ("-1", "PB"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                ipi.nivel(value, CODIGOS)
 
     def test_no_nivel_is_none(self):
         self.assertEqual(ipi.nivel(None, CODIGOS), (None, None))
@@ -389,6 +399,44 @@ class BuildTests(unittest.TestCase):
         data = build([padron(direccion_del_predio_completa=None)])
         self.assertEqual(data.predios["000000001-0001-0001"]["direccion"], "CALLE LAS FLORES 120 MZ C LT 17 URBANIZACION EL JARDIN")
         self.assertEqual(categorias(data)["direccion_compuesta"], 1)
+
+    def test_an_unknown_via_code_is_otros_and_reported(self):
+        data = build([padron(tipo_de_via="99")])
+        self.assertEqual(data.predios["000000001-0001-0001"]["tipo_via"], "OTROS")
+        self.assertEqual(categorias(data)["codigo_sin_mapeo"], 1)
+
+    def test_the_lowest_code_is_the_numeric_one(self):
+        data = build([padron(codigo_contribuyente="100000"), padron(codigo_contribuyente="99999", codigo_predio="000000002-0001-0001")])
+        self.assertEqual(data.contribuyentes["99999"]["numero_documento"], "40000001")
+        self.assertIsNone(data.contribuyentes["100000"].get("numero_documento"))
+
+    def test_an_unreadable_date_loads_empty_and_is_reported(self):
+        data = build([padron(fecha_adquisicion="ayer")])
+        self.assertEqual(len(data.declaraciones), 1)
+        self.assertIsNone(data.declaraciones[0].attributes.get("fecha_adquisicion"))
+        self.assertEqual(categorias(data)["fecha_invalida"], 1)
+
+    def test_a_predio_without_code_is_rejected(self):
+        data = build([padron(codigo_predio=None)])
+        self.assertEqual((data.predios, data.declaraciones), ({}, []))
+        self.assertNotIn("condominio_100_n", categorias(data))
+        self.assertGreaterEqual(categorias(data)["rechazada"], 1)
+
+    def test_a_repeated_row_does_not_make_a_condominio(self):
+        data = build([padron(), padron()])
+        [d] = data.declaraciones
+        self.assertEqual((d.attributes["porcentaje_condominio"], d.attributes["condicion_propiedad"]), ("100.00", "PROPIETARIO UNICO"))
+        self.assertEqual(categorias(data)["rechazada"], 1)
+        self.assertNotIn("condominio_100_n", categorias(data))
+
+    def test_a_non_numeric_cell_is_rejected_not_fatal(self):
+        predio = "000000009-0001-0001"
+        data = build([padron(codigo_predio=predio, valor_predio="S/N"),
+                      padron(codigo_predio=predio, codigo_contribuyente="900002", nro_documento="40000002", area_construida="x")],
+                     [construccion(codigo_predio=predio, area_construida_propia="?"),
+                      construccion(codigo_predio=predio, valor_total_nivel="--")])
+        self.assertEqual((data.declaraciones, data.niveles), ([], []))
+        self.assertEqual(categorias(data)["rechazada"], 4)
 
     def test_valor_predio_that_is_not_its_parts_is_reported(self):
         self.assertEqual(categorias(build([padron(valor_predio="99999")]))["valor_predio_no_cuadra"], 1)
@@ -612,6 +660,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(self.count("nivel_construccion"), 3)
         self.assertIn("done: 0 created", out)
 
+    def test_a_second_run_creates_nothing_when_core_answers_numbers(self):
+        self.assertEqual(self.run_cli()[0], 0)
+        for record in self.core.records["nivel_construccion"]:
+            a = record["attributes"]
+            a.update(area_construida=float(a["area_construida"]), numero_piso=int(a["numero_piso"]),
+                     anio_construccion=int(a["anio_construccion"]))
+        code, out, err = self.run_cli()
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(self.count("nivel_construccion"), 3)
+
     def test_a_missing_section_is_completed_on_the_next_run(self):
         self.assertEqual(self.run_cli()[0], 0)
         self.core.records["nivel_construccion"].pop()
@@ -626,6 +684,10 @@ class CliTests(unittest.TestCase):
         nuevo = next(r["attributes"] for r in self.core.records["contribuyente"] if r["attributes"]["codigo"] == "900001")
         self.assertNotIn("numero_documento", nuevo)
         self.assertIn("sin número", out)
+        with open(self.report, encoding="utf-8") as f:
+            [row] = [r for r in csv.DictReader(f) if r["categoria"] == "documento_en_core"]
+        self.assertEqual(row["codigo_contribuyente"], "900001")
+        self.assertNotIn("40000001", row["detalle"])
 
     def test_runs_isolated_from_another_directory(self):
         # python3 -I, as an untrusted xlsx is read: neither the cwd nor PYTHONPATH is on sys.path, only the script's own

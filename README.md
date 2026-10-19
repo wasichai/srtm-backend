@@ -1295,6 +1295,8 @@ hojas: `padron` (una fila por predio y contribuyente) y `construcciones` (una fi
      solo su propio directorio.
    - **Salida:** `0` ok; `1` Core rechazó algo (se muestra la fila); `2` el modelo no tiene un campo que el importador
      llena (falta #124), y no se envía nada.
+   - **Si Core rechaza algo,** la carga se detiene en ese registro. Lo ya creado queda: se corrige o se quita la fila y
+     se vuelve a correr, y la nueva corrida omite lo que ya está.
 
 **Qué crea, en orden.** Lo que Core ya tiene se omite, así que una segunda corrida no crea nada.
 
@@ -1302,11 +1304,12 @@ hojas: `padron` (una fila por predio y contribuyente) y `construcciones` (una fi
    código, porque Ica da el mismo nombre a varios códigos de vía.
 2. **`contribuyente`:** la llave es `codigo` (`codigo_contribuyente`).
    - Un RUC que empieza con 20 es JURIDICA, con `razon_social`.
-   - Es SUCESION (con `tipo_contribuyente` SUCESION INDIVISA) el contribuyente cuyo nombre empieza con SUC o SUCESION,
-     o que tiene alguna DJ con condición 2 o 6.
+   - Es SUCESION (con `tipo_contribuyente` SUCESION INDIVISA) el contribuyente cuyo nombre empieza con SUC., SUC o
+     SUCESION, o que tiene alguna DJ con condición 2 o 6.
    - El resto es NATURAL, con los apellidos y nombres del xlsx.
    - No se crea domicilio.
-   - Un número de documento que ya tiene otro código se carga sin número: `numero_documento` es único.
+   - Un número de documento que ya tiene otro código se carga sin número, porque `numero_documento` es único. Lo
+     conserva el código menor.
 3. **`predio`:** la llave es `codigo`.
    - Valores fijos: ubigeo 110101, región COSTA y departamento, provincia y distrito ICA.
    - La dirección es la del xlsx. Si viene vacía, se arma con sus partes.
@@ -1332,7 +1335,10 @@ su lectura (`evidencia`) y cuáles códigos son una decisión propia (`dudosos`)
 
 - Material, estado de conservación y clasificación se dedujeron de la columna `depreciacion`, que cuadra con las tablas
   del RNT.
-- Un código que la tabla no tiene va al reporte. Si el campo es obligatorio en el modelo, la fila se rechaza.
+- Un código que la tabla no tiene va al reporte (`codigo_sin_mapeo`). Si el campo es obligatorio en el modelo, la fila
+  se rechaza; un tipo de vía desconocido se carga como OTROS.
+- Un número o una fecha que no se pueden leer no detienen la carga. El número rechaza su fila al reporte. La fecha se
+  carga vacía.
 
 **Reporte** (`--report`, un CSV con `categoria, hoja, fila, codigo_predio, codigo_contribuyente, detalle`). Lleva solo
 códigos, sin nombres ni documentos, pero no se versiona.
@@ -1346,7 +1352,9 @@ códigos, sin nombres ni documentos, pero no se versiona.
 | `condomino_solo` | Un condómino (5 o 9) sin otros titulares en el padrón: se carga PROPIETARIO UNICO con 100 % |
 | `codigo_sin_mapeo` | Un código que `codigos.json` no tiene, una fila por columna y valor |
 | `documento_rellenado`, `documento_sin_numero`, `documento_repetido` | DNI con ceros agregados, tipo sin número, número que ya tiene otro código |
+| `documento_en_core` | En la carga: Core ya tiene ese número con otro código, y el contribuyente se envía sin número |
 | `fecha_relleno` | `fecha_adquisicion` 1900-01-01, cargada vacía |
+| `fecha_invalida` | `fecha_adquisicion` que no se lee como fecha, cargada vacía |
 | `direccion_compuesta` | Predio sin dirección, armada con sus partes |
 | `valor_predio_no_cuadra` | `valor_predio` distinto de terreno + construcción + otras instalaciones |
 | `niveles_vs_padron` | La suma de los niveles de un par no da su `valor_area_construida` o su `area_construida` |
