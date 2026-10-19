@@ -1,0 +1,10 @@
+# DEMO: filas FICTICIAS que sembrar_demo.py agrega a model/data/arbitrios/ficticio-tasas.csv para que la demo tenga
+# predios de otros usos (serenazgo del uso 9) y otras ubicaciones respecto del área verde (parques). Ninguna cifra es
+# de una municipalidad real.
+servicio,zona,uso_codigo,uso,ubicacion,nivel_afluencia,base,tasa_mensual
+SERENAZGO,Área 0,9,Otro uso ficticio,,,S/ por predio,30.0000
+SERENAZGO,Área 1,9,Otro uso ficticio,,,S/ por predio,35.0000
+PARQUES_JARDINES,Zona A,,,Otras ubicaciones ficticia,Alta,S/ por predio,20.0000
+PARQUES_JARDINES,Zona A,,,Otras ubicaciones ficticia,Muy alta,S/ por predio,25.0000
+PARQUES_JARDINES,Zona B,,,Otras ubicaciones ficticia,Alta,S/ por predio,15.0000
+PARQUES_JARDINES,Zona B,,,Otras ubicaciones ficticia,Muy alta,S/ por predio,18.0000

@@ -1,0 +1,162 @@
+= Base de demostración de los manuales
+:toc: left
+:icons: font
+:experimental:
+
+La base de demostración es una instalación de Rentas municipales (SRTM) con datos *sintéticos*: contribuyentes,
+predios, declaraciones juradas, catastro, arbitrios, una emisión masiva, infracciones y anuncios inventados para
+mostrar cada pantalla de los manuales. Las capturas de los manuales se toman sobre ella.
+
+Esta carpeta permite reconstruirla desde cero, respaldarla y restaurarla en otra base, y comprobar que la restauración
+quedó igual.
+
+[IMPORTANT]
+====
+* Todo aquí es *local y desechable*. La base vive en un contenedor propio (proyecto `srtm-docs`, contenedor
+  `srtm-docs-postgres`, puerto 5447), separado del de desarrollo (`srtm-postgres`, 5433).
+* Los scripts se niegan a correr contra otra base que las `srtm_demo*`, y contra otro Core que el de la demo
+  (`localhost:8098`). El Core de desarrollo (8090) nunca.
+* Ningún dato es real. Los nombres, DNI (rango 9xxxxxxx), RUC (prefijo 20999) y direcciones son inventados; las tasas de
+  arbitrios son de la «Ordenanza ficticia DEMO 000-2026-MDP». Los parámetros del predial (UIT, tramos), el CUIS y la
+  tasa de anuncios sí son los publicados para Perené.
+* Las cuentas de la demo usan claves conocidas (`admin` y `SRTM_DEMO_PASSWORD`): no sirven ni deben usarse fuera de
+  ella.
+====
+
+== Contenido
+
+[cols="1,3",options="header"]
+|===
+|Archivo |Qué es
+|`compose.demo.yml` |El contenedor de la base: `postgis/postgis:18-3.6`, la misma imagen que desarrollo y el CI.
+|`demo.env.example` |Las variables de la demo (base, Core en :8098, cuentas). Se copia a `demo.env`, que no se versiona.
+|`demo.sh` |La entrada única: `arriba`, `core`, `sembrar`, `exportar`, `restaurar`, `verificar`, `abajo`.
+|`sembrar_demo.py` |Carga el modelo y los datos sintéticos por la API del sistema. Idempotente.
+|`perfiles.json` |Los cinco perfiles sugeridos (rol, permisos y cuenta). Es la lista canónica de sus permisos.
+|`verificar_perfiles.py` |Comprueba que cada perfil puede lo que sus pantallas usan y recibe 403 en lo demás.
+|`guardia.py` |La comprobación de que el Core es el de la demo, que comparten los scripts.
+|`datos/` |Los datos ficticios que los cargadores del repositorio necesitan además de `model/data/` (plazos, zonas, tasas extra).
+|`exportar.sh`, `restaurar.sh`, `verificar.py` |Respaldo, restauración y verificación.
+|`respaldos/` |Los respaldos generados y su `manifiesto.json`.
+|===
+
+== Requisitos
+
+* Docker (local o remoto) para el contenedor de la base.
+* JDK 25 y acceso a las librerías de wasichai, para correr el Core (`../../develop/README.md`).
+* Python 3.11 o superior, solo con su biblioteca estándar.
+* Los clientes de PostgreSQL 18 (`psql`, `pg_dump`, `pg_restore`, `createdb`, `dropdb`).
+* Para las capturas: Node 22 o superior y srtm-ui (`yarn dev`) apuntando al Core de la demo (ver
+  `../herramientas/`).
+
+== De cero a la demo
+
+Desde la raíz de `srtm-backend`:
+
+[source,bash]
+----
+cp docs/manuales/demo/demo.env.example docs/manuales/demo/demo.env
+
+docs/manuales/demo/demo.sh arriba        # <1>
+docs/manuales/demo/demo.sh core          # <2>
+docs/manuales/demo/demo.sh sembrar --dry-run
+docs/manuales/demo/demo.sh sembrar       # <3>
+docs/manuales/demo/demo.sh sembrar       # <4>
+----
+<1> Crea el contenedor y espera a que la base acepte conexiones. Con un Docker remoto, el puerto queda en el loopback
+    del servidor: abra el túnel que indica el script (`ssh -fN -L 5447:localhost:5447 <servidor>`).
+<2> En otra terminal: arranca el Core en `http://localhost:8098` contra `srtm_demo`. La primera vez aplica las
+    migraciones de la plataforma y crea la cuenta `admin@wasichai.local` (seed de desarrollo). Está listo cuando
+    `curl -s localhost:8098/actuator/health` dice `UP`.
+<3> Carga todo, en este orden: el modelo (`model/apply.py`); los parámetros, catálogos, municipalidad, CUIS y tasas
+    (cargadores de `model/`); la ordenanza y las tasas ficticias de arbitrios; los roles y cuentas de
+    `perfiles.json`; y, por la API del sistema, los datos sintéticos, cada parte con la cuenta del perfil que la haría.
+    Termina con la determinación masiva de arbitrios 2026 y la emisión masiva 2026, esperando a que acaben.
+<4> Una segunda corrida no crea nada: cada cosa se busca antes por su clave natural (el código anterior `DEMO-NNN` del
+    contribuyente, el código del predio, el código CPU del lote, el número del acta, la clave de idempotencia del
+    anuncio…).
+
+Las fechas de los datos son fijas, de 2026 (con un «hoy» de 15 de octubre de 2026), salvo las que sella el servidor
+(fecha de registro, auditoría).
+
+=== Qué contiene
+
+[cols="1,3",options="header"]
+|===
+|Parte |Registros
+|Cuentas |`admin@wasichai.local` (ADMIN) y una por perfil: `registrador@`, `arbitrios@`, `fiscalizador@`, `anuncios@`, `consulta@demo.srtm.local`.
+|Padrón |40 contribuyentes (naturales, jurídicos, una sociedad conyugal, uno sin documento) con domicilios, contactos, relacionados y sustentos; 55 predios con su DJ 2026, niveles, obras y frentes; un condominio 60/40; una DJ anulada; un contribuyente con varios predios.
+|Catastro |45 lotes con polígonos en una cuadrícula sintética cerca de Perené.
+|Arbitrios |La ordenanza ficticia 2026, sus tasas y zonas; la determinación masiva 2026 y la anulación de una cuota.
+|Emisión |Una emisión masiva 2026 (HR, PU y HLA en un PDF), TERMINADA. Su archivo queda en `build/demo/emisiones`.
+|Infracciones |Notificaciones previas (una subsanada y una vencida) y actas: una anulada, una con descargo, resolución y notificación, una sin actos.
+|Anuncios |Anuncios vigente, vencido, cesado y retirado.
+|Brecha |Un intento de corrida 2026: con la integración con catastro apagada, el sistema responde 409 «Catastro no configurado».
+|===
+
+Los conteos exactos de la última exportación están en `respaldos/manifiesto.json` (`entidades` y `tablas`).
+
+== Respaldar
+
+[source,bash]
+----
+docs/manuales/demo/demo.sh exportar
+----
+
+Escribe en `respaldos/`:
+
+[cols="1,3",options="header"]
+|===
+|Archivo |Qué restaura y cómo
+|`srtm_demo.dump` |La base entera (`pg_dump -Fc`): extensiones, esquemas `wasichai` (metadatos, usuarios, roles, auditoría, historial de Flyway) y `app_data` (registros). Se restaura con `pg_restore` en una base *vacía*. Es el respaldo de referencia.
+|`srtm_demo.sql` |Lo mismo, en SQL plano y legible. Se restaura con `psql -f` en una base vacía.
+|`datos.sql` |Solo los datos de `wasichai` y `app_data`, con un `INSERT` por fila y columnas nombradas. *No crea tablas*: va sobre una base que ya tenga el mismo esquema (la del `.dump` con `--schema-only`, o una migrada por un Core de la misma versión). Lleva `--disable-triggers`, así que se carga como superusuario.
+|`emisiones.tar.gz` |Los archivos de las emisiones masivas. La base guarda su nombre, no su contenido: sin ellos, la emisión aparece pero su descarga falla.
+|`manifiesto.json` |La fecha, las versiones (srtm-backend, PostgreSQL, PostGIS, la última migración de cada módulo), los conteos por tabla y de las entidades de los manuales, el tamaño y la suma sha256 de cada archivo, y el orden de restauración.
+|===
+
+NOTE: El respaldo exige un `pg_dump` de la misma versión mayor que el servidor (18); el script lo comprueba.
+
+== Restaurar y verificar
+
+[source,bash]
+----
+docs/manuales/demo/demo.sh restaurar             # dump → srtm_demo_restaurada
+docs/manuales/demo/demo.sh restaurar sql         # srtm_demo.sql → srtm_demo_restaurada
+docs/manuales/demo/demo.sh restaurar datos       # esquema del dump + datos.sql → srtm_demo_restaurada
+docs/manuales/demo/demo.sh restaurar dump srtm_demo_prueba
+----
+
+WARNING: La base destino se *borra* y se crea de nuevo. El script solo acepta nombres `srtm_demo_*`: nunca restaura
+sobre `srtm_demo` ni sobre otra base.
+
+Después de restaurar, `verificar.py` compara la base con el manifiesto y comprueba:
+
+* las mismas tablas, con el mismo número de filas cada una;
+* el mismo historial de Flyway, sin migraciones fallidas;
+* ninguna restricción sin validar, y cada clave foránea de `wasichai` y `app_data` revisada fila a fila;
+* las entidades que muestran los manuales (cuentas, roles, contribuyentes, DJ anulada, condominio, cuotas, emisión
+  terminada, actas, anuncios).
+
+Para usar la base restaurada, arranque un Core contra ella con `WASICHAI_DB_NAME=srtm_demo_restaurada` y
+`SRTM_EMISION_DIR=build/demo/emisiones-srtm_demo_restaurada` (donde el script dejó los archivos de las emisiones). Las
+migraciones de la plataforma no tienen nada que aplicar: la base ya está en su versión.
+
+== Volver a tomar las capturas
+
+Con la demo (o su restauración) y srtm-ui arriba:
+
+[source,bash]
+----
+cd docs/manuales
+make capturas                    # todas
+make capturas SOLO=registrador   # las de un perfil o de un manual
+----
+
+== Bajar la demo
+
+[source,bash]
+----
+docs/manuales/demo/demo.sh abajo            # detiene el contenedor; los datos quedan en su volumen
+docs/manuales/demo/demo.sh abajo --borrar   # lo elimina con su volumen: la demo y sus restauraciones
+----

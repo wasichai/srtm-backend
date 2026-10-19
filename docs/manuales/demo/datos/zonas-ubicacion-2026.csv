@@ -1,0 +1,4 @@
+# DEMO: una zona por ubicación FICTICIA (zona_arbitrio_ubicacion) de la "Ordenanza ficticia DEMO 000-2026-MDP": el
+# barrido de la cuadra 1 de la AV. LOS FRESNOS, lado par, es de la ZONA_2 aunque su sector (01) sea de la ZONA_1.
+servicio,tipo_via,via,manzana,numero_inicial,numero_final,paridad,zona,vigencia_desde,vigencia_hasta,norma,observacion
+BAR,AVENIDA,LOS FRESNOS,,100,198,PAR,ZONA_2,2026-01-01,,Ordenanza ficticia DEMO 000-2026-MDP,Tramo de mayor tránsito (ficticio DEMO)

@@ -1,0 +1,18 @@
+# DEMO: zonas por sector catastral (ARBITRIO_ZONA servicio:sector) y afluencias (ARBITRIO_AFLUENCIA) FICTICIAS de la
+# "Ordenanza ficticia DEMO 000-2026-MDP", para que la determinación de arbitrios 2026 de la demo encuentre todo. Las
+# zonas van normalizadas como en las claves de TASA_ARBITRIO (ZONA_1, ZONA_A, AREA_0...). Ninguna es de Perené.
+tipo,clave,vigencia_desde,vigencia_hasta,valor_numerico,texto,norma,fuente,transcribio,verifico
+ARBITRIO_ZONA,BAR:01,2026-01-01,,,ZONA_1,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+ARBITRIO_ZONA,RRS:01,2026-01-01,,,ZONA_1,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+ARBITRIO_ZONA,PYJ:01,2026-01-01,,,ZONA_A,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+ARBITRIO_ZONA,SER:01,2026-01-01,,,AREA_1,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+ARBITRIO_ZONA,BAR:02,2026-01-01,,,ZONA_2,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+ARBITRIO_ZONA,RRS:02,2026-01-01,,,ZONA_2,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+ARBITRIO_ZONA,PYJ:02,2026-01-01,,,ZONA_B,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+ARBITRIO_ZONA,SER:02,2026-01-01,,,AREA_0,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+ARBITRIO_ZONA,BAR:03,2026-01-01,,,ZONA_2,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+ARBITRIO_ZONA,RRS:03,2026-01-01,,,ZONA_1,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+ARBITRIO_ZONA,PYJ:03,2026-01-01,,,ZONA_B,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+ARBITRIO_ZONA,SER:03,2026-01-01,,,AREA_1,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+ARBITRIO_AFLUENCIA,01,2026-01-01,,,ALTA,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+ARBITRIO_AFLUENCIA,02,2026-01-01,,,MUY_ALTA,Ordenanza ficticia DEMO 000-2026-MDP,docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"

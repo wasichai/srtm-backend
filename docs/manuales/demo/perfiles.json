@@ -1,0 +1,508 @@
+{
+  "_comentario": "Perfiles de la demostración de los manuales: un rol y una cuenta por perfil. sembrar_demo.py los crea (POST /api/roles, PUT /api/roles/{rol}/permissions, POST /api/users) y verificar_perfiles.py comprueba que cada uno pueda lo que sus pantallas usan y reciba 403 en lo demás. permisos: objeto -> acciones (CREATE, READ, UPDATE, DELETE). La clave de las cuentas sale de SRTM_DEMO_PASSWORD (Demo-2026 por omisión): solo para la demo local.",
+  "perfiles": [
+    {
+      "rol": "REGISTRADOR",
+      "etiqueta": "Registrador del padrón",
+      "email": "registrador@demo.srtm.local",
+      "displayName": "Registradora Demo",
+      "_para": "Registro tributario: contribuyentes y sus listas, predios, declaraciones juradas y sus listas, catastro fiscal; la ficha completa (con sus pestañas de arbitrios, infracciones y anuncios, solo lectura), el PU, la HR, la HLA y la liquidación.",
+      "permisos": {
+        "contribuyente": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "domicilio": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "relacionado": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "medio_contacto": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "sustento": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "predio": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "declaracion_predial": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "transferente": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "nivel_construccion": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "obra_complementaria": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "otro_frente": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "catastro_fiscal": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "ubigeo": [
+          "READ"
+        ],
+        "via": [
+          "READ"
+        ],
+        "unidad_urbana": [
+          "READ"
+        ],
+        "categoria_valor": [
+          "READ"
+        ],
+        "obra_categoria": [
+          "READ"
+        ],
+        "uso_predio": [
+          "READ"
+        ],
+        "parametro_tributario": [
+          "READ"
+        ],
+        "municipalidad": [
+          "READ"
+        ],
+        "ordenanza_arbitrio": [
+          "READ"
+        ],
+        "servicio_arbitrio": [
+          "READ"
+        ],
+        "inafectacion_arbitrio": [
+          "READ"
+        ],
+        "zona_arbitrio_ubicacion": [
+          "READ"
+        ],
+        "cuota_arbitrio": [
+          "READ"
+        ],
+        "anulacion_cuota_arbitrio": [
+          "READ"
+        ],
+        "codigo_infraccion": [
+          "READ"
+        ],
+        "notificacion_administrativa": [
+          "READ"
+        ],
+        "subsanacion_notificacion": [
+          "READ"
+        ],
+        "papeleta": [
+          "READ"
+        ],
+        "anulacion_papeleta": [
+          "READ"
+        ],
+        "descargo_papeleta": [
+          "READ"
+        ],
+        "resolucion_gerencia": [
+          "READ"
+        ],
+        "notificacion_resolucion": [
+          "READ"
+        ],
+        "anuncio": [
+          "READ"
+        ],
+        "movimiento_anuncio": [
+          "READ"
+        ]
+      }
+    },
+    {
+      "rol": "ARBITRIOS_EMISION",
+      "etiqueta": "Arbitrios y emisión",
+      "email": "arbitrios@demo.srtm.local",
+      "displayName": "Analista de Arbitrios Demo",
+      "_para": "Determinación de arbitrios (por predio, por contribuyente y masiva), anulación de una cuota, HLA y emisión masiva de HR, PU y HLA. Lee el padrón, la configuración de la ordenanza y los parámetros.",
+      "permisos": {
+        "cuota_arbitrio": [
+          "CREATE",
+          "READ"
+        ],
+        "anulacion_cuota_arbitrio": [
+          "CREATE",
+          "READ"
+        ],
+        "determinacion_arbitrio_masiva": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "determinacion_arbitrio_lote": [
+          "CREATE",
+          "READ"
+        ],
+        "emision_masiva": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ],
+        "emision_lote": [
+          "CREATE",
+          "READ"
+        ],
+        "ordenanza_arbitrio": [
+          "READ"
+        ],
+        "servicio_arbitrio": [
+          "READ"
+        ],
+        "inafectacion_arbitrio": [
+          "READ"
+        ],
+        "zona_arbitrio_ubicacion": [
+          "READ"
+        ],
+        "parametro_tributario": [
+          "READ"
+        ],
+        "municipalidad": [
+          "READ"
+        ],
+        "contribuyente": [
+          "READ"
+        ],
+        "domicilio": [
+          "READ"
+        ],
+        "relacionado": [
+          "READ"
+        ],
+        "medio_contacto": [
+          "READ"
+        ],
+        "sustento": [
+          "READ"
+        ],
+        "predio": [
+          "READ"
+        ],
+        "declaracion_predial": [
+          "READ"
+        ],
+        "transferente": [
+          "READ"
+        ],
+        "nivel_construccion": [
+          "READ"
+        ],
+        "obra_complementaria": [
+          "READ"
+        ],
+        "otro_frente": [
+          "READ"
+        ],
+        "ubigeo": [
+          "READ"
+        ],
+        "categoria_valor": [
+          "READ"
+        ],
+        "obra_categoria": [
+          "READ"
+        ],
+        "uso_predio": [
+          "READ"
+        ]
+      }
+    },
+    {
+      "rol": "FISCALIZADOR",
+      "etiqueta": "Fiscalización e infracciones",
+      "email": "fiscalizador@demo.srtm.local",
+      "displayName": "Fiscalizador Demo",
+      "_para": "Infracciones administrativas: CUIS, notificaciones previas y su subsanación, actas y su anulación, descargos, resoluciones (con su PDF) y su notificación, panel. Lee el padrón y los parámetros (UIT, plazos, feriados).",
+      "permisos": {
+        "codigo_infraccion": [
+          "CREATE",
+          "READ"
+        ],
+        "notificacion_administrativa": [
+          "CREATE",
+          "READ"
+        ],
+        "subsanacion_notificacion": [
+          "CREATE",
+          "READ"
+        ],
+        "papeleta": [
+          "CREATE",
+          "READ"
+        ],
+        "anulacion_papeleta": [
+          "CREATE",
+          "READ"
+        ],
+        "descargo_papeleta": [
+          "CREATE",
+          "READ"
+        ],
+        "resolucion_gerencia": [
+          "CREATE",
+          "READ"
+        ],
+        "notificacion_resolucion": [
+          "CREATE",
+          "READ"
+        ],
+        "parametro_tributario": [
+          "READ"
+        ],
+        "municipalidad": [
+          "READ"
+        ],
+        "contribuyente": [
+          "READ"
+        ],
+        "domicilio": [
+          "READ"
+        ],
+        "relacionado": [
+          "READ"
+        ],
+        "medio_contacto": [
+          "READ"
+        ],
+        "sustento": [
+          "READ"
+        ],
+        "predio": [
+          "READ"
+        ],
+        "declaracion_predial": [
+          "READ"
+        ],
+        "ubigeo": [
+          "READ"
+        ]
+      }
+    },
+    {
+      "rol": "ANUNCIOS",
+      "etiqueta": "Anuncios y propaganda",
+      "email": "anuncios@demo.srtm.local",
+      "displayName": "Gestora de Anuncios Demo",
+      "_para": "Anuncios y propaganda: alta con su autorización, renovación, cese y retiro, padrón y tasas. Lee el padrón y los parámetros (TASA_ANUNCIO).",
+      "permisos": {
+        "anuncio": [
+          "CREATE",
+          "READ"
+        ],
+        "movimiento_anuncio": [
+          "CREATE",
+          "READ"
+        ],
+        "parametro_tributario": [
+          "READ"
+        ],
+        "contribuyente": [
+          "READ"
+        ],
+        "domicilio": [
+          "READ"
+        ],
+        "relacionado": [
+          "READ"
+        ],
+        "medio_contacto": [
+          "READ"
+        ],
+        "sustento": [
+          "READ"
+        ],
+        "predio": [
+          "READ"
+        ],
+        "declaracion_predial": [
+          "READ"
+        ],
+        "ubigeo": [
+          "READ"
+        ]
+      }
+    },
+    {
+      "rol": "CONSULTA",
+      "etiqueta": "Consulta",
+      "email": "consulta@demo.srtm.local",
+      "displayName": "Usuario de Consulta Demo",
+      "_para": "Solo lectura de todo lo del modelo, también la brecha de recaudación: ninguna escritura.",
+      "permisos": {
+        "contribuyente": [
+          "READ"
+        ],
+        "domicilio": [
+          "READ"
+        ],
+        "relacionado": [
+          "READ"
+        ],
+        "medio_contacto": [
+          "READ"
+        ],
+        "sustento": [
+          "READ"
+        ],
+        "predio": [
+          "READ"
+        ],
+        "declaracion_predial": [
+          "READ"
+        ],
+        "transferente": [
+          "READ"
+        ],
+        "nivel_construccion": [
+          "READ"
+        ],
+        "obra_complementaria": [
+          "READ"
+        ],
+        "otro_frente": [
+          "READ"
+        ],
+        "catastro_fiscal": [
+          "READ"
+        ],
+        "ubigeo": [
+          "READ"
+        ],
+        "via": [
+          "READ"
+        ],
+        "unidad_urbana": [
+          "READ"
+        ],
+        "categoria_valor": [
+          "READ"
+        ],
+        "obra_categoria": [
+          "READ"
+        ],
+        "uso_predio": [
+          "READ"
+        ],
+        "parametro_tributario": [
+          "READ"
+        ],
+        "municipalidad": [
+          "READ"
+        ],
+        "emision_masiva": [
+          "READ"
+        ],
+        "emision_lote": [
+          "READ"
+        ],
+        "ordenanza_arbitrio": [
+          "READ"
+        ],
+        "servicio_arbitrio": [
+          "READ"
+        ],
+        "inafectacion_arbitrio": [
+          "READ"
+        ],
+        "zona_arbitrio_ubicacion": [
+          "READ"
+        ],
+        "cuota_arbitrio": [
+          "READ"
+        ],
+        "anulacion_cuota_arbitrio": [
+          "READ"
+        ],
+        "determinacion_arbitrio_masiva": [
+          "READ"
+        ],
+        "determinacion_arbitrio_lote": [
+          "READ"
+        ],
+        "codigo_infraccion": [
+          "READ"
+        ],
+        "notificacion_administrativa": [
+          "READ"
+        ],
+        "subsanacion_notificacion": [
+          "READ"
+        ],
+        "papeleta": [
+          "READ"
+        ],
+        "anulacion_papeleta": [
+          "READ"
+        ],
+        "descargo_papeleta": [
+          "READ"
+        ],
+        "resolucion_gerencia": [
+          "READ"
+        ],
+        "notificacion_resolucion": [
+          "READ"
+        ],
+        "anuncio": [
+          "READ"
+        ],
+        "movimiento_anuncio": [
+          "READ"
+        ],
+        "brecha_corrida": [
+          "READ"
+        ],
+        "brecha_predio": [
+          "READ"
+        ]
+      }
+    }
+  ]
+}
