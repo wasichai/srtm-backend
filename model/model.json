@@ -446,7 +446,15 @@
         {"name": "numero_registro", "label": "Número de registro de predio", "type": "INTEGER", "unique": true,
           "description": "Autogenerado al registrar el predio en el portal. Vacío en los importados del padrón."},
         {"name": "lote_geom", "label": "Lote", "type": "GEOMETRY", "geometryType": "POLYGON", "srid": 32718,
-          "description": "Polígono del lote (UTM 18S). Copiado del catastro fiscal o dibujado en el portal."}
+          "description": "Polígono del lote (UTM 18S). Copiado del catastro fiscal o dibujado en el portal."},
+        {"name": "codigo_via", "label": "Código de vía", "type": "TEXT",
+          "description": "Heredado de un padrón externo (Ica): el código de la vía en el catastro de origen. El SRTM nombra la vía por su texto."},
+        {"name": "codigo_unidad_urbana", "label": "Código de unidad urbana", "type": "TEXT",
+          "description": "Heredado de un padrón externo (Ica): el código de la habilitación urbana en el catastro de origen."},
+        {"name": "codigo_hu_armonizacion", "label": "Código de HU (armonización)", "type": "TEXT",
+          "description": "Heredado de un padrón externo (Ica): el código de la habilitación urbana del Formato Padrón Municipal Armonización."},
+        {"name": "codigo_via_armonizacion", "label": "Código de vía (armonización)", "type": "TEXT",
+          "description": "Heredado de un padrón externo (Ica): el código de la vía del Formato Padrón Municipal Armonización."}
       ]
     },
     {
@@ -506,7 +514,15 @@
         {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_declaracion",
           "description": "VIGENTE o ANULADA (descargo). Vacío en las importadas: cuentan como VIGENTE. Una anulada no suma en totales ni en el condominio."},
         {"name": "motivo_anulacion", "label": "Motivo de la anulación", "type": "LONG_TEXT"},
-        {"name": "fecha_anulacion", "label": "Fecha de anulación", "type": "DATE"}
+        {"name": "fecha_anulacion", "label": "Fecha de anulación", "type": "DATE"},
+        {"name": "arancel", "label": "Arancel (S/ por m²)", "type": "DECIMAL",
+          "description": "Heredado de un padrón externo (Ica): el valor arancelario del terreno con el que valuó el predio."},
+        {"name": "valor_terreno", "label": "Valor del terreno", "type": "DECIMAL",
+          "description": "Heredado de un padrón externo (Ica). El autoavalúo que se liquida sigue siendo valor_autoavaluo."},
+        {"name": "valor_construccion", "label": "Valor de la construcción", "type": "DECIMAL",
+          "description": "Heredado de un padrón externo (Ica): la suma de sus niveles, como la trae el padrón."},
+        {"name": "valor_otras_instalaciones", "label": "Valor de otras instalaciones", "type": "DECIMAL",
+          "description": "Heredado de un padrón externo (Ica): obras complementarias e instalaciones fijas, como las trae el padrón."}
       ]
     },
     {
@@ -627,7 +643,9 @@
       "fields": [
         {"name": "tipo_via", "label": "Tipo de vía", "type": "ENUM", "enum": "tipo_via", "required": true},
         {"name": "nombre", "label": "Nombre", "type": "TEXT", "required": true},
-        {"name": "ubigeo", "label": "Ubigeo", "type": "TEXT"}
+        {"name": "ubigeo", "label": "Ubigeo", "type": "TEXT"},
+        {"name": "codigo", "label": "Código", "type": "TEXT",
+          "description": "Heredado de un padrón externo (Ica): el código de la vía en el catastro de origen. Las del padrón de Perené no lo tienen."}
       ]
     },
     {
@@ -638,7 +656,9 @@
       "fields": [
         {"name": "tipo_unidad_urbana", "label": "Tipo de unidad urbana", "type": "ENUM", "enum": "tipo_unidad_urbana", "required": true},
         {"name": "nombre", "label": "Nombre", "type": "TEXT", "required": true},
-        {"name": "ubigeo", "label": "Ubigeo", "type": "TEXT"}
+        {"name": "ubigeo", "label": "Ubigeo", "type": "TEXT"},
+        {"name": "codigo", "label": "Código", "type": "TEXT",
+          "description": "Heredado de un padrón externo (Ica): el código de la habilitación en el catastro de origen. Las del padrón de Perené no lo tienen."}
       ]
     },
     {
@@ -681,7 +701,8 @@
         {"name": "tipo_nivel", "label": "Tipo de nivel", "type": "ENUM", "enum": "tipo_nivel", "required": true},
         {"name": "numero_piso", "label": "Número de piso", "type": "INTEGER", "required": true},
         {"name": "anio_construccion", "label": "Año de construcción", "type": "INTEGER", "required": true},
-        {"name": "mes_construccion", "label": "Mes de construcción", "type": "INTEGER", "required": true},
+        {"name": "mes_construccion", "label": "Mes de construcción", "type": "INTEGER",
+          "description": "Opcional en Core: un padrón externo (Ica) no lo trae. El portal lo pide al registrar el nivel."},
         {"name": "material", "label": "Material predominante", "type": "ENUM", "enum": "material", "required": true},
         {"name": "estado_conservacion", "label": "Estado de conservación", "type": "ENUM", "enum": "estado_conservacion", "required": true},
         {"name": "area_construida", "label": "Área construida (m2)", "type": "DECIMAL", "required": true},
@@ -694,7 +715,17 @@
         {"name": "revestimientos", "label": "Revestimientos", "type": "ENUM", "enum": "letra_categoria"},
         {"name": "banos", "label": "Baños", "type": "ENUM", "enum": "letra_categoria"},
         {"name": "instalaciones", "label": "Instalaciones eléctricas y sanitarias", "type": "ENUM", "enum": "letra_categoria"},
-        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"}
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"},
+        {"name": "clasificacion", "label": "Clasificación", "type": "ENUM", "enum": "clasificacion",
+          "description": "Heredado de un padrón externo (Ica), que clasifica cada nivel; las mismas opciones que la de la declaración."},
+        {"name": "valor_unitario", "label": "Valor unitario (S/ por m²)", "type": "DECIMAL",
+          "description": "Heredado de un padrón externo (Ica): el valor unitario de sus categorías, como lo trae el padrón."},
+        {"name": "incremento", "label": "Incremento", "type": "DECIMAL",
+          "description": "Heredado de un padrón externo (Ica): el incremento sobre el valor unitario, como lo trae el padrón."},
+        {"name": "porcentaje_depreciacion", "label": "% de depreciación", "type": "DECIMAL",
+          "description": "Heredado de un padrón externo (Ica)."},
+        {"name": "valor_total", "label": "Valor del nivel", "type": "DECIMAL",
+          "description": "Heredado de un padrón externo (Ica): el valor de la construcción del nivel, ya depreciado, como lo trae el padrón."}
       ]
     },
     {

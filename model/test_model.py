@@ -127,6 +127,32 @@ class ShippedModelTests(unittest.TestCase):
         self.assertIn("DESCARGO", self.model["enums"]["motivo_declaracion"])
         self.assertFalse(any(fields[f].get("required") for f in ("estado", "motivo_anulacion", "fecha_anulacion")))
 
+    def test_the_padron_externo_fields_are_optional(self):
+        # #124: what the padrón of Ica brings and the predial model had no place for. at the end of each object (the
+        # order apply.py creates them in on a Core that has the rest) and optional: perené's records and the portal's
+        # have none of them
+        nuevos = {
+            "predio": [("codigo_via", "TEXT"), ("codigo_unidad_urbana", "TEXT"), ("codigo_hu_armonizacion", "TEXT"),
+                       ("codigo_via_armonizacion", "TEXT")],
+            "declaracion_predial": [("arancel", "DECIMAL"), ("valor_terreno", "DECIMAL"), ("valor_construccion", "DECIMAL"),
+                                    ("valor_otras_instalaciones", "DECIMAL")],
+            "nivel_construccion": [("clasificacion", "ENUM"), ("valor_unitario", "DECIMAL"), ("incremento", "DECIMAL"),
+                                   ("porcentaje_depreciacion", "DECIMAL"), ("valor_total", "DECIMAL")],
+            "via": [("codigo", "TEXT")],
+            "unidad_urbana": [("codigo", "TEXT")],
+        }
+        for objeto, campos in nuevos.items():
+            with self.subTest(objeto=objeto):
+                ultimos = list(self.campos(objeto).values())[-len(campos):]
+                self.assertEqual([(f["name"], f["type"]) for f in ultimos], campos)
+                self.assertFalse(any(f.get("required") or f.get("unique") for f in ultimos))
+                self.assertTrue(all(f.get("label") and f.get("description") for f in ultimos))
+        # the same options as the declaración's
+        self.assertEqual(self.campos("nivel_construccion")["clasificacion"]["enum"], "clasificacion")
+        # ica has no month of construction: the nivel's goes optional (the portal still asks for it), the obra's stays
+        self.assertFalse(self.campos("nivel_construccion")["mes_construccion"].get("required"))
+        self.assertTrue(self.campos("obra_complementaria")["mes_construccion"]["required"])
+
     def test_parametro_tributario_has_the_columns_of_the_published_csv(self):
         # normativa's publicacion/parametros-2026.csv, by the names of the issue. the natural key is (tipo, clave,
         # vigencia_desde), which import_parametros.py keeps: clave is empty for a tipo of one value (the UIT)

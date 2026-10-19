@@ -1574,6 +1574,20 @@ En la fase 2 ganaron campos:
 Ninguno es obligatorio en Core, porque los registros importados del padrón no los tienen. El portal los exige al
 guardar.
 
+Para los padrones externos (Ica, #124) ganaron campos opcionales, al final de cada objeto:
+- **`predio`:** `codigo_via`, `codigo_unidad_urbana`, `codigo_hu_armonizacion` y `codigo_via_armonizacion` (TEXT),
+  los códigos del catastro de origen y del Formato Padrón Municipal Armonización.
+- **`declaracion_predial`:** `arancel`, `valor_terreno`, `valor_construccion` y `valor_otras_instalaciones` (DECIMAL),
+  la valuación como la trae el padrón. El impuesto se sigue liquidando sobre `valor_autoavaluo`.
+- **`nivel_construccion`:** `clasificacion` (el mismo enum de la declaración), `valor_unitario`, `incremento`,
+  `porcentaje_depreciacion` y `valor_total` (DECIMAL).
+- **`via` y `unidad_urbana`:** `codigo` (TEXT, no único: los del padrón de Perené no lo tienen).
+
+Además, `nivel_construccion.mes_construccion` dejó de ser obligatorio en Core, porque Ica no lo trae. El portal lo
+sigue pidiendo al registrar un nivel, y la PU imprime solo el año cuando falta. Los DTO del portal no conocen estos
+campos: los escribe el importador por la API de registros de Core, y un guardado del portal no los borra porque se
+fusiona con lo guardado (`Registros.replace`).
+
 **`contribuyente`**: una persona natural, persona jurídica o sucesión. `numero_documento` es único.
 
 | Campo | Origen en el Excel |
