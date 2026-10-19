@@ -35,8 +35,10 @@ logging:
 srtm:
   municipalidad:
     # the header of the emitted documents (PU, HR) is the organization's municipalidad record, edited in the admin
-    # (nombre, oficina, ruc, gerencia, direccion). this name is only its fallback, while there is no record
-    nombre: ${SRTM_MUNICIPALIDAD_NOMBRE:MUNICIPALIDAD DISTRITAL DE PERENÉ}
+    # (nombre, oficina, ruc, gerencia, direccion). this name is only its fallback, while there is no record. empty (the
+    # default), the fallback is the organization's own name in core: an install with several municipalidades never
+    # prints another's
+    nombre: ${SRTM_MUNICIPALIDAD_NOMBRE:}
     # the escudo, a png or jpg: classpath:… or file:… (core has no image field). empty prints none
     escudo: ${SRTM_MUNICIPALIDAD_ESCUDO:}
     # how long the header is kept per organization: an edit in the admin shows within it

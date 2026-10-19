@@ -8,6 +8,7 @@ import srtm.rentas.Registros
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import wasichai.core.identity.CurrentUser
+import wasichai.core.organization.OrganizationRepository
 import java.time.Duration
 import java.time.Instant
 import java.util.Base64
@@ -39,8 +40,8 @@ data class Municipalidad(
     val direccion: String? = null
 )
 
-// the header out of the organization's records (oldest first): the first one, or only `porDefecto`
-// (srtm.municipalidad.nombre) when there is none, so documents print before anyone fills the record in
+// the header out of the organization's records (oldest first): the first one, or only `porDefecto` (nombreDeRespaldo)
+// when there is none, so documents print before anyone fills the record in
 fun cabeceraDe(
     municipalidades: List<Municipalidad>,
     porDefecto: String,
@@ -56,6 +57,16 @@ fun cabeceraDe(
         escudo = escudo
     )
 }
+
+// the name a header carries while its organization has no municipalidad record: srtm.municipalidad.nombre when set,
+// else the organization's own name in core (so an install with several municipalidades never prints another's),
+// else its slug; never empty, whatever core knows
+fun nombreDeRespaldo(
+    configurado: String,
+    organizacion: String?,
+    slug: String?,
+    id: UUID
+): String = lleno(configurado) ?: lleno(organizacion) ?: lleno(slug) ?: id.toString()
 
 // a png or a jpg as a data: uri, told apart by its first bytes. anything else stops the app at startup: a
 // misconfigured escudo is found when deploying, not on the first document
@@ -89,8 +100,10 @@ private fun lleno(valor: String?): String? = valor?.trim()?.takeIf { it.isNotEmp
 class CabeceraDocumento(
     private val registros: Registros,
     private val currentUser: CurrentUser,
+    // wasichai's own repository, not part of its public api (ADR-024): read for the organization's name, as BrechaService does
+    private val organizaciones: OrganizationRepository,
     recursos: ResourceLoader,
-    @param:Value("\${srtm.municipalidad.nombre}") private val porDefecto: String,
+    @param:Value("\${srtm.municipalidad.nombre:}") private val configurado: String,
     @param:Value("\${srtm.municipalidad.escudo:}") escudo: String,
     @param:Value("\${srtm.municipalidad.cache:1m}") private val vigencia: Duration
 ) {
@@ -110,7 +123,9 @@ class CabeceraDocumento(
         cache[organizacion]?.takeIf { (leida, _) -> leida.plus(vigencia).isAfter(ahora) }?.let { return it.second }
         val municipalidades = registros.all(MUNICIPALIDAD, Municipalidad::class.java, sort = "created_at")
         if (municipalidades.size > 1) log.warn("la organización $organizacion tiene ${municipalidades.size} municipalidades: se usa la más antigua")
-        return cabeceraDe(municipalidades, porDefecto, escudo).also { cache[organizacion] = ahora to it }
+        val datos = organizaciones.findById(organizacion)
+        val respaldo = nombreDeRespaldo(configurado, datos?.name, datos?.slug, organizacion)
+        return cabeceraDe(municipalidades, respaldo, escudo).also { cache[organizacion] = ahora to it }
     }
 
     private companion object {
