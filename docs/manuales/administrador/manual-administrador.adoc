@@ -1,0 +1,587 @@
+= Manual del administrador: Usuarios, permisos, parámetros y operación
+Municipalidad Distrital de Perené
+include::../atributos.adoc[]
+
+[abstract]
+Este manual es para quien administra {producto} en la municipalidad. Explica cómo dar acceso a las personas, qué puede
+hacer cada rol, dónde se mantienen los parámetros tributarios y los datos maestros, cómo seguir la auditoría y los
+procesos masivos, y qué tareas periódicas y de recuperación hay que cumplir. Separa siempre lo que se hace desde la
+consola de administración (administración funcional) de lo que exige acceso al servidor o a la base de datos
+(administración técnica).
+
+[[presentacion]]
+== Presentación
+
+[[funciones]]
+=== Funciones del administrador
+
+El administrador de {producto}:
+
+* da de alta, modifica, desactiva y elimina las cuentas de usuario (<<usuarios>>);
+* define los roles y sus permisos, y asigna roles a las cuentas (<<roles-y-permisos>>);
+* mantiene la cabecera de los documentos y vigila los parámetros tributarios y los catálogos (<<datos-maestros>>);
+* revisa la auditoría (<<auditoria>>) y los procesos masivos (<<procesos-masivos>>);
+* prepara cada año tributario (<<anio-tributario>>) y coordina con el área de sistemas los respaldos y la
+  recuperación (<<respaldo>>).
+
+[[funcional-tecnica]]
+=== Administración funcional y administración técnica
+
+[cols="1,2,2",options="header"]
+|===
+| |Administración funcional |Administración técnica
+|Quién |El administrador del sistema, con una cuenta del rol {p-admin}. |El área de sistemas, con acceso al servidor y a la base de datos.
+|Dónde |La consola de administración del portal (`/admin`). |La línea de comandos del servidor, los scripts de `model/` y la base de datos.
+|Qué |Usuarios, roles, permisos, auditoría, registros de los objetos (municipalidad, parámetros, catálogos). |Arranque y configuración del servidor, carga y actualización del modelo, importaciones masivas, respaldos, restauración, integraciones.
+|Detalle |Este manual. |Este manual da los procedimientos y los criterios; el {m-sistema} da los comandos completos y la configuración.
+|===
+
+WARNING: La cuenta {p-admin} se salta todas las comprobaciones de permisos: puede leer, crear, modificar y borrar
+cualquier registro y cambiar el modelo de datos. Úsela solo para administrar; para el trabajo diario, cada persona,
+incluido el administrador, debe tener una cuenta con un rol acotado.
+
+[[consola]]
+== La consola de administración
+
+[[entrar-consola]]
+=== Entrar a la consola
+
+La consola es parte del portal. Las cuentas con el rol {p-admin} ven la opción *Administración* en el riel de módulos y
+en el menú de sesión (<<fig-admin-portal-menu>>); al pulsarla se abre la consola, en la misma sesión.
+
+[[fig-admin-portal-menu]]
+.Menú de sesión de un administrador
+image::{capturas}/administrador/portal-menu-sesion.png[Menú de sesión del portal con las opciones Administración y Cerrar sesión,520,align=center]
+
+La consola tiene su propio menú lateral (<<fig-admin-consola>>):
+
+[horizontal]
+Datos:: *Objetos* (el modelo de datos), *Registros* y *Relaciones*.
+GIS:: *Mapas*, *Capas* y *Vistas de mapa*.
+App Builder:: *Páginas*, *Formularios*, *Documentos* y *Vistas*.
+Automatización:: *Workflows*.
+Administración:: *Usuarios*, *Roles*, *Permisos* y *Auditoría*.
+
+Al pie del menú están su nombre, el selector de tema, el idioma (*EN* cambia la consola a inglés) y *Cerrar sesión*.
+
+[[fig-admin-consola]]
+.Inicio de la consola de administración
+image::{capturas}/administrador/consola-inicio.png[Consola de administración con el menú lateral y las tarjetas de los objetos del modelo]
+
+La página de inicio cuenta los objetos del modelo (42 en esta versión) y cuántos tienen geometría, y lista una tarjeta
+por objeto.
+
+[[secciones-plataforma]]
+=== Secciones de la plataforma que {producto} no usa
+
+*Mapas*, *Capas*, *Vistas de mapa*, *Páginas*, *Formularios*, *Documentos*, *Vistas* y *Workflows* vienen de la
+plataforma wasichai, sobre la que está construido {producto}. Las pantallas del portal tributario no dependen de
+ellas: están programadas en el portal. Puede consultarlas, pero no hace falta configurarlas para operar el sistema.
+
+CAUTION: *Objetos* y *Relaciones* muestran el modelo de datos que usa el portal. Lo carga y actualiza el área de
+sistemas con `model/apply.py` (<<modelo-datos>>). Cambiar a mano un objeto, un campo o una opción desde la consola
+puede romper pantallas del portal, y la siguiente actualización del modelo puede deshacer el cambio.
+
+[[usuarios]]
+== Usuarios
+
+menu:Administración[Usuarios] lista las cuentas de la municipalidad, con su nombre, correo, roles, estado y fecha de
+alta (<<fig-admin-usuarios>>). Encima de la lista está el formulario *Nuevo usuario*.
+
+[[fig-admin-usuarios]]
+.Lista de usuarios
+image::{capturas}/administrador/usuarios.png[Página Usuarios con el formulario Nuevo usuario y la lista de cuentas de la demostración]
+
+[[proc-crear-usuario]]
+.Crear una cuenta
+====
+[horizontal]
+Objetivo:: Dar acceso al portal a una persona.
+Requisitos previos:: Cuenta {p-admin}. El rol que corresponde a su trabajo ya existe (<<roles-y-permisos>>).
+====
+
+. Abra menu:Administración[Usuarios].
+. En *Nuevo usuario*, escriba el *Correo* (será su usuario), el *Nombre* que verá en el portal y una *Contraseña*
+  inicial de al menos 8 caracteres.
+. Marque en *Roles* el rol o los roles de la persona (<<fig-admin-usuario-nuevo>>).
+. Pulse btn:[Crear].
+
+// fin de los pasos
+Resultado esperado:: La cuenta aparece en la lista, *Activo*, con sus roles.
+Verificación:: La persona ingresa al portal con ese correo y esa contraseña, y ve su nombre y la condición *Usuario* en
+la barra superior.
+Casos especiales::
+* El correo debe ser único dentro de la municipalidad.
+* Entregue la contraseña inicial por un medio seguro. El portal no tiene una opción para que el usuario la cambie: si
+  quiere otra, se la asigna usted (<<proc-cambiar-clave>>).
+* Una cuenta con varios roles suma los permisos de todos.
+
+[[fig-admin-usuario-nuevo]]
+.Formulario Nuevo usuario
+image::{capturas}/administrador/usuario-nuevo.png[Formulario Nuevo usuario con el correo escrito y el rol Consulta marcado]
+
+[[proc-cambiar-clave]]
+.Cambiar la contraseña, el nombre o los roles de una cuenta
+====
+[horizontal]
+Objetivo:: Asignar una contraseña nueva, corregir el nombre o cambiar los roles.
+Requisitos previos:: Cuenta {p-admin}.
+====
+
+. En la lista de usuarios, pulse el lápiz de la cuenta. Se abre el panel *Editando a …* (<<fig-admin-usuario-editar>>).
+. Cambie lo necesario:
+** *Nueva contraseña*: déjela vacía para no cambiarla.
+** *Estado*: desmarque *Activo* para desactivar la cuenta (<<desactivar-usuario>>).
+** *Roles*: marque o desmarque.
+. Pulse btn:[Guardar].
+
+// fin de los pasos
+Resultado esperado:: La lista muestra los datos nuevos.
+Casos especiales:: Los roles nuevos rigen desde el siguiente ingreso de la persona: la sesión ya abierta conserva los
+roles con que ingresó hasta que vence.
+
+[[fig-admin-usuario-editar]]
+.Edición de una cuenta
+image::{capturas}/administrador/usuario-editar.png[Panel Editando a Registradora Demo con Nombre, Nueva contraseña, Estado Activo y los roles]
+
+[[desactivar-usuario]]
+=== Desactivar o eliminar una cuenta
+
+Desactivar:: La cuenta queda *Inactivo* y ya no puede ingresar. Conserva sus datos, y la auditoría y los registros
+siguen mostrando a esa persona como autora de lo que hizo. Es lo recomendable cuando alguien deja el área.
+Eliminar:: El cesto de basura borra la cuenta, después de confirmar (*¿Eliminar a …? Esta acción no se puede
+deshacer.*).
+
+IMPORTANT: Desactivar o eliminar una cuenta no corta una sesión que ya esté abierta: esa sesión sigue valiendo hasta
+que vence (ocho horas por defecto), porque el sistema no revoca las sesiones emitidas salvo que el área de sistemas
+active la revocación (`wasichai.security.jwt.revocation`, ver el {m-sistema}). Ante una baja urgente (por ejemplo,
+una credencial comprometida), pida al área de sistemas que active la revocación o que cambie el secreto de firma
+`WASICHAI_JWT_SECRET`, lo que cierra todas las sesiones.
+
+WARNING: Una emisión o determinación masiva en curso trabaja con la identidad de quien la lanzó. Si esa cuenta se
+desactiva o se elimina antes de que termine, sus lotes pendientes fallan («el usuario que lanzó la emisión ya no existe
+o está deshabilitado»). Espere a que terminen.
+
+Usted no puede desactivarse ni eliminarse a sí mismo (*Eres tú*).
+
+[[roles-y-permisos]]
+== Roles y permisos
+
+[[modelo-permisos]]
+=== Cómo funcionan los permisos
+
+* Un *rol* es un conjunto de permisos. Una cuenta tiene uno o más roles.
+* Un *permiso* autoriza una acción sobre un tipo de registro (un _objeto_ del modelo: contribuyente, predio,
+  declaración predial, cuota de arbitrio, acta…). Las acciones son *READ* (consultar), *CREATE* (crear), *UPDATE*
+  (modificar) y *DELETE* (borrar), más *MANAGE_METADATA* (cambiar el modelo) y *MANAGE_ORGANIZATION* (administrar la
+  organización), que se dan para todos los objetos.
+* Los *permisos de campo* restringen, dentro de un objeto, qué campos ve o modifica el rol. No conceden nada: un rol
+  sin permisos de campo en un objeto ve todos sus campos.
+* *Solo sus registros* limita el rol a los registros que creó la propia persona.
+* {p-admin} se salta todas las comprobaciones: su matriz no cambia nada.
+
+Muchas operaciones del portal piden varios permisos a la vez. Por ejemplo, lanzar una emisión masiva pide crear y
+modificar emisiones masivas y crear lotes de emisión; determinar arbitrios pide crear cuotas de arbitrio. El
+<<ref-permisos>> lista lo que pide cada operación.
+
+NOTE: El portal no esconde los botones que el rol no permite: los muestra deshabilitados, con el texto *Sin permiso:
+…*, para que la persona sepa qué pedir. Sí se esconde *Administración*, que solo ve {p-admin}.
+
+[[roles]]
+=== Crear y modificar roles
+
+menu:Administración[Roles] lista los roles con su etiqueta, nombre técnico, si son de *Solo sus registros*, cuántos
+permisos tienen y cuántos campos restringen (<<fig-admin-roles>>).
+
+[[fig-admin-roles]]
+.Roles de la base de demostración
+image::{capturas}/administrador/roles.png[Página Roles con el formulario Nuevo rol y los seis roles de la demostración]
+
+[[proc-crear-rol]]
+.Crear un rol
+====
+[horizontal]
+Objetivo:: Definir un perfil de trabajo nuevo.
+Requisitos previos:: Cuenta {p-admin}. Saber qué operaciones hará el perfil (<<perfiles-sugeridos>>).
+====
+
+. Abra menu:Administración[Roles].
+. En *Nuevo rol*, escriba el *Nombre técnico* en mayúsculas (por ejemplo `CAJERO`) y la *Etiqueta* que verán los
+  administradores (`Caja`).
+. Marque *Solo sus registros* únicamente si el rol debe ver solo lo que crea cada persona.
+. Pulse btn:[Crear]. El rol nace sin permisos.
+. Asígnele los permisos (<<proc-permisos-rol>>).
+
+// fin de los pasos
+Resultado esperado:: El rol aparece en la lista, con 0 permisos hasta que se guarde su matriz.
+Casos especiales:: El rol {p-admin} no se puede eliminar. Eliminar otro rol (después de confirmar) se lo quita a todas las
+cuentas que lo tenían: revise antes quiénes lo usan, para que no se queden sin acceso.
+
+[[proc-permisos-rol]]
+.Asignar los permisos de un rol
+====
+[horizontal]
+Objetivo:: Decidir qué puede consultar, crear, modificar o borrar un rol.
+Requisitos previos:: Cuenta {p-admin}. El rol existe.
+====
+
+. Abra menu:Administración[Permisos].
+. En *Rol*, elija el rol. Aparece su *Matriz de permisos*: una fila por objeto y una columna por acción
+  (<<fig-admin-permisos>>).
+. Marque las casillas. La fila *Todos los objetos* concede la acción sobre cualquier objeto, presente o futuro.
+. Pulse btn:[Guardar permisos].
+
+// fin de los pasos
+Resultado esperado:: La lista de roles muestra el nuevo número de permisos.
+Verificación:: Ingrese con una cuenta de ese rol (la de una persona de prueba) y compruebe que los botones que debe
+usar están habilitados y los demás muestran *Sin permiso*.
+Casos especiales::
+* Conceda lo mínimo que el trabajo necesita. Evite *Todos los objetos* salvo en un rol de solo lectura.
+* Las personas con una sesión abierta ven los permisos nuevos al volver a ingresar.
+
+[[fig-admin-permisos]]
+.Matriz de permisos del rol Registrador del padrón
+image::{capturas}/administrador/permisos-matriz.png[Matriz de permisos con las columnas READ, CREATE, UPDATE, DELETE, MANAGE_METADATA y MANAGE_ORGANIZATION]
+
+[[permisos-campo]]
+=== Permisos de campo
+
+Debajo de la matriz, *Permisos de campo* deja restringir campos de un objeto: elija el objeto y desmarque *Lectura* o
+*Escritura* en los campos que el rol no debe ver o no debe cambiar; luego pulse btn:[Guardar permisos de campo]
+(<<fig-admin-permisos-campo>>).
+
+[[fig-admin-permisos-campo]]
+.Permisos de campo del objeto Contribuyente, sin restricciones
+image::{capturas}/administrador/permisos-campo.png[Sección Permisos de campo con el objeto Contribuyente elegido y las columnas Lectura y Escritura]
+
+Un campo bloqueado para escritura conserva su valor cuando la persona graba el formulario: el portal no lo borra. Un
+campo sin lectura deja de mostrarse a ese rol.
+
+[[perfiles-sugeridos]]
+=== Perfiles sugeridos
+
+{producto} no trae roles de fábrica, salvo {p-admin}. La base de demostración crea cinco perfiles que reparten el
+trabajo de una oficina de rentas; sirven de punto de partida y son los que usan los manuales de usuario.
+
+.Perfiles de la base de demostración
+[cols="2,2,5,2",options="header"]
+|===
+|Nombre técnico |Etiqueta |Para qué |Manual
+|{p-registrador} |Registrador del padrón |Inscribir contribuyentes, registrar predios, declaraciones juradas y lotes de catastro; ver sus documentos (PU, HR, HLA). |{m-registrador}
+|{p-arbitrios} |Arbitrios y emisión |Determinar y anular arbitrios, la determinación masiva y la emisión masiva de documentos. |{m-arbitrios}
+|{p-fiscalizador} |Fiscalización e infracciones |CUIS, notificaciones previas, actas, descargos, resoluciones y sus notificaciones. |{m-fiscalizador}
+|{p-anuncios} |Anuncios y propaganda |Autorizar, renovar, cesar y retirar anuncios. |{m-anuncios}
+|{p-consulta} |Consulta |Solo lectura de todo el padrón y de la brecha de recaudación. |{m-consulta}
+|===
+
+La lista exacta de permisos de cada uno está en `docs/manuales/demo/perfiles.json`, que es la fuente que usa la carga de
+la demostración. Para crear estos perfiles en la base real, créelos desde la consola con <<proc-crear-rol>> y
+<<proc-permisos-rol>>, copiando la matriz de cada uno.
+
+[[datos-maestros]]
+== Datos maestros y parámetros
+
+[[registros-consola]]
+=== Ver y editar registros desde la consola
+
+menu:Administración[Objetos] lista los objetos del modelo; *Ver registros* abre la lista de registros de un objeto,
+con su búsqueda, y un clic en una fila abre el registro (<<fig-admin-objetos>>). Desde ahí se mantienen los datos que
+el portal no edita, como la cabecera de los documentos.
+
+[[fig-admin-objetos]]
+.Objetos del modelo
+image::{capturas}/administrador/objetos.png[Página Objetos con la lista de los objetos del modelo y sus botones Ver registros y Editar]
+
+CAUTION: Editar desde la consola un registro que el portal maneja (un contribuyente, un predio, una declaración) es
+posible, pero se salta parte de las reglas del portal. El sistema completa después los campos derivados que dependen
+del propio registro (por ejemplo, el valor afecto de una declaración), pero no las reglas que miran otros registros:
+correlativos, el domicilio fiscal copiado al contribuyente, los totales de un condominio. Haga esos cambios desde el
+portal.
+
+Hay registros que la consola no deja cambiar, ni siquiera a {p-admin}:
+
+[cols="1,2",options="header"]
+|===
+|Registros |Por qué
+|Actas, notificaciones, descargos, resoluciones, códigos de infracción (CUIS), anuncios y sus movimientos |Solo se
+agregan, y solo desde el portal, que aplica sus reglas. Desde la consola, una creación responde *solo lo escribe srtm,
+por su api* (403) y una modificación o un borrado se rechaza (409). El servidor deja en su registro una línea
+`ESCRITURA FUERA DE SRTM RECHAZADA`.
+|Cuotas de arbitrio y sus anulaciones |Solo se agregan: una cuota se corrige anulándola y determinando de nuevo
+(ver el {m-arbitrios}).
+|===
+
+[[municipalidad]]
+=== Cabecera de los documentos (municipalidad)
+
+El PU, la HR, la HLA y las resoluciones llevan arriba los datos del registro *Municipalidad*: nombre, oficina, RUC,
+gerencia y dirección (<<fig-admin-municipalidad>>).
+
+[[fig-admin-municipalidad]]
+.Registro Municipalidad
+image::{capturas}/administrador/municipalidad.png[Lista de registros del objeto Municipalidad con el nombre, la oficina, el RUC y la gerencia]
+
+[[proc-municipalidad]]
+.Corregir la cabecera de los documentos
+====
+[horizontal]
+Objetivo:: Que los documentos emitidos muestren los datos correctos de la municipalidad.
+Requisitos previos:: Cuenta {p-admin}.
+====
+
+. Abra menu:Objetos[Municipalidad > Ver registros] y pulse la fila de la municipalidad.
+. Corrija los campos y grabe.
+
+// fin de los pasos
+Resultado esperado:: Los documentos que se emitan desde ese momento llevan los datos nuevos. El cambio puede tardar
+hasta un minuto en aparecer (el sistema guarda la cabecera en memoria ese tiempo).
+Casos especiales::
+* Debe haber un solo registro *Municipalidad*: si hay más, el sistema usa el más antiguo.
+* Los datos que trae la carga inicial (`model/data/municipalidad.json`) son provisionales: revíselos antes de emitir.
+* El escudo no se carga desde la consola: es un archivo PNG o JPG que configura el área de sistemas
+  (`SRTM_MUNICIPALIDAD_ESCUDO`). Sin él, los documentos salen sin escudo.
+
+[[parametros]]
+=== Parámetros tributarios
+
+Las cifras que usan los cálculos (UIT, tramos y alícuotas del impuesto predial, mínimo, tasas y zonas de arbitrios,
+vencimientos, tasas de anuncios, plazos de las infracciones, feriados…) están en el objeto *Parámetro tributario*
+(<<fig-admin-parametros>>). Cada fila tiene:
+
+[horizontal]
+Tipo y clave:: Qué parámetro es (`UIT`, `TRAMO_PREDIAL`, `TASA_ARBITRIO`…) y, si hay varios del mismo tipo, cuál.
+Vigencia desde / hasta:: El período en que rige. Un cálculo usa la fila vigente en la fecha que le corresponde (el
+impuesto predial, la del 1 de enero del año).
+Valor numérico o texto:: El valor, en la unidad que imprime la norma.
+Norma y fuente:: La norma que fija el valor y dónde se leyó.
+Transcribió y verificó:: Quién copió el valor de la norma y quién lo comprobó: dos personas distintas (doble firma).
+
+[[fig-admin-parametros]]
+.Parámetros tributarios de la demostración
+image::{capturas}/administrador/parametros.png[Lista de registros del objeto Parámetro tributario con su tipo, clave, vigencia y norma]
+
+.Tipos de parámetro y quién los usa
+[cols="2,3",options="header"]
+|===
+|Tipos |Uso
+|`UIT`, `TRAMO_PREDIAL`, `TRAMO_PREDIAL_LIMITE`, `PREDIAL_MINIMO` |Liquidación del impuesto predial (HR y brecha).
+|`DEDUCCION_PENSIONISTA`, `DEDUCCION_ADULTO_MAYOR` |Se cargan con los anteriores; esta versión no aplica deducciones en el cálculo.
+|`TASA_ARBITRIO`, `BASE_ARBITRIO`, `DIMENSIONES_ARBITRIO`, `ARBITRIO_ZONA`, `ARBITRIO_USO`, `ARBITRIO_INFLUENCIA`, `ARBITRIO_AFLUENCIA`, `HABITANTES_PROMEDIO`, `HABITANTES_VARIACION`, `REDONDEO_ARBITRIO`, `ARBITRIO_VENCIMIENTO`, `TOPE_ARBITRIO`, `ARBITRIO_PU_POR_USO` |Determinación de arbitrios y HLA (ver el {m-arbitrios}).
+|`TASA_ANUNCIO` |Tasa de anuncios por clase.
+|`PLAZO`, `FERIADOS` |Plazos de las infracciones y feriados movibles de cada año, para contar los días hábiles (los feriados de fecha fija ya están en el sistema).
+|===
+
+CAUTION: No edite ni borre a mano un parámetro con el que ya se calculó algo: cambia el resultado de los cálculos que
+se vuelvan a hacer, pero no los ya hechos (las cuotas guardan el parámetro con que se calcularon). Un valor nuevo se
+carga como una fila nueva con su propia vigencia, con la doble firma, por el procedimiento técnico de
+<<anio-tributario>>.
+
+[[catalogos]]
+=== Catálogos
+
+Los formularios del portal ofrecen sus opciones desde estos catálogos:
+
+[cols="1,2,1",options="header"]
+|===
+|Catálogo |Contenido |Origen
+|Ubigeo |Los distritos del INEI. |`model/data/ubigeo.csv`
+|Vías y unidades urbanas |Las calles y las habilitaciones del distrito. |El padrón de predios (`import_catalogos.py --excel`)
+|Categorías de valores unitarios |Las letras A–I del cuadro de valores unitarios oficiales de edificación. |`model/data/categorias_valor.csv`
+|Categorías de obras complementarias |Las partidas del anexo de obras complementarias e instalaciones fijas. |`model/data/obras_complementarias.csv`
+|Usos del predio |Clase, subclase y uso, en cascada. |`model/data/usos_predio.csv`
+|===
+
+Los carga y actualiza el área de sistemas con `model/import_catalogos.py`. Un registro puede corregirse desde la
+consola, pero la siguiente importación vuelve a dejar los *usos del predio* como dice su archivo: para un cambio
+permanente, hay que cambiar el archivo.
+
+[[auditoria]]
+== Auditoría
+
+menu:Administración[Auditoría] muestra quién creó, modificó o eliminó cada registro y cuándo
+(<<fig-admin-auditoria>>). Filtre por *Objeto* y por *Operación* (*Creación*, *Modificación*, *Eliminación*) y elija
+cuántas entradas ver (*Máximo*). Una modificación se despliega con su flecha para ver qué campos cambiaron, con el
+valor anterior y el nuevo (<<fig-admin-auditoria-cambios>>).
+
+[[fig-admin-auditoria]]
+.Auditoría
+image::{capturas}/administrador/auditoria.png[Página Auditoría con los filtros Objeto, Operación y Máximo y la lista de cambios]
+
+[[fig-admin-auditoria-cambios]]
+.Detalle de una modificación
+image::{capturas}/administrador/auditoria-cambios.png[Fila de auditoría desplegada con los campos Predios y Estado, sus valores anterior y nuevo]
+
+Qué conviene saber de la auditoría:
+
+* No se puede editar ni borrar: la base de datos la protege. El servidor avisa al arrancar si el usuario de la base
+  podría saltarse esa protección (línea `AuditLogOwnershipCheck` en su registro); si aparece, avise al área de
+  sistemas.
+* Los procesos masivos dejan sus cambios de estado como modificaciones: las de su preparación, con la persona que los
+  lanzó; las del sistema, sin usuario (*Sistema*).
+* La auditoría no guarda el motivo de un acto. Por eso los actos que solo se agregan (cuotas, anulaciones, actas,
+  movimientos de anuncios) piden una *Observación* que queda en el propio registro.
+
+[[procesos-masivos]]
+== Procesos masivos
+
+La determinación masiva de arbitrios y la emisión masiva de documentos corren en segundo plano, repartidas en lotes de
+100 contribuyentes (o predios) que procesan los trabajadores del servidor. Las lanzan las personas con el perfil
+correspondiente (ver el {m-arbitrios}); al administrador le toca vigilarlas.
+
+[horizontal]
+Una a la vez:: Solo puede haber una emisión masiva en curso por año: una segunda responde *Ya hay una emisión masiva de
+<año> en curso: espere a que termine*.
+Reintentos:: Un lote que falla se reintenta hasta 3 veces; si una instancia del servidor se cae, otra retoma sus lotes
+a los dos minutos.
+Errores por contribuyente:: Un contribuyente que no se puede emitir queda listado en la emisión, con el motivo, y el
+resto sigue.
+Retención:: El sistema conserva los últimos 5 archivos de emisión de cada año; los más antiguos se depuran: la emisión
+queda en la lista con *Archivo depurado* y ya no se descarga. El área de sistemas puede cambiar la cantidad
+(`SRTM_EMISION_CONSERVAR`) o poner un límite en días (`SRTM_EMISION_DIAS`).
+Eliminar:: Eliminar una emisión borra sus lotes y su archivo. Si estaba en curso, la detiene.
+
+CAUTION: Los archivos de emisión contienen los datos de todos los contribuyentes del año. Guárdelos y compártalos solo
+por medios autorizados, y elimine las emisiones de prueba.
+
+[[integraciones]]
+== Integraciones
+
+[cols="1,2,1",options="header"]
+|===
+|Integración |Para qué |Estado en esta versión
+|PIDE RENIEC |Traer los nombres de una persona desde su DNI al inscribirla. |Apagada: los nombres se escriben a mano. Se enciende con las credenciales del convenio de la municipalidad (`SRTM_PIDE_RENIEC_*`); el contrato no se ha probado contra el servicio real.
+|catastro-backend |Valorizar los predios del levantamiento catastral para la brecha de recaudación. |Opcional (`SRTM_CATASTRO_*`). Apagada, una corrida de la brecha no empieza (*Catastro no configurado*).
+|Almacén S3 |Guardar los archivos de emisión fuera del servidor, para varias instancias. |Opcional (`SRTM_EMISION_ALMACEN=s3`); por defecto, el disco del servidor.
+|GeoServer |Publicar las capas de lotes como servicios WMS. |Opcional; los mapas del portal no lo necesitan.
+|===
+
+La configuración de todas ellas es técnica: variables de entorno del servidor, descritas en el {m-sistema}. Las
+credenciales se entregan al área de sistemas y nunca se guardan en el repositorio ni en este manual.
+
+[[administracion-tecnica]]
+== Administración técnica
+
+Esta parte resume lo que el área de sistemas hace en el servidor y que el administrador debe conocer para coordinarlo.
+Los comandos completos están en el {m-sistema}.
+
+[[modelo-datos]]
+=== Actualizar el modelo de datos
+
+Cada versión de {producto} puede traer cambios en el modelo (objetos, campos, opciones de las listas). Se aplican con
+`model/apply.py`, siempre en dos tiempos:
+
+. `python3 apply.py --diff` lee la base y lista lo que cambiaría (`would POST …`, `would PUT …`), sin escribir nada.
+. Se revisa la lista. Si es lo esperado, `python3 apply.py` lo aplica. Una segunda pasada de `--diff` debe decir
+  `diff: nothing pending`.
+
+`apply.py` solo agrega, relaja o reetiqueta: no renombra ni borra campos con datos.
+
+WARNING: `python3 apply.py --drop` borra el modelo *y todos los datos*. Solo para una base de prueba desechable.
+
+[[importaciones]]
+=== Importaciones masivas
+
+Los scripts de `model/` cargan datos en bloque por la API del sistema, con sus reglas. Todos aceptan `--dry-run` (lee
+y dice qué haría, sin escribir) y se pueden repetir sin duplicar:
+
+[cols="1,2",options="header"]
+|===
+|Script |Carga
+|`import_catalogos.py` |Ubigeo, categorías, obras complementarias, usos y la municipalidad; con `--excel`, vías y unidades urbanas del padrón.
+|`import_parametros.py` |Parámetros tributarios desde un CSV con doble firma.
+|`import_predios.py` |El padrón de contribuyentes, predios y declaraciones desde el Excel municipal.
+|`import_catastro.py` |Los lotes del catastro fiscal desde un GeoJSON.
+|`import_cuis.py`, `import_arbitrios.py`, `import_zonas_arbitrio.py` |El CUIS, la ordenanza y los servicios de arbitrios, y las zonas por ubicación.
+|===
+
+CAUTION: El Excel del padrón y los reportes de la importación contienen DNI, nombres y domicilios reales. Nunca se
+guardan en el repositorio ni se envían por correo: se trabajan solo en el servidor.
+
+Procedimiento recomendado para cualquier carga sobre la base real:
+
+. Respaldo de la base (<<respaldo>>).
+. Corrida con `--dry-run`; revisar el resumen.
+. Corrida real; comparar su resumen con el del ensayo.
+. Revisar en el portal una muestra de los registros cargados.
+
+[[anio-tributario]]
+=== Preparar un año tributario
+
+Antes de emitir los documentos de un año:
+
+.Lista de comprobación del año tributario
+[%header,cols="1,4,2"]
+|===
+|✓ |Tarea |Quién
+| |La UIT del año cargada en `parametro_tributario`, con su norma y la doble firma (`import_parametros.py`). |Sistemas, con el área de rentas
+| |Los tramos, el mínimo y las tasas del año vigentes al 1 de enero. |Sistemas
+| |La ordenanza de arbitrios del año ratificada, con sus tasas, zonas, usos y vencimientos cargados. Sin ordenanza ratificada no se determina ni se emite. |Rentas y sistemas
+| |El CUIS y los plazos vigentes, si cambiaron. |Fiscalización y sistemas
+| |Las tasas de anuncios del año. |Sistemas
+| |La cabecera de los documentos (<<municipalidad>>) revisada. |Administrador
+| |Las declaraciones juradas del año registradas o actualizadas. |Registradores
+| |La determinación masiva de arbitrios del año, terminada y sin errores pendientes. |Arbitrios y emisión
+| |Una emisión masiva de prueba revisada; luego la definitiva. |Arbitrios y emisión
+|===
+
+Mientras falte un parámetro, el sistema no calcula: la liquidación, la HR y la determinación responden qué falta (por
+ejemplo, *UIT 2027*).
+
+[[respaldo]]
+=== Respaldos y restauración
+
+Un respaldo completo de {producto} tiene dos partes:
+
+. *La base de datos*: el modelo, los registros, los usuarios y la auditoría. Se respalda con `pg_dump` (formato
+  personalizado y, como copia legible, SQL plano).
+. *El almacén de emisiones*: los archivos PDF y ZIP de las emisiones masivas, en el disco del servidor
+  (`SRTM_EMISION_DIR`) o en el bucket S3.
+
+Criterios:
+
+* Respaldo diario de la base y del almacén, y uno extra antes de cada actualización de versión o carga masiva.
+* Una prueba de restauración periódica en una base aparte, con la verificación del {m-sistema}.
+* Las actualizaciones de la plataforma cambian el esquema de la base y no se pueden revertir: volver a una versión
+  anterior exige restaurar el respaldo hecho antes de actualizar.
+
+WARNING: Restaurar sobre la base en uso borra lo registrado después del respaldo. Hágalo solo con el sistema detenido,
+con la aprobación de la gerencia y después de respaldar el estado actual.
+
+El procedimiento completo, con los comandos, está en el {m-sistema}. La base de demostración de estos manuales trae un
+ejemplo reproducible de respaldo, restauración y verificación (`docs/manuales/demo/README.adoc`).
+
+[[monitoreo]]
+=== Monitoreo e incidencias
+
+[cols="2,3",options="header"]
+|===
+|Síntoma |Qué hacer
+|Nadie puede ingresar. |Verificar con sistemas que el servidor responde (`/actuator/health` debe decir `UP`) y que la base de datos está arriba.
+|Una persona no puede hacer una operación (*Sin permiso*). |Revisar los roles de su cuenta (<<usuarios>>) y la matriz del rol (<<proc-permisos-rol>>).
+|Una emisión masiva quedó *Fallida*. |Ver su mensaje en la lista de emisiones. Si fue por la caída del servidor, lanzarla de nuevo. Si se repite, avisar a sistemas con la hora.
+|Un documento sale con la cabecera equivocada. |Corregir el registro *Municipalidad* (<<proc-municipalidad>>) y esperar un minuto.
+|Un cálculo responde que falta un parámetro. |Cargar el parámetro del año (<<anio-tributario>>).
+|El servidor registra `ESCRITURA FUERA DE SRTM RECHAZADA`. |Alguien intentó escribir actas o anuncios por la consola o por la API genérica: revisar la auditoría y con quién.
+|===
+
+[[checklist]]
+== Lista de comprobación de operaciones críticas
+
+.Antes de una operación crítica
+[%header,cols="2,3"]
+|===
+|Operación |Comprobar antes
+|Actualizar la versión del sistema |Respaldo de la base y del almacén; ensayo en una copia; `apply.py --diff` revisado; aviso a los usuarios; ninguna emisión ni determinación en curso.
+|Importación masiva |Respaldo; `--dry-run` revisado; archivo de origen correcto y del año correcto.
+|Determinación masiva |Ordenanza ratificada y parámetros del año cargados; DJ del año al día.
+|Emisión masiva |Determinación terminada; cabecera revisada; emisión de prueba revisada.
+|Baja de una cuenta |Que no tenga procesos masivos en curso; considerar la revocación de sesiones si es urgente.
+|Cambiar permisos de un rol |Qué cuentas lo tienen; probar con una cuenta de prueba.
+|Restaurar la base |Sistema detenido; respaldo del estado actual; aprobación; verificación después de restaurar.
+|===
+
+[appendix]
+include::../referencia/permisos.adoc[]
+
+:glosario-estilo: appendix
+include::../referencia/glosario.adoc[]

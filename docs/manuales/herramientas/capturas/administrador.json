@@ -1,0 +1,317 @@
+{
+    "_comentario": "Capturas del manual del administrador (administrador/manual-administrador.adoc), con la cuenta ADMIN de la demo.",
+    "referencias": {
+        "registrador_id": {
+            "get": "/api/srtm/contribuyentes?q=91002704",
+            "campo": "content.0.id"
+        }
+    },
+    "capturas": [
+        {
+            "id": "admin-portal-menu",
+            "perfil": "admin",
+            "archivo": "administrador/portal-menu-sesion.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/"
+                ],
+                [
+                    "clic",
+                    "button[aria-label$='menú de sesión']"
+                ],
+                [
+                    "esperar",
+                    "[data-ui=menu-sesion-panel]"
+                ]
+            ],
+            "area": {
+                "x": 900,
+                "y": 0,
+                "width": 540,
+                "height": 300
+            }
+        },
+        {
+            "id": "admin-consola-inicio",
+            "perfil": "admin",
+            "archivo": "administrador/consola-inicio.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/admin"
+                ],
+                [
+                    "esperarTexto",
+                    "Contribuyentes"
+                ]
+            ]
+        },
+        {
+            "id": "admin-usuarios",
+            "perfil": "admin",
+            "archivo": "administrador/usuarios.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/admin/admin/users"
+                ],
+                [
+                    "esperarTexto",
+                    "registrador@demo.srtm.local"
+                ]
+            ]
+        },
+        {
+            "id": "admin-usuario-nuevo",
+            "perfil": "admin",
+            "archivo": "administrador/usuario-nuevo.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/admin/admin/users"
+                ],
+                [
+                    "esperarTexto",
+                    "Nuevo usuario"
+                ],
+                [
+                    "llenar",
+                    "input[placeholder='inspector@wasichai.test']",
+                    "cajera@demo.srtm.local"
+                ],
+                [
+                    "clic",
+                    "label:has-text('Consulta') input"
+                ]
+            ],
+            "area": {
+                "x": 260,
+                "y": 110,
+                "width": 1160,
+                "height": 290
+            }
+        },
+        {
+            "id": "admin-usuario-editar",
+            "perfil": "admin",
+            "archivo": "administrador/usuario-editar.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/admin/admin/users"
+                ],
+                [
+                    "clic",
+                    "button[aria-label='Editar registrador@demo.srtm.local']"
+                ],
+                [
+                    "pausa",
+                    "600"
+                ]
+            ],
+            "area": {
+                "x": 260,
+                "y": 395,
+                "width": 1160,
+                "height": 320
+            }
+        },
+        {
+            "id": "admin-roles",
+            "perfil": "admin",
+            "archivo": "administrador/roles.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/admin/admin/roles"
+                ],
+                [
+                    "esperarTexto",
+                    "REGISTRADOR"
+                ]
+            ]
+        },
+        {
+            "id": "admin-permisos-matriz",
+            "perfil": "admin",
+            "archivo": "administrador/permisos-matriz.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/admin/admin/permissions"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Elige un rol')"
+                ],
+                [
+                    "clic",
+                    "[role=option]:has-text('Registrador del padrón')"
+                ],
+                [
+                    "esperarTexto",
+                    "Matriz de permisos"
+                ],
+                [
+                    "pausa",
+                    "600"
+                ]
+            ]
+        },
+        {
+            "id": "admin-permisos-campo",
+            "perfil": "admin",
+            "archivo": "administrador/permisos-campo.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/admin/admin/permissions"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Elige un rol')"
+                ],
+                [
+                    "clic",
+                    "[role=option]:has-text('Registrador del padrón')"
+                ],
+                [
+                    "esperarTexto",
+                    "Permisos de campo"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Elige un objeto')"
+                ],
+                [
+                    "clic",
+                    "[role=option]:has-text('Contribuyente')"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ]
+            ],
+            "recorte": "h2:has-text('Permisos de campo')",
+            "subir": 2,
+            "margen": 8,
+            "altoMax": 480
+        },
+        {
+            "id": "admin-auditoria",
+            "perfil": "admin",
+            "archivo": "administrador/auditoria.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/admin/admin/audit"
+                ],
+                [
+                    "esperarTexto",
+                    "Filtros"
+                ],
+                [
+                    "pausa",
+                    "600"
+                ]
+            ]
+        },
+        {
+            "id": "admin-objetos",
+            "perfil": "admin",
+            "archivo": "administrador/objetos.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/admin/data/objects"
+                ],
+                [
+                    "esperarTexto",
+                    "Objetos"
+                ],
+                [
+                    "pausa",
+                    "600"
+                ]
+            ]
+        },
+        {
+            "id": "admin-municipalidad",
+            "perfil": "admin",
+            "archivo": "administrador/municipalidad.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/admin/data/objects/municipalidad/records"
+                ],
+                [
+                    "esperarTexto",
+                    "PERENÉ"
+                ]
+            ],
+            "area": {
+                "x": 240,
+                "y": 0,
+                "width": 1200,
+                "height": 340
+            }
+        },
+        {
+            "id": "admin-parametros",
+            "perfil": "admin",
+            "archivo": "administrador/parametros.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/admin/data/objects/parametro_tributario/records"
+                ],
+                [
+                    "esperarTexto",
+                    "resultados"
+                ],
+                [
+                    "pausa",
+                    "600"
+                ]
+            ]
+        },
+        {
+            "id": "admin-auditoria-cambios",
+            "perfil": "admin",
+            "archivo": "administrador/auditoria-cambios.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/admin/admin/audit"
+                ],
+                [
+                    "clic",
+                    "#audit-operation"
+                ],
+                [
+                    "clic",
+                    "[role=option]:has-text('Modificación')"
+                ],
+                [
+                    "pausa",
+                    "1200"
+                ],
+                [
+                    "clic",
+                    "button[aria-label='Ver cambios']"
+                ],
+                [
+                    "pausa",
+                    "600"
+                ]
+            ],
+            "area": {
+                "x": 260,
+                "y": 280,
+                "width": 1160,
+                "height": 420
+            }
+        }
+    ]
+}
