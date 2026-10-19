@@ -25,6 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CODIGOS = ipi.load_codigos(ipi.default_codigos_path())
 MODEL = ipi.load_model(ipi.default_model_path())
 USOS = ipi.read_usos_srtm(ipi.default_usos_path())
+RNT = ipi.read_depreciacion(ipi.default_depreciacion_path())
 
 
 class CodigosTests(unittest.TestCase):
@@ -58,6 +59,12 @@ class CodigosTests(unittest.TestCase):
                 for field_name, enum in (("clase_uso", "clase_uso"), ("sub_clase_uso", "sub_clase_uso"), ("uso", "uso")):
                     if usos[field_name] is not None:
                         self.assertIn(usos[field_name], MODEL["enums"][enum])
+
+    def test_the_rnt_readings_say_how_they_were_checked(self):
+        for tabla in ("material", "estado_conservacion", "clasificacion"):
+            with self.subTest(tabla=tabla):
+                self.assertFalse(CODIGOS[tabla]["confirmado"])
+                self.assertIn("inferido y contrastado con el RNT, 3742/3755", CODIGOS[tabla]["nota"])
 
     def test_municipalidad_json_has_no_invented_ruc(self):
         with open(os.path.join(HERE, "data", "ica", "municipalidad.json"), encoding="utf-8") as f:
@@ -205,6 +212,26 @@ class NivelTests(unittest.TestCase):
         self.assertEqual(ipi.nivel(None, CODIGOS), (None, None))
 
 
+class DepreciacionTests(unittest.TestCase):
+    def test_the_rnt_cell_of_a_nivel(self):
+        # table 01 (casa habitación), ladrillo, bueno: 14 % up to 15 years, 17 % up to 20, 38 % past 50
+        self.assertEqual(ipi.depreciacion_rnt(RNT, "1", "LADRILLO", "BUENO", 15), Decimal("14"))
+        self.assertEqual(ipi.depreciacion_rnt(RNT, "1", "LADRILLO", "BUENO", 16), Decimal("17"))
+        self.assertEqual(ipi.depreciacion_rnt(RNT, "1", "LADRILLO", "BUENO", 0), Decimal("8"))
+        self.assertEqual(ipi.depreciacion_rnt(RNT, "1", "LADRILLO", "BUENO", 80), Decimal("38"))
+        self.assertEqual(ipi.depreciacion_rnt(RNT, "2", "CONCRETO", "MUY BUENO", 10), Decimal("2"))
+        self.assertEqual(ipi.depreciacion_rnt(RNT, "1", "ADOBE", "MALO", 5), Decimal("65"))
+
+    def test_no_cell_is_none(self):
+        self.assertIsNone(ipi.depreciacion_rnt(RNT, "0", "LADRILLO", "BUENO", 15))
+        self.assertIsNone(ipi.depreciacion_rnt(RNT, "1", None, "BUENO", 15))
+
+    def test_the_total_rounds_the_depreciated_unit_value_first(self):
+        # the padrón rounds the VU depreciado to the cent before multiplying by the área
+        self.assertEqual(ipi.valor_total_nivel(Decimal("764.04"), Decimal("0"), Decimal("14"), Decimal("100")), Decimal("65707.00"))
+        self.assertEqual(ipi.valor_total_nivel(Decimal("764.04"), Decimal("0"), Decimal("9"), Decimal("0.5")), Decimal("347.64"))
+
+
 class CheckTests(unittest.TestCase):
     def test_a_valid_record_has_no_problems(self):
         self.assertEqual(ipi.check(MODEL, "via", {"tipo_via": "CALLE", "nombre": "LAS FLORES", "ubigeo": "110101"}), [])
@@ -253,8 +280,8 @@ def padron(**overrides):
         "fecha_adquisicion": "2004-01-01 00:00:00", "codigo_uso": "4", "descripcion_del_uso": "CASA HABITACION",
         "tipo_predio": "1", "condicion_propiedad": "PROPIETARIO ÚNICO", "condomin": "0", "area_terreno": "120",
         "area_terreno_comun": "0", "arancel": "356", "valor_terreno": "42720", "area_construida": "100",
-        "area_construida_comun": "0", "valor_area_construida": "69527.64", "valor_otras_instalaciones": "0",
-        "valor_predio": "112247.64", "codigo_de_contribuyente": "900001", "codigo_de_contribuyente_2": "900001",
+        "area_construida_comun": "0", "valor_area_construida": "65707.00", "valor_otras_instalaciones": "0",
+        "valor_predio": "108427.00", "codigo_de_contribuyente": "900001", "codigo_de_contribuyente_2": "900001",
         "apellido_paterno": "QUISPE", "apellido_materno": "MAMANI", "nombres": "ANA", "nombre_completo": "QUISPE MAMANI ANA",
         "tipo_documento": "1", "nro_documento": "40000001", "COD_HU_ARMONIZACION": "405", "COD_VIA_ARMONIZACION": "23250",
     }
@@ -263,14 +290,14 @@ def padron(**overrides):
 
 
 def construccion(**overrides):
-    # (764.04 + 0) x (1 - 9/100) x 100 = 69527.64
+    # 2026 - 2011 = 15 years: RNT table 01, ladrillo, bueno, 14 %; round(764.04 x 0.86, 2) x 100 = 657.07 x 100
     base = {
         "id": "1", "codigo_contribuyente": "900001", "codigo_predio": "000000001-0001-0001", "nivel": "1",
         "ano_construccion": "2011", "clasificacion_construccion": "1", "material_predominante": "2",
         "estado_de_conservacion": "2", "muros_y_columnas": "C", "techos": "C", "pisos": "I", "puertas_y_ventanas": "F",
         "revestimientos": "I", "banos": "I", "instalaciones_electricas_y_sanitarias": "I", "area_construida_propia": "100",
-        "area_construida_comun": "0", "valor_unitario": "764.04", "incremento_5": "0", "depreciacion": "9",
-        "valor_unitario_depreciado": "123.45", "valor_total_nivel": "69527.64", "area_comun": "0",
+        "area_construida_comun": "0", "valor_unitario": "764.04", "incremento_5": "0", "depreciacion": "14",
+        "valor_unitario_depreciado": "123.45", "valor_total_nivel": "65707.00", "area_comun": "0",
     }
     base.update(overrides)
     return base
@@ -282,7 +309,7 @@ def numbered(rows):
 
 
 def build(padron_rows, construcciones_rows=()):
-    return ipi.build_dataset(numbered(padron_rows), numbered(construcciones_rows), 2026, MODEL, CODIGOS, USOS)
+    return ipi.build_dataset(numbered(padron_rows), numbered(construcciones_rows), 2026, MODEL, CODIGOS, USOS, RNT)
 
 
 def categorias(data):
@@ -319,11 +346,11 @@ class BuildSingleOwnerTests(unittest.TestCase):
         self.assertEqual((d.codigo_predio, d.codigo_contribuyente), ("000000001-0001-0001", "900001"))
         self.assertEqual((a["anio"], a["secuencia_uso"], a["condicion_propiedad"]), (2026, "001", "PROPIETARIO UNICO"))
         self.assertEqual((a["porcentaje_condominio"], a["valor_autoavaluo"], a["valor_condominio"], a["deduccion"], a["valor_afecto"]),
-                         ("100.00", "112247.64", "112247.64", "0.00", "112247.64"))
+                         ("100.00", "108427.00", "108427.00", "0.00", "108427.00"))
         self.assertEqual((a["clase_uso"], a["sub_clase_uso"], a["uso"]), ("RESIDENCIAL", "UNIFAMILIAR", "CASA HABITACIÓN"))
         self.assertEqual((a["area_terreno"], a["area_comun_terreno"], a["area_construida"]), ("120.00", "0.00", "100.00"))
         self.assertEqual((a["arancel"], a["valor_terreno"], a["valor_construccion"], a["valor_otras_instalaciones"]),
-                         ("356.00", "42720.00", "69527.64", "0.00"))
+                         ("356.00", "42720.00", "65707.00", "0.00"))
         self.assertEqual(a["fecha_adquisicion"], "2004-01-01")
 
     def test_nivel(self):
@@ -338,7 +365,7 @@ class BuildSingleOwnerTests(unittest.TestCase):
                          ["C", "C", "I", "F", "I", "I", "I"])
         self.assertEqual((a["area_construida"], a["area_comun"]), ("100.00", "0.00"))
         self.assertEqual((a["valor_unitario"], a["incremento"], a["porcentaje_depreciacion"], a["valor_total"]),
-                         ("764.04", "0.00", "9.00", "69527.64"))
+                         ("764.04", "0.00", "14.00", "65707.00"))
         self.assertFalse(any("depreciado" in k for k in a))
 
     def test_catalogs_carry_their_codes(self):
@@ -505,6 +532,26 @@ class BuildNivelesTests(unittest.TestCase):
         self.assertEqual(data.niveles, [])
         self.assertEqual(categorias(data)["rechazada"], 1)
 
+    def test_the_formula_takes_the_rnt_not_the_padrons_depreciacion(self):
+        # the padrón's column a tramo behind (11 %) while valor_total_nivel used the RNT's 14 %: loaded as it comes,
+        # reported apart, and the total is right
+        data = build([padron()], [construccion(depreciacion="11")])
+        self.assertEqual(data.niveles[0].attributes["porcentaje_depreciacion"], "11.00")
+        self.assertEqual(categorias(data)["formula_nivel"], 0)
+        [r] = [r for r in data.reporte if r["categoria"] == "depreciacion_vs_rnt"]
+        self.assertIn("14", r["detalle"])
+
+    def test_a_total_that_follows_the_padrons_column_and_not_the_rnt_is_reported(self):
+        # round(764.04 x 0.89, 2) x 100 = 68000.00 follows the column's 11 %, not the RNT's 14 %
+        data = build([padron(valor_area_construida="68000.00")], [construccion(depreciacion="11", valor_total_nivel="68000.00")])
+        [r] = [r for r in data.reporte if r["categoria"] == "formula_nivel"]
+        self.assertIn("RNT 14", r["detalle"])
+
+    def test_without_an_rnt_cell_the_padrons_column_is_used(self):
+        data = build([padron()], [construccion(clasificacion_construccion="0")])
+        self.assertEqual(categorias(data)["formula_nivel"], 0)
+        self.assertEqual(categorias(data)["depreciacion_vs_rnt"], 0)
+
     def test_a_total_off_the_formula_is_reported(self):
         data = build([padron(valor_area_construida="60000")], [construccion(valor_total_nivel="60000")])
         self.assertEqual(len(data.niveles), 1)
@@ -527,7 +574,7 @@ class SchemaTests(unittest.TestCase):
         model = json.loads(json.dumps(MODEL))
         predio = next(o for o in model["objects"] if o["name"] == "predio")
         predio["fields"] = [f for f in predio["fields"] if f["name"] != "codigo_via"]
-        data = ipi.build_dataset(numbered([padron()]), [], 2026, model, CODIGOS, USOS)
+        data = ipi.build_dataset(numbered([padron()]), [], 2026, model, CODIGOS, USOS, RNT)
         self.assertEqual(data.errores, ["predio: el modelo no tiene el campo codigo_via"])
 
 

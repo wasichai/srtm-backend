@@ -1325,7 +1325,8 @@ hojas: `padron` (una fila por predio y contribuyente) y `construcciones` (una fi
 5. **`nivel_construccion`:** se cuelga de la DJ de su par (predio, contribuyente).
    - El nivel 0 es SOTANO.
    - Las siete letras se cargan como vienen.
-   - Se cargan la clasificación, el valor unitario, el incremento, la depreciación y el valor total.
+   - Se cargan la clasificación, el valor unitario, el incremento, la depreciación (la del padrón, tal cual) y el valor
+     total.
      `valor_unitario_depreciado` no se carga, porque no cuadra con nada.
    - No tiene llave natural: se comparan DJ, nivel, año y área, contando las secciones repetidas.
 
@@ -1333,8 +1334,9 @@ hojas: `padron` (una fila por predio y contribuyente) y `construcciones` (una fi
 material, estado, clasificación y nivel. Ninguna está confirmada (`"confirmado": false`). Cada una dice de dónde sale
 su lectura (`evidencia`) y cuáles códigos son una decisión propia (`dudosos`).
 
-- Material, estado de conservación y clasificación se dedujeron de la columna `depreciacion`, que cuadra con las tablas
-  del RNT.
+- Material, estado de conservación y clasificación se dedujeron con la depreciación del RNT (tablas 01–04,
+  `model/data/depreciacion-rnt-2016.csv`, copia de la de catastro-backend) y la antigüedad 2026 − año. Así explican 3 742
+  de 3 755 niveles. La clasificación 1–4 es la tabla 01–04, en el orden del enum `clasificacion` de la DJ.
 - Un código que la tabla no tiene va al reporte (`codigo_sin_mapeo`). Si el campo es obligatorio en el modelo, la fila
   se rechaza; un tipo de vía desconocido se carga como OTROS.
 - Un número o una fecha que no se pueden leer no detienen la carga. El número rechaza su fila al reporte. La fecha se
@@ -1358,7 +1360,8 @@ códigos, sin nombres ni documentos, pero no se versiona.
 | `direccion_compuesta` | Predio sin dirección, armada con sus partes |
 | `valor_predio_no_cuadra` | `valor_predio` distinto de terreno + construcción + otras instalaciones |
 | `niveles_vs_padron` | La suma de los niveles de un par no da su `valor_area_construida` o su `area_construida` |
-| `formula_nivel` | `valor_total_nivel` lejos de (valor unitario + incremento) × (1 − depreciación) × área, por más de S/ 1 |
+| `depreciacion_vs_rnt` | La columna `depreciacion` difiere del % del RNT para su antigüedad (casi siempre un tramo atrás). Se carga la del padrón |
+| `formula_nivel` | `valor_total_nivel` distinto de redondear a 2 decimales (valor unitario + incremento) × (1 − % del RNT) y multiplicar por el área, por más de S/ 0,05. Sin celda del RNT, se usa la columna del padrón |
 
 Con el extracto de 2026-10 (7 829 filas del padrón y 3 762 de construcciones), el `--dry-run` da 588 vías, 161
 unidades urbanas, 1 458 contribuyentes, 7 521 predios, 7 829 declaraciones y 3 758 niveles, con 4 filas rechazadas. El

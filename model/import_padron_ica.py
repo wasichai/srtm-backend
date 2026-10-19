@@ -52,8 +52,9 @@ FECHA_RELLENO = date(1900, 1, 1)
 TITULAR_UNICO = frozenset({"PROPIETARIO UNICO", "SOCIEDAD CONYUGAL", "POSEEDOR"})
 CONDOMINO = "CONDOMINO"
 PROPIETARIO_UNICO = "PROPIETARIO UNICO"
-# a nivel's valor_total_nivel against (valor_unitario + incremento) x (1 - depreciación) x área
-TOLERANCIA_FORMULA = Decimal("1.00")
+# a nivel's valor_total_nivel against round((valor_unitario + incremento) x (1 - RNT %), 2) x área: the rounding is
+# the padrón's, so what is left is the last cent
+TOLERANCIA_FORMULA = Decimal("0.05")
 # the padrón's predio against the sum of its niveles
 TOLERANCIA_VALOR = Decimal("1.00")
 TOLERANCIA_AREA = Decimal("0.05")
@@ -78,6 +79,10 @@ def default_usos_path():
     return os.path.join(HERE, "data", "usos_predio.csv")
 
 
+def default_depreciacion_path():
+    return os.path.join(HERE, "data", "depreciacion-rnt-2016.csv")
+
+
 def load_model(path):
     with open(path, encoding="utf-8") as f:
         return json.load(f)
@@ -92,6 +97,18 @@ def read_usos_srtm(path):
     """data/usos_predio.csv as código -> descripción."""
     with open(path, encoding="utf-8") as f:
         return {r["codigo"].strip(): r["descripcion"].strip() for r in csv.DictReader(f)}
+
+
+def read_depreciacion(path):
+    """The RNT's depreciation tables 01-04 (data/depreciacion-rnt-2016.csv, a copy of catastro-backend's, itself a copy
+    of normativa's) as (tabla, material, estado) -> [(antigüedad hasta, %)], in order; no limit is 'más de 50'."""
+    with open(path, encoding="utf-8") as f:
+        rows = csv.DictReader(line for line in f if not line.startswith("#"))
+        tablas = defaultdict(list)
+        for r in rows:
+            hasta = int(r["antiguedad_hasta"]) if r["antiguedad_hasta"] else None
+            tablas[(r["tabla"], r["material"], r["estado_conservacion"])].append((hasta, Decimal(r["porcentaje"])))
+    return {k: sorted(v, key=lambda t: float("inf") if t[0] is None else t[0]) for k, v in tablas.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +225,24 @@ def nivel(value, codigos):
     return "PISO", int(code)
 
 
+# the model's material and estado as the RNT writes them
+RNT_MATERIAL = {"CONCRETO": "Concreto", "LADRILLO": "Ladrillo", "ADOBE": "Liviano/Adobe"}
+RNT_ESTADO = {"MUY BUENO": "Muy Bueno", "BUENO": "Bueno", "REGULAR": "Regular", "MALO": "Malo"}
+
+
+def depreciacion_rnt(tablas, clasificacion, material, estado, antiguedad):
+    """The RNT's % for a nivel: Ica's clasificación 1-4 is the RNT's table 01-04. None when the RNT has no cell (a
+    clasificación 0, a «*» cell the perito sets, a material it does not list)."""
+    filas = tablas.get((f"0{clasificacion}", RNT_MATERIAL.get(material), RNT_ESTADO.get(estado)), [])
+    return next((pct for hasta, pct in filas if hasta is None or antiguedad <= hasta), None)
+
+
+def valor_total_nivel(unitario, incremento, depreciacion, area):
+    """A nivel's total as the padrón computes it: the depreciated unit value rounded to the cent, times the área."""
+    depreciado = ((unitario + incremento) * (1 - depreciacion / CIEN)).quantize(CENTIMO, rounding=ROUND_HALF_UP)
+    return (depreciado * area).quantize(CENTIMO, rounding=ROUND_HALF_UP)
+
+
 # ---------------------------------------------------------------------------
 # the model (pure)
 # ---------------------------------------------------------------------------
@@ -282,8 +317,9 @@ def _sum(values):
 
 
 class _Builder:
-    def __init__(self, anio, model, codigos, usos):
+    def __init__(self, anio, model, codigos, usos, depreciacion):
         self.anio = anio
+        self.depreciacion = depreciacion
         self.model = model
         self.codigos = codigos
         self.usos = usos
@@ -551,7 +587,7 @@ class _Builder:
             valid = self.valid("nivel_construccion", attributes, "construcciones", row, *par, relations=missing)
             if valid is not None:
                 self.data.niveles.append(Registro(row["_fila"], *par, valid))
-            self.formula(row, par)
+            self.formula(row, par, attributes)
         for par, secciones in por_par.items():
             if par in en_padron:
                 self.suma(en_padron[par], par, secciones)
@@ -575,16 +611,26 @@ class _Builder:
             "valor_total": clean_decimal(row.get("valor_total_nivel")),
         }
 
-    def formula(self, row, par):
-        unitario, incremento, depreciacion, area, total = (_decimal(row.get(k)) for k in (
+    def formula(self, row, par, attributes):
+        """valor_total_nivel against the RNT's depreciation for the nivel's age (anio - año de construcción): the
+        padrón's depreciacion column is often a tramo behind and is loaded as it comes, not taken as the truth. Without
+        an RNT cell, the column is used."""
+        unitario, incremento, columna, area, total = (_decimal(row.get(k)) for k in (
             "valor_unitario", "incremento_5", "depreciacion", "area_construida_propia", "valor_total_nivel"))
-        if None in (unitario, incremento, depreciacion, area, total):
+        if None in (unitario, incremento, columna, area, total) or attributes.get("anio_construccion") is None:
             return
-        calculado = (unitario + incremento) * (1 - depreciacion / CIEN) * area
+        rnt = depreciacion_rnt(self.depreciacion, codigo(row.get("clasificacion_construccion")), attributes.get("material"),
+                               attributes.get("estado_conservacion"), self.anio - attributes["anio_construccion"])
+        if rnt is not None and rnt != columna:
+            self.report("depreciacion_vs_rnt", "construcciones", row["_fila"], *par,
+                        f"depreciacion {columna} y RNT {rnt} (antigüedad {self.anio - attributes['anio_construccion']}): "
+                        "se carga la del padrón")
+        calculado = valor_total_nivel(unitario, incremento, columna if rnt is None else rnt, area)
         if abs(calculado - total) > TOLERANCIA_FORMULA:
+            fuente = f"RNT {rnt}" if rnt is not None else f"depreciacion del padrón {columna}, sin celda del RNT"
             self.report("formula_nivel", "construcciones", row["_fila"], *par,
-                        f"valor_total_nivel {total} y (valor_unitario + incremento) x (1 - depreciación) x área "
-                        f"{calculado.quantize(CENTIMO, rounding=ROUND_HALF_UP)}")
+                        f"valor_total_nivel {total} y round((valor_unitario + incremento) x (1 - %), 2) x área {calculado} "
+                        f"con {fuente}")
 
     def suma(self, padron_row, par, secciones):
         """The padrón's construction against its niveles; a pair with an unreadable number is left out (its rows are
@@ -612,9 +658,9 @@ class _Builder:
         return self.data
 
 
-def build_dataset(padron, construcciones, anio, model, codigos, usos):
+def build_dataset(padron, construcciones, anio, model, codigos, usos, depreciacion):
     """The two sheets' rows -> what to load and what to report. Pure: reads nothing, calls nothing."""
-    builder = _Builder(anio, model, codigos, usos)
+    builder = _Builder(anio, model, codigos, usos, depreciacion)
     builder.contribuyentes(padron)
     builder.predios(padron)
     builder.declaraciones(padron)
@@ -768,7 +814,7 @@ def main(argv=None):
     if args.limit:
         padron, construcciones = limit_predios(padron, construcciones, args.limit)
     data = build_dataset(padron, construcciones, args.anio, load_model(args.model), load_codigos(args.codigos),
-                         read_usos_srtm(default_usos_path()))
+                         read_usos_srtm(default_usos_path()), read_depreciacion(default_depreciacion_path()))
 
     print(f"filas: {len(padron)} del padrón, {len(construcciones)} de construcciones")
     print(f"vías: {len(data.vias)}")

@@ -89,7 +89,8 @@
   "material": {
     "confirmado": false,
     "columna": "material_predominante",
-    "evidencia": "La columna depreciacion de construcciones cuadra con las tablas 01-04 del RNT (R.M. 172-2016-VIVIENDA) leyendo 1 concreto, 2 ladrillo y 3 adobe (p. ej. clasificación 1, material 3, estado 3: 100 de 100 filas en Adobe/Regular).",
+    "nota": "inferido y contrastado con el RNT, 3742/3755",
+    "evidencia": "Con la depreciación de las tablas 01-04 del RNT (R.M. 172-2016-VIVIENDA, data/depreciacion-rnt-2016.csv) y antigüedad 2026 - año, 1 concreto, 2 ladrillo y 3 adobe explican 3 742 de 3 755 niveles (contrastado también por catastro-backend#12).",
     "valores": {
       "1": "CONCRETO",
       "2": "LADRILLO",
@@ -99,7 +100,8 @@
   "estado_conservacion": {
     "confirmado": false,
     "columna": "estado_de_conservacion",
-    "evidencia": "Con la misma tabla del RNT: 1 muy bueno, 2 bueno, 3 regular y 4 malo (clasificación 1, ladrillo, estado 4: 12 de 12 en Malo). Ica no usa MUY MALO.",
+    "nota": "inferido y contrastado con el RNT, 3742/3755",
+    "evidencia": "Con la misma tabla del RNT: 1 muy bueno, 2 bueno, 3 regular y 4 malo. Ica no usa MUY MALO.",
     "valores": {
       "1": "MUY BUENO",
       "2": "BUENO",
@@ -110,7 +112,8 @@
   "clasificacion": {
     "confirmado": false,
     "columna": "clasificacion_construccion",
-    "evidencia": "El código es la tabla de depreciación del RNT: 01 casas habitación, 02 tiendas y depósitos, 03 edificios-oficinas, 04 clínicas, industrias y colegios (3 118 de 3 762 filas cuadran con antigüedad 2025 - año). El 0 (2 filas) no cuadra con ninguna: queda vacío.",
+    "nota": "inferido y contrastado con el RNT, 3742/3755",
+    "evidencia": "El código es la tabla de depreciación del RNT, en el orden del enum clasificacion de la DJ: 01 casas habitación, 02 tiendas y depósitos, 03 edificios-oficinas, 04 clínicas, industrias y colegios. La columna depreciacion del padrón suele ir un tramo atrás del RNT; valor_total_nivel sigue al RNT. El 0 (2 filas) no tiene tabla: queda vacío y va al reporte.",
     "valores": {
       "1": "CASA HABITACION Y DEPARTAMENTOS PARA VIVIENDA",
       "2": "TIENDAS DEPOSITOS CENTROS DE RECREACION CLUBES E INSTITUCIONES",
