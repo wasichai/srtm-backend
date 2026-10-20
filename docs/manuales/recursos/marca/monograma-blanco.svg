@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Rentas municipales</title>
+  <!-- la misma marca, en blanco, para la banda de color de la portada -->
+  <path d="M32 11 L52 21 L12 21 Z" fill="#FFFFFF"/>
+  <rect x="12" y="23" width="40" height="3" fill="#FFFFFF"/>
+  <rect x="15" y="28" width="5" height="17" fill="#FFFFFF"/>
+  <rect x="24" y="28" width="5" height="17" fill="#FFFFFF"/>
+  <rect x="35" y="28" width="5" height="17" fill="#FFFFFF"/>
+  <rect x="44" y="28" width="5" height="17" fill="#FFFFFF"/>
+  <rect x="11" y="47" width="42" height="3" fill="#FFFFFF"/>
+  <rect x="8" y="52" width="48" height="3" fill="#9CC3E6"/>
+</svg>

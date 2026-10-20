@@ -1,0 +1,9 @@
+{
+    "_comentario": "Configuración de las capturas (node capturas.mjs). Las capturas están en capturas/<manual>.json: cada una con id, perfil (registrador, arbitrios, fiscalizador, anuncios, consulta, admin o anonimo), archivo bajo recursos/capturas, pasos y, si no es la vista entera, area (rectángulo de la vista) o recorte (selector, con subir, margen y anchoMax). Pasos: [acción, argumentos…] (ir, clic, llenar, escribir, elegir, tecla, esperar, esperarTexto, pausa, desplazar, arriba, pasar, marcar). {ref:x} se resuelve con las referencias de cada archivo (GET a la API de la demo, como admin; una referencia puede usar las anteriores). Ninguna captura graba datos: los estados que muestra los deja demo/sembrar_demo.py. Un documento del sistema se captura con pdf (ruta de la API que lo emite, con la cuenta del perfil), pagina y resolucion: se dibuja con pdftoppm.",
+    "vista": {
+        "width": 1440,
+        "height": 1000
+    },
+    "escala": 1,
+    "tema": "portal-tributario"
+}

@@ -1,0 +1,4 @@
+# DEMO: mapeo FICTICIO que sembrar_demo.py agrega a model/data/arbitrios/ficticio-usos.csv: la clase COMERCIAL (02)
+# cobra como el "otro uso ficticio" 9.
+prefijo,uso
+02,9

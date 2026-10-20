@@ -1,0 +1,198 @@
+// Glosario común de todos los manuales de Rentas municipales (SRTM). Es independiente: no tiene cabecera de
+// documento y empieza en el nivel 2 (==), así que cada libro lo incluye como capítulo final o como anexo.
+//
+//   Como capítulo sin número de anexo (manuales de usuario):
+//     include::../referencia/glosario.adoc[]
+//   Como anexo (manual del administrador, manual técnico del sistema): fijar el estilo antes de incluirlo:
+//     :glosario-estilo: appendix
+//     include::../referencia/glosario.adoc[]
+//   Dentro de otro capítulo, un nivel más abajo:
+//     include::../referencia/glosario.adoc[leveloffset=+1]
+//
+// El ancla es [[glosario]]: <<glosario>> funciona en cualquier libro que lo incluya. Los términos van en orden
+// alfabético; cada definición en una o dos frases, sin referencias a capítulos de un libro en particular.
+ifndef::glosario-estilo[:glosario-estilo: glossary]
+
+[{glosario-estilo}]
+[[glosario]]
+== Glosario
+
+Términos tributarios y técnicos que usan los manuales. Las siglas tributarias se escriben como en la normativa
+peruana; los nombres técnicos, como aparecen en el código y en la configuración.
+
+[glossary]
+Acta (papeleta)::
+Documento con que se constata una infracción administrativa. En {sigla} guarda la multa calculada con el CUIS y la
+UIT del día de la infracción, y no se edita: se anula agregando una anulación.
+
+ADMIN::
+Rol de la plataforma con todos los permisos de la organización, incluidos cambiar el modelo y administrar usuarios y
+roles. Es el único rol que trae la instalación.
+
+Almacén de emisiones::
+Lugar donde quedan los archivos de la emisión masiva: un directorio del servidor (`local`) o un bucket compatible
+con S3 (`s3`).
+
+`appendOnly`::
+Regla de un objeto de Core: sus registros se agregan y nunca se editan ni se borran. La tienen `cuota_arbitrio` y
+`anulacion_cuota_arbitrio`.
+
+Arbitrios::
+Tasas municipales por servicios públicos (limpieza, recojo de residuos, parques y jardines, serenazgo), que fija
+una ordenanza anual ratificada por la municipalidad provincial.
+
+Auditoría (`audit_log`)::
+Registro de cada alta, edición y baja que hace la plataforma, con usuario, fecha, valores antes y después, y su
+identificador de correlación. En la base solo admite agregar filas.
+
+Autoavalúo::
+Valor del predio que el contribuyente declara (terreno, construcción y obras complementarias). Es la base del
+impuesto predial.
+
+Brecha de recaudación::
+Diferencia entre lo que el padrón declara y lo que valoriza el catastro (catastro-backend), expresada en
+autoavalúo, impuesto predial y arbitrios.
+
+Candado consultivo::
+Bloqueo de PostgreSQL (`pg_advisory_xact_lock`) que {sigla} toma dentro de una transacción para que dos peticiones no
+hagan a la vez lo mismo, por ejemplo numerar dos resoluciones con el mismo correlativo.
+
+Catastro fiscal::
+Registro de los lotes del distrito con su código CPU y su polígono, que el portal muestra en el mapa.
+
+Condominio::
+Situación de un predio con más de un titular en el mismo año y la misma secuencia de uso. Cada condómino declara su
+porcentaje.
+
+Contribuyente::
+Persona natural, persona jurídica o sucesión indivisa obligada al pago de tributos municipales.
+
+Core::
+Módulo base de la plataforma wasichai: identidad, organizaciones, metadata de objetos, registros, permisos y
+auditoría. Expone la API `/api/**`.
+
+Corrida::
+Una medición de la brecha de recaudación de un año, en segundo plano.
+
+CUIS::
+Cuadro único de infracciones y sanciones: la lista de infracciones administrativas con su multa como porcentaje de
+la UIT. En Perené, el CUIEMA aprobado por ordenanza.
+
+Declaración jurada (DJ)::
+Lo que un contribuyente declara sobre un predio en un año: características, autoavalúo y su parte en el condominio.
+Puede estar VIGENTE o ANULADA.
+
+Descargo::
+Escrito con que el administrado contesta un acta, dentro del plazo en días hábiles.
+
+Determinación de arbitrios::
+Cálculo y registro de las cuotas mensuales de arbitrios de un predio o de un contribuyente; la masiva hace lo mismo
+con todos los predios de un año, por lotes.
+
+Emisión masiva::
+Generación en segundo plano de las HR, los PU y las HLA de un año, como un PDF único o un ZIP.
+
+`EscrituraDeSrtm`::
+Marca interna con que la API de {sigla} identifica sus propias escrituras. Sin ella, la guardia de escritura rechaza
+el alta de un objeto de infracciones o de anuncios.
+
+Faltan::
+Lista de parámetros o datos que impiden un acto o un documento («UIT 2027», «TASA_ARBITRIO …»). La API la devuelve en
+el campo `faltan` de un 422.
+
+Flyway::
+Herramienta de migraciones de base de datos que usa wasichai. Cada módulo guarda su historial en una tabla
+`flyway_history_<módulo>`.
+
+Guardia de escritura::
+Componente de {sigla} (`GuardiaDeEscritura`) que Core consulta antes de cada escritura de un registro, por cualquier
+camino, y que aplica la regla de su objeto.
+
+Hoja de liquidación de arbitrios (HLA)::
+Documento con las cuotas de arbitrios de un contribuyente en un año, por predio y por servicio, con su cálculo y sus
+vencimientos.
+
+Hoja de resumen (HR)::
+Documento del impuesto predial de un contribuyente en un año: sus predios, la base imponible, el impuesto y sus
+cuotas.
+
+Impuesto predial::
+Tributo anual sobre el valor de los predios (TUO de la Ley de Tributación Municipal, art. 8 y siguientes), con tramos
+progresivos en UIT y un mínimo.
+
+Inafectación::
+Condición de un predio que no paga un servicio de arbitrios durante una vigencia.
+
+JWT::
+Token firmado que la plataforma entrega al iniciar sesión y que acompaña cada petición a la API
+(`Authorization: Bearer …`).
+
+Lease (latido)::
+Plazo durante el cual un trabajador conserva un lote o un ensamblado mientras renueva su latido. Si deja de latir,
+otro trabajador lo retoma al vencer el plazo.
+
+Lote (de trabajo)::
+Tramo de contribuyentes o de predios de un trabajo masivo, que procesa un trabajador de cualquier instancia.
+
+Ordenanza de arbitrios::
+Norma municipal anual que fija los servicios y las tasas de arbitrios; sin su ratificación provincial no se
+determina ni se emite.
+
+Organización::
+Entidad de la plataforma que agrupa usuarios, roles y datos. Los registros de cada organización viven en tablas
+propias.
+
+Padrón::
+Conjunto de contribuyentes, predios y declaraciones juradas registrados.
+
+Parámetro tributario::
+Valor normativo con vigencia y doble firma (quien transcribió y quien verificó): UIT, tramos y mínimo del predial,
+tasas de arbitrios, plazos, feriados, tasas de anuncios.
+
+PIDE::
+Plataforma de Interoperabilidad del Estado. {sigla} puede consultar por ella los nombres de un DNI en RENIEC, si hay
+convenio.
+
+Predio urbano (PU)::
+Formato de la declaración jurada de un predio y un titular, con sus usos, niveles, obras y valores declarados.
+También se llama así al predio situado en zona urbana.
+
+problem+json::
+Formato estándar de los errores de la API (RFC 7807): `type`, `title`, `status`, `detail` y campos adicionales como
+`errors` o `faltan`.
+
+RBAC::
+Control de acceso basado en roles: los permisos se dan a roles, y los roles a usuarios.
+
+Resolución de gerencia (RIS, RGR)::
+Resolución que sanciona un acta (RIS, de tipo administrativo) o resuelve un descargo o recurso (RGR).
+
+Secuencia de uso::
+Número de tres dígitos («001») que distingue los usos de un mismo predio en las declaraciones de un año.
+
+SKIP LOCKED::
+Cláusula de PostgreSQL (`FOR UPDATE SKIP LOCKED`) con que cada trabajador toma un lote que nadie más está tomando,
+sin esperar a los demás.
+
+Subsanación::
+Corrección de la conducta que motivó una notificación previa, dentro de su plazo; impide que la notificación origine
+un acta.
+
+Testcontainers::
+Biblioteca que levanta contenedores de Docker (PostgreSQL con PostGIS, MinIO) para las pruebas de integración.
+
+Trabajador::
+Corrutina de una instancia del backend que toma y procesa lotes de los trabajos masivos.
+
+Ubigeo::
+Código del INEI de un distrito (seis dígitos; Perené es `120302`).
+
+Unidad impositiva tributaria (UIT)::
+Valor de referencia que fija el Estado cada año, en soles. Se usa en los tramos del predial, el mínimo y las multas.
+
+Valor afecto::
+Parte del autoavalúo sobre la que se calcula el impuesto: el valor de condominio menos la deducción, nunca menos de 0.
+
+wasichai::
+Plataforma sobre la que está construido {sigla}: un conjunto de módulos de Spring Boot (core, workflow, documents,
+views, forms, pages, gis) que dan metadata, registros, seguridad y auditoría.

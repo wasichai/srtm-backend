@@ -1,0 +1,677 @@
+{
+    "_comentario": "Capturas del Manual de anuncios (usuario/anuncios.adoc), con la cuenta del perfil ANUNCIOS. Ninguna graba: el formulario y los diálogos de los actos se abren y se llenan, pero no se confirman.",
+    "referencias": {
+        "anu_1": {
+            "get": "/api/srtm/anuncios?q=AN-2026-000001",
+            "campo": "content.0.id"
+        },
+        "anu_2": {
+            "get": "/api/srtm/anuncios?q=AN-2026-000002",
+            "campo": "content.0.id"
+        },
+        "anu_3": {
+            "get": "/api/srtm/anuncios?q=AN-2026-000003",
+            "campo": "content.0.id"
+        },
+        "anu_4": {
+            "get": "/api/srtm/anuncios?q=AN-2026-000004",
+            "campo": "content.0.id"
+        },
+        "anu_5": {
+            "get": "/api/srtm/anuncios?q=AN-2026-000005",
+            "campo": "content.0.id"
+        },
+        "anu_bodega": {
+            "get": "/api/srtm/contribuyentes?q=20999000020",
+            "campo": "content.0.id"
+        },
+        "anu_predio_bodega": {
+            "get": "/api/srtm/predios?q=02-01-0003",
+            "campo": "content.0.id"
+        }
+    },
+    "capturas": [
+        {
+            "id": "anu-riel",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/riel.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios"
+                ],
+                [
+                    "esperarTexto",
+                    "Padrón de anuncios"
+                ],
+                [
+                    "clic",
+                    "[data-ui=riel] button:has-text('Anuncios')"
+                ],
+                [
+                    "esperar",
+                    "[data-ui=riel-panel]"
+                ]
+            ],
+            "area": {
+                "x": 0,
+                "y": 0,
+                "width": 400,
+                "height": 320
+            }
+        },
+        {
+            "id": "anu-padron",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/padron.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios"
+                ],
+                [
+                    "esperarTexto",
+                    "AN-2026-000005"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Estado al') + input",
+                    "2026-10-20"
+                ],
+                [
+                    "clic",
+                    "form[aria-label='Filtros del padrón de anuncios'] button:has-text('Buscar')"
+                ],
+                [
+                    "esperarTexto",
+                    "Estado y vigencia al 20/10/2026"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ]
+            ],
+            "area": {
+                "x": 0,
+                "y": 0,
+                "width": 1440,
+                "height": 850
+            }
+        },
+        {
+            "id": "anu-padron-estado-al",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/padron-estado-al.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios"
+                ],
+                [
+                    "esperarTexto",
+                    "AN-2026-000005"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Estado al') + input",
+                    "2026-04-16"
+                ],
+                [
+                    "clic",
+                    "form[aria-label='Filtros del padrón de anuncios'] button:has-text('Buscar')"
+                ],
+                [
+                    "esperarTexto",
+                    "Estado y vigencia al 16/04/2026"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ]
+            ],
+            "recorte": "table[aria-label^='Anuncios al']",
+            "subir": 2,
+            "margen": 4
+        },
+        {
+            "id": "anu-padron-vencidos",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/padron-vencidos.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios"
+                ],
+                [
+                    "esperarTexto",
+                    "AN-2026-000005"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Estado al') + input",
+                    "2026-10-20"
+                ],
+                [
+                    "clic",
+                    "form[aria-label='Filtros del padrón de anuncios'] button:has-text('Buscar')"
+                ],
+                [
+                    "esperarTexto",
+                    "Estado y vigencia al 20/10/2026"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ],
+                [
+                    "elegir",
+                    "label:text-is('Estado') + select",
+                    "Vencido"
+                ],
+                [
+                    "clic",
+                    "form[aria-label='Filtros del padrón de anuncios'] button:has-text('Buscar')"
+                ],
+                [
+                    "pausa",
+                    "1500"
+                ],
+                [
+                    "esperarTexto",
+                    "1 registro"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 140,
+                "width": 1336,
+                "height": 450
+            }
+        },
+        {
+            "id": "anu-nuevo",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/nuevo.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios/nuevo"
+                ],
+                [
+                    "esperarTexto",
+                    "Nuevo anuncio"
+                ],
+                [
+                    "escribir",
+                    "label:has-text('Titular') + div input",
+                    "20999000011"
+                ],
+                [
+                    "esperar",
+                    "ul[aria-label='Resultados de titular'] button:has-text('20999000011')"
+                ],
+                [
+                    "clic",
+                    "ul[aria-label='Resultados de titular'] button:has-text('20999000011')"
+                ],
+                [
+                    "pausa",
+                    "400"
+                ],
+                [
+                    "escribir",
+                    "label:has-text('Predio') + div input",
+                    "01-01-0007"
+                ],
+                [
+                    "esperar",
+                    "ul[aria-label='Resultados de predio'] button:has-text('01-01-0007')"
+                ],
+                [
+                    "clic",
+                    "ul[aria-label='Resultados de predio'] button:has-text('01-01-0007')"
+                ],
+                [
+                    "pausa",
+                    "400"
+                ],
+                [
+                    "elegir",
+                    "label:text-is('Clase') + select",
+                    "Letrero"
+                ],
+                [
+                    "elegir",
+                    "label:text-is('Tipo') + select",
+                    "Aviso iluminado"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Emplazamiento') + input",
+                    "FACHADA"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Forma') + input",
+                    "RECTANGULAR"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Denominación') + input",
+                    "FARMACIA SAN JUAN"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Dirección') + input",
+                    "JR. LAS ORQUIDEAS 171, URB. VALLE VERDE, PERENE"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Área m²') + input",
+                    "1.80"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Autorizado el') + input",
+                    "2026-10-20"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Vigente hasta') + input",
+                    "2026-12-31"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Licencia') + input",
+                    "LF-2026-0312"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Expediente') + input",
+                    "EXP-AN-2026-0090"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Fecha del expediente') + input",
+                    "2026-10-14"
+                ],
+                [
+                    "llenar",
+                    "label:text-is('Observación') + textarea",
+                    "Autorización de anuncio con el expediente EXP-AN-2026-0090"
+                ],
+                [
+                    "clic",
+                    "h1"
+                ]
+            ],
+            "recorte": "form[aria-label='Nuevo anuncio']",
+            "subir": 2,
+            "margen": 4,
+            "vista": {
+                "width": 1440,
+                "height": 1300
+            }
+        },
+        {
+            "id": "anu-nuevo-titular",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/nuevo-titular.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios/nuevo"
+                ],
+                [
+                    "esperarTexto",
+                    "Nuevo anuncio"
+                ],
+                [
+                    "escribir",
+                    "label:has-text('Titular') + div input",
+                    "BODEGA"
+                ],
+                [
+                    "esperar",
+                    "ul[aria-label='Resultados de titular'] button"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 220,
+                "width": 1336,
+                "height": 200
+            }
+        },
+        {
+            "id": "anu-ficha",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/ficha.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios/{ref:anu_2}"
+                ],
+                [
+                    "esperarTexto",
+                    "Movimientos"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ]
+            ],
+            "vista": {
+                "width": 1440,
+                "height": 1180
+            }
+        },
+        {
+            "id": "anu-ficha-cesado",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/ficha-cesado.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios/{ref:anu_4}"
+                ],
+                [
+                    "esperarTexto",
+                    "Movimientos"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 140,
+                "width": 1336,
+                "height": 380
+            }
+        },
+        {
+            "id": "anu-ficha-vencido",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/ficha-vencido.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios/{ref:anu_3}"
+                ],
+                [
+                    "esperarTexto",
+                    "Movimientos"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 140,
+                "width": 1336,
+                "height": 380
+            }
+        },
+        {
+            "id": "anu-movimientos",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/movimientos.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios/{ref:anu_5}"
+                ],
+                [
+                    "esperarTexto",
+                    "Movimientos"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "desplazar",
+                    "table[aria-label='Movimientos del anuncio']"
+                ]
+            ],
+            "recorte": "table[aria-label='Movimientos del anuncio']",
+            "subir": 3,
+            "margen": 4,
+            "vista": {
+                "width": 1800,
+                "height": 1000
+            }
+        },
+        {
+            "id": "anu-renovar",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/renovar.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios/{ref:anu_1}"
+                ],
+                [
+                    "esperarTexto",
+                    "Movimientos"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Renovar')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:text-is('Nueva vigencia hasta') + input",
+                    "2027-12-31"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Observación') + textarea",
+                    "Renovación del ejercicio 2027 solicitada por el titular"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0
+        },
+        {
+            "id": "anu-cesar",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/cesar.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios/{ref:anu_1}"
+                ],
+                [
+                    "esperarTexto",
+                    "Movimientos"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Cesar')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:text-is('Motivo') + textarea",
+                    "Cierre del local comercial"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Observación') + textarea",
+                    "El titular comunicó el cese con su escrito del 19/10/2026"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0
+        },
+        {
+            "id": "anu-retirar",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/retirar.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios/{ref:anu_4}"
+                ],
+                [
+                    "esperarTexto",
+                    "Movimientos"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Retirar')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:text-is('Fecha del acto') + input",
+                    "2026-10-19"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:text-is('Motivo') + textarea",
+                    "Elemento retirado de la fachada"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] label:has-text('Observación') + textarea",
+                    "Retiro verificado por el inspector en campo"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 0
+        },
+        {
+            "id": "anu-tasas",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/tasas.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios/tasas"
+                ],
+                [
+                    "esperarTexto",
+                    "Globo aerostático"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 420
+            }
+        },
+        {
+            "id": "anu-tasas-2025",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/tasas-2025.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/anuncios/tasas"
+                ],
+                [
+                    "esperarTexto",
+                    "Globo aerostático"
+                ],
+                [
+                    "elegir",
+                    "label:has-text('Año') select",
+                    "2025"
+                ],
+                [
+                    "esperarTexto",
+                    "Al año 2025 le falta"
+                ],
+                [
+                    "pausa",
+                    "500"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 360
+            }
+        },
+        {
+            "id": "anu-contribuyente-anuncios",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/contribuyente-anuncios.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:anu_bodega}?tab=anuncios"
+                ],
+                [
+                    "esperarTexto",
+                    "Estado y vigencia al"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        },
+        {
+            "id": "anu-predio-anuncios",
+            "perfil": "anuncios",
+            "archivo": "usuario/anuncios/predio-anuncios.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios/{ref:anu_predio_bodega}?tab=anuncios"
+                ],
+                [
+                    "esperarTexto",
+                    "Estado y vigencia al"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        }
+    ]
+}

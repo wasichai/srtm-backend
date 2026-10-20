@@ -1,0 +1,31 @@
+# Base de la demostración de los manuales. Proyecto aparte (srtm-docs): no comparte contenedor, volumen ni puerto
+# con el compose.yml de desarrollo (srtm-postgres, :5433). Desechable: se reconstruye con make demo-sembrar o se
+# restaura desde demo/respaldos/.
+#
+#   docker compose -p srtm-docs -f docs/manuales/demo/compose.demo.yml up -d
+#
+# Con un Docker remoto (DOCKER_HOST por ssh), el puerto queda en el loopback del servidor: ssh -fN -L 5447:localhost:5447 <servidor>
+name: srtm-docs
+
+services:
+  postgres:
+    # la misma imagen que compose.yml y que el CI
+    image: postgis/postgis:18-3.6
+    container_name: srtm-docs-postgres
+    environment:
+      POSTGRES_USER: srtm
+      POSTGRES_PASSWORD: srtm
+      POSTGRES_DB: srtm_demo
+    ports:
+      # solo loopback; 5447 para no chocar con el 5433 de desarrollo
+      - '127.0.0.1:${SRTM_DEMO_PG_PORT:-5447}:5432'
+    volumes:
+      - demo-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U srtm -d srtm_demo']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  demo-data:

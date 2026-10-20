@@ -1,0 +1,11 @@
+stateDiagram-v2
+  direction TB
+  [*] --> PENDIENTE: POST /api/srtm/emisiones
+  PENDIENTE --> EN_PROCESO: un trabajador toma el primer lote
+  EN_PROCESO --> EN_PROCESO: lotes de 100 contribuyentes<br/>(FOR UPDATE SKIP LOCKED, lease con latido)
+  EN_PROCESO --> ENSAMBLANDO: todos los lotes listos
+  EN_PROCESO --> FALLIDA: un lote agota sus 3 intentos
+  ENSAMBLANDO --> TERMINADA: una instancia une los lotes en el almacén
+  ENSAMBLANDO --> FALLIDA
+  TERMINADA --> [*]
+  FALLIDA --> [*]

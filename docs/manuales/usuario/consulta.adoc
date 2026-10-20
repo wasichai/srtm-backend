@@ -1,0 +1,664 @@
+= Manual de consulta: Consulta del padrón, documentos y brecha de recaudación
+Municipalidad Distrital de Perené
+include::../atributos.adoc[]
+:description: Manual de usuario de {producto} ({sigla}) para el perfil {p-consulta}: consulta del padrón, de las declaraciones, del catastro fiscal, de los arbitrios, de las infracciones y los anuncios, documentos y brecha de recaudación.
+:keywords: srtm, rentas municipales, consulta, padrón, contribuyente, predio, declaración jurada, PU, HR, HLA, brecha de recaudación
+
+[abstract]
+Este manual explica cómo consultar {producto} ({sigla}) con el perfil {p-consulta}: buscar y leer las fichas de
+contribuyentes, predios, declaraciones juradas y lotes del catastro fiscal; revisar los arbitrios, las infracciones y
+los anuncios; ver, imprimir y descargar los documentos que emite el sistema, y leer la brecha de recaudación. Es un
+perfil de solo lectura: el manual dice también qué no puede hacer y cómo lo muestra la pantalla. Está escrito para
+quien atiende consultas, audita o supervisa, sin conocimientos del funcionamiento interno del sistema. Todas las
+pantallas que se muestran son reales y se tomaron con datos ficticios.
+
+[[presentacion]]
+== Presentación
+
+[[presentacion-sistema]]
+=== Para qué sirve el sistema
+
+{producto} ({sigla}), el {producto-largo} de la {municipalidad}, reúne en un solo portal web el padrón de
+contribuyentes y de predios, las declaraciones juradas del impuesto predial, el catastro fiscal, los arbitrios, las
+infracciones administrativas y los anuncios. Cada área registra lo suyo; el perfil de consulta lo ve todo, tal como
+está, sin cambiar nada.
+
+[[presentacion-manual]]
+=== Para qué sirve este manual y a quién se dirige
+
+Este manual es para quien necesita leer el sistema sin registrar en él: el personal de orientación al contribuyente,
+la supervisión, la auditoría interna o la gerencia. Cada capítulo responde a una pregunta de consulta: qué predios
+declara esta persona, quién es el titular de este predio, cuánto debe de arbitrios, en qué fase está esta acta, qué
+anuncios tiene este comercio, cuánto deja de recaudar el padrón.
+
+En la demostración con la que se tomaron las capturas, este trabajo lo hace el perfil sugerido *{p-consulta}*
+(«Consulta»). La municipalidad puede definir otros roles con otros nombres: lo que cuenta es qué permisos tiene su
+cuenta (<<permisos-usuario>>). Con el perfil {p-consulta}, usted puede:
+
+* buscar y consultar contribuyentes, con sus domicilios, relacionados, medios de contacto y documentos de sustento;
+* consultar predios, sus titulares y sus declaraciones juradas, con sus niveles, obras, condóminos y frentes;
+* consultar los lotes del catastro fiscal y su polígono en el mapa;
+* consultar las tasas de arbitrios del año, las cuotas determinadas y las determinaciones masivas;
+* consultar los expedientes de infracción, las notificaciones previas, el CUIS y las escalas y plazos;
+* consultar el padrón de anuncios y sus tasas;
+* ver, imprimir y descargar el PU, la HR, la HLA y las resoluciones, y descargar las emisiones masivas;
+* consultar la brecha de recaudación.
+
+Con el perfil {p-consulta} usted no registra, corrige, anula ni elimina nada (<<sin-escritura>>).
+
+[[presentacion-alcance]]
+=== Qué cubre y qué no
+
+.Alcance de este manual
+[cols="2,3",options="header"]
+|===
+|Tema |Dónde se explica
+|Cómo encontrar y leer cada ficha, qué muestra cada pantalla |Este manual.
+|La brecha de recaudación: qué mide, cómo se lee y su situación en esta instalación |Este manual (<<brecha>>).
+|Cómo se inscriben contribuyentes y predios y se reciben declaraciones; qué significa cada dato del padrón
+|{m-registrador}.
+|Cómo se calculan y determinan los arbitrios; la HLA y la emisión masiva |{m-arbitrios}.
+|Actas, notificaciones, descargos, resoluciones y el cuadro único de infracciones y sanciones (CUIS)
+|{m-fiscalizador}.
+|Anuncios y propaganda: alta, renovación, cese y retiro |{m-anuncios}.
+|Cuentas de usuario, roles, catálogos y parámetros |{m-admin}.
+|===
+
+[[sin-escritura]]
+=== Lo que su perfil no puede hacer
+
+Su perfil solo lee. El portal no esconde las acciones que no le corresponden, y las muestra de dos maneras:
+
+Botón gris con «Sin permiso: …»:: En los arbitrios, las infracciones, los anuncios y la brecha, el botón del acto
+aparece deshabilitado y, debajo, una línea dice qué permiso pide (<<permisos-usuario>>). Por ejemplo: *Sin permiso:
+determinar pide creación sobre las cuotas de arbitrio.* (<<fig-arbitrios>>) o *Sin permiso: pide creación y edición
+sobre las corridas de brecha, y creación sobre sus predios.* (<<fig-brecha-sin-permiso>>).
+Botón habilitado que el sistema rechaza:: En las fichas del registro tributario (contribuyente, predio, declaración,
+lote del catastro) y en la emisión masiva, los botones de registro aparecen habilitados: btn:[Editar], btn:[Eliminar],
+el *+* de cada lista, btn:[Nuevo contribuyente], btn:[Nuevo predio], btn:[Nueva declaración], btn:[Anular
+declaración], btn:[Guardar], btn:[Guardar cambios], btn:[Emitir] y btn:[Eliminar] de las emisiones y de las
+determinaciones masivas. Si los usa, el formulario se abre, pero al grabar el sistema rechaza la operación y nada se
+graba.
+
+// fin de la lista
+CAUTION: No use los botones de registro de las fichas para «probar» un cambio: lo que escriba en un formulario se
+pierde al rechazarse, y abrir un formulario por error en una ficha que otra persona está atendiendo puede confundirla.
+Si su trabajo necesita registrar algo, pídale al administrador que añada ese permiso a su rol.
+
+[[presentacion-leer]]
+=== Cómo leer los procedimientos
+
+Cada tarea importante se describe con el mismo formato:
+
+[horizontal]
+Recuadro inicial:: El *objetivo* de la tarea y los *requisitos previos*: lo que debe tener a mano.
+Pasos numerados:: Lo que usted hace, en orden, con el rótulo exacto de cada botón y campo.
+Resultado esperado:: Lo que debe ver cuando la tarea terminó bien.
+Casos especiales:: Lo que puede pasar fuera del camino habitual y qué hacer.
+
+[[presentacion-convenciones]]
+=== Convenciones tipográficas
+
+.Convenciones de este manual
+[cols="1,2",options="header"]
+|===
+|Se escribe así |Significa
+|btn:[Ver HR] |Un botón de la pantalla, con su rótulo exacto.
+|menu:Fiscalización[Brecha de recaudación] |Una ruta de navegación: el módulo del riel y, luego, el trámite.
+|kbd:[Enter] |Una tecla.
+|*Titulares*, *Año* |Una pestaña, una sección o un campo, en negrita.
+|`01-01-0004` |Un valor que se escribe o que el sistema muestra tal cual.
+|===
+
+Los avisos tienen cuatro niveles: *Nota* (información complementaria), *Consejo* (una recomendación),
+*Precaución* (afecta a muchos registros o es difícil de revertir) y *Advertencia* (no se puede deshacer).
+
+[[presentacion-siglas]]
+=== Siglas
+
+.Siglas que usa este manual
+[cols="1,4",options="header"]
+|===
+|Sigla |Significado
+|DJ |Declaración jurada (del impuesto predial).
+|PU |Predio urbano: el formulario con lo que un titular declara de un predio.
+|HR |Hoja de resumen: los predios de un contribuyente y su impuesto predial del año.
+|HLA |Hoja de liquidación de arbitrios.
+|RIS |Resolución de sanción de una infracción administrativa.
+|CPU |Código del predio en el catastro fiscal (código catastral del lote).
+|CUIS |Cuadro único de infracciones y sanciones.
+|UIT |Unidad impositiva tributaria.
+|DNI, RUC |Documento nacional de identidad; registro único de contribuyentes.
+|===
+
+[[presentacion-datos]]
+=== Los datos de las capturas
+
+Las capturas se tomaron en una base de demostración con datos *ficticios*: 40 contribuyentes, 55 predios con sus
+declaraciones juradas de 2026 y sus lotes de catastro, en las urbanizaciones VALLE VERDE y LAS PALMERAS de Perené; los
+arbitrios 2026 determinados con una ordenanza también ficticia; tres actas de infracción, una de ellas sancionada con
+su resolución; varios anuncios, y una emisión masiva 2026 terminada. Los nombres, documentos y direcciones no
+corresponden a personas ni predios reales. Varios casos se repiten:
+
+* QUISPE ROJAS ROSA ELENA (contribuyente `000001`), que declara cuatro predios, uno de ellos con dos usos;
+* el predio `01-01-0004`, en condominio: 60 % y 40 %;
+* el acta `AC-2026-0003`, sancionada con la resolución `RIS-2026-000001`.
+
+Las capturas usan el tema *Portal tributario* (<<temas>>).
+
+include::../comun/acceso.adoc[]
+
+include::../comun/interfaz.adoc[]
+
+include::../comun/busqueda.adoc[]
+
+include::../comun/mensajes.adoc[]
+
+[[padron]]
+== Consultar el padrón
+
+[[contribuyentes]]
+=== Contribuyentes
+
+[[proc-consultar-contribuyente]]
+.Consultar un contribuyente
+====
+[horizontal]
+Objetivo:: Ver los datos, los predios, las declaraciones y las deudas de un contribuyente.
+Requisitos previos:: Su documento, su nombre o razón social, o su código.
+====
+
+. Busque al contribuyente con la caja de búsqueda de la barra superior (<<busqueda-general>>) o con
+  menu:Contribuyentes[Buscar contribuyentes], y abra su ficha.
+. Elija el *Año* de la ficha: cambia las cifras del *Resumen*, la pestaña *Predios* y los documentos. Muestra el año en
+  curso y los cuatro anteriores.
+. Recorra las pestañas: las de *Registro tributario* (*Datos del contribuyente*, *Domicilios*, *Relacionados*,
+  *Medios de contacto*, *Sustento*) y las de *Rentas* (*Predios*, *Declaraciones*, *Arbitrios*, *Infracciones*,
+  *Anuncios*) (<<fig-contribuyente>>).
+
+// fin de los pasos
+Resultado esperado:: La ficha muestra, arriba, el código y el nombre; debajo, el tipo de contribuyente, el documento y
+el domicilio fiscal; a la derecha, btn:[Ver HR] y btn:[Ver HLA] (<<documentos>>).
+Casos especiales::
+* *Nada coincide con «…»*: pruebe con el documento solo o con un solo apellido (<<faq-comun>>).
+* Dos personas con el mismo nombre: confirme por el número de documento y el domicilio fiscal.
+
+[[fig-contribuyente]]
+.La ficha de un contribuyente
+image::{capturas}/usuario/consulta/contribuyente.png[Ficha de QUISPE ROJAS ROSA ELENA con su documento y domicilio fiscal, el año 2026, los botones Ver HR, Ver HLA y Eliminar, las pestañas de Registro tributario y de Rentas, y los datos de la declaración, de identificación y personales]
+
+La pestaña *Predios* lista lo que el contribuyente declara en el año elegido: el predio y su dirección, la
+*Condición* (PROPIETARIO UNICO, CONDOMINO…), el *% condominio*, el *Uso*, el *Autoavalúo*, el *Valor afecto*, el
+número de su DJ (que abre la declaración) y un botón *PU* (<<fig-predios-del-contribuyente>>). Un predio con dos usos
+aparece dos veces, una por declaración. La fila *Total 2026* suma lo del año.
+
+[[fig-predios-del-contribuyente]]
+.Lo que un contribuyente declara en 2026
+image::{capturas}/usuario/consulta/predios-del-contribuyente.png[Pestaña Predios con cinco declaraciones sobre cuatro predios, su condición PROPIETARIO UNICO, el 100 por ciento, el uso, el autoavalúo, el valor afecto, el número de DJ y el botón PU, y la fila Total 2026 de S/ 517,339.52]
+
+La pestaña *Declaraciones* lista todas sus declaraciones, de todos los años; una anulada lleva la marca *Anulada* y no
+suma. Lo que significa cada dato está en el {m-registrador}.
+
+[[predios]]
+=== Predios
+
+Abra el predio con la búsqueda general, con menu:Predios[Buscar predios] o desde la pestaña *Predios* de un
+contribuyente. Su ficha muestra en la banda el número de registro, el código y la dirección, y tiene las pestañas
+*Datos de la ubicación*, *Titulares*, *Declaraciones*, *Arbitrios*, *Infracciones* y *Anuncios*, con btn:[Ver PU] a
+la derecha.
+
+La pestaña *Titulares* responde a la pregunta «¿de quién es este predio?»: quienes lo declaran en el año elegido, con
+su condición, su % de condominio, el uso, el autoavalúo, el valor afecto y el número de su DJ
+(<<fig-titulares>>). En un condominio, cada condómino tiene su fila y su parte del valor afecto.
+
+[[fig-titulares]]
+.Los titulares de un predio en condominio
+image::{capturas}/usuario/consulta/titulares.png[Pestaña Titulares del predio 01-01-0004 con dos condóminos al 40 y 60 por ciento, el mismo autoavalúo, su valor afecto y el número de DJ, y la fila Total 2026]
+
+El botón btn:[Buscar predios] de la lista de predios abre un diálogo de búsqueda por vía, número, manzana, lote,
+código, código CPU o partida registral, con un mapa, en el padrón (*Buscar en Tributario*) o en el catastro
+(*Buscar en Catastro Fiscal*). Se explica en el {m-registrador}.
+
+[[declaraciones]]
+=== Declaraciones juradas
+
+Una declaración se abre con su número desde la pestaña *Predios* o *Declaraciones* de un contribuyente o de un
+predio. Su banda dice el contribuyente, el número de la declaración, su estado (*Vigente* o *Anulada*), el año, la
+condición del titular y el predio. Sus pestañas son las del formulario: *Datos del predio*, *Datos de la ubicación*,
+*Datos del transferente*, *Características*, *Datos de los condóminos* y *Otros frentes* (<<fig-declaracion>>).
+
+[[fig-declaracion]]
+.Una declaración jurada
+image::{capturas}/usuario/consulta/declaracion.png[Declaración jurada predial 1 de QUISPE ROJAS ROSA ELENA, vigente, de 2026, con las seis pestañas y los datos del predio y de la adquisición; arriba, Anular declaración, Cancelar y Guardar]
+
+La declaración se muestra como un formulario, con los mismos campos con que se registró. Usted puede leerlos y
+cambiar de pestaña, pero no grabar: si cambia un campo por error, pulse btn:[Cancelar]. Al salir de la declaración con
+un cambio sin grabar, el sistema pregunta *¿Salir sin guardar?* (<<salir-sin-guardar>>): elija btn:[Salir sin
+guardar].
+
+[[catastro]]
+=== Catastro fiscal
+
+El catastro fiscal es el registro de los lotes del distrito con su código CPU, su dirección catastral y su polígono.
+Un lote se busca con btn:[Buscar predios], pestaña *Buscar en Catastro Fiscal*; con el lote seleccionado, el botón
+btn:[Editar lote] abre su ficha, que muestra sus datos y su polígono resaltado en rojo sobre los lotes vecinos
+(<<fig-lote>>). Aunque el botón diga «Editar», su perfil solo lee el lote.
+
+[[fig-lote]]
+.La ficha de un lote del catastro fiscal
+image::{capturas}/usuario/consulta/lote.png[Ficha del lote 1203020101001 con su código CPU, el código de predio municipal 01-01-0001, la partida registral, su ubicación en la AV. LOS FRESNOS 100 y el mapa con el lote resaltado en rojo entre los vecinos]
+
+NOTE: El mapa necesita salida a Internet: sin ella queda en blanco, pero los datos del lote se ven igual.
+
+[[documentos]]
+== Documentos
+
+Su perfil puede ver, imprimir y descargar todos los documentos que el sistema emite.
+
+.Documentos que puede consultar
+[cols="1,2,2",options="header"]
+|===
+|Documento |Qué es |Dónde
+|PU |Lo que un titular declara de un predio en el año. |btn:[Ver PU] en la ficha del predio; botón *PU* de cada fila en
+la pestaña *Predios* del contribuyente.
+|HR |Los predios del contribuyente en el año y su impuesto predial, con las cuatro cuotas. |btn:[Ver HR] en la ficha del
+contribuyente.
+|HLA |Las cuotas de arbitrios del año del contribuyente, por predio y mes. |btn:[Ver HLA] en la ficha del contribuyente.
+|Resolución de sanción (RIS) |La resolución de un acta de infracción. |btn:[Ver PDF de RIS-…] en la sección
+*Resoluciones* del expediente.
+|Emisión masiva |La HR, el PU y la HLA de todos los contribuyentes de un año, en un archivo. |btn:[Descargar] en
+menu:Emisión[Emisión masiva] (<<emisiones>>).
+|===
+
+[[proc-ver-documento]]
+.Ver, imprimir o descargar un documento
+====
+[horizontal]
+Objetivo:: Mostrar, imprimir o entregar en archivo un documento del sistema.
+Requisitos previos:: La ficha abierta, con el año elegido.
+====
+
+. Elija el *Año* en la ficha (para el PU, la HR y la HLA).
+. Pulse el botón del documento. Se abre una ventana con el documento; mientras se genera, dice *Generando…*.
+. Si el predio tiene varios titulares en el año, btn:[Ver PU] pregunta antes de quién es: elija el titular en *Elegir
+  el titular*.
+. Use btn:[Imprimir] o btn:[Descargar] de la ventana, y btn:[Cerrar] al terminar.
+
+// fin de los pasos
+Resultado esperado:: El documento se muestra en pantalla, con la fecha y la hora de emisión en su cabecera
+(<<fig-pdf-resolucion>>).
+Casos especiales::
+* *El predio … no tiene declaración jurada vigente en …* o *El contribuyente … no tiene declaración jurada vigente en
+  …*: no hay PU o HR de ese año. Cambie el año.
+* *El contribuyente … no tiene cuotas de arbitrios a su nombre en 2026*: no hay HLA (por ejemplo, un condómino que no
+  es el titular principal: {m-arbitrios}).
+* *Faltan parámetros: …*: el documento no se puede calcular porque falta un parámetro del año o los arbitrios no están
+  completos. Avise al área responsable.
+
+[[fig-pdf-resolucion]]
+.Una resolución de sanción
+image::{capturas}/usuario/consulta/pdf-resolucion.png[Resolución de sanción RIS-2026-000001 del acta AC-2026-0003 con el acta de constatación, la multa, el obligado, el recurso, lo resuelto y las firmas,600,pdfwidth=75%,align=center]
+
+El contenido del PU, la HR y la HLA se explica en el {m-registrador} y en el {m-arbitrios}; el de la resolución, en el
+{m-fiscalizador}.
+
+[[arbitrios]]
+== Arbitrios
+
+[[arbitrios-ficha]]
+=== Los arbitrios de un contribuyente o de un predio
+
+La pestaña *Arbitrios* de la ficha del contribuyente muestra sus cuotas del año, predio por predio: una tabla por
+predio, con una fila por servicio (barrido de calles, recolección de residuos sólidos, parques y jardines,
+serenazgo…), una columna por mes y los totales, y al final *Arbitrios de 2026 a su nombre:* con el total del año. La
+del predio muestra todas las cuotas del predio y, debajo, quién es el titular de cada mes. Al pasar el puntero sobre
+un monto aparece la cuenta con que se calculó.
+
+El botón btn:[Determinar arbitrios 2026] aparece gris, con la línea *Sin permiso: determinar pide creación sobre las
+cuotas de arbitrio.* (<<fig-arbitrios>>).
+
+[[fig-arbitrios]]
+.La pestaña Arbitrios, de solo consulta
+image::{capturas}/usuario/consulta/arbitrios.png[Ficha de QUISPE ROJAS ROSA ELENA en la pestaña Arbitrios con el botón Determinar arbitrios 2026 deshabilitado, la línea Sin permiso y la tabla de cuotas por servicio y mes del predio 01-01-0001]
+
+Un aviso amarillo *No se pueden determinar: …*, o uno que dice *Faltan determinar N cuotas*, indica que los arbitrios
+del predio no están completos. Lo que significan está en el {m-arbitrios}.
+
+[[arbitrios-modulo]]
+=== El módulo Arbitrios
+
+El módulo *Arbitrios* del riel tiene tres páginas, que su perfil puede consultar:
+
+Consulta de cuotas:: Las cuotas determinadas de un año, mes a mes, con su servicio, su monto, la fecha en que se
+determinaron y los enlaces *Ver predio* y *Ver contribuyente*. Se filtra por *Año* y *Servicio* (<<fig-cuotas>>).
+La lista incluye también las cuotas anuladas, sin marcarlas: lo que un predio debe lo dicen su ficha y su HLA.
+Tasas del año:: La ordenanza de arbitrios del año, su ratificación, sus tasas mensuales, la zona de cada sector, el
+uso de arbitrio de cada uso y los vencimientos.
+Determinación masiva:: Las determinaciones masivas, con su estado, sus predios procesados, sus cuotas escritas y los
+predios que no se pudieron determinar. El formulario para lanzarlas está deshabilitado, con la línea *Sin permiso: pide
+creación y edición sobre las determinaciones masivas, y creación sobre sus lotes y las cuotas de arbitrio.*
+(<<fig-determinacion-sin-permiso>>).
+
+// fin de la lista
+[[fig-cuotas]]
+.Consulta de cuotas de arbitrios
+image::{capturas}/usuario/consulta/cuotas.png[Página Consulta de cuotas de arbitrios con los filtros Año y Servicio y la tabla de cuotas de enero con su servicio, monto, fecha de determinación y enlaces]
+
+[[fig-determinacion-sin-permiso]]
+.La determinación masiva, de solo consulta
+image::{capturas}/usuario/consulta/determinacion-sin-permiso.png[Página Determinación masiva de arbitrios con el botón Determinar deshabilitado, la línea Sin permiso y la determinación 2026 Terminada con 55 predios y 2628 cuotas]
+
+NOTE: El botón btn:[Eliminar] de cada determinación aparece habilitado, pero su perfil no puede eliminar: el sistema
+rechaza la operación (<<sin-escritura>>).
+
+[[emisiones]]
+== Emisión masiva
+
+La página menu:Emisión[Emisión masiva] lista las emisiones masivas de todos los años, la más reciente primero, con su
+*Formato* (PDF o ZIP, y los documentos que lleva si no son los de omisión), su *Estado* (*Pendiente*, *En proceso*,
+*Ensamblando*, *Terminada* o *Fallida*), su *Progreso* en contribuyentes y, en *Iniciado* y *Terminado*, la fecha
+y la hora (<<fig-emisiones>>). Cómo se lanzan y qué contienen se explica en el {m-arbitrios}.
+
+[[proc-descargar-emision]]
+.Descargar una emisión masiva
+====
+[horizontal]
+Objetivo:: Obtener el archivo con los documentos de todo el padrón de un año.
+Requisitos previos:: Una emisión *Terminada* cuyo archivo no se haya depurado.
+====
+
+. Elija menu:Emisión[Emisión masiva] en el riel.
+. En la fila de la emisión, pulse btn:[Descargar]: el botón dice el tamaño del archivo.
+
+// fin de los pasos
+Resultado esperado:: El archivo se guarda en su equipo como `emision-2026-<identificador>.pdf` (o `.zip`).
+Casos especiales::
+* *Archivo depurado*: el sistema conserva solo los archivos de las últimas emisiones de cada año; ese ya se borró.
+  Pida una emisión nueva al área de arbitrios y emisión.
+* *1 contribuyente con error* (o *N*): púlselo para ver qué contribuyentes no tienen sus documentos en el archivo, y
+  por qué.
+
+[[fig-emisiones]]
+.La lista de emisiones masivas y su descarga
+image::{capturas}/usuario/consulta/emisiones.png[Página Emisión masiva con el formulario y la emisión 2026 en PDF con HR, PU y HLA, Terminada, 40/40, y el botón Descargar (4.3 MB) marcado]
+
+WARNING: El archivo de una emisión tiene los datos personales y tributarios de todo el padrón. Guárdelo en una carpeta
+de acceso restringido y bórrelo de su equipo cuando ya no lo necesite.
+
+NOTE: El formulario de arriba y los botones btn:[Emitir] y btn:[Eliminar] aparecen habilitados, pero su perfil no
+lanza ni elimina emisiones: btn:[Emitir] responde *No tiene permiso para lanzar emisiones masivas: …* y nada se crea.
+
+[[infracciones]]
+== Infracciones administrativas
+
+El módulo *Infracciones* del riel tiene cinco páginas: *Expedientes*, *Nueva acta*, *Notificaciones previas*, *CUIS* y
+*Escalas y plazos*. Su perfil consulta todas; los actos (registrar un acta, una notificación, un descargo, una
+resolución o su notificación, anular un acta, crear o versionar un código del CUIS) aparecen deshabilitados con su
+línea *Sin permiso: …*. El procedimiento completo está en el {m-fiscalizador}.
+
+Expedientes:: Las actas de constatación del año con su multa, su fase y el estado de la deuda, a la fecha indicada.
+Arriba, los totales del ejercicio (*Actas levantadas*, *Resoluciones de sanción (RIS)*, *Notificadas*, *Vencen esta
+semana*, *En coactiva*); debajo, los filtros (*Número de acta*, *Administrado*, *Código CUIS*, *Fase*, *Desde*,
+*Hasta*) y btn:[Buscar] (<<fig-expedientes>>). El número del acta abre su expediente.
+Expediente:: El acta, la multa cifrada por el sistema, el código CUIS aplicado y los actos del expediente: descargos y
+resoluciones, cada resolución con su btn:[Ver PDF de RIS-…] (<<fig-expediente>>). Las fichas de contribuyente y de
+predio tienen, además, una pestaña *Infracciones* con las actas que los nombran.
+Notificaciones previas:: Lo que se notificó antes de un acta, con su plazo para subsanar y si venció a la fecha
+elegida en *Vencidas al* (<<fig-notificaciones>>).
+CUIS:: El cuadro de infracciones vigente a una fecha, con la multa de cada código a la UIT de ese día.
+Escalas y plazos:: Las notificaciones previas vencidas sin acta a una fecha de corte (*Vencidas sin acta*), las de un
+contribuyente (*Por contribuyente*) y los plazos y feriados cargados con que el sistema cuenta los días (*Plazos
+cargados*).
+
+// fin de la lista
+[[fig-expedientes]]
+.Los expedientes de infracción, con Nueva acta deshabilitado
+image::{capturas}/usuario/consulta/expedientes.png[Página Expedientes con el botón Nueva acta deshabilitado y su línea Sin permiso, los totales del ejercicio 2026, los filtros y las actas AC-2026-0001 y AC-2026-0002 con su multa, medida, fase y estado de la deuda]
+
+[[fig-expediente]]
+.El expediente de un acta sancionada
+image::{capturas}/usuario/consulta/expediente.png[Expediente del acta AC-2026-0003 sancionada con los botones Registrar descargo, Dictar resolución y Anular deshabilitados y sus motivos, el acta de constatación y la multa de S/ 5,500.00]
+
+[[fig-notificaciones]]
+.Las notificaciones previas
+image::{capturas}/usuario/consulta/notificaciones.png[Página Notificaciones previas con el botón Nueva notificación deshabilitado, los filtros y las notificaciones NP-2026-0003 no vencida y NP-2026-0002 vencida y subsanada]
+
+[[anuncios]]
+== Anuncios y propaganda
+
+El módulo *Anuncios* tiene tres páginas: *Padrón de anuncios*, *Nuevo anuncio* y *Tasas de anuncios*. Su perfil
+consulta el padrón y las tasas; el formulario de *Nuevo anuncio* tiene btn:[Registrar anuncio] deshabilitado. Los
+detalles están en el {m-anuncios}.
+
+Padrón de anuncios:: Los anuncios autorizados, filtrados por *Titular*, *Clase*, *Estado*, *Estado al* (la fecha a la
+que se calcula el estado) y *Número, denominación o dirección*, con su número, titular, clase, tipo, dirección, área,
+*Vigente hasta* y *Estado* (*Vigente*, *Vencido*, *Cesado*, *Retirado*) (<<fig-anuncios>>). El número abre la ficha.
+Ficha del anuncio:: Su vigencia y lo devengado a la fecha, sus *Actos* (btn:[Renovar], btn:[Cesar], btn:[Retirar],
+deshabilitados con *Sin permiso: renovar, cesar o retirar pide creación sobre los movimientos de anuncio.*), sus
+*Datos del anuncio* y sus *Movimientos* (<<fig-anuncio>>).
+
+// fin de la lista
+[[fig-anuncios]]
+.El padrón de anuncios
+image::{capturas}/usuario/consulta/anuncios.png[Padrón de anuncios con los filtros Titular, Clase, Estado, Estado al y Número, denominación o dirección, y los anuncios AN-2026-000001 a 000004 con su titular, clase, tipo, dirección, área, vigencia y estado]
+
+[[fig-anuncio]]
+.La ficha de un anuncio, con sus actos deshabilitados
+image::{capturas}/usuario/consulta/anuncio.png[Ficha del anuncio AN-2026-000001 vigente hasta el 31/12/2026, con lo devengado, los botones Renovar, Cesar y Retirar deshabilitados y la línea Sin permiso]
+
+[[brecha]]
+== Brecha de recaudación
+
+[[brecha-que-es]]
+=== Para qué sirve
+
+La brecha de recaudación mide cuánto deja de recaudar la municipalidad porque lo declarado en el padrón no coincide con
+la realidad del catastro: predios que nadie declara, predios declarados por debajo (o por encima) de su valor y predios
+del padrón que el catastro no conoce. Para eso compara, predio por predio, el *autoavalúo declarado* en las
+declaraciones juradas con el *valor del catastro*: la valorización que calcula el sistema de catastro de la
+municipalidad (otro sistema, con los aranceles, los valores unitarios y la depreciación del levantamiento catastral),
+y con ese valor recalcula el impuesto predial y los arbitrios.
+
+Es una herramienta de fiscalización y de planificación: dice dónde están las diferencias y cuánto suman. No cambia
+nada del padrón: no corrige declaraciones ni determina deudas.
+
+[[brecha-situacion]]
+.La brecha en esta instalación
+[CAUTION]
+====
+En esta instalación, el sistema de catastro que valoriza los predios *no está conectado*: la brecha no se ha calculado
+nunca y no se puede calcular hasta que el área de sistemas configure la conexión con ese sistema. Por eso la página
+*Brecha de recaudación* muestra solo *Aún no se ha calculado la brecha de 2026* (<<fig-brecha>>), sin indicadores,
+tablas ni mapa.
+
+Quien tiene permiso para calcularla y pulsa btn:[Calcular brecha] recibe, en rojo, *Catastro no configurado:
+srtm.catastro necesita enabled, url, client-id y client-secret (…)*, y nada se crea. No es un error del padrón ni de su
+cuenta.
+
+Las secciones siguientes describen la pantalla tal como el sistema la muestra cuando hay una corrida terminada. Las
+capturas de este manual no pueden mostrarla con datos.
+====
+
+[[fig-brecha]]
+.La brecha de recaudación en esta instalación
+image::{capturas}/usuario/consulta/brecha.png[Página Brecha de recaudación con el año 2026, el botón Calcular brecha deshabilitado con su línea Sin permiso, y el recuadro Aún no se ha calculado la brecha de 2026]
+
+[[brecha-cruce]]
+=== Cómo se compara el padrón con el catastro
+
+El padrón:: Los predios con alguna declaración jurada *vigente* del año. Su autoavalúo declarado es el del predio: la
+suma de sus usos, contando cada uso una sola vez aunque tenga varios condóminos.
+El cruce:: Cada predio del catastro busca su predio del padrón: primero por el código municipal del predio, luego por
+el código CPU y, por último, por sector, manzana y lote. Esta última llave solo cruza cuando identifica a un solo
+predio: si la comparten varios, no se empareja ninguno.
+
+// fin de la lista
+.Categorías de la brecha
+[cols="1,3",options="header"]
+|===
+|Categoría |Qué es
+|Omiso |Un predio del catastro que no está en el padrón, o cuyo predio no tiene declaración vigente del año: nadie lo
+declara.
+|Sin catastro |Un predio del padrón que no cruzó con ningún predio del catastro.
+|Sin valor |Cruzó, pero el catastro no pudo valorizarlo; la fila dice el motivo.
+|Subvaluado |El valor del catastro es mayor que el declarado en más de 5 %: el contribuyente declara menos.
+|Sobrevaluado |El valor del catastro es menor que el declarado en más de 5 %: el contribuyente declara más.
+|Coincide |La diferencia está dentro del ±5 %, ambos extremos incluidos.
+|===
+
+Con el valor del catastro, el sistema recalcula el impuesto predial de cada contribuyente con las mismas reglas de
+la HR (su % de condominio, su deducción, los tramos y el mínimo del año) y reparte la diferencia entre sus predios. De
+un omiso, que no tiene contribuyente, se *estima* el impuesto con el valor del catastro solo. Los arbitrios se
+recalculan para el año entero con el uso, el área construida y el frente del catastro, sin tope y sin escribir ninguna
+cuota.
+
+[[brecha-pagina]]
+=== La página Brecha de recaudación
+
+Se abre con menu:Fiscalización[Brecha de recaudación] (<<fig-riel-fiscalizacion>>).
+
+[[fig-riel-fiscalizacion]]
+.El módulo Fiscalización
+image::{capturas}/usuario/consulta/riel-fiscalizacion.png[Riel de módulos con el panel Fiscalización abierto y su trámite Brecha de recaudación,560,align=center]
+
+Arriba está el *Año* y el botón btn:[Calcular brecha], que lanza una *corrida*: el cálculo de la brecha del año, que
+corre en segundo plano. Para lanzarla hace falta permiso de creación y edición sobre las corridas de brecha y de
+creación sobre sus predios; en la demostración, solo el administrador lo tiene. Con su perfil, el botón está
+deshabilitado (<<fig-brecha-sin-permiso>>).
+
+[[fig-brecha-sin-permiso]]
+.Calcular la brecha, sin permiso
+image::{capturas}/usuario/consulta/brecha-sin-permiso.png[Recuadro con el año 2026, el botón Calcular brecha deshabilitado y la línea Sin permiso: pide creación y edición sobre las corridas de brecha, y creación sobre sus predios]
+
+Cuando hay corridas, debajo del botón aparece la *Última corrida* del año, con su estado:
+
+.Estados de una corrida
+[cols="1,3",options="header"]
+|===
+|Estado |Qué significa
+|Pendiente, En curso |Se está calculando. La barra dice *Cruzando el padrón con el catastro…* y, luego, cuántos
+predios lleva (`1200/4000 predios`). La página se actualiza sola cada dos segundos.
+|Terminada |El resultado está listo: aparece debajo. Si el cálculo dejó un aviso (por ejemplo, que el año no tiene
+ordenanza de arbitrios y no hay diferencia de arbitrios), se muestra junto al estado.
+|Fallida |No terminó; el motivo aparece en rojo. Una corrida que deja de dar señales de vida por más de diez minutos se
+da por abandonada (*Abandonada: sin latido desde …*).
+|===
+
+El resultado es siempre el de la última corrida *terminada* del año, aunque haya otra en curso. Se lee en cuatro
+partes:
+
+Indicadores:: *Predios en catastro*, *Predios en el padrón*, y cuántos son *Omisos* («En catastro, sin declaración»),
+*Subvaluados* («Declaran menos que el catastro»), *Sobrevaluados* («Declaran más que el catastro»), *Coinciden*
+(«Diferencia de hasta 5 %»), *Sin catastro* («En el padrón, no en el catastro») y *Sin valor* («El catastro no pudo
+valorizarlos»); y tres diferencias en soles: *Δ autoavalúo* (del declarado al del catastro, en los predios comparados
+y los omisos), *Δ impuesto predial* (lo que suben los subvaluados menos lo que bajan los sobrevaluados, más lo
+estimado de los omisos) y *Δ arbitrios*, que dice *No calculado* cuando no se pudo calcular, con el motivo.
+Por categoría y Por sector:: Dos tablas con los predios y las diferencias de cada categoría y de cada sector. El
+nombre de una categoría o de un sector es un filtro: púlselo y la lista de predios de abajo muestra solo esos; vuelva
+a pulsarlo para quitarlo. Los predios sin sector se cuentan en *Sin sector*, que no filtra.
+Mapa de la brecha:: Los lotes de los predios, cada uno con el color de su categoría, y la leyenda. Un predio sin lote
+está solo en las tablas.
+Predios:: La lista de predios de la corrida, con su *Código* (que abre la ficha del predio, si está en el padrón), su
+*Categoría*, su *Sector* (sector, manzana y lote), el *Autoavalúo declarado*, el *Autoavalúo catastro*, el *Δ
+impuesto* (*estimado*, en un omiso) y el *Motivo*. Los filtros activos aparecen como botones junto al título, con
+una *×* para quitarlos; sin coincidencias, dice *Sin predios con ese filtro*.
+
+// fin de la lista
+TIP: Para preparar un operativo de fiscalización, filtre por *Omisos* o *Subvaluados* y luego por sector: la lista y
+el mapa le dan los predios a visitar, y su código lleva a la ficha con sus titulares y sus declaraciones.
+
+NOTE: Las cifras de la brecha son las de la corrida, al día en que terminó. Si después se registran declaraciones o el
+catastro se actualiza, la brecha no cambia hasta que se calcule otra corrida.
+
+[[errores]]
+== Errores frecuentes
+
+.Mensajes frecuentes al consultar
+[cols="3,3,3",options="header"]
+|===
+|Mensaje |Causa |Solución
+
+|Sin permiso: … |Su perfil no hace esa acción. |Nada: es de solo lectura. Si la necesita, pídasela al administrador
+(<<permisos-usuario>>).
+|No tiene permiso para lanzar emisiones masivas: … |Pulsó btn:[Emitir] en la emisión masiva. |Pida la emisión al área
+de arbitrios y emisión.
+|Aún no se ha calculado la brecha de 2026 |No hay ninguna corrida terminada del año. En esta instalación, porque el
+catastro no está conectado (<<brecha-situacion>>). |Nada que hacer desde su perfil.
+|Catastro no configurado: … |Quien tiene permiso intentó calcular la brecha sin la conexión con el sistema de catastro.
+|El área de sistemas debe configurarla.
+|Ya hay una corrida de la brecha de 2026 en curso: espere a que termine |Otra corrida del mismo año está corriendo.
+|Espere a que termine.
+|Sin permiso para ver la brecha: pide lectura sobre las corridas de brecha. |Su rol no lee la brecha. Todos los perfiles
+sugeridos la leen; un rol creado después puede no tenerla. |Pídalo al administrador.
+|Archivo depurado |El archivo de esa emisión se borró para conservar solo las últimas. |Pida una emisión nueva.
+|El predio … no tiene declaración jurada vigente en … |No hay PU de ese año. |Cambie el año en la ficha.
+|El contribuyente … no tiene cuotas de arbitrios a su nombre en … |No hay HLA de ese año. |Revise la pestaña
+*Arbitrios* de sus predios: el titular principal puede ser otro.
+|Faltan parámetros: … |El documento no se puede calcular: falta un parámetro del año o los arbitrios no están
+completos. |Avise al área responsable.
+|¿Salir sin guardar? |Cambió un campo de una declaración y quiere salir. |Pulse btn:[Salir sin guardar]: su perfil
+no puede grabar (<<salir-sin-guardar>>).
+|===
+
+[[faq]]
+== Preguntas frecuentes
+
+[[faq-consulta]]
+=== Preguntas de la consulta
+
+Veo un botón Editar en la ficha. ¿Puedo corregir un dato?::
+No. El botón aparece, pero el sistema rechaza el cambio: su perfil solo lee (<<sin-escritura>>). Pida la corrección al
+registro tributario.
+
+¿Puedo entregar la HR o la HLA a un contribuyente?::
+Sí: btn:[Ver HR] y btn:[Ver HLA] funcionan con su perfil, y puede imprimirlas o descargarlas (<<documentos>>).
+
+¿Por qué la brecha no muestra nada?::
+Porque en esta instalación el sistema de catastro no está conectado: nunca se calculó una corrida
+(<<brecha-situacion>>).
+
+¿Quién puede calcular la brecha?::
+Quien tiene permiso de creación y edición sobre las corridas de brecha y de creación sobre sus predios; en la
+demostración, solo el administrador. Su perfil la consulta.
+
+¿La brecha cambia el padrón o las deudas?::
+No. Solo guarda su propio resultado; las declaraciones, las cuotas y las actas no cambian.
+
+¿Cómo sé quién debe los arbitrios de un predio en condominio?::
+En la pestaña *Arbitrios* de la ficha del predio, debajo de la tabla: el titular de cada mes, que es el titular
+principal ({m-arbitrios}).
+
+En la Consulta de cuotas aparece dos veces el mismo mes y servicio de un predio.::
+Una de las cuotas está anulada: la lista muestra también las anuladas. Lo vigente está en la ficha del predio y en la
+HLA.
+
+¿Puedo descargar la emisión masiva?::
+Sí, mientras su archivo no se haya depurado (<<emisiones>>).
+
+include::../comun/faq.adoc[]
+
+[appendix]
+[[glosario]]
+== Glosario
+
+Este glosario reúne solo los términos de este manual. El glosario completo está en el {m-admin}.
+
+[glossary]
+Autoavalúo:: Valor del predio (o de uno de sus usos) que el titular declara.
+Brecha de recaudación:: La diferencia entre lo que el padrón declara y lo que el catastro valoriza de los mismos
+predios, y lo que esa diferencia significa en impuesto y en arbitrios.
+Catastro fiscal:: Registro de los lotes del distrito con su código CPU, su dirección catastral y su polígono.
+Coincide:: Predio cuyo valor del catastro está dentro del ±5 % del declarado.
+Corrida:: Un cálculo de la brecha de un año, en segundo plano.
+Cuota de arbitrio:: Lo determinado de un predio, un servicio y un mes.
+Declaración jurada (DJ):: Lo que un titular declara de un predio en un año, en el formulario del impuesto predial.
+Emisión masiva:: La HR, el PU y la HLA de todos los contribuyentes de un año, generados en un solo archivo.
+Expediente:: El acta de constatación de una infracción con sus actos: descargos, resoluciones y notificaciones.
+Ficha:: La pantalla de un registro (contribuyente, predio, declaración, lote, acta, anuncio) con sus pestañas.
+Omiso:: Predio del catastro que nadie declara en el año.
+Sin catastro:: Predio del padrón que no cruzó con el catastro.
+Sin valor:: Predio que cruzó, pero que el catastro no pudo valorizar.
+Sobrevaluado:: Predio cuyo valor del catastro es menor que el declarado en más de 5 %.
+Subvaluado:: Predio cuyo valor del catastro es mayor que el declarado en más de 5 %.
+Titular:: Quien declara un predio en un año: propietario único, sociedad conyugal, poseedor o condómino.
+Valor afecto:: Valor de condominio menos la deducción. Es la base del impuesto predial.

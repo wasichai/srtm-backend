@@ -1,0 +1,98 @@
+= Manuales de Rentas municipales (SRTM)
+:toc: left
+:icons: font
+:experimental:
+
+Fuente de los manuales de usuario, del administrador y técnico del sistema. La *fuente canónica* son los `.adoc`
+de esta carpeta; el HTML y el PDF de `salida/` se generan y no se versionan.
+
+== Qué hay aquí
+
+[cols="1,3",options="header"]
+|===
+|Ruta |Contenido
+|`atributos.adoc` |Atributos comunes: producto, versión, edición, fecha, rutas, nombres de libros y perfiles.
+|`index.adoc` |Portada del conjunto (`salida/html/index.html`).
+|`comun/` |Capítulos que comparten los cinco manuales de usuario (acceso, interfaz, búsqueda, fichas, mensajes, preguntas frecuentes).
+|`usuario/` |Un libro por perfil: registrador, arbitrios y emisión, fiscalizador, anuncios, consulta.
+|`administrador/` |Manual del administrador (funcional y técnico).
+|`sistema/` |Manual técnico del sistema.
+|`referencia/` |Referencias que incluyen los manuales del administrador y del sistema: modelo de datos, configuración, permisos, API, glosario.
+|`recursos/capturas/` |Capturas reales, tomadas con Playwright (`make capturas`). No se editan a mano.
+|`recursos/diagramas/` |Diagramas en Mermaid (`*.mmd`); `generados/` sale de `make diagramas`.
+|`recursos/marca/` |Marca editorial de los manuales (no es el escudo de la municipalidad).
+|`estilos/` |Tema del PDF, hoja de estilos del HTML y fuentes (familia Source de Adobe, licencia OFL).
+|`herramientas/` |Capturas, diagramas, retoques del HTML y validaciones.
+|`demo/` |Base de demostración reproducible: carga, respaldo, restauración y verificación (`demo/README.adoc`).
+|===
+
+== Construir
+
+Desde `docs/manuales`:
+
+[source,bash]
+----
+make build        # HTML + PDF + validaciones
+make html         # solo salida/html (abrir salida/html/index.html)
+make pdf          # solo salida/pdf/<carpeta>/<libro>.pdf
+make validar      # imágenes, rutas, secretos, enlaces del HTML, fuentes del PDF
+make diagramas    # vuelve a dibujar recursos/diagramas/generados (Node + Chromium de Playwright)
+make capturas     # vuelve a tomar las capturas (necesita la demo arriba)
+make limpiar      # borra salida/
+----
+
+Requisitos::
+* Asciidoctor 2.0 y Asciidoctor PDF 2.3 (`gem install asciidoctor asciidoctor-pdf`, o `brew install asciidoctor`).
+* Python 3.11 o superior (validaciones y demo).
+* poppler (`pdffonts`, `pdfinfo`) para validar el PDF.
+* Node 22 o superior, solo para `make capturas` y `make diagramas`
+  (`herramientas/package.json` fija Playwright 1.60.0 y mermaid-cli 12.0.0; `npx playwright install chromium`
+  si falta el navegador).
+
+Todo aviso de Asciidoctor detiene la construcción (`--failure-level=WARN`): una referencia cruzada rota, un
+`include::` que falta o una imagen inexistente no llegan a la salida.
+
+== Mantener los manuales al día
+
+. Cuando cambia el software, actualizar primero la demo si hace falta (`demo/sembrar_demo.py`) y volver a tomar las
+  capturas (`make capturas`, o `make capturas SOLO=registrador` para un perfil o un manual).
+. Corregir el texto del capítulo afectado. Cada afirmación sobre el comportamiento debe poder comprobarse en la
+  pantalla o en el código; si algo no está implementado, se dice.
+. Subir `:edicion:` y `:fecha-edicion:` en `atributos.adoc` y anotar el cambio en `CHANGELOG.adoc`.
+  `:version-producto:` debe coincidir con `gradle.properties` (lo comprueba `make validar`).
+. `make build` sin avisos ni fallas.
+
+== Convenciones de redacción
+
+* Español neutro, en *usted*. Los rótulos de la interfaz se escriben exactamente como aparecen en pantalla.
+* Botones: `btn:[Grabar]`. Menús y rutas de navegación: `menu:Contribuyentes[Nuevo contribuyente]`. Teclas: `kbd:[Enter]`.
+  Pestañas y campos, en negrita: *Domicilios*, *Tipo de documento*.
+* Las siglas se desarrollan en su primera aparición en cada libro: declaración jurada (DJ), predio urbano (PU), hoja
+  de resumen (HR), hoja de liquidación de arbitrios (HLA), unidad impositiva tributaria (UIT), cuadro único de
+  infracciones y sanciones (CUIS).
+* Cada procedimiento importante sigue el mismo formato:
++
+[source,asciidoc]
+----
+[[proc-inscribir-contribuyente]]
+.Inscribir un contribuyente
+====
+[horizontal]
+Objetivo:: …
+Requisitos previos:: …
+====
+
+. Paso concreto, con el rótulo exacto.
+. …
+
+Resultado esperado:: …
+Verificación:: …
+Casos especiales:: …
+----
+* Avisos: `NOTE` (información complementaria), `TIP` (recomendación), `CAUTION` (precaución: afecta a muchos
+  registros o es difícil de revertir), `WARNING` (destructivo o irreversible). Cada aviso nombra el riesgo concreto.
+* Capturas: `image::{capturas}/<carpeta>/<archivo>.png[<texto alternativo>]`, con un título (`.Título`) que dice qué
+  muestra. La captura debe estar declarada en `herramientas/capturas/<manual>.json`; ninguna captura graba datos.
+* Diagramas: `image::{diagramas}/<nombre>.{diagext}[<texto alternativo>,role=diagrama]`.
+* Referencias entre manuales: `xref:../administrador/manual-administrador.adoc#ancla[{m-admin}]`.
+* Ningún dato real de personas: la demo es sintética. Ninguna credencial salvo las de la demo local.

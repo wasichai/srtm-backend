@@ -1,0 +1,6 @@
+stateDiagram-v2
+  direction LR
+  [*] --> VIGENTE: registro de la DJ (motivo INSCRIPCION)
+  VIGENTE --> VIGENTE: edición en el portal<br/>(motivo ACTUALIZACION)
+  VIGENTE --> ANULADA: Anular declaración<br/>(motivo obligatorio)
+  ANULADA --> [*]: solo lectura

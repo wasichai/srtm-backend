@@ -1,0 +1,8 @@
+# DEMO: plazos de las infracciones FICTICIOS para la demostración (ninguno está transcrito y verificado en normativa):
+# 5 días hábiles para el descargo de un acta y 15 para impugnar una resolución, y los feriados movibles de 2026 y de
+# 2027 (Jueves y Viernes Santo), para que un plazo que cruza el cambio de año no dé 422. Solo para la base de la demo.
+tipo,clave,vigencia_desde,vigencia_hasta,valor_numerico,texto,norma,fuente,transcribio,verifico
+PLAZO,DESCARGO_PAPELETA,2026-01-01,,5,DIAS_HABILES,Norma ficticia DEMO (plazo de descargo),docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+PLAZO,RG_RECURSO,2026-01-01,,15,DIAS_HABILES,Norma ficticia DEMO (plazo para impugnar),docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+FERIADOS,2026,2026-01-01,2026-12-31,,"2026-04-02,2026-04-03",Norma ficticia DEMO (feriados movibles 2026),docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"
+FERIADOS,2027,2027-01-01,2027-12-31,,"2027-03-25,2027-03-26",Norma ficticia DEMO (feriados movibles 2027),docs/manuales/demo (datos ficticios),"DEMO A, 2026-01-05","DEMO B, 2026-01-09"

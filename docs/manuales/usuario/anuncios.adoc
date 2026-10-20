@@ -1,0 +1,671 @@
+= Manual de anuncios: Anuncios y propaganda
+Municipalidad Distrital de Perené
+include::../atributos.adoc[]
+:description: Manual de usuario de {producto} ({sigla}) para el perfil {p-anuncios}: padrón de anuncios, autorización, renovación, cese y retiro, y tasas de anuncios.
+:keywords: srtm, rentas municipales, anuncios, propaganda, publicidad exterior, autorización, renovación, cese, retiro, tasa
+
+[abstract]
+Este manual explica, paso a paso, cómo se lleva en {producto} ({sigla}) el registro de los anuncios y la propaganda:
+consultar el padrón de anuncios a cualquier fecha, registrar un anuncio con su autorización, renovarlo, cesarlo y
+retirarlo, y consultar la tasa de cada clase de anuncio. Está escrito para el personal que atiende las autorizaciones
+de anuncios con el perfil {p-anuncios}, que no necesita saber nada del funcionamiento interno del sistema. Todas las
+pantallas que se muestran son reales y se tomaron con datos ficticios.
+
+[[presentacion]]
+== Presentación
+
+[[presentacion-sistema]]
+=== Para qué sirve el sistema
+
+{producto} ({sigla}), el {producto-largo} de la {municipalidad}, reúne en un solo portal web el padrón de
+contribuyentes y predios, las declaraciones juradas, los arbitrios, las infracciones administrativas y los anuncios.
+En el módulo de anuncios, el sistema numera cada anuncio, guarda cada acto (la autorización, las renovaciones, el cese
+y el retiro), devenga la tasa de cada ejercicio con la tarifa vigente de su clase y dice, a cualquier fecha, en qué
+estado está cada anuncio. No cobra la tasa: la deja determinada para que se cobre fuera del sistema
+(<<devengado>>).
+
+[[presentacion-manual]]
+=== Para qué sirve este manual y a quién se dirige
+
+Este manual es para quien registra y mantiene las autorizaciones de anuncios. Supone que usted conoce el trámite
+(qué es una autorización de anuncio, su vigencia, su renovación), pero no el sistema. Cada capítulo responde a una
+pregunta de trabajo: qué anuncios están vigentes, cómo registro uno nuevo, cómo lo renuevo, cómo lo doy de baja, cuánto
+se cobra.
+
+En la demostración con la que se tomaron las capturas, este trabajo lo hace el perfil sugerido *{p-anuncios}*
+(«Anuncios y propaganda»). La municipalidad puede definir otros roles con otros nombres: lo que cuenta es qué permisos
+tiene su cuenta (<<permisos-usuario>>). Con el perfil {p-anuncios}, usted puede:
+
+* consultar el padrón de anuncios y la ficha de cada uno;
+* registrar anuncios con su autorización;
+* renovar, cesar y retirar anuncios;
+* consultar las tasas de anuncios de cada año;
+* consultar, sin modificar, los contribuyentes y predios, y los anuncios de cada uno.
+
+[[presentacion-alcance]]
+=== Qué cubre y qué no
+
+.Alcance de este manual
+[cols="2,3",options="header"]
+|===
+|Tema |Dónde se explica
+|El padrón de anuncios, la autorización, la renovación, el cese y el retiro |Este manual.
+|Las tasas de anuncios de cada año |Este manual las muestra (<<tasas>>); las carga el administrador ({m-admin}).
+|El cobro de la tasa |No está en el sistema (<<devengado>>).
+|Las infracciones por anuncios sin autorización |{m-fiscalizador}.
+|Contribuyentes y predios |{m-registrador}.
+|Cuentas de usuario, roles y parámetros |{m-admin}.
+|===
+
+NOTE: Los perfiles de este manual son los de la demostración. Si su cuenta tiene un rol distinto, algunas acciones
+pueden aparecer deshabilitadas con la línea *Sin permiso: …* (<<permisos-usuario>>), o habilitadas otras que este
+manual no describe.
+
+[[presentacion-leer]]
+=== Cómo leer los procedimientos
+
+Cada tarea importante se describe con el mismo formato:
+
+[horizontal]
+Recuadro inicial:: El *objetivo* de la tarea y los *requisitos previos*: lo que debe tener a mano o haber hecho antes.
+Pasos numerados:: Lo que usted hace, en orden, con el rótulo exacto de cada botón y campo. Las capturas acompañan
+al paso que muestran.
+Resultado esperado:: Lo que debe ver cuando la tarea terminó bien.
+Verificación:: Cómo comprobar, en otra pantalla, que quedó registrado.
+Casos especiales:: Lo que puede pasar fuera del camino habitual y qué hacer.
+
+[[presentacion-convenciones]]
+=== Convenciones tipográficas
+
+.Convenciones de este manual
+[cols="1,2",options="header"]
+|===
+|Se escribe así |Significa
+|btn:[Registrar anuncio] |Un botón de la pantalla, con su rótulo exacto.
+|menu:Anuncios[Nuevo anuncio] |Una ruta de navegación: el módulo del riel y, luego, el trámite.
+|kbd:[Enter] |Una tecla.
+|*Movimientos*, *Estado al* |Una sección, una columna o un campo, en negrita.
+|`AN-2026-000001` |Un valor que se escribe o que el sistema muestra tal cual.
+|===
+
+Los avisos tienen cuatro niveles: *Nota* (información complementaria), *Consejo* (una recomendación),
+*Precaución* (afecta a muchos registros o es difícil de revertir) y *Advertencia* (no se puede deshacer).
+
+[[presentacion-siglas]]
+=== Siglas
+
+.Siglas que usa este manual
+[cols="1,4",options="header"]
+|===
+|Sigla |Significado
+|DNI, RUC |Documento nacional de identidad; registro único de contribuyentes.
+|TUPA |Texto único de procedimientos administrativos de la municipalidad.
+|===
+
+[[presentacion-datos]]
+=== Los datos de las capturas
+
+Las capturas se tomaron en una base de demostración con datos *ficticios*. El «hoy» de la demostración es el 20 de
+octubre de 2026, y hay un anuncio en cada estado:
+
+.Los anuncios de la demostración
+[cols="2,2,3",options="header"]
+|===
+|Anuncio |Clase |Lo que tiene
+|`AN-2026-000001` |Panel |Vigente hasta el 31/12/2026.
+|`AN-2026-000002` |Letrero |Vigente: renovado el 05/10/2026 para el ejercicio 2027, hasta el 31/12/2027.
+|`AN-2026-000003` |Toldo |Vencido: su autorización rigió hasta el 31/07/2026.
+|`AN-2026-000004` |Pantalla digital |Cesado el 31/08/2026.
+|`AN-2026-000005` |Banderola |Cesado el 15/04/2026 y retirado el 20/04/2026.
+|===
+
+Las capturas usan el tema *Portal tributario* (<<temas>>).
+
+include::../comun/acceso.adoc[]
+
+include::../comun/interfaz.adoc[]
+
+include::../comun/busqueda.adoc[]
+
+include::../comun/mensajes.adoc[]
+
+[[anuncio-sistema]]
+== El anuncio en el sistema
+
+[[anuncio-conceptos]]
+=== Lo que hay que saber antes
+
+Titular:: El contribuyente que obtiene la autorización y responde por la tasa. Debe estar inscrito en el padrón.
+Predio:: El predio donde está el anuncio, si está en uno. Es opcional: un anuncio en la vía pública no tiene predio.
+Clase:: *Letrero*, *Panel*, *Toldo*, *Banderola*, *Pantalla digital* o *Globo aerostático*. La clase fija la tasa
+(<<tasas>>).
+Tipo:: *Aviso simple*, *Aviso luminoso*, *Aviso iluminado* o *Aviso electrónico*.
+Número:: `AN-AAAA-NNNNNN`: el año de la autorización y un correlativo de ese año, que empieza en `000001`. Lo asigna
+el sistema al registrar el anuncio.
+Movimientos:: Los actos del anuncio: la *Autorización*, las *Renovaciones*, el *Cese* y el *Retiro*. Cada uno se
+agrega; ninguno se edita ni se borra.
+Vigencia:: Hasta cuándo rige la autorización (o la última renovación). Sin fecha, el anuncio no vence.
+
+// fin de los pasos
+El anuncio *no se edita*: sus datos son los de la autorización. Lo que le pasa después se registra como un movimiento
+nuevo.
+
+[[estados]]
+=== Cómo se decide el estado
+
+El estado no se escribe: el sistema lo deduce de los movimientos, a una fecha. Revisa, en este orden:
+
+. *Retirado*, si tiene un retiro fechado hasta ese día.
+. Si no, *Cesado*, si tiene un cese fechado hasta ese día.
+. Si no, *Vencido*, si su vigencia terminó antes de ese día.
+. Si no, *Vigente*.
+
+// fin de los pasos
+La vigencia que cuenta es la del último acto que devenga (la autorización o una renovación) fechado hasta ese día. Por
+eso un movimiento posterior no cambia lo que el padrón dice de un día pasado: `AN-2026-000002`, renovado el
+05/10/2026, aparece vigente hasta el 31/12/2026 si se consulta al 16/04/2026, y hasta el 31/12/2027 si se consulta
+hoy (<<fig-padron-estado-al>>). El último día de la vigencia el anuncio todavía está vigente; vence al día
+siguiente.
+
+.Estados de un anuncio
+[cols="1,3",options="header"]
+|===
+|Estado |Qué significa y qué admite
+|Vigente |La autorización rige. Se puede renovar o cesar.
+|Vencido |Pasó su vigencia sin renovarse. Se puede renovar o cesar.
+|Cesado |Se dio de baja la autorización. No se renueva; queda pendiente el retiro del elemento.
+|Retirado |Se constató el retiro del elemento. El anuncio está cerrado: no admite más actos.
+|===
+
+[[modulo]]
+=== El módulo Anuncios
+
+Todos los trámites de este manual están en el módulo *Anuncios* del riel (<<fig-riel-anuncios>>). Las tres páginas
+del módulo se enlazan también entre sí con la fila de enlaces que tienen arriba: *Padrón de anuncios*, *Nuevo
+anuncio* y *Tasas de anuncios*.
+
+[[fig-riel-anuncios]]
+.El panel del módulo Anuncios
+image::{capturas}/usuario/anuncios/riel.png[Riel de módulos con el panel Anuncios y propaganda abierto: Padrón de anuncios, Nuevo anuncio y Tasas de anuncios,400,align=center]
+
+[[padron]]
+== El padrón de anuncios
+
+[[proc-padron]]
+=== Consultar el padrón
+
+[[proc-padron-pasos]]
+.Consultar el padrón de anuncios
+====
+[horizontal]
+Objetivo:: Ver los anuncios autorizados, con su estado y su vigencia a una fecha.
+Requisitos previos:: Ninguno.
+====
+
+. Elija menu:Anuncios[Padrón de anuncios]. La lista muestra todos los anuncios, por número, con su estado de hoy
+  (<<fig-padron>>).
+. Para afinar, use los filtros:
+** *Titular*: escriba el DNI, RUC o nombre del titular y elíjalo de la lista. btn:[Todos los titulares] quita el
+   filtro.
+** *Clase* y *Estado*: elija uno, o deje *Todas* y *Todos*.
+** *Estado al*: la fecha a la que se calcula el estado (hoy, por omisión).
+** *Número, denominación o dirección*: parte del número del anuncio, de su denominación o de su dirección.
+. Pulse btn:[Buscar].
++
+[[fig-padron]]
+.El padrón de anuncios al 20/10/2026
+image::{capturas}/usuario/anuncios/padron.png[Página Padrón de anuncios con los filtros Titular, Clase, Estado, Estado al y Número, denominación o dirección, y cinco anuncios con su titular, clase, tipo, dirección, área, vigencia y estado: dos vigentes, uno vencido, uno cesado y uno retirado]
+
+// fin de los pasos
+Resultado esperado:: Sobre la tabla, la línea *Estado y vigencia al 20/10/2026.* dice a qué fecha se calculó. La tabla
+muestra el *Número* (abre la ficha), el *Titular*, la *Clase*, el *Tipo*, la *Dirección* con la denominación debajo,
+el *Área m²*, *Vigente hasta* y el *Estado*.
+Casos especiales::
+* *Vigente hasta* dice *—* en un anuncio cesado o retirado (ya no rige, diga lo que diga su última vigencia) y *Sin
+  plazo* en uno sin fecha de vigencia.
+* *Ningún anuncio al …*: ningún anuncio cumple los filtros, o ninguno estaba autorizado a esa fecha.
+* Los filtros se aplican juntos al pulsar btn:[Buscar]: cambiar uno sin pulsarlo no cambia la lista.
+
+[[fig-padron-vencidos]]
+.Los anuncios vencidos
+image::{capturas}/usuario/anuncios/padron-vencidos.png[Padrón filtrado por el estado Vencido al 20/10/2026, con un solo anuncio, AN-2026-000003, vencido el 31/07/2026]
+
+[[padron-a-fecha]]
+=== El padrón a una fecha pasada
+
+Con *Estado al* en un día pasado, el padrón muestra lo que habría dicho ese día:
+
+* solo aparecen los anuncios autorizados hasta ese día;
+* el estado y la vigencia se calculan con los movimientos fechados hasta ese día: un cese, un retiro o una
+  renovación posteriores todavía no cuentan.
+
+// fin de los pasos
+En la <<fig-padron-estado-al>>, al 16/04/2026, los cuatro primeros anuncios estaban vigentes, `AN-2026-000005` estaba
+cesado (aún no se había retirado) y `AN-2026-000002` regía hasta el 31/12/2026, porque su renovación es de octubre.
+
+[[fig-padron-estado-al]]
+.El mismo padrón, al 16/04/2026
+image::{capturas}/usuario/anuncios/padron-estado-al.png[Tabla del padrón con la línea Estado y vigencia al 16/04/2026: cuatro anuncios vigentes, entre ellos AN-2026-000002 hasta el 31/12/2026, y AN-2026-000005 cesado]
+
+TIP: El padrón a una fecha sirve para responder qué anuncios tenían autorización vigente un día determinado, por
+ejemplo, el de una inspección.
+
+[[nuevo]]
+== Registrar un anuncio
+
+[[proc-nuevo]]
+=== Registrar un anuncio con su autorización
+
+[[proc-nuevo-pasos]]
+.Registrar un anuncio
+====
+[horizontal]
+Objetivo:: Dar de alta un anuncio autorizado y devengar la tasa del ejercicio.
+Requisitos previos:: La autorización, con sus datos (clase, tipo, ubicación, área, vigencia) y su expediente. El
+titular inscrito como contribuyente. La tasa de la clase cargada para el año de la autorización (<<tasas>>). Permiso
+de creación sobre los anuncios.
+====
+
+. Elija menu:Anuncios[Nuevo anuncio]. Se abre el formulario *Nuevo anuncio*.
+. En *Titular*, escriba el DNI, RUC o nombre del titular y pulse el que corresponde en la lista
+  (<<fig-nuevo-titular>>).
++
+[[fig-nuevo-titular]]
+.Elegir el titular
+image::{capturas}/usuario/anuncios/nuevo-titular.png[Campo Titular con la búsqueda BODEGA y el resultado 20999000020 BODEGA LA ORQUIDEA E.I.R.L.]
+. Si el anuncio está en un predio, elíjalo en *Predio* (por su código o su dirección). btn:[Sin predio] quita la
+  elección.
+. Elija la *Clase* y el *Tipo*. Si los tiene, escriba el *Emplazamiento* (por ejemplo, `FACHADA`) y la *Forma*.
+. Escriba la *Denominación* (el texto o el nombre que muestra el anuncio) y la *Dirección* donde está.
+. Escriba el *Área m²* (mayor que cero, con punto decimal), los *Lados* y la *Cantidad* (1, por omisión).
+. Revise *Autorizado el* (hoy, por omisión) y escriba *Vigente hasta*, el último día que rige la autorización. En
+  blanco, el anuncio no vence.
+. Escriba, si los tiene, la *Licencia*, el *Expediente* y la *Fecha del expediente*.
+. Escriba la *Observación*: por qué se autoriza, de 5 a 500 caracteres (<<fig-nuevo>>).
++
+[[fig-nuevo]]
+.El formulario Nuevo anuncio, completo
+image::{capturas}/usuario/anuncios/nuevo.png[Formulario Nuevo anuncio con el titular y el predio elegidos, la clase Letrero, el tipo Aviso iluminado, el emplazamiento, la forma, la denominación, la dirección, el área 1.80, lados y cantidad 1, autorizado el 20/10/2026, vigente hasta el 31/12/2026, la licencia, el expediente con su fecha, la observación y el botón Registrar anuncio]
+. Pulse btn:[Registrar anuncio]. Mientras falte el titular, la clase, el tipo, la dirección, el área o la observación,
+  el botón está gris.
+
+// fin de los pasos
+Resultado esperado:: El formulario se reemplaza por el aviso *Anuncio AN-2026-000006 registrado.* y la línea
+*Autorizado el 20/10/2026: devenga S/ 90.20 del ejercicio 2026 (tasa al 20/10/2026).* El enlace *Ver la ficha del
+anuncio* abre su ficha; btn:[Registrar otro anuncio] vuelve al formulario en blanco.
+Verificación:: El anuncio aparece en el padrón, *Vigente*, y en la pestaña *Anuncios* del titular y del predio
+(<<fichas>>). Su ficha tiene un movimiento: la *Autorización*, con la tasa.
+Casos especiales::
+* *No se puede autorizar: falta TASA_ANUNCIO PANEL 2025. Sin la tasa de la clase el anuncio no se autoriza, y nunca a
+  0.*: no hay tasa de esa clase para la fecha de la autorización. Nada se registra. Avise al administrador
+  (<<tasas>>).
+* *El anuncio no es válido*, con la lista de los campos rechazados (por ejemplo, *vigencia_hasta: no es anterior a la
+  autorización*, que quiere decir que *Vigente hasta* no puede ser anterior a *Autorizado el*): corrija esos campos.
+* *La fecha de la autorización (…) es posterior a hoy (…): un acto no se fecha en el futuro*: corrija *Autorizado
+  el*.
+* *El alta chocó con otra que se confirmó a la vez y no se registró nada: vuelva a intentarlo*: otra persona
+  registraba un anuncio en el mismo instante. Pulse de nuevo btn:[Registrar anuncio].
+* Si sale de la página antes de registrar, lo escrito se pierde sin pregunta previa.
+
+WARNING: El anuncio no se edita ni se borra después de registrado: revise los datos antes de pulsar btn:[Registrar
+anuncio].
+
+[[reintento]]
+=== Si no hubo respuesta: el reintento seguro
+
+Si al pulsar btn:[Registrar anuncio] se corta la comunicación, el formulario muestra *No hubo respuesta del servidor.
+Vuelva a intentarlo: el acto no se registra dos veces.* Puede que el anuncio se haya registrado o no: usted no lo sabe.
+Pulse btn:[Registrar anuncio] otra vez, sin salir de la página:
+
+* si el primer intento no llegó, el anuncio se registra ahora, como siempre;
+* si el primer intento sí se registró, el sistema lo reconoce y responde con el aviso *El anuncio AN-… ya estaba
+  registrado.* y la línea *Este envío repetía uno anterior: no se registró otro ni se devengó otra vez.* No queda un
+  anuncio duplicado ni una tasa devengada dos veces.
+
+// fin de los pasos
+El sistema reconoce el reintento porque el formulario envía, en cada intento, la misma marca de envío, hasta que el
+anuncio queda registrado. La marca se renueva al pulsar btn:[Registrar otro anuncio].
+
+CAUTION: El reintento solo se reconoce desde el mismo formulario, sin salir ni recargar la página. Si recarga la
+página o vuelve a llenar el formulario desde cero, el sistema lo toma como un anuncio nuevo: busque antes en el padrón
+si el primero quedó registrado. Tampoco sirve para corregir: si cambió un dato entre los dos intentos y el primero ya
+se había registrado, queda el primero, con sus datos.
+
+[[ficha]]
+== La ficha del anuncio
+
+[[ficha-partes]]
+=== Partes de la ficha
+
+La ficha se abre con el número del anuncio en el padrón, en la pestaña *Anuncios* de un contribuyente o un predio, o
+con *Ver la ficha del anuncio* al registrarlo (<<fig-ficha>>). Tiene:
+
+[horizontal]
+Banda de título:: *Anuncio*, el número y la denominación (o la clase); debajo, la clase, el tipo y la dirección; a la
+derecha, el estado de hoy (*Al 20/10/2026: Vigente*).
+Vigente hasta (al …):: La vigencia que rige hoy. En un anuncio cesado o retirado dice *—* y debajo *cesado el …* o
+*retirado el …*.
+Devengado al …:: La suma de las tasas de la autorización y las renovaciones fechadas hasta hoy (<<devengado>>).
+Actos:: Los botones btn:[Renovar], btn:[Cesar] y btn:[Retirar], cada uno con el motivo debajo si no procede
+(<<actos-anuncio>>).
+Datos del anuncio:: Los datos de la autorización. *Ver contribuyente* y *Ver predio* abren la pestaña *Anuncios* de
+esas fichas. *Vigencia autorizada* es la de la autorización original; la que rige hoy es la de arriba.
+Movimientos:: Los actos del anuncio, por fecha (<<movimientos>>).
+
+[[fig-ficha]]
+.La ficha de un anuncio renovado
+image::{capturas}/usuario/anuncios/ficha.png[Ficha del anuncio AN-2026-000002 vigente hasta el 31/12/2027 con S/ 180.40 devengados, los botones Renovar y Cesar, Retirar deshabilitado con su motivo, los datos del anuncio y los movimientos: la autorización del 20/01/2026 para 2026 y la renovación del 05/10/2026 para 2027]
+
+[[movimientos]]
+=== Movimientos
+
+La tabla *Movimientos* muestra, por acto, el *Acto*, la *Fecha*, el *Ejercicio* que devenga, la *Referencia de cargo*,
+la *Tasa* (con la fecha a la que se leyó), *Vigente hasta*, el *Motivo* (del cese y del retiro) y la *Observación*
+(<<fig-movimientos>>).
+
+[[fig-movimientos]]
+.Los movimientos de un anuncio retirado
+image::{capturas}/usuario/anuncios/movimientos.png[Tabla Movimientos del anuncio AN-2026-000005 con la autorización del 01/04/2026, que devenga S/ 31.00 de 2026 hasta el 15/04/2026, el cese del 15/04/2026 por fin de la campaña y el retiro del 20/04/2026]
+
+Solo la *Autorización* y las *Renovaciones* devengan: tienen ejercicio, referencia de cargo y tasa. El *Cese* y el
+*Retiro* no devengan ni cambian la vigencia: tienen su motivo. La referencia de cargo (`ANUNCIO-…-2026`) identifica la
+tasa de ese anuncio y ese ejercicio: hay una sola por ejercicio.
+
+[[actos-anuncio]]
+=== Qué actos quedan
+
+.Cuándo no procede cada acto
+[cols="1,3",options="header"]
+|===
+|Acto |No procede cuando… (lo que dice debajo del botón)
+|Renovar |El anuncio está cesado (*Un anuncio cesado no se renueva: el cese detiene la tasa de los ejercicios
+siguientes.*) o retirado (*Un anuncio retirado no se renueva.*).
+|Cesar |El anuncio ya está cesado (*El anuncio ya está cesado.*) o retirado (*El anuncio ya está retirado.*).
+|Retirar |El anuncio no está cesado (*Se retira después del cese: el anuncio no está cesado.*) o ya está retirado.
+|===
+
+[[fig-ficha-cesado]]
+.Un anuncio cesado: solo queda retirarlo
+image::{capturas}/usuario/anuncios/ficha-cesado.png[Ficha del anuncio AN-2026-000004 cesado, con Vigente hasta — y cesado el 31/08/2026, S/ 90.20 devengados, Renovar y Cesar deshabilitados con su motivo y Retirar habilitado]
+
+Si es su rol el que no permite el acto, debajo de los botones dice *Sin permiso: renovar, cesar o retirar pide
+creación sobre los movimientos de anuncio.* (<<permisos-usuario>>).
+
+[[proc-renovar]]
+=== Renovar un anuncio
+
+[[proc-renovar-pasos]]
+.Renovar un anuncio
+====
+[horizontal]
+Objetivo:: Prorrogar la autorización de un anuncio por un ejercicio y devengar su tasa.
+Requisitos previos:: El anuncio vigente o vencido (no cesado ni retirado); la nueva fecha de vigencia; la tasa de la
+clase cargada para el ejercicio que se renueva. Permiso de creación sobre los movimientos de anuncio.
+====
+
+. En la ficha del anuncio, pulse btn:[Renovar]. Se abre *Renovar el anuncio …* (<<fig-renovar>>).
+. En *Fecha del acto*, escriba el día de la renovación. En blanco, se toma hoy.
+. En *Nueva vigencia hasta*, escriba el último día que regirá la renovación (por ejemplo, `31/12/2027`).
+. Escriba la *Observación* (de 5 a 500 caracteres).
++
+[[fig-renovar]]
+.Renovar un anuncio para el ejercicio 2027
+image::{capturas}/usuario/anuncios/renovar.png[Diálogo Renovar el anuncio AN-2026-000001 con la explicación del devengo, la fecha del acto en blanco, la nueva vigencia hasta el 31/12/2027 y la observación,460,align=center]
+. Pulse btn:[Renovar].
+
+// fin de los pasos
+Resultado esperado:: El diálogo dice *Renovación registrada el 20/10/2026. Devenga S/ 90.20 del ejercicio 2027.* Pulse
+btn:[Cerrar].
+Verificación:: *Vigente hasta* muestra la nueva fecha, *Devengado* suma la nueva tasa y *Movimientos* tiene la
+*Renovación* con su ejercicio.
+Casos especiales::
+* *El ejercicio 2026 de AN-… ya está devengado (ANUNCIO-…-2026): una tasa por ejercicio*: ese ejercicio ya se devengó,
+  con la autorización o con otra renovación (<<renovacion-reglas>>).
+* *La prórroga del … al … abarca los ejercicios 2027 a 2028, y una renovación devenga uno solo: se renueva ejercicio a
+  ejercicio*: la nueva vigencia pasa de un ejercicio. Renueve hasta el fin de un año y, después, el siguiente.
+* *La renovación de AN-… del … no puede vencer el …*: la nueva vigencia es anterior a la fecha del acto.
+* *No hay tasa que devengar: falta TASA_ANUNCIO LETRERO 2027*: no está cargada la tasa de la clase para ese ejercicio.
+  Nada se registra. Avise al administrador.
+* *La fecha de la renovación de AN-… (…) es anterior a …: los actos van en orden*: la fecha no puede ser anterior a la
+  autorización ni al último movimiento del anuncio, ni posterior a hoy.
+
+[[renovacion-reglas]]
+=== Qué ejercicio renueva y cuánto devenga
+
+Una renovación devenga *un* ejercicio, y cada ejercicio se devenga *una sola vez* por anuncio:
+
+* El ejercicio que renueva es el año de *Nueva vigencia hasta*. La prórroga se cuenta desde el día siguiente a la
+  vigencia actual (si todavía rige el día del acto) o desde la fecha del acto (si ya venció), y no puede abarcar más de
+  un ejercicio.
+* La tasa es la de la clase vigente al 1 de enero de ese ejercicio (<<tasas>>).
+* La autorización ya devengó el ejercicio de su año. Por eso, una renovación que caiga en ese mismo año se rechaza.
+
+// fin de los pasos
+Ejemplos, con el «hoy» de la demostración (20/10/2026):
+
+* `AN-2026-000001` rige hasta el 31/12/2026: una renovación con *Nueva vigencia hasta* `31/12/2027` va del 01/01/2027 al
+  31/12/2027 y devenga el ejercicio 2027 (como la que ya tiene `AN-2026-000002`).
+* `AN-2026-000003` venció el 31/07/2026 y su autorización ya devengó 2026. Una renovación de hoy hasta el 31/12/2026
+  sería del ejercicio 2026, ya devengado; una hasta el 31/12/2027 abarcaría 2026 y 2027. El sistema rechaza las dos:
+  este anuncio podrá renovarse desde el 01/01/2027, para el ejercicio 2027 (<<fig-ficha-vencido>>).
+
+[[fig-ficha-vencido]]
+.Un anuncio vencido
+image::{capturas}/usuario/anuncios/ficha-vencido.png[Ficha del anuncio AN-2026-000003 vencido, vigente hasta el 31/07/2026, con S/ 90.20 devengados y los botones Renovar y Cesar habilitados]
+
+CAUTION: Si deja en blanco *Nueva vigencia hasta*, la renovación devenga el ejercicio de la fecha del acto y el
+anuncio queda *sin plazo*: no vencerá nunca. Escriba siempre la nueva vigencia, salvo que la autorización sea, en
+efecto, indefinida.
+
+[[proc-cesar]]
+=== Cesar un anuncio
+
+[[proc-cesar-pasos]]
+.Cesar un anuncio
+====
+[horizontal]
+Objetivo:: Dar de baja la autorización de un anuncio: deja de estar vigente y no devenga más tasa.
+Requisitos previos:: El anuncio no cesado ni retirado; el documento del cese (la comunicación del titular, la
+resolución). Permiso de creación sobre los movimientos de anuncio.
+====
+
+. En la ficha del anuncio, pulse btn:[Cesar]. Se abre *Cesar el anuncio …* (<<fig-cesar>>).
+. En *Fecha del acto*, escriba el día del cese. En blanco, se toma hoy.
+. Escriba el *Motivo* (obligatorio, hasta 500 caracteres) y la *Observación* (de 5 a 500 caracteres).
++
+[[fig-cesar]]
+.El diálogo del cese
+image::{capturas}/usuario/anuncios/cesar.png[Diálogo Cesar el anuncio AN-2026-000001 con la fecha del acto en blanco, el motivo Cierre del local comercial y la observación,460,align=center]
+. Pulse btn:[Cesar].
+
+// fin de los pasos
+Resultado esperado:: El diálogo dice *Cese registrado el …*. Pulse btn:[Cerrar]. El anuncio queda *Cesado*: *Vigente
+hasta* dice *—* y debajo *cesado el …*.
+Verificación:: En el padrón, el anuncio aparece *Cesado* desde la fecha del cese.
+Casos especiales::
+* El cese no devuelve lo ya devengado: el *Devengado* no cambia.
+* Después del cese, btn:[Renovar] y btn:[Cesar] quedan deshabilitados; solo queda btn:[Retirar].
+* *El anuncio … ya está cesado*: el cese se registra una sola vez.
+* La fecha no puede ser anterior a la autorización ni al último movimiento, ni posterior a hoy.
+
+WARNING: El cese no se puede deshacer: un anuncio cesado no se vuelve a renovar. Si el titular quiere el anuncio de
+nuevo, registre un anuncio nuevo con su autorización.
+
+[[proc-retirar]]
+=== Retirar un anuncio
+
+El retiro deja constancia de que el elemento ya no está (porque lo retiró el titular o porque se verificó en campo).
+Va siempre después del cese y cierra el anuncio.
+
+. En la ficha de un anuncio *cesado*, pulse btn:[Retirar]. Se abre *Retirar el anuncio …* (<<fig-retirar>>).
+. Escriba la *Fecha del acto* (en blanco, hoy), el *Motivo* y la *Observación*.
+. Pulse btn:[Retirar].
+
+// fin de los pasos
+El anuncio queda *Retirado* y ya no admite ningún acto. En un anuncio sin cese, btn:[Retirar] está gris y dice *Se
+retira después del cese: el anuncio no está cesado.*; en uno ya retirado, *El anuncio ya está retirado.* Como el cese,
+el retiro no devenga, no cambia lo devengado y no se deshace.
+
+[[fig-retirar]]
+.El diálogo del retiro
+image::{capturas}/usuario/anuncios/retirar.png[Diálogo Retirar el anuncio AN-2026-000004 con la fecha del acto 19/10/2026, el motivo Elemento retirado de la fachada y la observación,460,align=center]
+
+[[tasas]]
+== Las tasas de anuncios
+
+[[tasas-consultar]]
+=== Consultar las tasas de un año
+
+Elija menu:Anuncios[Tasas de anuncios]. La página muestra, para el *Año* elegido (el siguiente, el actual y los
+cuatro anteriores), la *Tasa* de cada clase y desde cuándo rige (*Vigente desde*) (<<fig-tasas>>).
+
+[[fig-tasas]]
+.Las tasas de anuncios de 2026
+image::{capturas}/usuario/anuncios/tasas.png[Página Tasas de anuncios del año 2026 con S/ 90.20 para Letrero, Panel, Toldo, Pantalla digital y Globo aerostático y S/ 31.00 para Banderola, todas vigentes desde el 01/01/2026]
+
+Si a un año le falta la tasa de alguna clase, un aviso lo dice (<<fig-tasas-2025>>): esas clases no se pueden autorizar
+ni renovar en ese ejercicio hasta que el administrador cargue su tasa. El sistema nunca toma una tasa de cero.
+
+[[fig-tasas-2025]]
+.Un año sin tasas cargadas
+image::{capturas}/usuario/anuncios/tasas-2025.png[Página Tasas de anuncios del año 2025 con el aviso Al año 2025 le falta: TASA_ANUNCIO de las seis clases y la lista vacía Sin tasas de anuncios en 2025]
+
+[[tasa-como-aplica]]
+=== Cómo se aplica la tasa
+
+* La tasa es *una por clase y por ejercicio completo*. No depende del área, de los lados ni de la cantidad: un letrero
+  de 1 m² y uno de 10 m² devengan lo mismo.
+* La *autorización* devenga el ejercicio de su año, con la tasa de la clase vigente el día de la autorización.
+* Cada *renovación* devenga el ejercicio que renueva, con la tasa de la clase vigente el 1 de enero de ese ejercicio
+  (<<renovacion-reglas>>).
+* La tasa se copia en el movimiento: si después cambia la tarifa, lo ya devengado no cambia.
+* El cese y el retiro no devengan.
+
+// fin de los pasos
+La tarifa la carga el administrador como parámetro tributario `TASA_ANUNCIO`, una fila por clase, con su vigencia
+({m-admin}). Usted no la escribe en ningún formulario: el sistema la lee al registrar cada acto.
+
+NOTE: Perené no tiene una ordenanza de tasa por anuncios. Las tarifas cargadas son el derecho de trámite de su TUPA
+(anuncio de publicidad exterior en predio o vía pública, S/ 90.20; banderola o pasacalle, S/ 31.00), que la
+municipalidad decidió usar como tasa del ejercicio. Una fórmula por área o por lados queda pendiente de que la
+ordenanza la fije.
+
+[[devengado]]
+=== Lo devengado no es una deuda
+
+El *Devengado al …* de la ficha suma las tasas que los actos del anuncio determinaron hasta hoy. Es lo que el anuncio
+debe por sus ejercicios autorizados, pero el sistema no registra pagos ni emite recibos: no sabe si se pagó. La orden
+de cobro de cada tasa va al sistema de caja de la municipalidad (caja-backend), con la *Referencia de cargo* de su
+movimiento. Para saber si un anuncio está pagado, consulte en caja.
+
+[[fichas]]
+== Los anuncios en las fichas
+
+Las fichas del contribuyente y del predio tienen la pestaña *Anuncios*. En la del contribuyente salen los anuncios de
+los que es titular; en la del predio, los que están en él (<<fig-contribuyente-anuncios>>, <<fig-predio-anuncios>>).
+Cada fila muestra el número (abre la ficha del anuncio), la clase, el tipo, la dirección, la fecha de autorización, la
+vigencia y el estado, al día que se indica arriba. Sin anuncios, dice *Sin anuncios*. Es una consulta: los actos se
+registran en la ficha de cada anuncio.
+
+[[fig-contribuyente-anuncios]]
+.La pestaña Anuncios de un contribuyente
+image::{capturas}/usuario/anuncios/contribuyente-anuncios.png[Pestaña Anuncios de BODEGA LA ORQUIDEA E.I.R.L. con el anuncio AN-2026-000002, letrero, aviso simple, autorizado el 20/01/2026, vigente hasta el 31/12/2027]
+
+[[fig-predio-anuncios]]
+.La pestaña Anuncios de un predio
+image::{capturas}/usuario/anuncios/predio-anuncios.png[Pestaña Anuncios del predio 02-01-0003 con el mismo anuncio AN-2026-000002]
+
+Para llegar a la ficha de un contribuyente o un predio, use la búsqueda general de la barra superior
+(<<busqueda-general>>) o los enlaces *Ver contribuyente* y *Ver predio* de la ficha del anuncio.
+
+[[errores]]
+== Errores frecuentes
+
+.Mensajes frecuentes de los anuncios
+[cols="3,3,3",options="header"]
+|===
+|Mensaje |Causa |Solución
+
+|No se puede autorizar: falta TASA_ANUNCIO PANEL 2025 |No hay tasa de la clase para la fecha de la autorización.
+|Avise al administrador (<<tasas>>).
+|No hay tasa que devengar: falta TASA_ANUNCIO LETRERO 2027 |No hay tasa de la clase para el ejercicio que se renueva.
+|Avise al administrador.
+|El anuncio no es válido |Un campo del formulario no se aceptó; la lista dice cuál. |Corrija los campos.
+|vigencia_hasta: no es anterior a la autorización |*Vigente hasta* es anterior a *Autorizado el*. |Corrija la
+fecha.
+|La fecha de … es posterior a hoy (…): un acto no se fecha en el futuro |Una fecha futura. |Corrija la fecha.
+|La fecha de … es anterior a la de …: los actos van en orden |El acto es anterior a la autorización o al último
+movimiento. |Corrija la fecha.
+|El ejercicio … de AN-… ya está devengado (…): una tasa por ejercicio |Ese ejercicio ya se devengó. |Revise la nueva
+vigencia (<<renovacion-reglas>>).
+|La prórroga del … al … abarca los ejercicios … |La renovación pasa de un ejercicio. |Renueve ejercicio a ejercicio.
+|La renovación de AN-… del … no puede vencer el … |La nueva vigencia es anterior a la fecha del acto. |Corrija la
+nueva vigencia.
+|El anuncio … ya está cesado (o ya está retirado) |El acto ya se registró. |Nada que hacer.
+|Se retira después del cese: el anuncio no está cesado. |btn:[Retirar] está gris en un anuncio sin cese. |Registre
+antes el cese.
+|El alta chocó con otra que se confirmó a la vez… |Dos altas en el mismo instante. |Vuelva a pulsar btn:[Registrar
+anuncio].
+|No hubo respuesta del servidor. Vuelva a intentarlo: el acto no se registra dos veces. |Se cortó la comunicación.
+|Vuelva a pulsar el botón, sin salir de la página (<<reintento>>).
+|===
+
+[[faq]]
+== Preguntas frecuentes
+
+[[faq-anuncios]]
+=== Preguntas de los anuncios
+
+Registré un anuncio con un dato equivocado. ¿Cómo lo corrijo?::
+El anuncio no se edita ni se borra desde el portal. Consulte con su jefatura y con el administrador antes de registrar
+otro: dos anuncios para el mismo elemento devengarían dos tasas.
+
+¿Por qué un anuncio grande paga lo mismo que uno pequeño?::
+Porque la tasa cargada es una por clase y ejercicio: no depende del área (<<tasa-como-aplica>>).
+
+El anuncio venció. ¿Se renueva con la misma tasa?::
+Con la tasa de su clase vigente el 1 de enero del ejercicio que renueva (<<renovacion-reglas>>).
+
+No me deja renovar un anuncio vencido este año.::
+Si su autorización ya devengó el ejercicio actual, la renovación de este año se rechaza: se renueva para el ejercicio
+siguiente, desde el 1 de enero (<<renovacion-reglas>>).
+
+¿Cuál es la diferencia entre cesar y retirar?::
+El cese da de baja la autorización (deja de estar vigente y no devenga más). El retiro deja constancia de que el
+elemento ya no está, y cierra el anuncio. El retiro va después del cese (<<proc-retirar>>).
+
+Me apareció «ya estaba registrado». ¿Qué pasó?::
+Su primer intento se había registrado aunque no llegó la respuesta; el sistema no registró otro (<<reintento>>).
+
+¿Cómo sé qué anuncios estaban vigentes en una fecha pasada?::
+Con *Estado al* en esa fecha, en el padrón (<<padron-a-fecha>>).
+
+¿Cómo sé si la tasa de un anuncio se pagó?::
+El sistema no registra pagos: consulte en caja (<<devengado>>).
+
+¿Qué hago si un anuncio no tiene autorización?::
+Eso es una infracción, que se tramita en el módulo de infracciones ({m-fiscalizador}).
+
+include::../comun/faq.adoc[]
+
+[appendix]
+[[glosario]]
+== Glosario
+
+Este glosario reúne solo los términos de este manual. El glosario completo está en el {m-admin}.
+
+[glossary]
+Autorización:: El primer movimiento de un anuncio: el alta, con su vigencia y la tasa de su ejercicio.
+Cese:: El movimiento que da de baja la autorización: el anuncio deja de estar vigente y no devenga más.
+Clase:: El tipo de elemento publicitario (letrero, panel, toldo, banderola, pantalla digital, globo aerostático). Fija
+la tasa.
+Devengado:: La suma de las tasas determinadas por la autorización y las renovaciones. No es una deuda registrada.
+Ejercicio:: El año tributario al que corresponde una tasa.
+Estado:: Vigente, Vencido, Cesado o Retirado, deducido de los movimientos a una fecha.
+Movimiento:: Cada acto del anuncio: autorización, renovación, cese o retiro.
+Referencia de cargo:: `ANUNCIO-` con el identificador del anuncio y el ejercicio: identifica la tasa de ese ejercicio.
+Renovación:: El movimiento que prorroga la vigencia por un ejercicio y devenga su tasa.
+Retiro:: El movimiento que deja constancia de que el elemento ya no está. Va después del cese y cierra el anuncio.
+Tasa:: La tarifa de una clase de anuncio para un ejercicio completo (`TASA_ANUNCIO`).
+Titular:: El contribuyente que obtiene la autorización del anuncio.
+Vigencia:: El último día en que rige la autorización o la última renovación.

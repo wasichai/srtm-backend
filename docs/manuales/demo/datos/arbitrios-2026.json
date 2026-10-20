@@ -1,0 +1,31 @@
+{
+  "_comentario": "DEMO: la ordenanza de arbitrios 2026 de la demostración es FICTICIA (Ordenanza ficticia DEMO 000-2026-MDP): no hay transcripción verificada de la de Perené (D-02b). sembrar_demo.py la carga con model/import_arbitrios.py después de los predios, porque la inafectación nombra uno por su código.",
+  "ordenanzas": [
+    {
+      "anio": 2026,
+      "numero": "Ordenanza ficticia DEMO 000-2026-MDP",
+      "fecha_publicacion": "2025-12-20",
+      "acuerdo_ratificacion": "Acuerdo de Concejo ficticio DEMO 000-2025-MPCH",
+      "fecha_ratificacion": "2025-12-28",
+      "municipalidad_ratificante": "Municipalidad Provincial ficticia DEMO",
+      "observacion": "Ordenanza FICTICIA de la demostración de los manuales: ninguna cifra es de Perené."
+    }
+  ],
+  "servicios": [
+    {"codigo": "BAR", "nombre": "Barrido de calles", "orden": 1, "vigencia_desde": "2026-01-01", "ordenanza": 2026},
+    {"codigo": "RRS", "nombre": "Recolección de residuos sólidos", "orden": 2, "vigencia_desde": "2026-01-01", "ordenanza": 2026},
+    {"codigo": "PYJ", "nombre": "Parques y jardines", "orden": 3, "vigencia_desde": "2026-01-01", "ordenanza": 2026},
+    {"codigo": "SER", "nombre": "Serenazgo", "orden": 4, "vigencia_desde": "2026-01-01", "ordenanza": 2026}
+  ],
+  "inafectaciones": [
+    {
+      "predio": "03-02-0006",
+      "servicio": "SER",
+      "vigencia_desde": "2026-01-01",
+      "tipo_documento": "RESOLUCION",
+      "numero_documento": "RG-DEMO-0001-2026",
+      "motivo": "Local de una asociación sin fines de lucro (DEMO)",
+      "observacion": "Inafectación ficticia de la demostración: el serenazgo no se cobra a este predio en 2026."
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+// Capítulo común de los manuales de usuario: formularios, mensajes del sistema y permisos.
+[[formularios]]
+== Formularios, mensajes y permisos
+
+[[campos]]
+=== Campos obligatorios y formatos
+
+Los campos con un asterisco rojo (*) son obligatorios. Al pulsar btn:[Grabar], btn:[Siguiente] o el botón que
+registra la operación, el sistema revisa el formulario y marca en rojo, debajo de cada campo, lo que falta o está mal
+escrito (<<fig-validacion>>):
+
+[cols="1,2",options="header"]
+|===
+|Mensaje |Qué significa
+|Este dato es obligatorio |El campo está vacío y el trámite lo exige.
+|Debe ser un número entero |El campo admite solo dígitos, sin decimales (por ejemplo, el número de pisos).
+|Debe ser un número, con punto decimal (1,250.50) |Los importes y las áreas se escriben con punto para los decimales;
+la coma separa los miles.
+|===
+
+Las fechas se eligen con el calendario del campo o se escriben en el formato día/mes/año. Las listas desplegables
+empiezan en *SELECCIONAR*: hay que elegir una opción.
+
+[[fig-validacion]]
+.Campos obligatorios sin completar
+image::{capturas}/comun/validacion.png[Formulario con los campos obligatorios marcados en rojo con el mensaje Este dato es obligatorio]
+
+Además de estas comprobaciones del formulario, el servidor aplica las reglas del trámite (por ejemplo, que un número
+de documento no esté inscrito dos veces, o que los porcentajes de los condóminos no pasen de 100). Cuando una regla no
+se cumple, el mensaje aparece junto al campo afectado o en un recuadro rojo sobre el formulario, y nada se graba.
+
+[[salir-sin-guardar]]
+=== Salir sin guardar
+
+En la declaración jurada (la nueva y la ficha de una existente), si sale con cambios sin grabar, por el riel o por
+otra pestaña de fichas, el sistema pregunta *¿Salir sin guardar?* y nombra las pestañas con cambios
+(<<fig-salir-sin-guardar>>):
+
+* btn:[Seguir editando] lo devuelve al formulario, con lo que había escrito.
+* btn:[Salir sin guardar] descarta los cambios.
+
+Si en cambio cierra o recarga la pestaña del navegador, la pregunta la hace el propio navegador, con su texto.
+Moverse entre las pestañas de la misma ficha no pregunta nada: los cambios siguen ahí hasta que pulse btn:[Guardar]
+o btn:[Cancelar].
+
+CAUTION: Los demás formularios (contribuyente, predio, lote de catastro) no preguntan: si sale sin grabar, lo escrito
+se pierde.
+
+[[fig-salir-sin-guardar]]
+.Aviso de cambios sin grabar
+image::{capturas}/comun/salir-sin-guardar.png[Diálogo Salir sin guardar con los botones Seguir editando y Salir sin guardar,560,align=center]
+
+[[actos]]
+=== Actos con observación
+
+Las operaciones que no se pueden deshacer editando el registro (determinar arbitrios, registrar un acta, renovar o
+cesar un anuncio, entre otras) piden una *Observación*: el motivo del acto, de 5 a 500 caracteres.
+Unas la piden en un diálogo de confirmación (determinar, renovar, cesar); otras, como *Nueva acta* y *Nuevo anuncio*,
+en el propio formulario. La observación queda guardada con el acto y explica después por qué se hizo. La
+anulación de una declaración jurada es distinta: pide un *Motivo de la anulación*, obligatorio y sin largo mínimo.
+
+Si al confirmar se corta la comunicación, el diálogo dice *No hubo respuesta del servidor. Vuelva a intentarlo: el
+acto no se registra dos veces.* Puede volver a pulsar el botón sin miedo a duplicar el acto.
+
+[[permisos-usuario]]
+=== Lo que su rol le permite
+
+Cada cuenta tiene uno o más roles, y cada rol dice qué tipos de registro puede consultar, crear, modificar o eliminar.
+El portal no esconde las acciones que su rol no permite. En los actos de infracciones y anuncios, la determinación de
+arbitrios y la brecha, el botón aparece deshabilitado, con una línea que empieza con *Sin permiso:* y dice qué permiso
+falta (<<fig-sin-permiso>>). Si necesita esa acción para su trabajo, pídasela al administrador.
+
+[[fig-sin-permiso]]
+.Una acción que el rol no permite
+image::{capturas}/comun/sin-permiso.png[Botón deshabilitado con el texto Sin permiso: registrar un acta pide creación sobre las papeletas]
+
+En las demás pantallas (los formularios del registro tributario, la emisión masiva y la eliminación de procesos
+masivos) los botones se ven habilitados aunque el rol no permita la operación: es el servidor quien la rechaza al
+grabar, con un mensaje (por ejemplo, *No tiene permiso para lanzar emisiones masivas*), y nada se guarda.
+
+[[errores-pagina]]
+=== Páginas que no se pueden mostrar
+
+[cols="1,2",options="header"]
+|===
+|Mensaje |Qué hacer
+|Esta página no existe |La dirección está mal escrita o el registro ya no existe. Use btn:[Ir al inicio] o elija
+una opción del riel.
+|No se pudo mostrar esta página |Ocurrió un error inesperado. Vuelva a intentarlo; si se repite, avise a soporte
+técnico con la hora y la dirección de la página.
+|===

@@ -1,0 +1,80 @@
+// Atributos comunes de todos los manuales. Cada libro lo incluye justo después de su cabecera.
+// La versión del producto sale de gradle.properties (x-release-please); la fecha de edición se fija a mano
+// en cada edición (CHANGELOG.adoc).
+:producto: Rentas municipales
+:sigla: SRTM
+// como lo nombra el pie del portal (srtm-ui, PortalShell)
+:producto-largo: Sistema de Gestión Tributaria Municipal
+:municipalidad: Municipalidad Distrital de Perené
+:version-producto: 0.9.0
+:version-ui: 0.5.0
+:version-wasichai: 1.2.0
+:edicion: 1.0
+:fecha-edicion: 19 de octubre de 2026
+:revnumber: {edicion}
+:revdate: {fecha-edicion} · {producto} {version-producto}
+:lang: es
+// sin partición silábica en el PDF: asciidoctor-pdf la haría con la gema text-hyphen, que no se exige
+:hyphens!:
+:doctype: book
+:icons: font
+:sectnums:
+:sectnumlevels: 3
+:toc: left
+:toclevels: 2
+:xrefstyle: short
+:experimental:
+:source-highlighter: rouge
+:rouge-style: github
+// colores del código en línea: con linkcss, rouge pediría una hoja rouge-github.css aparte
+:rouge-css: style
+:table-caption: Tabla
+:figure-caption: Figura
+:example-caption: Procedimiento
+:listing-caption: Listado
+:toc-title: Contenido
+:preface-title: Acerca de este manual
+:chapter-signifier: Capítulo
+:part-signifier: Parte
+:appendix-caption: Anexo
+:appendix-refsig: Anexo
+:chapter-refsig: capítulo
+:section-refsig: sección
+:caution-caption: Precaución
+:important-caption: Importante
+:note-caption: Nota
+:tip-caption: Consejo
+:warning-caption: Advertencia
+:last-update-label: Generado el
+:version-label: Edición
+:untitled-label: Sin título
+:outline-title: Contenido
+// rutas: cada libro vive un nivel debajo de docs/manuales
+:imagesdir: ../recursos
+:capturas: capturas
+:diagramas: diagramas/generados
+:diagext: png
+// estilos HTML (el PDF usa estilos/pdf/tema-srtm.yml por la línea de comandos)
+:stylesdir: ../estilos
+:stylesheet: manuales.css
+:linkcss:
+:copycss!:
+:docinfo: shared
+:docinfodir: ../estilos/html
+// nombres de los libros, para las referencias entre manuales
+:m-registrador: Manual del registrador
+:m-arbitrios: Manual de arbitrios y emisión
+:m-fiscalizador: Manual del fiscalizador
+:m-anuncios: Manual de anuncios
+:m-consulta: Manual de consulta
+:m-admin: Manual del administrador
+:m-sistema: Manual técnico del sistema
+// perfiles demo (demo/perfiles.json)
+:p-registrador: REGISTRADOR
+:p-arbitrios: ARBITRIOS_EMISION
+:p-fiscalizador: FISCALIZADOR
+:p-anuncios: ANUNCIOS
+:p-consulta: CONSULTA
+:p-admin: ADMIN
+// la portada del conjunto (index.adoc la redefine a index.html)
+:biblioteca: ../index.html

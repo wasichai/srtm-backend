@@ -1,0 +1,432 @@
+// Referencia de configuración de srtm-backend. La incluyen el manual técnico del sistema y el del administrador,
+// como capítulo (include::../referencia/configuracion.adoc[]) o dentro de otro capítulo ([leveloffset=+1]).
+// Empieza en el nivel 2 (==) y no tiene cabecera de documento. Fuentes: src/main/resources/application.yml,
+// develop/example.env, compose.yml, build.gradle.kts y la referencia de wasichai 1.2.0 (docs/modules/core.md).
+// Ningún valor de aquí es un secreto real: las claves se muestran como <marcador>.
+
+[[ref-configuracion]]
+== Configuración
+
+Toda la configuración de {sigla} se lee al arrancar el proceso. Los valores por defecto están en
+`src/main/resources/application.yml`, cada uno con la forma `${VARIABLE:valor por defecto}`: basta con definir la
+variable de entorno para cambiarlo. Una propiedad sin variable propia en `application.yml` también se puede fijar
+por entorno, con la regla de nombres de Spring Boot (mayúsculas, puntos y guiones cambiados por `_`): por ejemplo,
+`server.port` como `SERVER_PORT`.
+
+No hay archivos de configuración fuera del jar, ni configuración guardada en la base salvo la que se carga como
+datos: el registro `municipalidad`
+(cabecera de los documentos) y los parámetros tributarios (`parametro_tributario`), que se administran como
+registros.
+
+Lo mínimo que un entorno real debe fijar:
+
+* la base (`WASICHAI_DB_*`), con un rol y una clave propios;
+* `WASICHAI_JWT_SECRET`, de al menos 32 bytes y secreto;
+* `WASICHAI_SEED_DEV=false`;
+* `SRTM_EMISION_DIR` en un volumen persistente y privado, o el almacén S3;
+* `SRTM_MUNICIPALIDAD_ESCUDO`, si la cabecera lleva escudo.
+
+[[ref-config-precedencia]]
+=== Orden de precedencia
+
+De mayor a menor, como en cualquier aplicación Spring Boot:
+
+. argumentos de la línea de comandos (`java -jar app.jar --server.port=8091`);
+. variables de entorno (`SERVER_PORT=8091`, `WASICHAI_DB_HOST=…`);
+. `application.yml` empaquetado en el jar (los valores por defecto de esta referencia).
+
+`develop/.env` no lo lee la aplicación: es un archivo que el shell exporta (`set -a; source develop/.env; set +a`)
+antes de `./gradlew bootRun`. En un servidor, las mismas variables se definen en la unidad del servicio, en el
+`environment` del contenedor o en los secretos del orquestador.
+
+[[ref-config-servidor]]
+=== Servidor y base de datos
+
+[cols="4,3,5",options="header"]
+|===
+|Variable (propiedad) |Por defecto |Para qué
+
+|`SERVER_PORT` +
+(`server.port`)
+|`8090`
+|Puerto HTTP del backend. Los scripts de `model/` llaman por defecto a `http://localhost:8090`.
+
+|`WASICHAI_DB_HOST` +
+(`wasichai.database.host`)
+|`localhost`
+|Servidor de PostgreSQL.
+
+|`WASICHAI_DB_PORT` +
+(`wasichai.database.port`)
+|`5433`
+|Puerto. `compose.yml` publica la base en el 5433, nunca en el 5432, para no tocar otro PostgreSQL de la máquina.
+
+|`WASICHAI_DB_NAME` +
+(`wasichai.database.name`)
+|`srtm`
+|Nombre de la base.
+
+|`WASICHAI_DB_USERNAME` +
+(`wasichai.database.username`)
+|`srtm`
+|Rol con el que se conecta el backend. Con la configuración de srtm, el mismo rol ejecuta las migraciones de Flyway.
+
+|`WASICHAI_DB_PASSWORD` +
+(`wasichai.database.password`)
+|`srtm`
+|Clave de ese rol. El valor por defecto solo sirve para la base local de `compose.yml`.
+
+|`SRTM_PG_PORT`
+|`5433`
+|Solo para `compose.yml`: el puerto que publica en `127.0.0.1`. Debe coincidir con `WASICHAI_DB_PORT`.
+|===
+
+Propiedades de wasichai que {sigla} no fija y que conviene conocer (valores por defecto de wasichai {version-wasichai}):
+
+[cols="5,3,5",options="header"]
+|===
+|Propiedad |Por defecto |Para qué
+
+|`wasichai.database.metadata-schema`
+|`wasichai`
+|Esquema de la metadata, la identidad, la auditoría y los historiales de Flyway.
+
+|`wasichai.database.data-schema`
+|`app_data`
+|Esquema de las tablas de registros: una por objeto y organización.
+
+|`wasichai.database.migrate`
+|`true`
+|`false` cuando las migraciones se corren en un paso aparte, con otro rol que el de la aplicación (dos roles de base de datos).
+
+|`wasichai.metadata.cache.ttl`
+|`5s`
+|Cuánto guarda cada instancia las definiciones del modelo. Con varias instancias, un cambio de `apply.py` se ve en
+las demás a lo sumo en ese tiempo. `0s` apaga la caché.
+
+|`wasichai.web.cors-allowed-origin-patterns`
+|`http://localhost:*`
+|Orígenes de navegador que la API atiende. Con el proxy de Vite (desarrollo) no hace falta; con el portal servido
+desde otro origen, sí.
+
+|`spring.r2dbc.pool.max-size`
+|`10` (el de r2dbc-pool)
+|Conexiones del pool. Limita los trabajadores de la emisión masiva a `max-size − 2`.
+|===
+
+[[ref-config-seguridad]]
+=== Seguridad e identidad
+
+[cols="4,3,5",options="header"]
+|===
+|Variable (propiedad) |Por defecto |Para qué
+
+|`WASICHAI_JWT_SECRET` +
+(`wasichai.security.jwt.secret`)
+|un valor de desarrollo escrito en `application.yml`
+|Clave HS256 con que se firman los tokens; al menos 32 bytes. *Obligatorio cambiarla* en cualquier entorno que no sea la
+máquina de un desarrollador. Si se cambia, todos los tokens emitidos dejan de valer.
+
+|`WASICHAI_SEED_DEV` +
+(`wasichai.seed.dev`)
+|`true` en srtm (`false` en wasichai)
+|Corre la migración `core_seed`, que crea la organización `demo`, el rol `ADMIN` y el usuario
+`admin@wasichai.local` con clave `admin`. *Debe ser `false` fuera de desarrollo*; apagarlo no borra lo que ya creó.
+
+|`wasichai.security.jwt.ttl`
+|`8h`
+|Vida de un token de usuario.
+
+|`wasichai.security.jwt.revocation`
+|`false`
+|`true`: un token emitido antes de deshabilitar al usuario, cambiar su clave o sus roles responde 401. {sigla} no
+lo enciende.
+
+|`wasichai.security.login.enabled`
+|`false`
+|`true`: límite de intentos de inicio de sesión (429). Encenderlo exige ajustar `SrtmApiTest`, que inicia sesión en
+cada test.
+
+|`wasichai.security.password.min-length`
+|`8`
+|Largo mínimo de la clave. Las opciones `require-uppercase`, `-lowercase`, `-digit` y `-symbol` vienen apagadas.
+|===
+
+[[ref-config-municipalidad]]
+=== Cabecera de los documentos emitidos
+
+[cols="4,3,5",options="header"]
+|===
+|Variable (propiedad) |Por defecto |Para qué
+
+|`SRTM_MUNICIPALIDAD_NOMBRE` +
+(`srtm.municipalidad.nombre`)
+|vacío
+|Nombre de respaldo de la cabecera del PU, la HR, la HLA y las resoluciones, mientras la organización no tenga
+registro `municipalidad`. Vacío, el respaldo es el nombre de la organización en Core (y, si no tiene, su slug): una
+instalación con varias municipalidades no imprime el nombre de otra.
+
+|`SRTM_MUNICIPALIDAD_ESCUDO` +
+(`srtm.municipalidad.escudo`)
+|vacío
+|Escudo de la cabecera: `classpath:…` o `file:…`, solo PNG o JPG. Se lee al arrancar: si no existe o no es PNG ni
+JPG, la aplicación no arranca y el error nombra el archivo. Vacío, la cabecera no lleva escudo.
+
+|`srtm.municipalidad.cache`
+|`1m`
+|Cuánto se guarda la cabecera por organización: un cambio del registro `municipalidad` en el admin aparece en los PDF
+dentro de ese tiempo.
+|===
+
+[[ref-config-pide]]
+=== PIDE RENIEC (consulta de DNI)
+
+[cols="4,3,5",options="header"]
+|===
+|Variable (propiedad) |Por defecto |Para qué
+
+|`SRTM_PIDE_RENIEC_ENABLED` +
+(`srtm.pide.reniec.enabled`)
+|`false`
+|Enciende la consulta. Encendida sin URL, usuario, RUC o clave, el log avisa
+(`srtm.pide.reniec.enabled sin url, usuario, RUC o password: no se consulta RENIEC`) y no se consulta.
+
+|`SRTM_PIDE_RENIEC_URL`
+|`https://ws2.pide.gob.pe/Rest/RENIEC/Consultar`
+|Servicio REST «Consultar». Algunas entidades usan `ws6.pide.gob.pe` en producción.
+
+|`SRTM_PIDE_RENIEC_DNI_USUARIO`
+|vacío
+|DNI del usuario del convenio.
+
+|`SRTM_PIDE_RENIEC_RUC_USUARIO`
+|vacío
+|RUC de la municipalidad en el convenio.
+
+|`SRTM_PIDE_RENIEC_PASSWORD`
+|vacío
+|Clave del convenio. Secreto: solo por entorno o por el gestor de secretos, nunca en el repositorio.
+
+|`SRTM_PIDE_RENIEC_TIMEOUT`
+|`5s`
+|Cuánto se espera la respuesta; pasado ese tiempo es «sin datos».
+
+|`srtm.pide.reniec.vigencia`
+|`30m`
+|Cuánto respalda una consulta un alta o edición con fuente PIDE RENIEC. Se guarda en la memoria de cada instancia.
+|===
+
+[[ref-config-catastro]]
+=== catastro-backend (brecha de recaudación)
+
+[cols="4,3,5",options="header"]
+|===
+|Variable (propiedad) |Por defecto |Para qué
+
+|`SRTM_CATASTRO_ENABLED` +
+(`srtm.catastro.enabled`)
+|`false`
+|Enciende la lectura de valuaciones. Apagado, `POST /api/srtm/brecha/corridas` responde 409 «Catastro no
+configurado».
+
+|`SRTM_CATASTRO_URL`
+|`http://localhost:8091`
+|Raíz de catastro-backend.
+
+|`SRTM_CATASTRO_CLIENT_ID`
+|vacío
+|`clientId` de la cuenta de servicio `srtm` de catastro-backend (rol `SRTM_LECTOR`, la crea su
+`model/crear_cuenta_srtm.py`).
+
+|`SRTM_CATASTRO_CLIENT_SECRET`
+|vacío
+|Su `clientSecret`, que catastro-backend muestra una sola vez. Secreto.
+
+|`SRTM_CATASTRO_TIMEOUT`
+|`60s`
+|Plazo de cada petición: catastro valoriza al vuelo una página de 500 predios.
+
+|`SRTM_CATASTRO_ORGANIZACION`
+|vacío
+|Slug o id de la organización de {sigla} cuyo catastro es. Vacía con el catastro encendido, ninguna corrida empieza
+(409); una corrida de otra organización también es 409.
+|===
+
+[[ref-config-emision]]
+=== Emisión masiva y trabajadores
+
+Estas propiedades también rigen la determinación masiva de arbitrios, que usa los mismos trabajadores y lotes.
+
+[cols="4,3,5",options="header"]
+|===
+|Variable (propiedad) |Por defecto |Para qué
+
+|`SRTM_EMISION_ALMACEN` +
+(`srtm.emision.almacen`)
+|`local`
+|Dónde quedan los archivos generados: `local` (disco, bajo `dir`) o `s3` (un bucket, sin volumen compartido).
+
+|`SRTM_EMISION_DIR`
+|`./data/emisiones`
+|Raíz del almacén local, relativa al directorio de trabajo del proceso. En producción, un volumen persistente y
+privado: los archivos traen datos personales del padrón entero.
+
+|`SRTM_EMISION_TEMPORALES`
+|`${java.io.tmpdir}/srtm-emision`
+|Archivos de trabajo de la instancia (`.part`, `.partes-`, `ensamblado-`). Locales de cada instancia y descartables:
+nunca un volumen compartido.
+
+|`SRTM_EMISION_LOTE`
+|`100`
+|Contribuyentes (o predios, en la determinación masiva) por lote. Mínimo 1.
+
+|`SRTM_EMISION_TRABAJADORES`
+|`auto`
+|Trabajadores de la instancia. `auto` = `min(núcleos, (memoria máxima − 512 MiB) / 300 MiB)`, entre 1 y los
+núcleos; un número se toma tal cual; `0` no corre ninguno. Nunca más que `spring.r2dbc.pool.max-size − 2`.
+
+|`SRTM_EMISION_ESPERA`
+|`5s`
+|Cuánto espera un trabajador sin trabajo antes de volver a mirar. Un POST a esa instancia lo despierta antes.
+
+|`SRTM_EMISION_LEASE`
+|`2m`
+|Un lote o un ensamblado cuya instancia dejó de latir hace este tiempo lo retoma otra. El latido se renueva cada
+`lease/4`.
+
+|`SRTM_EMISION_INTENTOS`
+|`3`
+|Tomas de un lote antes de quedar FALLIDO. Mínimo 1.
+
+|`SRTM_EMISION_CONSERVAR`
+|`5`
+|Retención: archivos que se conservan por organización y año. `0` apaga la regla.
+
+|`SRTM_EMISION_DIAS`
+|`0`
+|Retención: ningún archivo más viejo que estos días. `0` (por defecto) apaga la regla.
+|===
+
+[[ref-config-s3]]
+=== Almacén S3
+
+Solo con `SRTM_EMISION_ALMACEN=s3`.
+
+[cols="4,3,5",options="header"]
+|===
+|Variable (propiedad) |Por defecto |Para qué
+
+|`SRTM_EMISION_S3_BUCKET` +
+(`srtm.emision.s3.bucket`)
+|vacío
+|Obligatorio. Sin él la aplicación no arranca («srtm.emision.s3.bucket es obligatorio con
+srtm.emision.almacen=s3»). Al arrancar se comprueba con `HeadBucket`.
+
+|`SRTM_EMISION_S3_REGION`
+|vacío
+|Vacía: la de la cadena del SDK (`AWS_REGION`). Contra otro endpoint, `us-east-1`.
+
+|`SRTM_EMISION_S3_ENDPOINT`
+|vacío
+|Solo para un servicio compatible que no sea AWS (MinIO), al que se llega por _path-style_.
+
+|`SRTM_EMISION_S3_PREFIJO`
+|vacío
+|Las claves van debajo de este prefijo (`srtm/emisiones` da `srtm/emisiones/emision-<id>/…`).
+
+|`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+|—
+|Credenciales por la cadena por defecto del AWS SDK v2, solo si no hay IRSA ni rol de instancia. Secretos.
+
+|`AWS_REQUEST_CHECKSUM_CALCULATION`
+|—
+|`when_required` apaga los checksums al final del cuerpo en los `PutObject` (archivos de menos de 16 MiB), para un
+almacén compatible que no los acepte. No afecta a las subidas en partes.
+|===
+
+[[ref-config-gis]]
+=== GIS
+
+[cols="4,3,5",options="header"]
+|===
+|Variable (propiedad) |Por defecto |Para qué
+
+|`WASICHAI_GEOSERVER_ENABLED` +
+(`wasichai.gis.geoserver.enabled`)
+|`false`
+|Solo para publicar capas WMS. Sin GeoServer, los lotes se sirven directamente desde PostGIS.
+
+|`WASICHAI_GEOSERVER_URL`
+|`http://localhost:8081/geoserver`
+|URL de GeoServer.
+|===
+
+[[ref-config-scripts]]
+=== Scripts, construcción y pruebas
+
+Estas variables no las lee el backend: las leen los scripts de `model/`, Gradle o la suite de integración.
+
+[cols="4,3,5",options="header"]
+|===
+|Variable |Por defecto |La lee
+
+|`WASICHAI_CORE`
+|`http://localhost:8090`
+|Todos los scripts de `model/` que llaman a Core (`--core`).
+
+|`WASICHAI_EMAIL` / `WASICHAI_PASSWORD`
+|`admin@wasichai.local` / `admin`
+|Los mismos scripts (`--email`, `--password`). Fuera de desarrollo, una cuenta con los permisos que el script
+necesita.
+
+|`GITHUB_ACTOR` / `GITHUB_TOKEN`
+|—
+|Gradle (`settings.gradle.kts`), si no están `gpr.user` / `gpr.key` en `~/.gradle/gradle.properties`. Un PAT con
+`read:packages`.
+
+|`WASICHAI_TEST_DB_HOST`, `_PORT`, `_NAME`, `_USERNAME`, `_PASSWORD`
+|—
+|`./gradlew integrationTest`, para usar una base externa en lugar de Testcontainers. El nombre debe terminar en
+`_test`: la suite la vacía al empezar.
+
+|`NORMATIVA`
+|—
+|`python3 -m unittest` en `model/`: ruta al repositorio `normativa`, para comparar los parámetros del predial con el
+original.
+
+|`WASICHAI_API_URL`
+|`http://localhost:8090`
+|El servidor de Vite de `srtm-ui`, a dónde hace proxy de `/api`.
+|===
+
+[[ref-config-env-ejemplo]]
+=== Ejemplo de archivo de entorno
+
+El repositorio trae `develop/example.env`, para desarrollo. Para un servidor, un archivo como el siguiente
+(los valores entre `<>` los provee quien administra el entorno; ninguno se versiona):
+
+[source,bash]
+----
+# /etc/srtm/srtm.env (permisos 600, dueño el usuario del servicio)
+SERVER_PORT=8090
+WASICHAI_DB_HOST=<servidor de base de datos>
+WASICHAI_DB_PORT=5432
+WASICHAI_DB_NAME=srtm
+WASICHAI_DB_USERNAME=<rol de la aplicación>
+WASICHAI_DB_PASSWORD=<clave del rol>
+WASICHAI_JWT_SECRET=<al menos 32 bytes aleatorios, p. ej. openssl rand -base64 48>
+WASICHAI_SEED_DEV=false
+
+SRTM_MUNICIPALIDAD_ESCUDO=file:/opt/srtm/escudo.png
+
+SRTM_EMISION_ALMACEN=local
+SRTM_EMISION_DIR=/var/lib/srtm/emisiones
+SRTM_EMISION_TEMPORALES=/var/tmp/srtm-emision
+
+# apagados hasta tener el convenio y la cuenta de servicio
+SRTM_PIDE_RENIEC_ENABLED=false
+SRTM_CATASTRO_ENABLED=false
+----
+
+CAUTION: Un archivo de entorno con claves es un secreto: permisos `600`, fuera del repositorio y fuera de los
+respaldos que no estén cifrados. El ejemplo de arriba no lleva ninguna clave real.

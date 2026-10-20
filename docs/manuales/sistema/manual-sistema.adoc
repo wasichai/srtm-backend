@@ -1,0 +1,2289 @@
+= Manual técnico del sistema: Arquitectura, instalación, operación y recuperación
+Municipalidad Distrital de Perené
+include::../atributos.adoc[]
+:description: Manual técnico de {producto} ({sigla}): arquitectura, instalación, configuración, operación, respaldo y recuperación.
+:keywords: srtm, wasichai, rentas municipales, operación, respaldo, PostgreSQL
+
+[abstract]
+Este manual describe cómo está construido {producto} ({sigla}) {version-producto}, cómo se instala y configura,
+cómo se opera y cómo se respalda y recupera. Está escrito para ingenieros de software, personal de operaciones
+(DevOps) y administradores de bases de datos (DBA) que mantienen el backend `srtm-backend` y su base PostgreSQL. No
+explica el uso funcional del portal: para eso están los manuales de usuario y el {m-admin}. Cada afirmación remite
+al código, a la configuración o a la documentación del repositorio; lo que no se pudo comprobar se marca como
+*No verificado*.
+
+[[intro]]
+== Introducción y alcance
+
+[[intro-audiencia]]
+=== A quién está dirigido
+
+[cols="2,5",options="header"]
+|===
+|Lector |Capítulos de mayor interés
+
+|Ingeniero de software
+|<<arquitectura>>, <<ref-modelo-datos>>, <<componentes>>, <<ref-api>>, <<pruebas>>.
+
+|Operaciones (DevOps)
+|<<requisitos>>, <<instalacion>>, <<ref-configuracion>>, <<despliegue>>, <<operacion>>, <<diagnostico>>.
+
+|Administrador de base de datos
+|<<ref-modelo-datos>>, <<carga>>, <<seguridad>>, <<respaldo>>.
+|===
+
+Se supone que el lector conoce Spring Boot, PostgreSQL, Docker y la línea de comandos de un sistema tipo Unix.
+
+[[intro-version]]
+=== Versión que se describe
+
+Este manual describe la rama `main` del repositorio `srtm-backend`, con `version=0.9.0` en `gradle.properties` y
+wasichai {version-wasichai}.
+
+IMPORTANT: La etiqueta `v0.9.0` (release del 10 de octubre de 2026) se construyó con wasichai 0.6.0. La subida a
+wasichai 1.2.0 (#112) y la brecha de recaudación (#120) llegaron a `main` después de esa etiqueta y todavía no tienen
+release propio. Un jar descargado del release `v0.9.0` no trae la brecha ni aplica la migración V18 de Core.
+Compruebe qué versión despliega antes de seguir los procedimientos de actualización (<<despliegue-actualizar>>).
+
+[[intro-alcance]]
+=== Qué cubre
+
+* La arquitectura del backend y su relación con la plataforma wasichai, el portal `srtm-ui` y los servicios externos
+  (catastro-backend, PIDE).
+* Requisitos, instalación local, configuración completa y carga del modelo y los datos.
+* El comportamiento interno de cada módulo que afecta a la operación: trabajos en segundo plano, candados,
+  almacenes de archivos, reglas de escritura.
+* La API, la seguridad y los permisos, las pruebas, la construcción y el despliegue.
+* La operación diaria, el respaldo, la restauración y el diagnóstico de problemas.
+
+Queda fuera el frontend `srtm-ui` (solo se describe cómo se conecta), la plataforma wasichai más allá de lo que
+{sigla} usa y la infraestructura de producción, que no está definida en ningún repositorio: `srtm-infrastructure`
+solo tiene un `README.md`.
+
+[[intro-convenciones]]
+=== Convenciones
+
+Cada comando dice:
+
+[horizontal]
+Directorio:: desde dónde se corre. «Raíz del repositorio» es la carpeta que contiene `build.gradle.kts`;
+`model/` es la carpeta de los scripts de Python.
+Requisitos previos:: qué debe estar listo antes (la base arriba, el servidor corriendo, las variables cargadas).
+Efecto:: qué cambia. Un comando que solo lee lo dice.
+Resultado esperado:: qué debe verse si el comando salió bien.
+
+Los valores entre `<` y `>` (`<servidor>`, `<clave>`) se reemplazan por los del entorno. Ningún valor de este manual
+es una credencial real: las únicas que aparecen son las de desarrollo local que trae el repositorio.
+
+Los avisos siguen este criterio:
+
+NOTE: Información complementaria.
+
+TIP: Una recomendación.
+
+CAUTION: Afecta a muchos registros o es difícil de revertir.
+
+WARNING: Destructivo o irreversible: borra datos o no tiene vuelta atrás.
+
+Las siglas tributarias se desarrollan en su primera aparición: declaración jurada (DJ), predio urbano (PU), hoja de
+resumen (HR), hoja de liquidación de arbitrios (HLA), unidad impositiva tributaria (UIT), cuadro único de infracciones
+y sanciones (CUIS). El <<glosario>> reúne los términos tributarios y técnicos.
+
+[[intro-fuentes]]
+=== Fuentes en el repositorio
+
+[cols="2,5",options="header"]
+|===
+|Archivo |Qué contiene
+
+|`README.md`
+|La referencia técnica detallada: modelo, reglas de cálculo, API, importadores, emisión masiva, brecha.
+
+|`docs/develop/README.md`
+|Guía de desarrollo local. Desactualizada en dos puntos: dice wasichai 0.6.0 (es 1.2.0) y que `apply.py` crea «21
+objetos + 10 relaciones» (son 42 objetos y 44 relaciones).
+
+|`docs/develop/releasing.md`
+|Flujo de versiones con release-please.
+
+|`compose.yml`, `develop/example.env`
+|Base local y variables de ejemplo.
+
+|`src/main/resources/application.yml`
+|Toda la configuración con sus valores por defecto.
+
+|`model/model.json`, `model/*.py`
+|El modelo de metadata y los scripts de carga.
+|===
+
+NOTE: `SECURITY.md` es la plantilla de GitHub sin completar (habla de versiones 5.1.x y 4.0.x que no existen): no
+describe ninguna política real de seguridad.
+
+[[arquitectura]]
+== Arquitectura
+
+[[arq-contexto]]
+=== Contexto
+
+{sigla} es un backend Spring Boot (`srtm-backend`) más un portal web (`srtm-ui`). Los funcionarios usan el portal
+tributario; el administrador, la consola de administración de wasichai (`/admin`). Ambos llaman a la misma API.
+
+.Contexto del sistema
+image::{diagramas}/contexto.{diagext}[Diagrama de contexto: usuarios, srtm-ui, srtm-backend con wasichai Core, PostgreSQL, almacén de emisiones y servicios externos,role=diagrama]
+
+[cols="2,5",options="header"]
+|===
+|Elemento |Papel
+
+|`srtm-ui`
+|Vite + React (repositorio aparte, versión {version-ui}). En desarrollo corre en `http://localhost:5180` y hace proxy
+de `/api` al backend, así que no hace falta CORS.
+
+|`srtm-backend`
+|Un solo proceso: la API de {sigla} (`/api/srtm/**`) y la de Core (`/api/**`), en el puerto 8090.
+
+|PostgreSQL 18 + PostGIS 3.6
+|Una base con dos esquemas de wasichai (`wasichai` y `app_data`) y las extensiones en `public`. Es el único estado
+compartido entre instancias, junto con el almacén.
+
+|Almacén de emisiones
+|Los PDF y ZIP de la emisión masiva: un directorio del servidor o un bucket S3.
+
+|catastro-backend
+|Opcional. Valoriza los predios; {sigla} lo lee con una cuenta de servicio para la brecha de recaudación.
+
+|PIDE RENIEC
+|Opcional, apagado. Consulta de nombres por DNI.
+
+|Teselas de OpenStreetMap
+|Fondo de los mapas; las pide el navegador, no el backend.
+|===
+
+[[arq-componentes]]
+=== Componentes
+
+.Componentes del backend
+image::{diagramas}/componentes.{diagext}[Diagrama de componentes: paquetes de srtm-backend sobre los starters de wasichai,role=diagrama]
+
+El servidor entero es la clase `srtm.SrtmApplication`, anotada con `@WasichaiApplication`: los starters de wasichai
+que están en el classpath hacen el resto (seguridad, migraciones, API de Core, manejo de errores). La clase no debe
+moverse a un paquete `wasichai`, porque el escaneo de componentes registraría dos veces los controladores de la
+librería (ADR-024 de wasichai).
+
+[[arq-wasichai]]
+=== La plataforma wasichai
+
+wasichai es un conjunto de módulos Spring Boot (WebFlux, corrutinas de Kotlin, R2DBC) que dan objetos definidos por
+metadata, registros, permisos, auditoría y GIS. {sigla} usa siete, por sus starters (`build.gradle.kts`, versionados
+por `wasichai:wasichai-bom:{version-wasichai}`):
+
+[cols="2,6",options="header"]
+|===
+|Módulo |Qué aporta a {sigla}
+
+|core
+|Identidad (usuarios, roles, organizaciones), JWT, metadata de objetos y campos, `RecordService` y la API genérica
+de registros, permisos por objeto y campo, auditoría (`audit_log`), migraciones Flyway, manejo de errores
+problem+json, `X-Correlation-Id`.
+
+|workflow
+|Flujos de estado de los registros. {sigla} no define flujos todavía.
+
+|documents
+|Tipos de documento y su numeración. {sigla} no lo usa para sus PDF: los dibuja con su propia infraestructura.
+
+|views, forms, pages
+|Vistas, formularios y páginas configurables de la consola de administración.
+
+|gis
+|El tipo de campo GEOMETRY sobre PostGIS y la API `/api/gis/**` (lotes del mapa).
+|===
+
+Lo que wasichai no trae y {sigla} sí agrega: generación de PDF (Thymeleaf y openhtmltopdf sobre PDFBox), trabajos por
+lotes coordinados por PostgreSQL, almacén de archivos local o S3, candados consultivos, clientes de catastro-backend y
+de la PIDE.
+
+[[arq-modulos]]
+=== Módulos de {sigla} y responsabilidades
+
+[cols="2,6",options="header"]
+|===
+|Paquete |Responsabilidad
+
+|`srtm` (raíz)
+|Lo transversal: `GuardiaDeEscritura` y `ReglaDeEscritura`, la marca `EscrituraDeSrtm`, `Candados`, `Permisos`,
+`Faltan`, `Duplicados`, `ParametroInvalido`, `Observacion`.
+
+|`srtm.rentas`
+|Registro tributario: contribuyentes y sus listas, predios, DJ y sus listas, condominio, anulación, catastro fiscal,
+catálogos, búsqueda. `Registros` y `Listas` envuelven `RecordService`. `ReglasFueraDelPortal` completa lo que se
+graba desde el admin.
+
+|`srtm.impuesto`
+|Liquidación del impuesto predial (`ImpuestoPredial`, función pura) y vencimientos.
+
+|`srtm.emision`
+|PU y HR en PDF, cabecera institucional, emisión masiva por lotes, trabajadores, almacén (local y S3), retención.
+
+|`srtm.arbitrios`
+|Cálculo y determinación de arbitrios (por predio, por contribuyente y masiva), HLA, anulación de cuotas.
+
+|`srtm.sanciones`
+|Infracciones administrativas: CUIS, notificaciones previas, actas, descargos, resoluciones y su PDF, panel.
+
+|`srtm.anuncios`
+|Anuncios y propaganda: alta, renovación, cese, retiro, tasa devengada.
+
+|`srtm.pide`
+|Consulta de DNI a RENIEC por la PIDE (`ConsultaDocumento`).
+
+|`srtm.brecha`
+|Brecha de recaudación contra las valuaciones de catastro-backend.
+|===
+
+Los módulos de negocio no se importan entre sí salvo en la dirección del diagrama: emisión usa rentas, impuesto y
+arbitrios; la brecha reusa las reglas de rentas, impuesto y arbitrios sin copiarlas. Sanciones y anuncios no
+importan a ningún otro módulo de negocio.
+
+[[arq-peticion]]
+=== Recorrido de una petición
+
+. El filtro JWT de Core valida el token de toda ruta bajo `/api` (salvo login, token y salud). Sin token válido, 401.
+. El controlador de {sigla} es una función `suspend`: el contexto de seguridad viaja en la corrutina de la petición.
+. El servicio pide, si el acto lo requiere, el permiso de creación del objeto que va a escribir (`Permisos`); si
+  falta, 403 antes de leer nada.
+. Lee y escribe por `Registros`, que llama en proceso a `RecordService` de Core como el usuario. Cada escritura de
+  {sigla} lleva la marca `EscrituraDeSrtm` en el contexto de la corrutina.
+. `RecordService` aplica los permisos por objeto y campo, `appendOnly`, la existencia de los registros relacionados
+  y, antes de escribir, las `RecordWriteGuard`: entre ellas `GuardiaDeEscritura`, que aplica la regla del objeto.
+. Los actos que no deben cruzarse toman un candado consultivo dentro de la misma transacción.
+. Core escribe la fila en la tabla de la organización y su entrada en `audit_log`.
+. Toda excepción se responde como problem+json: las de Core por su manejador global; `Faltan` (422 con `faltan`) y
+  `DuplicateKeyException` (409) por los manejadores de {sigla}, que van antes.
+
+// fin del recorrido
+[[arq-metadata]]
+=== Modelo de metadata cargado por REST
+
+{sigla} no tiene migraciones SQL propias. Al arrancar, Flyway aplica solo las migraciones de wasichai, que crean los
+esquemas `wasichai` (metadata) y `app_data` (registros). El modelo de negocio, 42 objetos con sus campos, 44
+relaciones y 61 listas de opciones, está en `model/model.json` y lo carga `model/apply.py` por la API de Core
+(`/api/objects`, `/api/relationships`), con el servidor corriendo.
+
+Por cada objeto y cada organización, Core crea una tabla física `app_data.<objeto>__<8 hex de la organización>`. Las
+columnas y sus nombres también los decide Core. Por eso:
+
+* el modelo se cambia editando `model.json` y corriendo `apply.py`, nunca con `ALTER TABLE`;
+* una consulta SQL directa debe buscar el nombre físico en `wasichai.custom_objects` y `wasichai.custom_fields`;
+* una base sin `apply.py` arranca, pero el portal no funciona: no hay objetos.
+
+El detalle está en <<ref-modelo-datos>> y la carga en <<carga>>.
+
+[[arq-decisiones]]
+=== Decisiones verificables en el código
+
+[cols="3,6,3",options="header"]
+|===
+|Decisión |Qué garantiza |Dónde
+
+|Guardia de escritura
+|Core consulta `GuardiaDeEscritura` antes de cada escritura de un registro, por cualquier camino (API genérica,
+`/admin`, servicio, enlace, transición, automatización, plataforma). La regla de cada objeto valida el alta (400),
+rechaza cambios, borrados y transiciones (409) y, en los objetos `soloDesdeElServicio`, exige la marca
+`EscrituraDeSrtm` (403 y una línea WARN).
+|`srtm/GuardiaDeEscritura.kt`, `ReglaDeEscritura.kt`, `EscrituraDeSrtm.kt`
+
+|Objetos que solo se agregan
+|`cuota_arbitrio` y `anulacion_cuota_arbitrio` son `appendOnly` en el modelo: Core responde 409 a PUT o DELETE, a
+cualquiera. Infracciones y anuncios lo garantizan con su regla.
+|`model/model.json`, `srtm/sanciones/ReglaDeSanciones.kt`, `srtm/anuncios/ReglaDeAnuncios.kt`
+
+|Candados consultivos
+|`pg_advisory_xact_lock(<clase>, hashtext(<clave>))`, solo dentro de una transacción. Siete clases con el prefijo
+`0x5352` («SR»): serie de anuncios, versiones del CUIS, notificación previa, acta, serie de resoluciones,
+notificaciones de una resolución, corrida de la brecha.
+|`srtm/Candados.kt`
+
+|Faltan → 422
+|Lo que impide un acto o un documento se nombra en `faltan` («UIT 2027», «TASA_ANUNCIO PANEL 2026»), en un 422.
+|`srtm/Faltan.kt`
+
+|Duplicados → 409
+|Un valor único repetido (`DuplicateKeyException`) es 409 con mensaje en castellano, nunca 500. Pierde
+`errors[].field`.
+|`srtm/Duplicados.kt`
+
+|Parámetro inválido → 422
+|Un filtro desconocido o mal formado se nombra, nunca se ignora.
+|`srtm/ParametroInvalido.kt`
+
+|Observación obligatoria
+|Cada acto de arbitrios, sanciones y anuncios lleva una observación de 5 a 500 caracteres (400), porque la auditoría
+de Core no tiene columna para el motivo.
+|`srtm/Observacion.kt`
+
+|Los trabajos corren como su usuario
+|Emisión, determinación y brecha se ejecutan con los permisos de quien las lanzó (`IdentidadEmision`), no como la
+plataforma.
+|`srtm/emision/IdentidadEmision.kt`
+
+|Estados de lotes por SQL
+|Las máquinas de lotes escriben directo en la tabla física (`FOR UPDATE SKIP LOCKED`, actualizaciones condicionadas),
+fuera de `RecordService` y de la guardia.
+|`srtm/emision/TablasCore.kt`, `MaquinaLotes.kt`, `EstadoEmisiones.kt`
+
+|Errores en problem+json
+|Toda respuesta de error sigue RFC 7807, con `type` `+https://wasichai.dev/problems/<estado>+`.
+|Manejador de Core; `Faltantes`, `Duplicados`
+|===
+
+[[requisitos]]
+== Requisitos y versiones
+
+[[req-versiones]]
+=== Versiones
+
+[cols="3,2,5",options="header"]
+|===
+|Componente |Versión |Dónde se fija
+
+|JDK
+|25
+|`kotlin { jvmToolchain(25) }` en `build.gradle.kts`; CI con Temurin 25.
+
+|Kotlin
+|2.4.21 (plugin `jvm`), 2.4.20 (plugin `spring`)
+|`build.gradle.kts`. Ver la nota de abajo.
+
+|Spring Boot
+|4.1.1
+|Plugin `org.springframework.boot`.
+
+|Gradle
+|9.8.1
+|`gradle/wrapper/gradle-wrapper.properties`. Use siempre `./gradlew`.
+
+|wasichai
+|{version-wasichai}
+|`val wasichaiVersion` en `build.gradle.kts`.
+
+|PostgreSQL + PostGIS
+|18 + 3.6
+|Imagen `postgis/postgis:18-3.6` en `compose.yml`, en el CI y en los tests de integración.
+
+|Python
+|3.11 o superior, solo biblioteca estándar
+|`model/`. Sin `pip install`.
+
+|Node
+|26 o superior
+|Solo para `srtm-ui` y para las herramientas de formato y commits del repositorio (`package.json`: prettier
+3.9.10, commitlint, husky).
+
+|Docker
+|Reciente
+|La base local (`compose.yml`) y Testcontainers.
+
+|ktlint
+|1.7.1
+|`ktlint { version.set("1.7.1") }`.
+|===
+
+NOTE: El plugin `kotlin("plugin.spring")` figura en 2.4.20 aunque el commit de Dependabot #117 lo subió a 2.4.21; el
+plugin `jvm` sí está en 2.4.21. No se verificó si la diferencia es intencional.
+
+Bibliotecas fuera del BOM de wasichai (`gradle/libs.versions.toml`): Thymeleaf 3.1.5, openhtmltopdf 1.1.97 (el fork
+`io.github.openhtmltopdf`), PDFBox 3.0.8 y AWS SDK v2 2.55.16 (`s3`, y `sts` en tiempo de ejecución para IRSA).
+
+[[req-paquetes]]
+=== Acceso a las librerías de wasichai
+
+Las librerías `wasichai:*` se resuelven, en este orden, desde GitHub Packages
+(`https://maven.pkg.github.com/wasichai/wasichai`) y desde `mavenLocal`. GitHub Packages pide un token incluso para
+leer.
+
+[[proc-token-paquetes]]
+.Configurar el acceso a GitHub Packages
+====
+[horizontal]
+Objetivo:: Que Gradle descargue `wasichai-bom` y los starters.
+Requisitos previos:: Una cuenta de GitHub con acceso al repositorio `wasichai/wasichai` y un token personal (PAT)
+con el permiso `read:packages`.
+====
+
+. Agregue a `~/.gradle/gradle.properties` (del usuario, nunca del repositorio):
++
+[source,properties]
+----
+gpr.user=<usuario de github>
+gpr.key=<PAT con read:packages>
+----
+. O, en su lugar, exporte `GITHUB_ACTOR` y `GITHUB_TOKEN` en el shell (o en `develop/.env`).
+
+// fin de los pasos
+Resultado esperado:: `./gradlew build` descarga `wasichai:wasichai-bom:{version-wasichai}` sin errores.
+Verificación:: `./gradlew dependencies --configuration runtimeClasspath | grep wasichai` lista los starters en
+{version-wasichai}.
+Casos especiales:: Mientras no haya un release publicado de wasichai, se puede publicar en local desde un checkout
+de wasichai: `./gradlew publishToMavenLocal -x test`, y repetirlo cada vez que cambie.
+
+[[req-recursos]]
+=== Recursos de máquina
+
+El repositorio no fija requisitos de hardware. Las referencias medidas son:
+
+* Emisión masiva medida el 2026-10-02 con un padrón sintético (240 contribuyentes, 540 documentos) en una máquina de
+  4 núcleos y 15 GiB, con la JVM en 4 GiB de heap: 10,4 s con 4 trabajadores. Extrapolado al padrón completo (unos
+  26 800 documentos), unos 9 minutos. *No verificado* con el padrón real en dev (issue #55 abierto).
+* Cada trabajador de la emisión cuenta con unos 300 MiB de memoria, más 512 MiB de base (fórmula de `auto`).
+* El importador del padrón completo carga unos 42 000 registros: minutos contra una base local; por un túnel SSH,
+  unos 12 registros por segundo.
+
+[[instalacion]]
+== Instalación y arranque en desarrollo
+
+Este capítulo deja un entorno local completo: base PostGIS, backend, modelo y portal. Para un servidor, vea
+<<despliegue>>.
+
+[[proc-variables-desarrollo]]
+.Preparar las variables de entorno
+====
+[horizontal]
+Objetivo:: Tener un `develop/.env` propio y exportarlo al shell.
+Requisitos previos:: Un clon del repositorio `srtm-backend`.
+Directorio:: Raíz del repositorio.
+====
+
+. Copie el ejemplo (`develop/.env` está en `.gitignore`):
++
+[source,bash]
+----
+cp develop/example.env develop/.env
+----
+. Edite `develop/.env` si necesita otro puerto o base. Las variables comentadas (PIDE, catastro, S3, tests contra
+  una base externa) quedan apagadas.
+. Exporte las variables en el shell donde va a trabajar:
++
+[source,bash]
+----
+set -a; source develop/.env; set +a
+----
+
+// fin de los pasos
+Resultado esperado:: `echo $WASICHAI_DB_PORT` imprime `5433`.
+Casos especiales:: Todas las variables tienen el mismo valor por defecto en `application.yml`: con la base de
+`compose.yml`, el servidor arranca aunque no cargue el archivo.
+
+[[proc-base-local]]
+.Levantar la base de datos local
+====
+[horizontal]
+Objetivo:: PostgreSQL 18 con PostGIS 3.6 en `127.0.0.1:5433`, base `srtm`.
+Requisitos previos:: Docker en marcha; el puerto 5433 libre.
+Directorio:: Raíz del repositorio.
+Efecto:: Crea el contenedor `srtm-postgres` y el volumen `postgres-data`.
+====
+
+. Levante el servicio:
++
+[source,bash]
+----
+docker compose up -d
+----
+. Espere a que el chequeo de salud pase:
++
+[source,bash]
+----
+docker compose ps
+----
+
+// fin de los pasos
+Resultado esperado:: El servicio `postgres` aparece `healthy` (el chequeo es `pg_isready -U srtm -d srtm`).
+Casos especiales:: El puerto se publica solo en el loopback. Con un Docker remoto (`DOCKER_HOST` apuntando a otro
+servidor), el puerto queda en el loopback de ese servidor y hace falta un túnel abierto mientras trabaja:
+`ssh -N -L 5433:localhost:5433 <usuario>@<servidor>`.
+
+WARNING: `docker compose down -v` borra el volumen `postgres-data` con todos los datos: modelo, padrón, cuotas y
+auditoría. Úselo solo para empezar de cero en desarrollo, y nunca sin un respaldo si la base tiene algo que importe
+(<<respaldo>>). `docker compose down` sin `-v` detiene y borra el contenedor, pero conserva el volumen.
+
+[[proc-arrancar-backend]]
+.Arrancar el backend
+====
+[horizontal]
+Objetivo:: El servidor en `http://localhost:8090`.
+Requisitos previos:: La base arriba (<<proc-base-local>>), las variables exportadas y acceso a las librerías de
+wasichai (<<proc-token-paquetes>>).
+Directorio:: Raíz del repositorio.
+Efecto:: En el primer arranque, Flyway crea los esquemas `wasichai` y `app_data`, las extensiones y, con
+`WASICHAI_SEED_DEV=true`, la organización `demo` y el usuario `admin@wasichai.local` / `admin`.
+====
+
+. Arranque:
++
+[source,bash]
+----
+./gradlew bootRun
+----
+. En otra terminal, compruebe la salud:
++
+[source,bash]
+----
+curl http://localhost:8090/actuator/health
+----
+
+// fin de los pasos
+Resultado esperado:: `{"groups":["liveness","readiness"],"status":"UP"}`. En el log, la línea
+`emisión masiva: la instancia <host>-<uuid> corre N trabajadores (srtm.emision.trabajadores=auto)`.
+Verificación:: Un WARN de `AuditLogOwnershipCheck` (el rol `srtm` de `compose.yml` es superusuario y puede actuar
+como dueño de `audit_log`) es esperado en desarrollo; ver <<seg-auditoria>>.
+Casos especiales:: El servidor se detiene con kbd:[Ctrl+C]. Desde el IDE, la clase principal es
+`srtm.SrtmApplication`, con las variables de `develop/.env` en la configuración de ejecución. Para correr el jar:
+`./gradlew bootJar && java -jar build/libs/app.jar`.
+
+[[proc-modelo-inicial]]
+.Cargar el modelo y los datos mínimos
+====
+[horizontal]
+Objetivo:: Los 42 objetos, los catálogos y los parámetros del predial, para que el portal funcione.
+Requisitos previos:: El backend corriendo y `develop/.env` exportado (los scripts leen `WASICHAI_CORE`,
+`WASICHAI_EMAIL` y `WASICHAI_PASSWORD`).
+Directorio:: `model/`.
+Efecto:: Escribe metadata y registros en la organización del usuario con que entra el script.
+====
+
+. Valide y aplique el modelo:
++
+[source,bash]
+----
+cd model
+python3 apply.py --validate-only
+python3 apply.py
+----
+. Cargue los parámetros del predial y los catálogos:
++
+[source,bash]
+----
+python3 import_parametros.py
+python3 import_catalogos.py
+----
+
+// fin de los pasos
+Resultado esperado:: `apply.py` termina con `done: N created, M updated, K skipped` y código de salida 0; una
+segunda corrida no crea nada. `import_parametros.py` informa `parametro_tributario: 13 created, …` la primera vez.
+Verificación:: `python3 apply.py --diff` debe decir `diff: nothing pending`.
+Casos especiales:: El padrón real (Excel), el catastro y la configuración de arbitrios y sanciones se cargan después,
+en el orden de <<carga>>.
+
+[[proc-portal-local]]
+.Levantar el portal contra el backend local
+====
+[horizontal]
+Objetivo:: El portal en `http://localhost:5180`.
+Requisitos previos:: Node 26 o superior; el repositorio `srtm-ui` junto a `srtm-backend`; el backend corriendo y el
+modelo cargado.
+Directorio:: `../srtm-ui`.
+====
+
+. Instale y arranque el servidor de desarrollo:
++
+[source,bash]
+----
+cd ../srtm-ui && yarn dev
+----
+. Abra `http://localhost:5180` y entre con `admin@wasichai.local` / `admin`.
+
+// fin de los pasos
+Resultado esperado:: El portal tributario carga la página de inicio con los totales del padrón.
+Casos especiales:: El servidor de Vite hace proxy de `/api` a `http://localhost:8090`; otra dirección se fija con
+`WASICHAI_API_URL`. El puerto 5180 es fijo (`strictPort`): si está ocupado, Vite no arranca.
+
+[[proc-minio-local]]
+.Probar el almacén S3 con MinIO local
+====
+[horizontal]
+Objetivo:: Ejecutar la emisión masiva con `srtm.emision.almacen=s3` sin AWS.
+Requisitos previos:: La base arriba.
+Directorio:: Raíz del repositorio.
+Efecto:: Crea los contenedores `srtm-minio` (API en `127.0.0.1:9000`, consola en `127.0.0.1:9001`) y
+`srtm-minio-init`, que crea el bucket `srtm-emisiones` y termina.
+====
+
+. Levante el perfil `s3`:
++
+[source,bash]
+----
+docker compose --profile s3 up -d
+----
+. Descomente en `develop/.env` el bloque «Emisión masiva en S3» (`SRTM_EMISION_ALMACEN=s3`,
+  `SRTM_EMISION_S3_BUCKET=srtm-emisiones`, `SRTM_EMISION_S3_ENDPOINT=http://localhost:9000` y las credenciales del
+  MinIO local que trae `compose.yml`), vuelva a exportarlo y arranque el backend.
+
+// fin de los pasos
+Resultado esperado:: El backend arranca; si el bucket no existiera, no arrancaría y lo diría
+(«No se puede usar el bucket …»).
+Casos especiales:: La imagen es el fork comunitario `pgsty/minio`: MinIO ya no publica `minio/minio` en Docker Hub.
+
+include::../referencia/configuracion.adoc[]
+
+include::../referencia/modelo-datos.adoc[]
+
+[[carga]]
+== Carga del modelo y de los datos
+
+[[carga-orden]]
+=== Orden de carga
+
+Una base nueva se llena en este orden. Cada paso depende del anterior: un importador escribe registros de objetos
+que solo existen después de `apply.py`, y un predio no se puede declarar sin sus catálogos.
+
+.Orden de carga de una base nueva
+image::{diagramas}/carga-modelo.{diagext}[Orden de carga: Core arriba, apply.py, catálogos, parámetros, CUIS y arbitrios, padrón, catastro,role=diagrama]
+
+Todos los scripts de `model/` comparten estas opciones: `--core` (por defecto `$WASICHAI_CORE` o
+`http://localhost:8090`), `--email` y `--password` (por defecto `$WASICHAI_EMAIL` / `$WASICHAI_PASSWORD`, o el
+administrador de desarrollo). Escriben en la organización del usuario con que entran. Todos son idempotentes:
+vuelven a leer lo que Core ya tiene y solo crean o actualizan lo que falta.
+
+[[carga-apply]]
+=== `apply.py`: el modelo
+
+`apply.py` lee `model/model.json`, lo valida contra las reglas de Core (nombres reservados, tipos, listas) y lo
+aplica: crea objetos, campos y relaciones; sincroniza opciones, obligatoriedad y etiquetas; y deja `indexes` y
+`appendOnly` como los declara el modelo. Nunca renombra, cambia tipos ni borra campos.
+
+[cols="3,6,2",options="header"]
+|===
+|Modo |Qué hace |¿Escribe?
+
+|`--validate-only`
+|Solo valida `model.json`, sin llamar a Core.
+|No
+
+|`--dry-run`
+|Imprime lo que declara `model.json` como si se creara de cero. No consulta a Core: no muestra la diferencia con la
+base. No va con `--diff`.
+|No
+
+|`--diff`
+|Entra a Core, lee y corre la misma sincronización, pero imprime cada escritura como
+`would <MÉTODO> <ruta> <resumen>` y termina con `diff: nothing pending` o `diff: N writes pending, none sent`.
+|No
+
+|(sin opción)
+|Aplica. Termina con `done: N created, M updated, K skipped`.
+|Sí
+
+|`--drop`
+|Apaga `appendOnly` y borra el modelo entero en orden inverso. Con `--diff` lista lo que borraría; con `--dry-run`
+imprime los `DELETE`.
+|Sí, destructivo
+|===
+
+Otras opciones: `--model` (otro `model.json`). Códigos de salida: `0` bien, `1` error de Core, `2` `model.json`
+inválido.
+
+WARNING: `python3 apply.py --drop` borra los objetos con sus tablas: *todos los registros de esos objetos se pierden*,
+padrón, cuotas y actas incluidos, y no hay forma de recuperarlos salvo restaurar un respaldo. Antes de usarlo, corra
+`python3 apply.py --drop --diff` para ver lo que borraría, haga un respaldo (<<proc-respaldo-base>>) y confirme que
+la base no es compartida.
+
+[[proc-apply-compartida]]
+.Aplicar un cambio del modelo en una base compartida
+====
+[horizontal]
+Objetivo:: Llevar a la base de dev (o de producción) un cambio de `model.json` sin sorpresas.
+Requisitos previos:: El backend de esa base corriendo; una cuenta con `MANAGE_METADATA`; un respaldo reciente.
+Directorio:: `model/`.
+====
+
+. Valide el archivo: `python3 apply.py --validate-only`.
+. Vea lo pendiente, sin escribir: `python3 apply.py --diff`.
+. Muestre la salida a quien aprueba el cambio y espere su conformidad.
+. Aplique: `python3 apply.py`.
+. Confirme: `python3 apply.py --diff` debe decir `diff: nothing pending`.
+
+// fin de los pasos
+Resultado esperado:: Lo aplicado coincide con lo que mostró `--diff`.
+Casos especiales:: Con varias instancias del backend, las demás ven el cambio a lo sumo en `wasichai.metadata.cache.ttl`
+(5 s). Una opción de lista que algún registro usa no se quita: `apply.py` la conserva y avisa `keep option …`.
+
+[[carga-importadores]]
+=== Importadores
+
+[cols="3,5,4",options="header"]
+|===
+|Script |Qué carga |Opciones propias
+
+|`import_catalogos.py`
+|`municipalidad` (solo si la organización no tiene), `ubigeo`, `categoria_valor`, `obra_categoria`, `uso_predio`;
+con `--excel`, además `via` y `unidad_urbana` del padrón.
+|`--excel`, `--sheet`, `--distrito` (`120302`), `--dry-run`, `--workers` (4), `--ubigeo-csv`, `--categorias-csv`,
+`--obras-csv`, `--usos-csv`, `--municipalidad-json`
+
+|`import_parametros.py`
+|Filas de `parametro_tributario` por clave natural (`tipo`, `clave`, `vigencia_desde`). Por omisión, el CSV del
+predial; con `--csv`, los de arbitrios, sanciones o anuncios.
+|`--csv`, `--dry-run`
+
+|`import_arbitrios.py`
+|Ordenanza, servicios e inafectaciones de arbitrios, desde un JSON.
+|`--archivo` (obligatorio), `--dry-run`
+
+|`import_zonas_arbitrio.py`
+|`zona_arbitrio_ubicacion` desde un CSV.
+|`--csv` (obligatorio), `--dry-run`
+
+|`import_cuis.py`
+|Versiones del CUIS, por `POST /api/srtm/infracciones/cuis`.
+|`--csv` (obligatorio), `--completo` (deroga lo que el archivo no trae), `--dry-run`
+
+|`import_predios.py`
+|Contribuyentes, predios y DJ desde el Excel del padrón.
+|`--excel` (obligatorio), `--sheet`, `--anio` (2026), `--limit`, `--workers` (4), `--report`, `--model`,
+`--dry-run`
+
+|`import_catastro.py`
+|Lotes de `catastro_fiscal` desde un GeoJSON en EPSG:4326.
+|`--geojson` (obligatorio), `--map campo=propiedad` (repetible), `--model`, `--workers` (4), `--dry-run`
+|===
+
+Scripts que no llaman a Core, solo derivan archivos: `import_tasas_arbitrio.py` (de la tabla de tasas de una
+ordenanza al CSV de `import_parametros.py`), `derivar_ipc_arbitrio.py` (tasas del año siguiente reajustadas por IPC)
+y `derivar_cuiema.py` (de la transcripción del CUIEMA al CSV de `import_cuis.py`).
+
+Códigos de salida comunes: `0` bien; `1` Core rechazó algo (el script nombra la fila); `2` el archivo no encaja en
+el modelo, y en ese caso no se envía nada.
+
+TIP: Use `--dry-run` primero con cada importador. En los que llaman a Core, `--dry-run` lee Core y dice qué
+crearía o actualizaría; en `import_predios.py` e `import_catastro.py` solo lee y transforma el archivo, sin
+llamar a Core.
+
+[[carga-orden-arbitrios]]
+=== Arbitrios y sanciones: orden interno
+
+* *Arbitrios.* Primero `import_arbitrios.py` (ordenanza y servicios), luego `import_parametros.py --csv` con las
+  tasas (`TASA_ARBITRIO`, `ARBITRIO_ZONA`, `ARBITRIO_USO`, vencimientos…) y, si la ordenanza zonifica por vía,
+  `import_zonas_arbitrio.py`. Las inafectaciones nombran predios por su código: van después del padrón.
+* *Zonas y afluencias.* Quien carga `ARBITRIO_ZONA`, `zona_arbitrio_ubicacion` o `ARBITRIO_AFLUENCIA` debe escribir el
+  mismo texto normalizado que usan las claves de `TASA_ARBITRIO` (sin acentos, mayúsculas, `_`): «Zona 1» no calza con
+  `ZONA_1` y el predio entero queda sin determinar, con un `TASA_ARBITRIO` en `faltan` y ningún otro aviso.
+* *CUIS de Perené.* `import_cuis.py --csv data/cuiema/perene-2021-cuis.csv` primero; después
+  `import_cuis.py --csv data/cuiema/perene-2026-cuis.csv --completo`, que deroga los códigos de 2021 al 2026-05-06.
+* *Parámetros de sanciones y anuncios* (`PLAZO`, `FERIADOS`, `TASA_ANUNCIO`) con `import_parametros.py --csv`. La
+  tasa de anuncios de Perené está en `model/data/parametros-anuncios-perene.csv`.
+
+NOTE: El repositorio no trae las tasas reales de arbitrios de Perené: no hay todavía una transcripción verificada
+de su ordenanza y su ratificación. Los archivos de `model/data/arbitrios/` son ficticios (año 2041) y solo sirven
+para las pruebas.
+
+[[carga-migraciones]]
+=== Migraciones de datos
+
+Para bases cargadas con versiones anteriores del modelo hay scripts de migración. Todos tienen `--dry-run` (lee Core
+y escribe el reporte sin cambiar nada), `--report`, `--workers` (PUT en paralelo, 4) y son idempotentes.
+
+[cols="4,8",options="header"]
+|===
+|Script |Para qué
+
+|`normalizar_padron.py`
+|Separa tipo y nombre de vía y habilitación de los predios importados antes de que el importador lo hiciera, y pasa
+`secuencia_uso` a tres dígitos.
+
+|`migrar_usos_padron.py`
+|Pasa los grupos de uso del padrón a clase, sub clase y uso del SRTM, y `ESTACIONAMIENTO` a `GARAGE`.
+
+|`migrar_modelo_srtm.py`
+|Sucesiones indivisas a tipo de contribuyente, `predio.condicion` a `tipo_predio`. Con `--borrar-condicion`, borra
+el campo `predio.condicion` (y su columna).
+
+|`migrar_tipos_unidad_urbana.py`
+|Tipos de unidad urbana antiguos a los 43 de `TIPO_UU`; borra las unidades urbanas que quedan repetidas.
+|===
+
+Cada uno sigue el mismo patrón: `apply.py` (agrega lo nuevo y conserva lo que aún se usa), el script con `--dry-run`
+(revisar el reporte), el script sin `--dry-run` y `apply.py` otra vez (quita lo que ya nadie usa).
+
+CAUTION: `migrar_modelo_srtm.py --borrar-condicion` borra un campo con sus datos, y `migrar_tipos_unidad_urbana.py`
+borra registros de `unidad_urbana`. Respalde la base antes.
+
+[[carga-datos-personales]]
+=== Datos personales
+
+El Excel del padrón (`CODIGO DE PREDIOS AL 2026.xlsx`) y los reportes de los importadores (`model/reports/`) traen
+DNI, nombres y domicilios. *Nunca se versionan*: `*.xlsx`, `*.xls` y `model/reports/` están en `.gitignore`. Guarde
+el Excel fuera del repositorio, en un lugar con acceso restringido, y bórrelo de las máquinas de trabajo cuando la
+carga termine. Lo mismo vale para los archivos de la emisión masiva (`data/`, también en `.gitignore`) y para los
+respaldos de la base.
+
+[[proc-importar-padron]]
+.Importar el padrón de predios
+====
+[horizontal]
+Objetivo:: Cargar contribuyentes, predios y DJ del Excel del padrón.
+Requisitos previos:: El modelo y los catálogos cargados; el Excel en una ruta fuera del repositorio.
+Directorio:: `model/`.
+Efecto:: Crea solo lo que falta (contribuyentes por `numero_documento`, predios por `codigo`, DJ por predio,
+contribuyente, año y secuencia).
+====
+
+. Revise sin escribir: `python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run`.
+. Pruebe con pocas filas: agregue `--limit 200`.
+. Cargue el archivo completo: sin `--dry-run` ni `--limit`.
+. Revise `model/reports/nombres_dudosos.csv` (nombres cuya separación en apellidos y nombres conviene mirar a mano).
+
+// fin de los pasos
+Resultado esperado:: Con el Excel de 2026: 11 840 contribuyentes, 14 947 predios y 15 644 declaraciones.
+Casos especiales:: Salida `2`: el Excel tiene valores que no encajan en el modelo y no se envió nada. Salida `1`: Core
+rechazó una fila, que el script muestra; se puede volver a correr después de corregirla. Por un túnel SSH, suba
+`--workers`.
+
+[[componentes]]
+== Componentes y comportamiento interno
+
+Este capítulo explica lo que cada módulo hace por dentro en la medida en que afecta a la operación: qué escribe,
+qué bloquea, qué corre en segundo plano y qué puede fallar. Las fórmulas tributarias completas están en `README.md`.
+
+[[comp-transversal]]
+=== Piezas transversales
+
+* *`Registros`* (`srtm.rentas`) envuelve `RecordService` de Core: pone la marca `EscrituraDeSrtm` alrededor de cada
+  `create` y `replace`, envía solo los campos que el usuario puede escribir y fusiona lo enviado con el registro
+  guardado, porque el `update` de Core reemplaza *todos* los campos editables (un campo enviado como `null` sí se
+  borra).
+* *`GuardiaDeEscritura`* consulta la `ReglaDeEscritura` de cada objeto. Hay tres reglas, una por módulo, que no se
+  conocen entre sí: `ReglaDeArbitrios` (`cuota_arbitrio`, sin exigir la marca), `ReglaDeSanciones` (los ocho objetos
+  de infracciones) y `ReglaDeAnuncios` (`anuncio`, `movimiento_anuncio`), estas dos con `soloDesdeElServicio`.
+* *Lo que la guardia no ve:* una escritura directa a la base. Así escriben sus estados los trabajos masivos
+  (`TablasCore`), sobre objetos que no tienen regla.
+* *`Candados`* toma `pg_advisory_xact_lock` y falla si no hay transacción activa: fuera de una transacción el candado
+  se tomaría y soltaría en la misma sentencia, sin proteger nada.
+
+[[comp-rentas]]
+=== Registro tributario (`srtm.rentas`)
+
+`RentasController` llama a cinco servicios (`ContribuyenteService`, `DeclaracionService`, `RentasService`,
+`PredioService`, `CatalogoService`) que devuelven DTO tipados con los nombres de campo del modelo.
+
+.Ciclo de una declaración jurada
+image::{diagramas}/ciclo-dj.{diagext}[Estados de la declaración jurada: VIGENTE, edición con motivo ACTUALIZACIÓN, ANULADA de solo lectura,role=diagrama]
+
+Comportamiento que conviene conocer al operar:
+
+* *Numeración.* El backend asigna el `codigo` del contribuyente (seis dígitos), `numero_declaracion`, el código del
+  predio (`SS-MM-NNNN` con sector y manzana, el código municipal del lote del catastro, o `P-NNNNNN`) y
+  `numero_registro`. El código y el número se calculan dentro de un reintento: si otro funcionario tomó el mismo
+  en ese momento, la base rechaza el duplicado y se vuelve a calcular.
+* *Condominio.* Tras cada alta, edición o baja de una DJ, el backend recalcula el grupo entero del mismo predio, año
+  y secuencia de uso: condición, porcentajes, `valor_condominio` y `valor_afecto`.
+* *Anulación.* Anular una DJ es su descargo: queda ANULADA, sale del condominio y de los totales, y es de solo lectura
+  en el portal (400 sobre `estado` al editarla).
+* *Baja protegida.* Un predio o contribuyente con declaraciones o cuotas no se borra (409); una DJ con filas en sus
+  listas tampoco. Core respondería un 500 por la clave foránea: la comprobación va antes.
+* *Grabado fuera del portal* (`ReglasFueraDelPortal`). Core no tiene gancho previo a la escritura para estos objetos;
+  un `RecordChangeListener` completa después, con una segunda escritura como el mismo usuario, los derivados de un
+  solo registro (`tipo_persona`, `nombre_completo`, `descripcion` del domicilio, `total_metrado`). La numeración, el
+  condominio, la baja protegida y el ciclo de la DJ *solo* se aplican desde el portal: lo que se graba en `/admin`
+  no los recibe.
+
+[[comp-impuesto]]
+=== Impuesto predial (`srtm.impuesto`)
+
+`ImpuestoPredial.liquidar` es una función pura: base (la suma del `valor_afecto` de las DJ vigentes del año), tramos
+progresivos en UIT, mínimo y cuatro cuotas con vencimiento el último día hábil de febrero, mayo, agosto y noviembre.
+Los feriados nacionales de fecha fija están en una sola lista, `Vencimientos.FERIADOS_NACIONALES`. Los parámetros
+son los vigentes al 1 de enero; si falta alguno, la respuesta trae `faltan` (`["UIT 2027"]`) e importes en `null`.
+
+Fuera de alcance, y por eso no implementado: el reajuste de las cuotas 2 a 4 por IPM, la prórroga de vencimientos por
+ordenanza, el derecho de emisión y las deducciones.
+
+[[comp-emision]]
+=== Documentos y emisión masiva (`srtm.emision`)
+
+[[comp-emision-pdf]]
+==== Generación de PDF
+
+wasichai no genera PDF en el servidor, así que {sigla} trae su propia infraestructura:
+
+* `PdfRenderer` arma el HTML con Thymeleaf en modo autónomo (la aplicación es WebFlux, sin MVC) desde
+  `templates/emision/` y lo pasa a PDF con openhtmltopdf sobre PDFBox 3. Hoja A4, fuente Liberation Sans incrustada
+  (con DejaVu Sans de respaldo).
+* `PdfMerger` une PDF con archivos temporales (`MemoryUsageSetting.setupTempFileOnly()`), para que la masiva no llene
+  la memoria.
+* `DocumentosPrediales` es la única fachada del PU y la HR; la HLA y la resolución de infracciones usan la misma
+  cabecera (`templates/emision/cabecera.html`), cuyos datos salen del registro `municipalidad` de la organización
+  (uno por organización; si hay más, vale el más antiguo y el log lo avisa).
+* El log de openhtmltopdf va en WARN (`logging.level.com.openhtmltopdf`).
+
+[[comp-emision-masiva]]
+==== Emisión masiva
+
+`POST /api/srtm/emisiones` genera todas las HR, PU y, si se piden, HLA de un año, como un PDF único o un ZIP. El
+trabajo se reparte en lotes que generan los trabajadores de *todas* las instancias, coordinados solo por PostgreSQL;
+una sola instancia ensambla el resultado.
+
+.Estados de una emisión masiva
+image::{diagramas}/emision-lotes.{diagext}[Máquina de estados de la emisión masiva: PENDIENTE, EN_PROCESO, ENSAMBLANDO, TERMINADA o FALLIDA,role=diagrama]
+
+[cols="2,7",options="header"]
+|===
+|Pieza |Comportamiento
+
+|Lanzamiento
+|Exige `CREATE` y `UPDATE` sobre `emision_masiva` y `CREATE` sobre `emision_lote` (403 antes de crear nada). Una sola
+emisión activa (PENDIENTE, EN_PROCESO o ENSAMBLANDO) por organización y año: otra es 409; dos POST simultáneos, sigue
+el más antiguo.
+
+|Preparación
+|En segundo plano, como quien la lanzó: lee los contribuyentes con DJ vigentes del año, los ordena por código, los
+corta en lotes de `srtm.emision.lote` (100) y pasa a EN_PROCESO con su `total`.
+
+|Toma de lotes
+|`UPDATE … FOR UPDATE SKIP LOCKED` sobre la tabla física: dos trabajadores, de esta u otra instancia, nunca toman el
+mismo lote. Las organizaciones se turnan.
+
+|Lease
+|El trabajador renueva el `latido` del lote cada `lease/4`. Un lote EN_PROCESO cuyo latido venció hace `lease` (2 min)
+lo toma otro trabajador: así se retoma lo de una instancia que murió. Cada escritura del lote exige que siga siendo
+de esa toma.
+
+|Intentos
+|Un lote tomado más de `srtm.emision.intentos` (3) veces queda FALLIDO, con sus contribuyentes en `errores`.
+
+|Errores por contribuyente
+|Un contribuyente que falla queda en `errores` (`{contribuyente, mensaje}`) sin sus documentos, y el resto sigue. Una
+HLA imposible deja la HR y los PU del contribuyente y anota `HLA: <por qué>`.
+
+|Ensamblado
+|El trabajador que cierra el último lote pasa la emisión a ENSAMBLANDO con un `UPDATE` condicional; solo él ensambla
+(une las partes en orden de `numero`), guarda el archivo final, borra las partes y deja TERMINADA. Si muere, otro lo
+retoma al vencer el lease.
+
+|Identidad
+|Cada lote se genera como su creador: `IdentidadEmision` arma en memoria el `Jwt` que armaría el filtro de Core, con
+los roles actuales de ese usuario. Ese token nunca se firma ni sale del proceso. Si el usuario fue borrado o
+deshabilitado, el lote falla sin reintentos.
+
+|Al arrancar
+|Pasan a FALLIDA las emisiones PENDIENTE con el latido vencido y las EN_PROCESO sin latido (de la versión anterior a
+los lotes). Corre la retención. Cada grupo de trabajadores limpia sus temporales.
+
+|Retención
+|Después de cada ensamblado y al arrancar: por organización y año se conservan los últimos
+`srtm.emision.conservar` (5) archivos y ninguno más viejo que `srtm.emision.dias` (0: sin límite). El trabajo
+depurado queda sin archivo, con el mensaje «archivo depurado»; su descarga da 410.
+
+|Cancelación
+|`DELETE /api/srtm/emisiones/{id}` pasa a FALLIDO sus lotes pendientes, borra los lotes, el trabajo y cuanto el
+almacén guarda bajo `emision-<id>/`.
+
+|Auditoría
+|Las transiciones del trabajo van directo a la tabla y dejan su entrada en `audit_log` (UPDATE), con el usuario
+cuando es la preparación y sin usuario cuando es del sistema. El avance, el latido y los lotes no se auditan.
+|===
+
+[[comp-trabajadores]]
+==== Trabajadores
+
+Al arrancar (`ApplicationReadyEvent`), cada instancia lanza N corrutinas en `Dispatchers.IO` con un id de instancia
+`<hostname>-<uuid del arranque>`, que queda en `tomado_por` de los lotes. `srtm.emision.trabajadores`:
+
+* `auto`: `min(núcleos, (memoria máxima − 512 MiB) / 300 MiB)`, entre 1 y los núcleos;
+* un número: se toma tal cual; `0` es una instancia que no corre trabajadores pero atiende peticiones;
+* nunca más que `spring.r2dbc.pool.max-size − 2` (con el pool por defecto, 10, a lo sumo 8): si se pide más, un WARN
+  lo dice y corren los que caben, para no dejar sin conexiones al portal.
+
+Los mismos trabajadores corren la determinación masiva de arbitrios, turnándose con la emisión.
+
+[[comp-almacen]]
+==== Almacén de archivos
+
+[cols="2,5,5",options="header"]
+|===
+| |`local` (por defecto) |`s3`
+
+|Dónde
+|`<srtm.emision.dir>/<clave>`; por defecto `./data/emisiones`, relativo al directorio de trabajo.
+|`<bucket>/<prefijo>/<clave>`.
+
+|Claves
+2+|`emision-<id>/emision-<anio>-<id>.pdf\|zip` (resultado) y `emision-<id>/parte-00001.pdf\|zip` (partes). Segmentos
+`[A-Za-z0-9._-]`; nunca vacíos, `.` ni `..`.
+
+|Escritura
+|Mueve el archivo a un temporal junto a su destino y lo renombra de forma atómica.
+|`PutObject` hasta 16 MiB; más, subida en partes de 16 MiB con CRC32, que se aborta si algo falla.
+
+|Varias instancias
+|Todas con el *mismo volumen* en `dir`, y cada una con sus temporales locales.
+|Sin volumen: cada pod solo necesita sus temporales (un `emptyDir`).
+
+|Descarga
+|Streaming con `Range` (206, varios rangos, 416).
+|Streaming en trozos de 64 KiB por `boundedElastic`; sin `Range`, siempre 200 con el archivo entero.
+
+|Al arrancar
+|Mueve los archivos planos de la versión anterior (`<dir>/emision-<anio>-<id>.<ext>`) a su clave.
+|Comprueba el bucket con `HeadBucket`; si no existe o las credenciales no llegan, no arranca.
+|===
+
+Credenciales de S3: la cadena por defecto del AWS SDK v2, nunca la configuración de la aplicación. En EKS, IRSA (una
+ServiceAccount con `eks.amazonaws.com/role-arn`; el módulo `sts` va en el classpath para eso); si no, un secreto con
+`AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY`. El rol necesita `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject`,
+`s3:AbortMultipartUpload` y `s3:ListBucket` sobre el bucket o su prefijo.
+
+CAUTION: Configure en el bucket una regla de ciclo de vida que aborte las subidas en partes incompletas (por ejemplo,
+a los 7 días). Un pod que muere a mitad de una subida no puede abortarla, y sus partes se cobran hasta que alguien las
+borre.
+
+[[comp-arbitrios]]
+=== Arbitrios (`srtm.arbitrios`)
+
+`Arbitrios.determinar` es una función pura que calcula las cuotas de un predio en un año, mes por mes, a la fecha del
+día 1 de cada mes: titular principal, zona por servicio (`Zonas.de`: primero `zona_arbitrio_ubicacion` por vía, tramo
+y manzana, luego `ARBITRIO_ZONA` por sector catastral), uso de arbitrio, tasa, base (`PREDIO`, `FRONTIS_ML` o
+`AREA_CONSTRUIDA_M2`), factor de habitantes, redondeo y, si la ordenanza lo dispone, tope de incremento. Es *entero o
+nada*: si falta un parámetro de cualquier secuencia, no se determina nada del predio y `faltan` lo nombra.
+
+* *Escritura.* Las cuotas de un predio se escriben en una transacción. Si otra determinación del mismo predio escribe
+  entre la lectura y la escritura (la `clave` es única), se lee y se calcula otra vez, una sola vez.
+* *Reejecutar no duplica:* las cuotas existentes no se recalculan.
+* *Inmutables:* `appendOnly`. Una corrección es una `anulacion_cuota_arbitrio` y una redeterminación, que escribe la
+  versión siguiente de la `clave`.
+* *Ratificación.* Sin la ordenanza del año ratificada (acuerdo y fecha) no se determina ni se emite la HLA (decisión
+  D-02b).
+* *PU por uso.* Desde el año que fija la fila `ARBITRIO_PU_POR_USO`, cada secuencia de uso paga aparte; antes, un PU
+  por predio. Activarlo en un año ya determinado deja secuencias pendientes y su HLA da 422: elija un año sin
+  determinar.
+
+[[comp-determinacion-masiva]]
+==== Determinación masiva
+
+`POST /api/srtm/arbitrios/determinaciones` determina todos los predios con alguna DJ del año (también anulada) sobre
+la misma maquinaria de lotes de la emisión: lotes de `srtm.emision.lote` predios, los mismos trabajadores, lease e
+intentos. Antes de crear nada responde 403 (falta `CREATE`/`UPDATE` sobre `determinacion_arbitrio_masiva`, o `CREATE`
+sobre `determinacion_arbitrio_lote` o `cuota_arbitrio`), 400 (observación), 422 con `faltan` (sin ordenanza
+ratificada, servicios o filas de tasas, zonas y usos) o 409 (otra del año en curso). Cada predio se escribe en su
+propia transacción; uno que no se puede determinar va a `errores` y el lote sigue. No genera archivo, así que no pasa
+por ENSAMBLANDO. `DELETE` cancela y borra el trabajo; *las cuotas escritas quedan*.
+
+[[comp-hla]]
+==== HLA
+
+`GET /api/srtm/contribuyentes/{id}/hla` imprime las cuotas a nombre del contribuyente tal como se determinaron, con
+el cálculo legible de cada secuencia y servicio (`Calculo.formula`), los vencimientos (`ARBITRIO_VENCIMIENTO`) y la
+ordenanza con su ratificación. Da 422 con `faltan` si el año no tiene su ordenanza ratificada, si un predio tiene
+cuotas por determinar o si un mes con cuota no tiene vencimiento; 404 si no hay cuotas a su nombre.
+
+[[comp-sanciones]]
+=== Infracciones administrativas (`srtm.sanciones`)
+
+.Ciclo de un acta
+image::{diagramas}/ciclo-acta.{diagext}[Ciclo de un acta: notificación previa, subsanación, acta, anulación, descargo, resolución y su notificación,role=diagrama]
+
+* *Escritura solo por el servicio.* Los ocho objetos son `soloDesdeElServicio`: la API genérica no los escribe (POST
+  403, PUT y DELETE 409), tampoco un ADMIN. `import_cuis.py` usa por eso `POST /api/srtm/infracciones/cuis`.
+* *Lo leído se copia.* El acta guarda la UIT, los porcentajes y los importes; el descargo y la resolución, el plazo;
+  corregir después una UIT o agregar una versión del CUIS no cambia un acta ni el papel de una resolución.
+* *Candados.* La versión nueva del CUIS (`CODIGO_INFRACCION`), la subsanación y el acta de una misma previa
+  (`NOTIFICACION`), la anulación y la resolución que deja sin efecto (`ACTA`), el correlativo `RIS-AAAA-NNNNNN` /
+  `RGR-AAAA-NNNNNN` (`RESOLUCION`) y el intento de notificación (`NOTIFICACION_RESOLUCION`): cada uno dentro de la
+  transacción del insert.
+* *El PDF de la resolución* se dibuja antes de abrir la transacción y no se guarda: `GET /resoluciones/{id}/pdf` lo
+  vuelve a dibujar desde las filas congeladas.
+* *Sin cobranza.* {sigla} determina la multa; la orden de cobro, el pago y la coactiva son de `caja-backend`, con la
+  referencia `PAPELETA-<id>`. El panel responde `coactiva: null`.
+* *`SE_REDUCE` → 422:* la regla de reducción debe fijarla la ordenanza (D-02b).
+
+[[comp-anuncios]]
+=== Anuncios y propaganda (`srtm.anuncios`)
+
+El anuncio no se edita: su estado (VIGENTE, VENCIDO, CESADO, RETIRADO) se deriva de sus movimientos y del día que se
+pregunta. El alta escribe el anuncio y su AUTORIZACION en una transacción, con la tasa `TASA_ANUNCIO <clase>` vigente
+copiada en el movimiento y el número `AN-AAAA-NNNNNN` bajo el candado `SERIE`. La cabecera `Idempotency-Key` hace
+que un reenvío responda 200 con lo de la primera vez, sin devengar otra vez. La renovación devenga el ejercicio que
+renueva (409 si ya está devengado: lo garantizan los únicos `clave` y `referencia_cargo`). Igual que en sanciones,
+{sigla} determina y no cobra: la orden de cobro de cada tasa (`ANUNCIO-<id>-<anio>`) es de `caja-backend`.
+
+[[comp-pide]]
+=== PIDE RENIEC (`srtm.pide`)
+
+`ConsultaDocumento` tiene dos implementaciones: `SinConsulta` (por defecto, nunca hay datos) y `PideReniec`, activa
+con `SRTM_PIDE_RENIEC_ENABLED=true` y las tres credenciales del convenio. `PideReniec` hace un POST a
+`…/Rest/RENIEC/Consultar?out=json` con las credenciales en el cuerpo (nunca en la URL) y solo consulta DNI de 8
+dígitos. Cualquier error, código distinto de `0000` o demora mayor al plazo equivale a «sin datos»; el log registra
+el motivo, nunca la clave ni los datos de la persona. Una consulta con respuesta se recuerda 30 minutos *en la memoria
+de la instancia* para respaldar un alta con fuente PIDE RENIEC: con varias instancias, la consulta y el alta deben
+caer en la misma.
+
+WARNING: El contrato de `PideReniec` está tomado de los ejemplos publicados de la PIDE y *nunca se probó contra la
+PIDE real*: los tests usan un doble o un servidor local. Antes de encenderlo en producción, revíselo contra la
+documentación del convenio. Una clave vencida (`coResultado` 1002) no se renueva sola.
+
+[[comp-brecha]]
+=== Brecha de recaudación (`srtm.brecha`)
+
+Compara el autoavalúo declarado (las DJ) con el valorizado por catastro-backend y recalcula el impuesto predial y los
+arbitrios con él, reusando `totalesDePredio`, `condominio`, `ImpuestoPredial.liquidar` y `Arbitrios.determinar`.
+
+*Requiere catastro-backend.* Con `SRTM_CATASTRO_ENABLED=false` (por defecto), o sin URL o cuenta de servicio,
+`POST /api/srtm/brecha/corridas` responde *409* «Catastro no configurado». Con el catastro encendido pero sin
+`SRTM_CATASTRO_ORGANIZACION`, o pedida desde otra organización, también 409: nunca se cruza el padrón de una
+organización con el catastro de otra.
+
+[cols="2,7",options="header"]
+|===
+|Paso |Comportamiento
+
+|Lectura del catastro
+|`POST \{url}/api/auth/token` con la cuenta de servicio (token guardado hasta un minuto antes de vencer, o hasta un
+401) y `GET \{url}/api/catastro/valuaciones?anio&page&size=500`, todas las páginas. Respuestas de hasta 32 MiB por
+página; importes como decimales, nunca como `double`.
+
+|Cruce
+|Por pasadas sobre todos los ítems: código municipal, luego CPU, luego sector, manzana y lote (este solo cuando a la
+llave le queda un ítem y un predio).
+
+|Categorías
+|OMISO, SIN_CATASTRO, SIN_VALOR, SUBVALUADO (> declarado × 1,05), SOBREVALUADO (< × 0,95), COINCIDE.
+
+|Corrida
+|Un solo trabajador en segundo plano, como quien la lanzó; escribe las filas en lotes de 200. Una activa por
+organización y año (candado `BRECHA`). Una cuyo latido tiene más de 10 minutos se da por abandonada y pasa a FALLIDA,
+también al consultarla.
+
+|Fallos
+|Catastro responde 403 (la cuenta no lee alguno de sus objetos), no devuelve valuaciones del año con un padrón no
+vacío, o faltan la UIT, los tramos o el mínimo del año: la corrida queda FALLIDA con el motivo en `mensaje`.
+|===
+
+NOTE: Las decisiones del cruce y del cálculo las confirmó la municipalidad el 19 de octubre de 2026, salvo D8: D5
+(una celda «.....» del cuadro de valores no es cero: el predio queda SIN_VALOR), D7 (llave de cruce: código municipal,
+CPU, sector-manzana-lote), D10 (COINCIDE con |Δ autoavalúo| ≤ 5 %), D11 (el año lo decide catastro) y D12 (reparto
+entre secuencias por autoavalúo declarado, si no por área construida, si no en partes iguales). D8 (la deducción
+Amazonía no se aplica) sigue abierta para una municipalidad de la Amazonía. Las demás (D1-D4, D6, D9) son de
+catastro-backend.
+
+La brecha la consulta cualquier usuario de la municipalidad: por decisión del 19 de octubre de 2026, *todo rol* lleva
+lectura sobre `brecha_corrida` y `brecha_predio` (wasichai no tiene un permiso para «cualquier usuario autenticado»,
+así que un rol nuevo sin esa lectura ve el panel con 403). Lanzar una corrida pide creación y edición.
+
+include::../referencia/api.adoc[]
+
+[[seguridad]]
+== Seguridad
+
+[[seg-autenticacion]]
+=== Autenticación
+
+Toda ruta bajo `/api` exige un JWT firmado con HS256, salvo `POST /api/auth/login`, `POST /api/auth/token`,
+`GET /api/health` y `GET /actuator/health/**`. El token se obtiene con usuario y clave (`/api/auth/login`) o, para
+una integración, con una cuenta de servicio (`/api/auth/token`, vida de 15 minutos). Un token de usuario vale 8
+horas.
+
+La clave de firma es `WASICHAI_JWT_SECRET`, de al menos 32 bytes. `application.yml` trae un valor de desarrollo para
+que el servidor arranque sin configurar nada: *ese valor está en el repositorio y no protege nada*. En cualquier
+entorno que no sea la máquina de un desarrollador, fije uno propio, generado al azar (por ejemplo,
+`openssl rand -base64 48`) y guardado como secreto. Cambiarlo invalida todos los tokens emitidos: los usuarios deben
+volver a iniciar sesión.
+
+[[seg-seed]]
+=== Semilla de desarrollo
+
+Con `WASICHAI_SEED_DEV=true` (el valor por defecto en {sigla}; en wasichai es `false`), Flyway corre la migración
+`core_seed`, que crea la organización `demo` (`00000000-0000-0000-0000-000000000001`), el rol `ADMIN` con todos los
+permisos y el usuario `admin@wasichai.local` con clave `admin`.
+
+WARNING: Una base que arrancó una vez con la semilla conserva ese usuario aunque después se apague la semilla: es una
+migración que ya se aplicó, no un ajuste. En un entorno real, fije `WASICHAI_SEED_DEV=false` *antes del primer
+arranque*. Si la base ya tiene el usuario de desarrollo, cámbiele la clave o deshabilítelo en `/admin` antes de
+exponer el servicio.
+
+*No verificado:* el repositorio de {sigla} no documenta cómo crear la primera organización y su administrador sin la
+semilla. wasichai {version-wasichai} ofrece `POST /api/organizations` (pide `MANAGE_TENANTS`) y su guía
+(`docs/guides/build-your-app.md`) indica que el primer permiso se escribe una vez en la base, con SQL propio. Defina
+ese procedimiento antes de instalar producción.
+
+[[seg-autorizacion]]
+=== Autorización
+
+wasichai aplica control de acceso por roles (RBAC): permisos por objeto y acción, y opcionalmente por campo. Los
+roles de {sigla} no usan permisos por campo. La matriz completa sigue.
+
+include::../referencia/permisos.adoc[leveloffset=+1]
+
+[[seg-guardia]]
+=== Guardia de escritura
+
+Además de los permisos, `GuardiaDeEscritura` impide, por cualquier camino y para cualquier usuario, editar o borrar
+lo que solo se agrega (409) y escribir infracciones o anuncios sin pasar por la API de {sigla} (403). Cada rechazo por
+falta de la marca deja una línea en el log:
+
+[source,text]
+----
+ESCRITURA FUERA DE SRTM RECHAZADA: CREATE papeleta (alta) por el usuario <id> de la organización <id>
+----
+
+Una línea así significa que alguien intentó escribir un objeto de infracciones o de anuncios desde `/admin`, la API
+genérica, una automatización o la plataforma. No escribió nada. Si se repite, revise quién (el usuario del mensaje y
+`GET /api/audit`) y por qué.
+
+[[seg-auditoria]]
+=== Auditoría
+
+Core escribe en `wasichai.audit_log` cada alta, edición y baja de un registro, con usuario, fecha, estado anterior y
+posterior, `X-Correlation-Id` y origen. Se consulta con `GET /api/audit` y `GET /api/objects/{objeto}/records/{id}/history`.
+La tabla es de solo agregar *en la base*: desde la migración V13 de Core, unos disparadores rechazan `UPDATE`,
+`DELETE` y `TRUNCATE` para cualquier rol. La única excepción es la purga, que solo puede hacer el rol nombrado en
+`wasichai.audit.purge-role` (sin configurar en {sigla}: nadie purga).
+
+Lo que la auditoría de Core no guarda es el motivo de un acto: por eso {sigla} exige la observación en el propio
+registro.
+
+Al arrancar, `AuditLogOwnershipCheck` comprueba si el rol con que se conecta la aplicación puede actuar como dueño
+de `audit_log` (es el dueño, es miembro de él o es superusuario). Si puede, deja un WARN:
+
+[source,text]
+----
+audit_log is append-only through triggers (ADR-054), but the role wasichai runs as
+('srtm') can act as its owner ('srtm') and so drop or disable them. ...
+----
+
+Con `compose.yml` el WARN es esperado: el usuario `srtm` es superusuario. En producción indica que un usuario con la
+clave de la aplicación podría desactivar los disparadores.
+
+[[seg-roles-base]]
+==== Dos roles de base de datos
+
+wasichai recomienda separar el rol que migra (dueño de los esquemas) del rol con que corre la aplicación. El
+procedimiento está en la guía de wasichai (`docs/guides/build-your-app.md`, «Two database roles»): crear los dos
+roles, crear los esquemas `wasichai` y `app_data` como el dueño, dar al rol de la aplicación `USAGE` y
+`SELECT, INSERT, UPDATE, DELETE` por omisión en `wasichai` y `USAGE, CREATE` en `app_data` (la aplicación crea una
+tabla por objeto en tiempo de ejecución), revocar `UPDATE, DELETE, TRUNCATE` sobre `audit_log` y correr las
+migraciones aparte (`wasichai.database.migrate=false`) o reemplazar el bean `wasichaiMigrations`.
+
+*No verificado en {sigla}:* ninguna instalación de {sigla} usa todavía dos roles; `compose.yml` y la base de dev usan
+un superusuario. Pruebe el procedimiento en una base de ensayo antes de aplicarlo.
+
+[[seg-secretos]]
+=== Secretos
+
+[cols="3,4,5",options="header"]
+|===
+|Secreto |Variable |Dónde vive
+
+|Clave de firma de los JWT
+|`WASICHAI_JWT_SECRET`
+|Gestor de secretos o archivo de entorno con permisos 600. Nunca en el repositorio.
+
+|Clave de la base
+|`WASICHAI_DB_PASSWORD`
+|Ídem.
+
+|Clave del convenio PIDE
+|`SRTM_PIDE_RENIEC_PASSWORD` (más el DNI y el RUC del convenio)
+|Ídem. `application.yml` advierte: «set them in the environment, never here».
+
+|Cuenta de servicio de catastro-backend
+|`SRTM_CATASTRO_CLIENT_SECRET`
+|Ídem. catastro-backend la muestra una sola vez al crearla.
+
+|Credenciales de S3
+|`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+|Mejor ninguna: IRSA o un rol de instancia. Si no, un secreto del orquestador.
+
+|Token de GitHub Packages
+|`gpr.key` o `GITHUB_TOKEN`
+|`~/.gradle/gradle.properties` del usuario o el secreto del CI; solo `read:packages`.
+
+|Token de release-please
+|`RELEASE_PLEASE_TOKEN`
+|Secreto del repositorio en GitHub.
+|===
+
+Ni el código ni los registros imprimen estos valores: `CatastroProperties.toString()` omite el secreto, el cliente de
+catastro registra solo el motivo de un fallo, y `PideReniec` nunca registra la clave ni los datos de la persona.
+`develop/.env`, `.env` y `*.local.env` están en `.gitignore`.
+
+[[seg-datos-personales]]
+=== Datos personales
+
+El padrón, los documentos emitidos, los reportes de los importadores y los respaldos traen DNI, nombres, domicilios y
+valores de predios. En concreto:
+
+* la base completa (esquema `app_data`) y su auditoría (`audit_log` guarda los valores antes y después);
+* el almacén de emisiones: cada archivo de una emisión masiva trae los documentos del padrón entero;
+* el Excel del padrón y `model/reports/`;
+* los volcados de la base.
+
+Todos deben estar en almacenamiento privado, con acceso restringido, y nunca en el repositorio.
+
+[[seg-pendiente]]
+=== Endurecimiento disponible y apagado
+
+wasichai trae, apagadas por compatibilidad, medidas que {sigla} no enciende: límite de intentos de inicio de sesión
+(`wasichai.security.login.enabled`), revocación de tokens (`wasichai.security.jwt.revocation`), una política de
+claves más estricta que 8 caracteres y la separación de quién crea organizaciones
+(`wasichai.organizations.separate-provisioning`). Para un sistema con datos personales conviene encenderlas.
+Encender el límite de intentos o la política de claves exige ajustar `SrtmApiTest`, que inicia sesión una vez por
+test y cuyas claves de prueba son solo minúsculas y guiones.
+
+[[asincronos]]
+== Procesos asíncronos
+
+El trabajo en segundo plano corre dentro del mismo proceso del backend, en corrutinas; no hay colas ni
+programadores externos. El estado vive en PostgreSQL y, para los archivos, en el almacén.
+
+[cols="3,4,5",options="header"]
+|===
+|Proceso |Cuándo corre |Cómo se sigue
+
+|Emisión masiva
+|`POST /api/srtm/emisiones`; los lotes, en los trabajadores de todas las instancias
+|`GET /api/srtm/emisiones/{id}`: `estado`, `total`, `procesados`, `errores`, `mensaje`.
+
+|Determinación masiva de arbitrios
+|`POST /api/srtm/arbitrios/determinaciones`; mismos trabajadores
+|`GET /api/srtm/arbitrios/determinaciones/{id}`: `procesados`, `generadas`, `errores`.
+
+|Corrida de la brecha
+|`POST /api/srtm/brecha/corridas`; un solo trabajador en la instancia que recibió el POST
+|`GET /api/srtm/brecha/corridas/{id}`: `totalPredios`, `procesados`, `mensaje`.
+
+|Recuperación al arrancar
+|`ApplicationReadyEvent` de cada instancia
+|Log: «N emisiones masivas sin quien las corriera pasan a FALLIDA».
+
+|Retención de archivos
+|Tras cada ensamblado y al arrancar
+|Log: «N archivos de emisiones masivas depurados».
+
+|Limpieza de temporales
+|Al arrancar los trabajadores
+|Log: «N temporales de emisiones masivas borrados de <dir>».
+
+|Comprobación del dueño de `audit_log`
+|`ApplicationReadyEvent`
+|WARN si el rol de la aplicación puede actuar como dueño.
+
+|Reconciliación de índices (Core)
+|`ApplicationReadyEvent`, si `wasichai.metadata.reconcile-indexes` (por defecto sí)
+|Construye los índices declarados que falten; retiene la disponibilidad mientras tanto.
+|===
+
+[[async-estados]]
+=== Estados y fallos
+
+* Un trabajo masivo termina en TERMINADA o FALLIDA, siempre con `mensaje` si falló. Un lote que agota sus intentos no
+  hace fallar el trabajo entero: sus contribuyentes o predios quedan en `errores`, y el trabajo puede terminar
+  TERMINADA con errores.
+* Si una instancia muere, sus lotes los retoma otra al vencer el lease (2 minutos por defecto). Si muere la única
+  instancia, al volver a arrancar retoma los lotes con lease vencido y da por FALLIDA la preparación que quedó a
+  medias (vuelva a lanzar el trabajo).
+* Un trabajo cuyo creador fue borrado o deshabilitado falla sin reintentos: los lotes corren con sus permisos.
+* La corrida de la brecha no se retoma: si su instancia muere, a los 10 minutos sin latido se informa FALLIDA y se
+  puede lanzar otra.
+
+[[async-instancias]]
+=== Varias instancias
+
+Varias instancias contra la misma base se reparten los lotes sin coordinador: `FOR UPDATE SKIP LOCKED` y los
+`UPDATE` condicionados hacen que cada lote y cada ensamblado tengan un solo dueño. Condiciones:
+
+* *mismo almacén*: con `local`, el mismo volumen montado en `srtm.emision.dir` en todas; con `s3`, el mismo bucket y
+  prefijo;
+* *temporales locales* de cada instancia, nunca compartidos;
+* *la misma versión*: una instancia de una versión anterior a los lotes da por huérfano cualquier trabajo activo de las
+  nuevas, y una nueva falla los que corre una vieja. Detenga todas las viejas antes de arrancar las nuevas;
+* la memoria de PIDE RENIEC (30 minutos) es de cada instancia.
+
+[[pruebas]]
+== Pruebas
+
+[cols="3,5,4",options="header"]
+|===
+|Suite |Qué prueba |Cómo se corre
+
+|Unitarias (Kotlin)
+|Las reglas puras (condominio, anulación, impuesto, vencimientos, arbitrios, multas, plazos, CUIS, anuncios), la
+guardia, el mapeo de registros, la generación de PDF (leídos de vuelta con PDFBox) y el contrato del almacén local.
+68 clases.
+|`./gradlew build` (ktlint + unitarias; excluye `integration`).
+
+|Integración (Kotlin)
+|`SrtmSmokeTest`, las clases `*ApiTest` y `AlmacenS3Test` (47 clases): la aplicación entera en un puerto aleatorio contra PostGIS,
+llamada por HTTP como el portal. Heredan de `SrtmApiTest`, que aplica `model.json` como `apply.py` antes de cada
+test. `AlmacenS3Test` y `EmisionS3ApiTest`, contra un MinIO de Testcontainers.
+|`./gradlew integrationTest`.
+
+|Modelo e importadores (Python)
+|`model/test_*.py` (18 archivos): validación de `model.json`, cada importador y migración contra un Core falso
+(`fake_core.py`), y que los CSV de datos coincidan con sus fuentes.
+|`cd model && python3 apply.py --validate-only && python3 -m unittest -v`.
+
+|Formato
+|YAML y JSON, `model.json` incluido, con prettier.
+|`yarn format:check` (lo arregla `yarn format`).
+|===
+
+Las pruebas de integración llevan `@Tag("integration")`, que heredan de `WasichaiIntegrationTest` de wasichai.
+Testcontainers levanta la imagen `postgis/postgis:18-3.6` (propiedad `wasichai.test.db.image` de
+`build.gradle.kts`). `src/test/resources/application.properties` fija `srtm.emision.trabajadores=0` para toda la
+corrida: solo `EmisionMasivaApiTest` corre trabajadores, porque un contexto en caché tomaría los lotes que crean las
+demás clases.
+
+[[proc-tests-base-externa]]
+.Correr las pruebas de integración con un Docker remoto
+====
+[horizontal]
+Objetivo:: Correr `integrationTest` cuando `DOCKER_HOST` apunta a otro servidor.
+Requisitos previos:: Una base PostgreSQL con PostGIS ya levantada en ese servidor, cuyo nombre termine en `_test`, y
+un túnel SSH a su puerto.
+Directorio:: Raíz del repositorio.
+Efecto:: La suite *vacía esa base* al empezar.
+====
+
+. Descomente las cinco variables `WASICHAI_TEST_DB_*` de `develop/.env` y expórtelo.
+. Corra la suite sin caché:
++
+[source,bash]
+----
+./gradlew integrationTest --rerun
+----
+
+// fin de los pasos
+Resultado esperado:: La suite termina en verde; `--rerun` evita que Gradle devuelva un resultado verde viejo.
+Casos especiales:: Con un Docker remoto, Testcontainers crea el contenedor en el servidor pero lo busca en
+`localhost`: ni Ryuk ni PostgreSQL responden y la suite falla al arrancar, aunque `docker info` funcione. La
+alternativa habitual es `./gradlew compileTestKotlin` y dejar que las corra el CI.
+
+WARNING: La suite de integración borra el contenido entero de la base externa al empezar. Nunca apunte
+`WASICHAI_TEST_DB_*` a una base con datos: el nombre debe terminar en `_test` precisamente para evitarlo.
+
+[[pruebas-ci]]
+=== Integración continua
+
+`.github/workflows/ci.yml` corre en cada PR y en cada push a `main`, con estos trabajos:
+
+[cols="3,6,2",options="header"]
+|===
+|Trabajo |Qué hace |Límite
+
+|Build (ktlint + unit tests)
+|`./gradlew build --no-daemon` con Temurin 25. Si falla, sube `build/reports/tests/` como `test-reports`.
+|30 min
+
+|Integration tests
+|`docker pull postgis/postgis:18-3.6` y `./gradlew integrationTest --no-daemon`. Si falla, sube
+`integration-test-reports`.
+|60 min
+
+|Model and importer (python)
+|`python3 apply.py --validate-only` y `python3 -m unittest -v` en `model/`.
+|10 min
+
+|Format (prettier)
+|`yarn format:check` con Node 26.
+|10 min
+|===
+
+`commits.yml` exige Conventional Commits en los commits del PR (commitlint) y en su título.
+
+[[despliegue]]
+== Construcción, versiones y despliegue
+
+[[desp-construir]]
+=== Construir el jar
+
+[[proc-bootjar]]
+.Construir el jar ejecutable
+====
+[horizontal]
+Objetivo:: Un jar ejecutable del backend.
+Requisitos previos:: JDK 25 y acceso a las librerías de wasichai.
+Directorio:: Raíz del repositorio.
+====
+
+. Construya:
++
+[source,bash]
+----
+./gradlew bootJar
+----
+
+// fin de los pasos
+Resultado esperado:: `build/libs/app.jar` (nombre fijo; no se genera el jar plano).
+Verificación:: `java -jar build/libs/app.jar` arranca con la configuración por defecto y responde en
+`/actuator/health`.
+
+[[desp-versiones]]
+=== Versiones y releases
+
+{sigla} usa release-please sobre Conventional Commits (`docs/develop/releasing.md`):
+
+. Los commits convencionales (`feat:`, `fix:`, …) se mezclan a `main`.
+. `release-please.yml` abre o actualiza un PR de release que sube `version=` en `gradle.properties` y escribe
+  `CHANGELOG.md`.
+. Al mezclar ese PR, release-please crea la etiqueta `vX.Y.Z` y el GitHub Release.
+. El release dispara `release.yml`, que compila `./gradlew bootJar -Pversion=X.Y.Z` y adjunta
+  `srtm-backend-X.Y.Z.jar` y su `.sha256`.
+
+// fin de los pasos
+Mientras la versión sea 0.x, un `feat:` sube el minor y un `fix:` el patch (`bump-minor-pre-major`). Para que
+`release.yml` corra hace falta el secreto `RELEASE_PLEASE_TOKEN` (un PAT): un release creado con el `GITHUB_TOKEN`
+del workflow no dispara otros workflows, y entonces el jar habría que adjuntarlo a mano.
+
+NOTE: `releasing.md` indica quitar `"release-as": "0.9.0"` de `release-please-config.json` después del primer
+release. La etiqueta `v0.9.0` ya existe y la configuración todavía lo tiene: el siguiente PR de release volvería a
+proponer 0.9.0 hasta que se quite.
+
+[[desp-artefactos]]
+=== Qué se publica
+
+* *El jar* (`srtm-backend-X.Y.Z.jar`) y su suma SHA-256, adjuntos al GitHub Release.
+* *No se publica ninguna imagen de Docker*: el repositorio no tiene `Dockerfile` ni workflow que la construya. El
+  ejemplo de `compose.yml` con varias réplicas del `README.md` (`image: srtm-backend`) supone una imagen que hay que
+  construir aparte.
+* No hay manifiestos de Kubernetes ni infraestructura como código: `srtm-infrastructure` está vacío (solo un
+  `README.md`).
+
+[[proc-verificar-jar]]
+.Verificar un jar descargado
+====
+[horizontal]
+Objetivo:: Comprobar que el jar del release no se alteró.
+Requisitos previos:: El jar y su `.sha256` en el mismo directorio.
+Efecto:: Solo lee.
+====
+
+. Compare la suma: `shasum -a 256 -c srtm-backend-X.Y.Z.jar.sha256` (o `sha256sum -c` en Linux).
+
+// fin de los pasos
+Resultado esperado:: `srtm-backend-X.Y.Z.jar: OK`.
+
+[[desp-servidor]]
+=== Desplegar en un servidor
+
+El repositorio no define un procedimiento de despliegue de producción. Lo que sigue es lo mínimo que se deduce de la
+configuración; adáptelo a la infraestructura de la municipalidad.
+
+. Instale JDK 25 y prepare un usuario sin privilegios para el servicio.
+. Prepare PostgreSQL 18 con PostGIS 3.6 disponible (`CREATE EXTENSION postgis` debe poder correr: wasichai-gis lo
+  hace en su primera migración) y una base vacía.
+. Prepare el directorio del almacén (volumen persistente y privado) o el bucket S3, y un directorio local para los
+  temporales.
+. Escriba el archivo de entorno (<<ref-config-env-ejemplo>>) con `WASICHAI_SEED_DEV=false` y un
+  `WASICHAI_JWT_SECRET` propio.
+. Arranque el jar con ese entorno y compruebe `/actuator/health`.
+. Cargue el modelo y los datos (<<carga>>) con una cuenta administradora.
+. Recorra la lista de <<op-checklist>>.
+
+// fin de los pasos
+Un ejemplo de unidad de systemd, *que no está en el repositorio* y se da solo como punto de partida:
+
+[source,ini]
+----
+# /etc/systemd/system/srtm-backend.service (ejemplo, no versionado)
+[Unit]
+Description=srtm-backend
+After=network-online.target
+
+[Service]
+User=srtm
+WorkingDirectory=/opt/srtm
+EnvironmentFile=/etc/srtm/srtm.env
+ExecStart=/usr/bin/java -Xmx4g -jar /opt/srtm/srtm-backend.jar
+Restart=on-failure
+SuccessExitStatus=143
+
+[Install]
+WantedBy=multi-user.target
+----
+
+La memoria máxima de la JVM (`-Xmx`) decide cuántos trabajadores corre `auto`: con 4 GiB,
+`(4096 − 512) / 300 = 11`, limitado por los núcleos y por el pool de conexiones (8 con el pool por defecto).
+
+[[desp-kubernetes]]
+=== Kubernetes y almacén S3
+
+Lo único documentado para Kubernetes es el almacén S3 (`README.md`, «Almacén S3 (K8s)»): sin volumen compartido, cada
+pod con sus temporales en un `emptyDir`, credenciales por IRSA o por un secreto. El fragmento del `README.md`:
+
+[source,yaml]
+----
+serviceAccountName: srtm-backend # con IRSA; sin IRSA, el envFrom del secreto
+containers:
+  - name: backend
+    image: srtm-backend
+    env:
+      - { name: SRTM_EMISION_ALMACEN, value: s3 }
+      - { name: SRTM_EMISION_S3_BUCKET, value: municipalidad-srtm-emisiones }
+      - { name: SRTM_EMISION_S3_PREFIJO, value: srtm/emisiones }
+      - { name: SRTM_EMISION_TEMPORALES, value: /tmp/srtm-emision } # un emptyDir
+----
+
+Las sondas pueden usar `/actuator/health/liveness` y `/actuator/health/readiness`, que responden sin token. La
+reconciliación de índices de Core retiene la disponibilidad al arrancar: en una tabla grande, dé margen a la sonda
+de arranque.
+
+*No verificado:* no existe imagen, chart ni manifiesto de {sigla}; ningún despliegue en Kubernetes se ha probado.
+
+[[despliegue-actualizar]]
+=== Actualizar a una versión nueva
+
+[[proc-actualizar]]
+.Actualizar el backend
+====
+[horizontal]
+Objetivo:: Pasar a una versión nueva sin perder datos ni dejar trabajos a medias.
+Requisitos previos:: El jar nuevo verificado; una ventana sin emisiones ni determinaciones masivas en curso.
+Efecto:: Las migraciones de Core que traiga la versión nueva se aplican al arrancar y *no tienen vuelta atrás*.
+====
+
+. Haga un respaldo completo de la base y del almacén (<<proc-respaldo-base>>, <<proc-respaldo-almacen>>).
+. Si la versión cambia el modelo (lo dice su `CHANGELOG.md` o su `README.md`), aplique `model.json` primero con el
+  backend nuevo todavía apagado: `python3 apply.py --diff` y luego `python3 apply.py`, contra la instancia que siga
+  corriendo.
+. Detenga *todas* las instancias de la versión anterior.
+. Arranque las instancias nuevas.
+. Compruebe la salud, el log de arranque y la lista de <<op-checklist>>.
+
+// fin de los pasos
+Resultado esperado:: El backend nuevo arranca, Flyway aplica sus migraciones y `apply.py --diff` dice
+`diff: nothing pending`.
+Casos especiales:: De wasichai 0.6 a 1.2, Core aplica V18 (`custom_fields.time_zone`, una columna sin datos). De
+0.3.2 a 0.6, V9 a V17: entre ellas los disparadores de `audit_log`, que exigen que el rol que migra sea dueño de la
+tabla, y un índice sobre `audit_log` sin `CONCURRENTLY` (en una base con mucha auditoría, arranque sin tráfico).
+La versión con la HLA agrega `emision_masiva.documentos`: sin ese campo el backend no ve las tablas de emisión de la
+organización y su POST falla.
+
+WARNING: Las migraciones de Core no se pueden revertir. Volver a la versión anterior exige restaurar el respaldo
+tomado antes de actualizar (<<respaldo>>), con la pérdida de lo escrito después.
+
+[[operacion]]
+== Operación
+
+[[op-ciclo]]
+=== Arrancar, detener y reiniciar
+
+[cols="2,5,5",options="header"]
+|===
+|Acción |Desarrollo |Servidor (unidad de ejemplo de <<desp-servidor>>)
+
+|Arrancar
+|`./gradlew bootRun` (o `java -jar build/libs/app.jar`) con `develop/.env` exportado.
+|`systemctl start srtm-backend`
+
+|Detener
+|kbd:[Ctrl+C]
+|`systemctl stop srtm-backend`
+
+|Reiniciar
+|Detener y arrancar.
+|`systemctl restart srtm-backend`
+
+|Base local
+|`docker compose up -d` / `docker compose stop`
+|La gestiona el DBA.
+|===
+
+Al detenerse, el proceso cancela sus trabajadores (`@PreDestroy`): un lote a medias queda EN_PROCESO hasta que vence
+su lease y lo retoma otra instancia, o esta misma al volver. Un ensamblado a medias queda ENSAMBLANDO y se retoma
+igual. Una corrida de la brecha a medias se pierde (se informa FALLIDA a los 10 minutos).
+
+TIP: Antes de detener la única instancia, revise que no haya trabajos activos:
+`GET /api/srtm/emisiones`, `GET /api/srtm/arbitrios/determinaciones` y `GET /api/srtm/brecha/corridas`. No es
+obligatorio, pero evita esperar el lease o relanzar una corrida.
+
+[[op-salud]]
+=== Salud
+
+[cols="4,5,3",options="header"]
+|===
+|Ruta |Responde |Token
+
+|`GET /actuator/health`
+|`{"groups":["liveness","readiness"],"status":"UP"}`
+|No
+
+|`GET /actuator/health/liveness`, `/actuator/health/readiness`
+|200 si el proceso está vivo / listo para atender.
+|No
+
+|`GET /api/health`
+|`{"status":"UP","application":"srtm-backend"}`
+|No
+|===
+
+`/actuator/health` no muestra el detalle de sus componentes, y no comprueba el almacén de emisiones. *No verificado:*
+si el estado incluye la conexión a la base (lo haría el indicador R2DBC de Spring Boot). Para confirmar que la API
+lee la base, llame a una ruta autenticada, como `GET /api/srtm/resumen`.
+
+[[op-logs]]
+=== Registros (logs)
+
+El backend escribe en la salida estándar (no hay archivo de log configurado): `journalctl -u srtm-backend` con la
+unidad de ejemplo, o `docker logs` en un contenedor. Las líneas que conviene vigilar:
+
+[cols="5,1,6",options="header"]
+|===
+|Mensaje (comienzo) |Nivel |Qué significa y qué hacer
+
+|`ESCRITURA FUERA DE SRTM RECHAZADA: <op> <objeto> …`
+|WARN
+|Alguien intentó escribir infracciones o anuncios fuera de la API de {sigla}. No se escribió nada. Revise el usuario.
+
+|`audit_log is append-only through triggers (ADR-054), but the role …`
+|WARN
+|`AuditLogOwnershipCheck`: el rol de la aplicación puede desactivar los disparadores de `audit_log`. Esperado con
+`compose.yml`; en producción, separe los roles (<<seg-roles-base>>).
+
+|`emisión masiva: la instancia <id> corre N trabajadores …`
+|INFO
+|Al arrancar: cuántos trabajadores corre la instancia. `N = 0` con `trabajadores=0`.
+
+|`srtm.emision.trabajadores=N no cabe en el pool de conexiones (P): corren M`
+|WARN
+|Se pidieron más trabajadores que conexiones. Suba `spring.r2dbc.pool.max-size` o baje el número.
+
+|`N emisiones masivas sin quien las corriera pasan a FALLIDA`, +
+`la emisión masiva <id> no tenía quien la corriera: FALLIDA`
+|WARN
+|Trabajos abandonados por una instancia que murió o por la versión anterior. Vuelva a lanzarlos.
+
+|`el lote N de la emisión masiva <id> falló en el intento K`
+|ERROR
+|Fallo inesperado al generar: el lote se suelta y lo toma otro trabajador. Mire la traza.
+
+|`el lote N de la emisión masiva <id> queda FALLIDO: …`
+|WARN
+|Agotó sus intentos o su creador ya no existe. Sus contribuyentes están en `errores`.
+
+|`no se pudo ensamblar la emisión masiva <id>`
+|ERROR
+|La emisión queda FALLIDA. Revise el almacén (espacio, permisos, bucket).
+
+|`lote N de la emisión <id>: … documentos/s`, +
+`emisión <id> de <año>: … documentos/s`
+|INFO
+|Medición por lote y por emisión, para calibrar `lote` y `trabajadores`.
+
+|`N archivos de emisiones masivas depurados`
+|INFO
+|La retención borró archivos; sus descargas darán 410.
+
+|`la determinación masiva <id> no tenía quien la corriera: FALLIDA`, +
+`el lote N de la determinación masiva <id> queda FALLIDO`
+|WARN
+|Igual que en la emisión, para la determinación de arbitrios.
+
+|`la corrida de brecha <id> falló`
+|ERROR
+|La corrida queda FALLIDA con el motivo en `mensaje` (catastro sin respuesta, 403, faltan parámetros).
+
+|`catastro: no se obtuvo el token de la cuenta de servicio <id> (…)`
+|WARN
+|`clientId` o `clientSecret` equivocados, o catastro-backend caído.
+
+|`srtm.catastro.enabled sin url, client-id o client-secret …`, +
+`srtm.catastro.enabled sin organizacion …`
+|WARN
+|Configuración incompleta de la brecha: ninguna corrida empieza.
+
+|`PIDE RENIEC: la consulta falló (…)`, `PIDE RENIEC: sin datos (coResultado …)`
+|WARN
+|La consulta no dio datos; el funcionario escribe los nombres a mano. `coResultado 1002` es clave vencida.
+
+|`srtm.pide.reniec.enabled sin url, usuario, RUC o password …`
+|WARN
+|PIDE encendida sin credenciales completas: no se consulta.
+
+|`la organización <id> tiene N municipalidades: se usa la más antigua`
+|WARN
+|Hay más de un registro `municipalidad`; borre los sobrantes en `/admin`.
+|===
+
+Cada respuesta HTTP lleva `X-Correlation-Id`; el mismo valor queda en `audit_log` y permite unir una queja de un
+usuario con su petición.
+
+[[op-trabajos]]
+=== Revisar los trabajos en segundo plano
+
+[[proc-revisar-trabajos]]
+.Revisar el estado de los trabajos masivos
+====
+[horizontal]
+Objetivo:: Saber qué corre, qué terminó y qué falló.
+Requisitos previos:: Un token (<<proc-token-api>>) de un usuario que pueda leer `emision_masiva`,
+`determinacion_arbitrio_masiva` y `brecha_corrida`.
+Efecto:: Solo lee.
+====
+
+. Liste las emisiones del año (la más reciente primero):
++
+[source,bash]
+----
+curl -s -H "Authorization: Bearer $TOKEN" \
+  'http://localhost:8090/api/srtm/emisiones?anio=2026'
+----
+. Revise una: `estado`, `procesados` de `total`, `errores` y `mensaje`.
+. Haga lo mismo con `/api/srtm/arbitrios/determinaciones?anio=2026` y `/api/srtm/brecha/corridas?anio=2026`.
+
+// fin de los pasos
+Resultado esperado:: Ningún trabajo EN_PROCESO o ENSAMBLANDO cuyo `procesados` no avance durante más que el lease.
+Casos especiales:: Un trabajo TERMINADA con `errores` no es una falla del sistema: son contribuyentes o predios que
+no se pudieron hacer (falta un parámetro, una DJ sin uso). Corrija el dato y vuelva a emitir o determinar; la
+determinación no duplica lo ya escrito.
+
+[[op-checklist]]
+=== Lista de verificación posterior al despliegue
+
+[cols="1,8,3",options="header"]
+|===
+|# |Comprobación |Cómo
+
+|1
+|El servicio responde.
+|`GET /actuator/health` → `UP`.
+
+|2
+|La semilla de desarrollo está apagada y no hay usuario `admin@wasichai.local` con clave `admin`.
+|`WASICHAI_SEED_DEV=false`; intentar ese login debe dar 401.
+
+|3
+|El secreto JWT no es el de desarrollo.
+|Revise el archivo de entorno o el gestor de secretos.
+
+|4
+|El modelo está al día.
+|`python3 apply.py --diff` → `diff: nothing pending`.
+
+|5
+|La API lee la base.
+|`GET /api/srtm/resumen` con un token devuelve los totales esperados.
+
+|6
+|El log de arranque no tiene ERROR; los WARN son los esperados.
+|<<op-logs>>.
+
+|7
+|Los trabajadores corren donde deben.
+|Línea `… corre N trabajadores …` en cada instancia.
+
+|8
+|El almacén es escribible y persistente.
+|Una emisión de prueba de un año pequeño termina y su archivo se descarga.
+
+|9
+|La cabecera de los documentos es la de la municipalidad (no los datos provisionales de
+`model/data/municipalidad.json`).
+|Un PU o una HR de prueba.
+
+|10
+|PIDE y catastro están como se decidió (encendidos con credenciales, o apagados).
+|`GET /api/srtm/documentos/DNI/<dni>`; `POST /brecha/corridas` (409 si está apagado).
+
+|11
+|El respaldo de la base y del almacén está programado y se probó una restauración.
+|<<respaldo>>.
+|===
+
+[[op-periodicas]]
+=== Tareas periódicas
+
+* *Cada año:* cargar la UIT nueva y los parámetros del predial (`import_parametros.py`), la ordenanza de arbitrios con
+  su ratificación y tasas, los feriados movibles (`FERIADOS <año>`), y actualizar los valores de obras
+  complementarias de la R.M. nueva (`import_catalogos.py`).
+* *Con cada norma nueva:* versiones del CUIS (`import_cuis.py`), plazos y tasas de anuncios.
+* *Según la retención acordada:* revisar el espacio del almacén y, en S3, la regla de ciclo de vida.
+* *Periódicamente:* probar una restauración (<<proc-restaurar>>).
+
+[[respaldo]]
+== Respaldo, restauración y recuperación ante desastres
+
+[[resp-que]]
+=== Qué hay que respaldar
+
+[cols="3,5,4",options="header"]
+|===
+|Qué |Por qué |Cómo
+
+|La base completa
+|Esquema `wasichai` (metadata, usuarios, roles, permisos, auditoría y los historiales `flyway_history_*`), esquema
+`app_data` (todos los registros) y las extensiones de `public` (`pgcrypto`, `postgis`).
+|`pg_dump` de la base entera (<<proc-respaldo-base>>).
+
+|El almacén de emisiones
+|Los PDF y ZIP generados. La base solo guarda su clave y su tamaño: sin el archivo, la descarga da 404.
+|Copia del directorio `SRTM_EMISION_DIR` o del bucket (<<proc-respaldo-almacen>>).
+
+|La configuración
+|El archivo de entorno o los secretos del orquestador, y el escudo (`SRTM_MUNICIPALIDAD_ESCUDO`).
+|Con el mecanismo de secretos de la organización, cifrado.
+
+|Los datos de entrada
+|El Excel del padrón, los GeoJSON del catastro, los CSV y JSON de ordenanzas que no estén en el repositorio.
+|Almacenamiento privado.
+|===
+
+No hace falta respaldar los temporales de la emisión (`SRTM_EMISION_TEMPORALES`): son descartables y cada instancia
+los limpia al arrancar.
+
+CAUTION: Respalde la base *entera*, nunca un solo esquema. Un respaldo de `app_data` sin `wasichai` no sirve: los
+nombres de tabla y de columna, los usuarios y los permisos están en la metadata. Y uno de `wasichai` sin `app_data`
+restaura un modelo sin registros.
+
+[[proc-respaldo-base]]
+.Respaldar la base
+====
+[horizontal]
+Objetivo:: Un volcado completo y restaurable de la base de {sigla}.
+Requisitos previos:: Acceso a la base con un rol que pueda leer todos los esquemas (en desarrollo, el usuario `srtm`
+de `compose.yml`); espacio en disco.
+Directorio:: Raíz del repositorio (para `docker compose`) o cualquiera con `pg_dump` 18.
+Efecto:: Solo lee. Con la base en uso, `pg_dump` toma una foto coherente sin bloquear las escrituras.
+====
+
+. Formato personalizado (comprimido, restaurable por partes con `pg_restore`):
++
+[source,bash]
+----
+docker compose exec -T postgres \
+  pg_dump -U srtm -d srtm -Fc > srtm-$(date +%Y%m%d-%H%M).dump
+----
+. Opcionalmente, también en texto plano (legible, restaurable con `psql`):
++
+[source,bash]
+----
+docker compose exec -T postgres \
+  pg_dump -U srtm -d srtm --format=plain > srtm-$(date +%Y%m%d-%H%M).sql
+----
+. Contra un servidor (sin Docker), lo mismo con `-h <servidor> -p <puerto>`, y la clave en `~/.pgpass`, nunca en la
+  línea de comandos.
+. Copie el volcado a almacenamiento privado fuera del servidor.
+
+// fin de los pasos
+Resultado esperado:: Un archivo `.dump` que `pg_restore --list srtm-….dump | head` lee sin error y que lista los
+esquemas `wasichai` y `app_data`.
+Verificación:: `pg_restore --list srtm-….dump | grep -c 'TABLE DATA'` da un número mayor que cero, y la lista
+incluye `flyway_history_core` y `audit_log`.
+Casos especiales:: Use `exec -T`: sin él, `docker compose exec` asigna una terminal y puede alterar la salida binaria
+del formato `-Fc`. (Los ejemplos del `README.md` omiten `-T`.) Antes de una actualización de versión, nombre el
+volcado con la versión (`srtm-antes-de-<versión>.dump`) y consérvelo hasta confirmar que la versión nueva funciona.
+
+[[proc-respaldo-almacen]]
+.Respaldar el almacén de emisiones
+====
+[horizontal]
+Objetivo:: Una copia de los archivos generados, coherente con el volcado de la base.
+Requisitos previos:: Acceso de lectura al directorio del almacén o al bucket.
+Efecto:: Solo lee el origen.
+====
+
+. Con el almacén local, copie el directorio entero (por ejemplo, `rsync -a /var/lib/srtm/emisiones/ <destino>/`).
+. Con S3, use el versionado o la replicación del bucket, o una copia: `aws s3 sync s3://<bucket>/<prefijo> <destino>`.
+. Haga la copia *después* del volcado de la base: un archivo de más no estorba; uno que falte da 404 al descargarlo.
+
+// fin de los pasos
+Resultado esperado:: Cada trabajo TERMINADA con `archivo` de la base tiene su archivo en la copia, bajo
+`emision-<id>/emision-<anio>-<id>.<ext>`.
+Casos especiales:: Los archivos que la retención depuró no hacen falta: su trabajo ya no tiene `archivo`.
+
+[[resp-restaurar]]
+=== Restaurar
+
+Restaure siempre en una base *nueva y vacía*, con la *misma versión* del backend que tenía la base al respaldarla, y
+cambie la conexión del backend solo cuando la verificación pase. Así el original queda intacto hasta el final.
+
+WARNING: Restaurar sobre una base existente (`pg_restore --clean`, o `psql` de un volcado plano sobre una base con
+datos) borra o mezcla lo que tenía, sin vuelta atrás. No lo haga sobre la base en uso: restaure en una base nueva y
+cambie la conexión.
+
+[[proc-restaurar]]
+.Restaurar la base en una base nueva
+====
+[horizontal]
+Objetivo:: Una base `srtm_restaurada` idéntica al respaldo.
+Requisitos previos:: El volcado; un servidor PostgreSQL 18 con PostGIS 3.6 *disponible* (la restauración ejecuta
+`CREATE EXTENSION postgis`); un rol con permiso para crear bases y extensiones (en desarrollo, el `srtm` de
+`compose.yml`, que es superusuario); el backend apagado o apuntando a otra base.
+Directorio:: Raíz del repositorio.
+Efecto:: Crea y llena `srtm_restaurada`. No toca la base `srtm`.
+====
+
+. Cree la base vacía:
++
+[source,bash]
+----
+docker compose exec -T postgres createdb -U srtm srtm_restaurada
+----
+. Restaure el formato personalizado:
++
+[source,bash]
+----
+docker compose exec -T postgres \
+  pg_restore -U srtm -d srtm_restaurada --no-owner --exit-on-error < srtm-AAAAMMDD-HHMM.dump
+----
++
+o un volcado plano:
++
+[source,bash]
+----
+docker compose exec -T postgres \
+  psql -U srtm -d srtm_restaurada -v ON_ERROR_STOP=1 < srtm-AAAAMMDD-HHMM.sql
+----
+. Restaure el almacén en su lugar (el directorio de `SRTM_EMISION_DIR` o el bucket).
+. Arranque el backend con `WASICHAI_DB_NAME=srtm_restaurada` y siga <<proc-verificar-restauracion>>.
+. Cuando la verificación pase, deje la conexión definitiva apuntando a la base restaurada (o renómbrela, con el
+  backend apagado).
+
+// fin de los pasos
+Resultado esperado:: `pg_restore` termina con código 0 y el backend arranca sin aplicar migraciones nuevas.
+Casos especiales:: `--no-owner` asigna los objetos al rol que restaura; si se usan dos roles de base de datos
+(<<seg-roles-base>>), restaure como el rol dueño y vuelva a dar los permisos al rol de la aplicación. *No
+verificado:* la restauración con dos roles y la de `audit_log` con `--clean` (sus disparadores rechazan `TRUNCATE`);
+por eso este procedimiento usa siempre una base vacía.
+
+[[proc-verificar-restauracion]]
+.Verificar una restauración
+====
+[horizontal]
+Objetivo:: Confirmar que la base restaurada está completa antes de usarla.
+Requisitos previos:: El backend arrancado contra la base restaurada; un token de administrador.
+Efecto:: Solo lee.
+====
+
+. Salud: `GET /actuator/health` → `UP`, y el log de arranque sin errores de Flyway.
+. Modelo: `GET /api/objects` lista 42 objetos y `python3 apply.py --diff` dice `diff: nothing pending`.
+. Datos: `GET /api/srtm/resumen` devuelve los mismos totales que la base original (anótelos al respaldar).
+. Usuarios y permisos: entre con una cuenta de cada perfil y abra una pantalla suya.
+. Auditoría: `GET /api/audit?limit=5` devuelve las últimas entradas anteriores al respaldo.
+. Archivos: descargue el archivo de la emisión TERMINADA más reciente (`GET /api/srtm/emisiones/{id}/archivo`).
+. Opcional, como DBA: compare el conteo de filas de cada tabla de `app_data` con el de la base original.
+
+// fin de los pasos
+Resultado esperado:: Todas las comprobaciones coinciden con el original.
+Casos especiales:: Una descarga que da 404 indica que falta ese archivo en el almacén restaurado; una que da 410, que
+la retención lo había depurado antes del respaldo.
+
+[[resp-desastres]]
+=== Recuperación ante desastres
+
+[cols="3,4,5",options="header"]
+|===
+|Situación |Qué se pierde |Cómo se recupera
+
+|Se perdió el servidor de la aplicación
+|Nada, si la base y el almacén están en otro lado. Los temporales y la memoria de PIDE (30 min).
+|Instalar el jar en otro servidor con el mismo entorno (<<desp-servidor>>). Los lotes abandonados se retoman solos.
+
+|Se perdió la base
+|Lo escrito después del último respaldo.
+|<<proc-restaurar>> con el último volcado; después, volver a hacer lo posterior (DJ, determinaciones, actas).
+
+|Se perdió el almacén
+|Los archivos de emisión no respaldados.
+|Restaurar la copia. Lo que falte se vuelve a emitir: la base tiene lo necesario para generarlo. Borre antes los trabajos
+cuyos archivos no se recuperen, o sus descargas seguirán dando 404.
+
+|Falló una actualización de versión
+|Lo escrito con la versión nueva.
+|Las migraciones de Core no se revierten: restaurar el volcado tomado antes de actualizar y volver al jar anterior.
+
+|Se corrió `apply.py --drop` o un script de migración por error
+|Los registros de los objetos borrados (o el campo borrado).
+|Restaurar el último volcado. No hay otra vía.
+
+|Se borró un trabajo masivo por error
+|Su archivo.
+|Volver a emitir el año. Las cuotas de una determinación borrada se conservan.
+|===
+
+[[resp-demo]]
+=== Ensayo con la base de demostración
+
+Los manuales se construyen sobre una base de demostración reproducible, con datos sintéticos, que se carga, se
+exporta (volcado `.dump`, volcado `.sql`, datos y manifiesto), se restaura en otra base y se verifica (conteos,
+claves foráneas, secuencias). Es un buen ensayo del respaldo y la restauración sin datos reales: siga el
+procedimiento de la base de demostración (demo/README.adoc).
+
+.Ciclo de la base de demostración
+image::{diagramas}/demo-reconstruccion.{diagext}[Ciclo de la demo: levantar, sembrar, exportar, restaurar, verificar y capturar,role=diagrama]
+
+[[diagnostico]]
+== Diagnóstico de problemas frecuentes
+
+[cols="4,4,5",options="header"]
+|===
+|Síntoma |Causa probable |Acción
+
+|`Could not find wasichai:wasichai-spring-boot-starter…` al construir
+|Sin token de GitHub Packages y sin `publishToMavenLocal`.
+|<<proc-token-paquetes>>.
+
+|`Connection refused` a `localhost:5433`
+|La base no está arriba, o falta el túnel con un Docker remoto.
+|`docker compose up -d`; `ssh -N -L 5433:localhost:5433 <servidor>`.
+
+|El backend no arranca: falta `wasichai.security.jwt.secret`
+|`WASICHAI_JWT_SECRET` definido vacío en el entorno.
+|Defínalo con 32 bytes o más, o quítelo para usar el de desarrollo (solo en desarrollo).
+
+|El backend no arranca: error con el escudo
+|`SRTM_MUNICIPALIDAD_ESCUDO` apunta a un archivo que no existe o no es PNG ni JPG.
+|Corrija la ruta (`file:` o `classpath:`) o déjelo vacío.
+
+|El backend no arranca con `almacen=s3`
+|Falta el bucket, no existe o las credenciales no llegan (`HeadBucket`).
+|Revise `SRTM_EMISION_S3_*`, la región y el rol o las claves.
+
+|Puerto 8090 ocupado
+|Otro backend corriendo.
+|`lsof -iTCP:8090 -sTCP:LISTEN`.
+
+|`apply.py`: `connection failed`
+|El servidor no está en `WASICHAI_CORE`.
+|Arranque el backend o corrija `--core`.
+
+|401 en toda llamada
+|Sin `Authorization: Bearer`, token vencido (8 h) o firmado con otro `WASICHAI_JWT_SECRET`.
+|Inicie sesión otra vez.
+
+|403 «… exige permiso de creación sobre …»
+|El rol no tiene el permiso del acto.
+|Dé el permiso de la matriz (<<ref-permisos>>) al rol.
+
+|403 «… solo lo escribe srtm, por su api …»
+|Escritura de infracciones o anuncios desde `/admin` o la API genérica.
+|Use la pantalla o la ruta de {sigla}. Es intencional, también para ADMIN.
+
+|409 «Ya existe un registro con ese valor: un campo único no se repite»
+|Valor único repetido (código, número, clave).
+|Use otro valor; si es un acto repetido, ya estaba registrado.
+
+|409 «… solo se agrega: no se edita ni se borra, por ninguna puerta», o el 409 de `appendOnly` de Core
+|PUT o DELETE de un objeto de infracciones o de anuncios (regla de {sigla}), o de una cuota o su anulación
+(`appendOnly`).
+|Anule en lugar de editar (cuota, acta); los anuncios se cesan o retiran.
+
+|409 «Ya hay una emisión masiva de <año> en curso»
+|Otra emisión del mismo año y organización está activa.
+|Espere a que termine o bórrela.
+
+|409 «Catastro no configurado…» al lanzar la brecha
+|`SRTM_CATASTRO_ENABLED=false` (por defecto) o faltan URL, `client-id` o `client-secret`.
+|Configure catastro-backend (<<ref-config-catastro>>).
+
+|409 «Catastro sin organización…» o «… para esta organización»
+|Falta `SRTM_CATASTRO_ORGANIZACION`, o la corrida es de otra organización.
+|Fije el slug o el id de la organización correcta.
+
+|Corrida de la brecha FALLIDA con «catastro-backend no respondió las valuaciones de <año> (página N):
+DataBufferLimitException»
+|Una página de valuaciones pasó de 32 MiB, el límite del cliente (`maxInMemorySize` en `ClienteCatastro`).
+|*No verificado* con datos reales. El tamaño de página (500) y el límite están fijos en el código: hace falta un
+cambio en {sigla} o páginas más livianas en catastro-backend.
+
+|Corrida FALLIDA «El catastro no devolvió valuaciones de <año>…»
+|catastro-backend no tiene valuaciones de ese año.
+|Revise el año en catastro-backend.
+
+|409 en `GET /emisiones/{id}/archivo`
+|La emisión no está TERMINADA.
+|Espere; siga `GET /emisiones/{id}`.
+
+|410 en la descarga
+|La retención depuró el archivo («archivo depurado»).
+|Vuelva a emitir el año; ajuste `SRTM_EMISION_CONSERVAR` / `_DIAS`.
+
+|404 en la descarga de una emisión TERMINADA
+|El almacén no tiene la clave (almacén restaurado incompleto, migración de local a S3 sin copiar los archivos).
+|Copie los archivos con sus claves (`aws s3 sync <dir> s3://<bucket>/<prefijo>`) o vuelva a emitir.
+
+|422 con `faltan` (UIT, `TASA_ARBITRIO`, `PLAZO`, `FERIADOS`, `TASA_ANUNCIO`…)
+|Falta un parámetro tributario del año.
+|Cárguelo con `import_parametros.py --csv` (doble firma).
+
+|Predio sin determinar con `TASA_ARBITRIO` en `faltan`, aunque la tasa está cargada
+|La zona o la afluencia se cargó con otro texto que la clave de la tasa («Zona 1» frente a `ZONA_1`).
+|Normalice `ARBITRIO_ZONA`, `zona_arbitrio_ubicacion` y `ARBITRIO_AFLUENCIA`.
+
+|422 «El parámetro 'x' …»
+|Filtro desconocido o mal formado.
+|Corrija la consulta; el mensaje lista los filtros válidos.
+
+|Emisión o determinación FALLIDA «interrumpida: el proceso que la corría ya no está»
+|La instancia murió durante la preparación, o el trabajo era de la versión anterior a los lotes.
+|Vuelva a lanzarla.
+
+|Lote FALLIDO «el usuario que lanzó la emisión ya no existe o está deshabilitado»
+|Se deshabilitó o borró a quien lanzó el trabajo.
+|Lance el trabajo con otro usuario.
+
+|Los trabajos no avanzan
+|`SRTM_EMISION_TRABAJADORES=0` en todas las instancias, o pool de conexiones agotado.
+|Revise la línea de arranque de los trabajadores.
+
+|Un cambio en `/admin` no aparece en los PDF
+|Caché de la cabecera (1 min) o de la metadata (5 s entre instancias).
+|Espere; o reinicie.
+
+|`integrationTest` no arranca (Ryuk o PostgreSQL no responden)
+|Docker remoto: Testcontainers no llega a sus puertos.
+|<<proc-tests-base-externa>>, o deje que lo corra el CI.
+
+|`integrationTest` en verde sin haber corrido
+|Caché de Gradle.
+|`./gradlew integrationTest --rerun`.
+
+|El puerto 5433 no responde desde otra máquina
+|`compose.yml` publica solo en `127.0.0.1`, a propósito.
+|Use un túnel SSH; no abra el puerto.
+
+|WARN de `AuditLogOwnershipCheck` al arrancar
+|El rol de la aplicación es dueño o superusuario.
+|Esperado en desarrollo; en producción, <<seg-roles-base>>.
+|===
+
+[[pendientes]]
+== Pendientes y limitaciones conocidas
+
+[cols="3,7",options="header"]
+|===
+|Tema |Estado
+
+|PIDE RENIEC
+|El contrato de `PideReniec` sale de ejemplos publicados y nunca se probó contra la PIDE real. Apagado.
+
+|Brecha de recaudación
+|D8 (deducción Amazonía) sigue abierta; las demás decisiones están confirmadas. Requiere catastro-backend y su
+cuenta de servicio; apagada por defecto.
+
+|Tasas de arbitrios de Perené
+|No cargadas: falta una transcripción verificada de la ordenanza y su ratificación. Solo hay datos ficticios.
+
+|Parámetros de sanciones y anuncios
+|Plazos y feriados reales no transcritos en `normativa`; la tasa de anuncios sale del TUPA 2019 por decisión del
+usuario.
+
+|Cobranza
+|{sigla} determina y no cobra: deuda, pagos, recibos y coactiva son de `caja-backend`.
+
+|Despliegue
+|No hay imagen de Docker, manifiestos ni infraestructura como código; `srtm-infrastructure` está vacío.
+
+|Seguridad
+|Semilla de desarrollo activa por defecto; límite de intentos, revocación de tokens y política de claves apagados;
+un solo rol de base de datos en los entornos actuales. `SECURITY.md` sin completar.
+
+|Medición
+|Falta la cifra de la emisión masiva con el padrón real en dev (#55).
+
+|Release
+|`v0.9.0` usa wasichai 0.6.0; `main` (wasichai 1.2.0, brecha) no tiene release propio y `release-as` sigue en la
+configuración.
+|===
+
+:glosario-estilo: appendix
+include::../referencia/glosario.adoc[]

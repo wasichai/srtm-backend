@@ -1,0 +1,7 @@
+flowchart LR
+  A["make demo-arriba<br/>contenedor srtm-docs"] --> B["Core :8098<br/>migraciones"]
+  B --> C["make demo-sembrar<br/>modelo + datos sintéticos"]
+  C --> D["make demo-exportar<br/>.dump · .sql · datos.sql<br/>manifiesto.json"]
+  D --> E["make demo-restaurar<br/>srtm_demo_restaurada"]
+  E --> F["make demo-verificar<br/>conteos · FK · secuencias"]
+  F --> G["make capturas<br/>Playwright"]

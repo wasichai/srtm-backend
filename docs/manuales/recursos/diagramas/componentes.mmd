@@ -1,0 +1,31 @@
+flowchart TB
+  subgraph SRTM["srtm-backend (src/main/kotlin/srtm)"]
+    direction TB
+    R["rentas<br/>contribuyentes · predios · DJ · catastro"]
+    I["impuesto<br/>liquidación del predial"]
+    E["emision<br/>PU · HR · emisión masiva"]
+    AR["arbitrios<br/>determinación · HLA · masiva"]
+    S["sanciones<br/>CUIS · actas · resoluciones"]
+    AN["anuncios<br/>padrón · movimientos"]
+    B["brecha<br/>recaudación vs. catastro"]
+    PI["pide<br/>RENIEC"]
+    T["transversal<br/>GuardiaDeEscritura · Candados · Permisos · Faltan"]
+  end
+  subgraph W["wasichai 1.2 (starters)"]
+    direction LR
+    WC["core"] --- WW["workflow"] --- WD["documents"] --- WV["views"] --- WF["forms"] --- WP["pages"] --- WG["gis"]
+  end
+  R --> I
+  E --> R
+  E --> I
+  E --> AR
+  AR --> R
+  S --> R
+  AN --> R
+  B --> R
+  B --> I
+  B --> AR
+  R --> PI
+  SRTM --> T
+  T --> WC
+  SRTM --> W

@@ -1,0 +1,14 @@
+erDiagram
+  contribuyente ||--o{ declaracion_predial : declara
+  predio ||--o{ declaracion_predial : "es declarado en"
+  contribuyente ||--o{ domicilio : tiene
+  contribuyente ||--o{ relacionado : tiene
+  contribuyente ||--o{ medio_contacto : tiene
+  contribuyente ||--o{ sustento : tiene
+  declaracion_predial ||--o{ transferente : registra
+  declaracion_predial ||--o{ nivel_construccion : registra
+  declaracion_predial ||--o{ obra_complementaria : registra
+  declaracion_predial ||--o{ otro_frente : registra
+  catastro_fiscal |o..o{ predio : "por código CPU"
+  ubigeo |o..o{ domicilio : "por código"
+  categoria_valor |o..o{ nivel_construccion : "por categoría"

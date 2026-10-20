@@ -1,0 +1,61 @@
+// Capítulo común de los manuales de usuario: búsquedas, listas y fichas abiertas.
+[[busquedas]]
+== Búsquedas, listas y fichas
+
+[[busqueda-general]]
+=== La búsqueda general
+
+La caja de búsqueda de la barra superior busca a la vez contribuyentes y predios. Acepta un DNI, un RUC, un nombre o
+razón social, un código de contribuyente o de predio, o parte de una dirección.
+
+[[proc-buscar-general]]
+.Buscar un contribuyente o un predio desde la barra
+====
+[horizontal]
+Objetivo:: Encontrar la ficha de un contribuyente o de un predio sin saber en qué lista está.
+Requisitos previos:: Permiso de lectura sobre contribuyentes y predios (todos los perfiles lo tienen).
+====
+
+. Escriba en la caja de búsqueda (*DNI, RUC, nombre, código o dirección*) y pulse kbd:[Enter].
+. El sistema muestra dos bloques: *Contribuyentes* y *Predios*, cada uno con sus primeras coincidencias
+  (<<fig-busqueda-general>>).
+. Pulse la fila que busca para abrir su ficha, o *Ver los N* para ver la lista completa de ese bloque.
+
+// fin de los pasos
+Resultado esperado:: Se abre la ficha elegida, en una pestaña nueva de *Fichas abiertas*.
+Casos especiales:: Si no hay coincidencias, el bloque dice *Ningún contribuyente coincide* o *Ningún predio coincide*.
+Pruebe con menos palabras o solo con el número de documento.
+
+[[fig-busqueda-general]]
+.Resultado de la búsqueda general
+image::{capturas}/comun/busqueda-general.png[Página de resultados con un bloque de contribuyentes y otro de predios]
+
+[[listas]]
+=== Listas, filtros y páginas
+
+Las listas del portal (contribuyentes, predios, cuotas, expedientes, anuncios…) comparten el mismo comportamiento:
+
+* Las listas de los módulos muestran *20 filas por página*; las listas dentro de una ficha (domicilios, niveles,
+  condóminos…) muestran 10 y tienen un selector *Filas* para cambiarlo. Los controles de página, al pie de la lista,
+  avanzan y retroceden.
+* Los filtros están sobre la lista. Una lista con caja de búsqueda filtra mientras escribe; una con varios filtros
+  tiene un botón btn:[Buscar] que los aplica todos juntos.
+* Una fila se abre con un clic: abre la ficha del registro.
+* Las listas no tienen exportación a hojas de cálculo. Para sacar documentos en bloque existe la emisión masiva
+  (en el {m-arbitrios}).
+
+[[fichas-abiertas]]
+=== Fichas abiertas
+
+Cada ficha que abre (un contribuyente, un predio, una declaración, un lote de catastro, un expediente) queda como una
+pestaña en la segunda fila de la barra superior, hasta que la cierre con su *×*. Así puede atender a varias personas a
+la vez y volver a cualquiera con un clic (<<fig-fichas-abiertas>>). La página *Inicio* las lista también.
+
+[[fig-fichas-abiertas]]
+.Varias fichas abiertas
+image::{capturas}/comun/fichas-abiertas.png[Barra superior con las pestañas Inicio, un contribuyente, un predio y una declaración abiertos]
+
+Las fichas abiertas se conservan si recarga la página, mientras no cierre esa pestaña del navegador ni su sesión, y
+son solo suyas: otra persona que ingrese en el mismo equipo no las ve.
+
+NOTE: Cerrar una pestaña con cambios sin grabar pregunta antes (<<salir-sin-guardar>>).

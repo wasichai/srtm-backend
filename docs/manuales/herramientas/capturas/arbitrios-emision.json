@@ -1,0 +1,684 @@
+{
+    "_comentario": "Capturas del Manual de arbitrios y emisión (usuario/arbitrios-emision.adoc), con la cuenta del perfil ARBITRIOS_EMISION. Ninguna graba datos: los diálogos de Determinar y Eliminar se abren y se llenan, nunca se confirman. Los estados (determinación masiva y emisión masiva 2026 TERMINADAS, cuotas determinadas) los deja demo/sembrar_demo.py.",
+    "referencias": {
+        "arb_rosa": {
+            "get": "/api/srtm/contribuyentes?q=91000101",
+            "campo": "content.0.id"
+        },
+        "arb_p0001": {
+            "get": "/api/srtm/predios?q=01-01-0001",
+            "campo": "content.0.id"
+        },
+        "arb_p0002": {
+            "get": "/api/srtm/predios?q=01-01-0002",
+            "campo": "content.0.id"
+        },
+        "arb_dj_0002": {
+            "get": "/api/srtm/predios/{ref:arb_p0002}/declaraciones?anio=2026",
+            "campo": "0.declaracion.id"
+        },
+        "arb_p030206": {
+            "get": "/api/srtm/predios?q=03-02-0006",
+            "campo": "content.0.id"
+        }
+    },
+    "capturas": [
+        {
+            "id": "arb-riel",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/riel.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/"
+                ],
+                [
+                    "clic",
+                    "[data-ui=riel] button:has-text('Arbitrios')"
+                ],
+                [
+                    "esperar",
+                    "[data-ui=riel-panel]"
+                ]
+            ],
+            "area": {
+                "x": 0,
+                "y": 0,
+                "width": 720,
+                "height": 560
+            }
+        },
+        {
+            "id": "arb-tasas",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/tasas.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/arbitrios/tasas"
+                ],
+                [
+                    "esperarTexto",
+                    "Ordenanza ficticia DEMO"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 90,
+                "width": 1336,
+                "height": 910
+            }
+        },
+        {
+            "id": "arb-tasas-zonas",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/tasas-zonas.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/arbitrios/tasas"
+                ],
+                [
+                    "esperarTexto",
+                    "Zona de cada sector catastral"
+                ]
+            ],
+            "recorte": "h2:text-is('Zona de cada sector catastral')",
+            "subir": 2,
+            "margen": 8
+        },
+        {
+            "id": "arb-tasas-usos",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/tasas-usos.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/arbitrios/tasas"
+                ],
+                [
+                    "esperarTexto",
+                    "Uso de arbitrio de cada uso del predio"
+                ]
+            ],
+            "recorte": "h2:text-is('Uso de arbitrio de cada uso del predio')",
+            "subir": 2,
+            "margen": 8
+        },
+        {
+            "id": "arb-tasas-vencimientos",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/tasas-vencimientos.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/arbitrios/tasas"
+                ],
+                [
+                    "esperarTexto",
+                    "Vencimientos"
+                ]
+            ],
+            "recorte": "h2:text-is('Vencimientos')",
+            "subir": 2,
+            "margen": 8
+        },
+        {
+            "id": "arb-tasas-faltan",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/tasas-faltan.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/arbitrios/tasas"
+                ],
+                [
+                    "esperarTexto",
+                    "Ordenanza ficticia DEMO"
+                ],
+                [
+                    "elegir",
+                    "label:has-text('Año') select",
+                    "2025"
+                ],
+                [
+                    "esperarTexto",
+                    "Al año 2025 le falta"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 90,
+                "width": 1336,
+                "height": 560
+            }
+        },
+        {
+            "id": "arb-cuotas",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/cuotas.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/arbitrios"
+                ],
+                [
+                    "esperarTexto",
+                    "Ver contribuyente"
+                ]
+            ]
+        },
+        {
+            "id": "arb-cuotas-servicio",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/cuotas-servicio.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/arbitrios"
+                ],
+                [
+                    "esperarTexto",
+                    "Ver contribuyente"
+                ],
+                [
+                    "elegir",
+                    "label:has-text('Servicio') select",
+                    "Recolección de residuos sólidos"
+                ],
+                [
+                    "pausa",
+                    "1500"
+                ],
+                [
+                    "esperarTexto",
+                    "Ver contribuyente"
+                ],
+                [
+                    "pasar",
+                    "table tbody tr:nth-child(2) td:nth-child(3) button"
+                ],
+                [
+                    "pausa",
+                    "600"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 90,
+                "width": 1336,
+                "height": 520
+            }
+        },
+        {
+            "id": "arb-predio-arbitrios",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/predio-arbitrios.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios/{ref:arb_p0002}?tab=arbitrios"
+                ],
+                [
+                    "esperarTexto",
+                    "Determinados al"
+                ],
+                [
+                    "desplazar",
+                    "[aria-label='Titular de cada mes']"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8,
+            "vista": {
+                "width": 1920,
+                "height": 1000
+            }
+        },
+        {
+            "id": "arb-desglose",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/desglose.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios/{ref:arb_p0002}?tab=arbitrios"
+                ],
+                [
+                    "esperarTexto",
+                    "Determinados al"
+                ],
+                [
+                    "pasar",
+                    "[role=tabpanel] tbody tr:nth-child(2) td:nth-child(3) button"
+                ],
+                [
+                    "pausa",
+                    "600"
+                ]
+            ],
+            "recorte": "[role=tabpanel] table",
+            "margen": 12,
+            "altoMax": 420
+        },
+        {
+            "id": "arb-inafectacion",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/inafectacion.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios/{ref:arb_p030206}?tab=arbitrios"
+                ],
+                [
+                    "esperarTexto",
+                    "Determinados al"
+                ]
+            ],
+            "vista": {
+                "width": 1920,
+                "height": 1000
+            },
+            "recorte": "[role=tabpanel] table",
+            "margen": 12
+        },
+        {
+            "id": "arb-contribuyente-arbitrios",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/contribuyente-arbitrios.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:arb_rosa}?tab=arbitrios"
+                ],
+                [
+                    "esperarTexto",
+                    "Determinados al"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 760
+            }
+        },
+        {
+            "id": "arb-contribuyente-total",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/contribuyente-total.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:arb_rosa}?tab=arbitrios"
+                ],
+                [
+                    "esperar",
+                    "[data-testid=total-arbitrios]"
+                ],
+                [
+                    "desplazar",
+                    "[data-testid=total-arbitrios]"
+                ]
+            ],
+            "recorte": "[data-testid=total-arbitrios]",
+            "margen": 12
+        },
+        {
+            "id": "arb-determinar-predio",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/determinar-predio.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios/{ref:arb_p0002}?tab=arbitrios"
+                ],
+                [
+                    "esperarTexto",
+                    "Determinados al"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Determinar arbitrios 2026')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] textarea",
+                    "Se rectificó el frontis en la DJ 2026 (expediente 1234-2026)"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 16
+        },
+        {
+            "id": "arb-determinar-contribuyente",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/determinar-contribuyente.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/contribuyentes/{ref:arb_rosa}?tab=arbitrios"
+                ],
+                [
+                    "esperarTexto",
+                    "Determinados al"
+                ],
+                [
+                    "clic",
+                    "button:has-text('Determinar arbitrios 2026')"
+                ],
+                [
+                    "esperar",
+                    "[role=dialog]"
+                ],
+                [
+                    "llenar",
+                    "[role=dialog] textarea",
+                    "Alta"
+                ]
+            ],
+            "recorte": "[role=dialog]",
+            "margen": 16
+        },
+        {
+            "id": "arb-predio-faltan",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/predio-faltan.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios/{ref:arb_p0001}?tab=arbitrios"
+                ],
+                [
+                    "esperarTexto",
+                    "Determinados al"
+                ],
+                [
+                    "elegir",
+                    "label:has-text('Año') select",
+                    "2025"
+                ],
+                [
+                    "esperarTexto",
+                    "No se pueden determinar"
+                ],
+                [
+                    "pausa",
+                    "800"
+                ]
+            ],
+            "recorte": "[role=tabpanel]",
+            "margen": 8
+        },
+        {
+            "id": "arb-dj-caracteristicas",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/dj-caracteristicas.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/declaraciones/{ref:arb_dj_0002}?tab=caracteristicas"
+                ],
+                [
+                    "esperarTexto",
+                    "Características de predio"
+                ],
+                [
+                    "desplazar",
+                    "legend:has-text('Características de predio')"
+                ]
+            ],
+            "recorte": "fieldset:has(legend:has-text('Características de predio'))",
+            "margen": 12
+        },
+        {
+            "id": "arb-predio-ubicacion",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/predio-ubicacion.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/predios/{ref:arb_p0002}"
+                ],
+                [
+                    "esperarTexto",
+                    "Ubicación respecto a áreas verdes"
+                ],
+                [
+                    "marcar",
+                    "text=Ubicación respecto a áreas verdes"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 100,
+                "width": 1336,
+                "height": 900
+            }
+        },
+        {
+            "id": "arb-pdf-hla-1",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/pdf-hla-1.png",
+            "pdf": "/api/srtm/contribuyentes/{ref:arb_rosa}/hla?anio=2026",
+            "pagina": 1,
+            "resolucion": 100
+        },
+        {
+            "id": "arb-pdf-hla-2",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/pdf-hla-2.png",
+            "pdf": "/api/srtm/contribuyentes/{ref:arb_rosa}/hla?anio=2026",
+            "pagina": 2,
+            "resolucion": 100
+        },
+        {
+            "id": "arb-determinaciones",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/determinaciones.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/arbitrios/determinaciones"
+                ],
+                [
+                    "esperarTexto",
+                    "Terminada"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 90,
+                "width": 1336,
+                "height": 480
+            }
+        },
+        {
+            "id": "arb-determinacion-lanzar",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/determinacion-lanzar.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/arbitrios/determinaciones"
+                ],
+                [
+                    "esperarTexto",
+                    "Terminada"
+                ],
+                [
+                    "llenar",
+                    "form:has(button:has-text('Determinar')) textarea",
+                    "Determinación de los arbitrios 2026 tras la carga de la ordenanza ratificada"
+                ],
+                [
+                    "marcar",
+                    "form button:has-text('Determinar')"
+                ]
+            ],
+            "recorte": "form:has(button:has-text('Determinar'))",
+            "subir": 1,
+            "margen": 8
+        },
+        {
+            "id": "arb-determinacion-eliminar",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/determinacion-eliminar.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/arbitrios/determinaciones"
+                ],
+                [
+                    "esperarTexto",
+                    "Terminada"
+                ],
+                [
+                    "clic",
+                    "table button:has-text('Eliminar')"
+                ],
+                [
+                    "esperarTexto",
+                    "¿Eliminar esta determinación masiva?"
+                ]
+            ],
+            "recorte": "[role=dialog], [role=alertdialog]",
+            "margen": 16
+        },
+        {
+            "id": "arb-riel-emision",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/riel-emision.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/"
+                ],
+                [
+                    "clic",
+                    "[data-ui=riel] button:has-text('Emisión')"
+                ],
+                [
+                    "esperar",
+                    "[data-ui=riel-panel]"
+                ]
+            ],
+            "area": {
+                "x": 0,
+                "y": 0,
+                "width": 720,
+                "height": 680
+            }
+        },
+        {
+            "id": "arb-emisiones",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/emisiones.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/emisiones"
+                ],
+                [
+                    "esperarTexto",
+                    "Terminada"
+                ]
+            ],
+            "area": {
+                "x": 104,
+                "y": 90,
+                "width": 1336,
+                "height": 440
+            }
+        },
+        {
+            "id": "arb-emision-formulario",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/emision-formulario.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/emisiones"
+                ],
+                [
+                    "esperarTexto",
+                    "Terminada"
+                ],
+                [
+                    "clic",
+                    "input[name=formato][value=ZIP]"
+                ],
+                [
+                    "clic",
+                    "input[name=documentos][value=HLA]"
+                ],
+                [
+                    "marcar",
+                    "form button:has-text('Emitir')"
+                ]
+            ],
+            "recorte": "form:has(button:has-text('Emitir'))",
+            "subir": 1,
+            "margen": 8
+        },
+        {
+            "id": "arb-emision-sin-documentos",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/emision-sin-documentos.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/emisiones"
+                ],
+                [
+                    "esperarTexto",
+                    "Terminada"
+                ],
+                [
+                    "clic",
+                    "input[name=documentos][value=HR]"
+                ],
+                [
+                    "clic",
+                    "input[name=documentos][value=PU]"
+                ]
+            ],
+            "recorte": "form:has(button:has-text('Emitir'))",
+            "subir": 1,
+            "margen": 8
+        },
+        {
+            "id": "arb-emision-eliminar",
+            "perfil": "arbitrios",
+            "archivo": "usuario/arbitrios-emision/emision-eliminar.png",
+            "pasos": [
+                [
+                    "ir",
+                    "/emisiones"
+                ],
+                [
+                    "esperarTexto",
+                    "Terminada"
+                ],
+                [
+                    "clic",
+                    "table button:has-text('Eliminar')"
+                ],
+                [
+                    "esperarTexto",
+                    "¿Eliminar esta emisión?"
+                ]
+            ],
+            "recorte": "[role=dialog], [role=alertdialog]",
+            "margen": 16
+        }
+    ]
+}

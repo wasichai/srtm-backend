@@ -1,0 +1,17 @@
+{
+    "name": "srtm-manuales-herramientas",
+    "private": true,
+    "description": "Capturas (Playwright) y diagramas (mermaid-cli) de los manuales. No forma parte del build del backend.",
+    "type": "module",
+    "engines": {
+        "node": ">=22"
+    },
+    "scripts": {
+        "capturas": "node capturas.mjs",
+        "diagramas": "./diagramas.sh"
+    },
+    "devDependencies": {
+        "@mermaid-js/mermaid-cli": "12.0.0",
+        "playwright": "1.60.0"
+    }
+}
