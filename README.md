@@ -1853,6 +1853,7 @@ Se descarta `orden2`, que es solo el número de fila.
 | Método | Ruta | |
 |---|---|---|
 | GET | `/api/srtm/resumen` | totales del padrón |
+| GET | `/api/srtm/municipalidad` | la cabecera y el mapa del portal: `{nombre, oficina, escudo, extension, centro, lugar}` de la organización del usuario; 403 sin lectura sobre `municipalidad` ([El portal y su municipalidad](#el-portal-y-su-municipalidad)) |
 | GET | `/api/srtm/catalogos` | opciones ENUM por objeto y campo, de los objetos que el rol puede leer |
 | GET | `/api/srtm/ubigeos` | la lista INEI completa; la cascada departamento → provincia → distrito se hace en el portal |
 | GET | `/api/srtm/vias?q&tipo&ubigeo`, `/api/srtm/unidades-urbanas?q&tipo&ubigeo` | sugerencias del catálogo |
@@ -2124,6 +2125,31 @@ emisión (hora de Lima); la gerencia; la dirección; una línea punteada, y el t
     (`SRTM_MUNICIPALIDAD_ESCUDO`), `classpath:…` o `file:…`, solo PNG o JPG. Se lee una vez al arrancar: si no es PNG ni
     JPG, o si no existe, la app no arranca y el error nombra el archivo. Vacío (el valor por defecto), sin escudo. En
     una instalación con varias organizaciones conviene dejarlo vacío: si no, la que no subió el suyo imprime este.
+
+### El portal y su municipalidad
+
+`GET /api/srtm/municipalidad` da al portal (srtm-ui) lo que muestra de la organización del usuario, para no fijar
+ninguna municipalidad en el frontend (wasichai/srtm-ui#112):
+
+```json
+{"nombre": "MUNICIPALIDAD DISTRITAL DE PERENÉ", "oficina": "…", "escudo": "data:image/png;base64,…",
+ "extension": [-75.31, -10.99, -75.18, -10.90], "centro": [-75.245, -10.945],
+ "lugar": {"ubigeo": "120302", "departamento": "JUNIN", "provincia": "CHANCHAMAYO", "distrito": "PERENE", "region": "SELVA"}}
+```
+
+- **Cabecera:** `nombre`, `oficina` y `escudo` son los de la [cabecera de los documentos](#cabecera-de-los-documentos)
+  (`CabeceraDocumento`): el registro `municipalidad`, el mismo nombre de respaldo sin registro y el escudo como data
+  URI (o `null`). Pide lectura sobre `municipalidad`, como emitir; sin ella, 403. Comparte la caché por organización.
+- **Mapa:** `extension` (`[oeste, sur, este, norte]`, EPSG:4326) cubre los polígonos `lote_geom` de `predio` y de
+  `catastro_fiscal` de la organización, y `centro` es su punto medio. Sin lotes, los dos son `null` y el portal abre
+  el mapa en un centro neutro (Perú). `municipalidad` no tiene ubigeo ni coordenadas, y `model.json` no cambia: se
+  calcula con un `ST_Extent` por tabla (una lectura de las cajas de los polígonos, sin traer los lotes).
+- **Lugar por omisión:** `lugar` es el ubigeo que más predios tienen, con el departamento, la provincia, el distrito y
+  la región que más se repiten en esos predios. El portal lo propone al registrar un predio, un domicilio, un
+  transferente o un lote. Sin predios con ubigeo es `null` y no propone ninguno.
+- **Permisos:** `extension` y `lugar` se calculan en SQL sobre las tablas del objeto (como `TablasCore`), fuera de
+  `RecordService`; por eso solo cuentan los objetos que el rol puede leer (`predio`, `catastro_fiscal`). Si un cálculo
+  falla, el campo sale `null` y el log lo avisa (WARN): la cabecera nunca se pierde por el mapa.
 
 ### Archivos (wasichai-files)
 
