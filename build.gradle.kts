@@ -23,7 +23,7 @@ plugins {
 }
 
 group = "srtm"
-description = "srtm-backend: rentas municipales on wasichai (core, workflow, documents, views, forms, pages, gis)"
+description = "srtm-backend: rentas municipales on wasichai (core, workflow, documents, views, forms, pages, gis, files)"
 
 val wasichaiVersion = "1.2.0"
 
@@ -37,6 +37,9 @@ dependencies {
     implementation("wasichai:wasichai-spring-boot-starter-pages")
     // lotes of the catastro fiscal and of the predios, the domicilio's point. needs PostGIS (compose.yml)
     implementation("wasichai:wasichai-spring-boot-starter-gis")
+    // the FILE and IMAGE fields: the municipalidad's escudo. its s3 store is srtm's (ArchivosS3, over the sync client):
+    // the module's wants the sdk's async client, whose netty is left out below
+    implementation("wasichai:wasichai-spring-boot-starter-files")
 
     // srtm.emision: html from thymeleaf (standalone, no mvc: the app is webflux) to pdf with openhtmltopdf,
     // merged with pdfbox

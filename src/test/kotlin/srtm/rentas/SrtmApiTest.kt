@@ -6,11 +6,15 @@ import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.core.io.ByteArrayResource
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
+import org.springframework.http.client.MultipartBodyBuilder
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.reactive.server.WebTestClient
+import org.springframework.web.reactive.function.BodyInserters
 import srtm.emision.IdentidadEmision
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
@@ -79,6 +83,20 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                 if (field["type"].asString() == "GEOMETRY") {
                     put("geometryType", field["geometryType"].asString())
                     put("srid", field["srid"]?.asInt() ?: 4326)
+                }
+                // wasichai-files' settings, fixed at creation
+                if (field["type"].asString() in setOf("FILE", "IMAGE")) {
+                    field["contentTypes"]?.let { tipos ->
+                        put(
+                            "contentTypes",
+                            tipos
+                                .iterator()
+                                .asSequence()
+                                .map { it.asString() }
+                                .toList()
+                        )
+                    }
+                    field["maxBytes"]?.let { put("maxBytes", it.asLong()) }
                 }
             }
 
@@ -194,6 +212,54 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
         val suyo = bearer(email, clave)
         aplicarModelo(suyo)
         return suyo
+    }
+
+    // the documents' header
+
+    // the organization's municipalidad record (the oldest, the one the header reads) with `datos`, created if it has
+    // none: its id
+    protected fun municipalidad(
+        datos: Map<String, Any?>,
+        token: String = this.token
+    ): String {
+        val existente = tree(send("GET", "/api/objects/municipalidad/records?sort=created_at", null, HttpStatus.OK, token))["content"].firstOrNull()
+        if (existente == null) return post("/api/objects/municipalidad/records", mapOf("attributes" to datos), token)["id"].asString()
+        val id = existente["id"].asString()
+        put("/api/objects/municipalidad/records/$id", mapOf("attributes" to datos), token)
+        return id
+    }
+
+    // uploads `imagen` as the record's escudo, as the admin does (wasichai-files): the descriptor it stored
+    protected fun subirEscudo(
+        municipalidad: String,
+        imagen: ByteArray,
+        nombre: String = "escudo.png",
+        token: String = this.token
+    ): JsonNode {
+        val (status, cuerpo) = subida(municipalidad, imagen, nombre, token)
+        assertEquals(HttpStatus.OK, status, cuerpo)
+        return tree(cuerpo)["attributes"]["escudo"]
+    }
+
+    // the upload's status and body, without asserting
+    protected fun subida(
+        municipalidad: String,
+        imagen: ByteArray,
+        nombre: String,
+        token: String = this.token
+    ): Pair<HttpStatus, String> {
+        val partes = MultipartBodyBuilder().apply { part("file", ByteArrayResource(imagen)).filename(nombre) }.build()
+        val result =
+            client
+                .post()
+                .uri("/api/objects/municipalidad/records/$municipalidad/files/escudo")
+                .header(HttpHeaders.AUTHORIZATION, token)
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(BodyInserters.fromMultipartData(partes))
+                .exchange()
+                .expectBody(String::class.java)
+                .returnResult()
+        return HttpStatus.valueOf(result.status.value()) to (result.responseBody ?: "")
     }
 
     // calls

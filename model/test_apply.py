@@ -338,6 +338,35 @@ class DiffTests(ApplyCliTestCase):
         self.assertEqual(would_lines(out), [])
         self.assertIn("diff: nothing pending", out)
 
+    def test_a_core_without_the_escudo_would_get_only_that_field(self):
+        # dev before this change: the municipalidad without its escudo. the real run adds it with wasichai-files' settings
+        model = load_model()
+        fields = {o["name"]: core_fields_with_relations(model, o["name"]) for o in model["objects"]}
+        fields["municipalidad"] = [f for f in fields["municipalidad"] if f["name"] != "escudo"]
+        self.core = FakeCore(
+            existing_objects=[o["name"] for o in model["objects"]],
+            existing_relationships=[r["name"] for r in model["relationships"]],
+            existing_fields=fields,
+            object_rules=core_rules(model),
+            object_meta=core_meta(model),
+        )
+        self.addCleanup(self.core.stop)
+        code, out, err = self.run_cli(["--diff"])
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(writes(self.core), [])
+        self.assertEqual(would_lines(out), ["would POST /api/metadata/objects/municipalidad/fields escudo"])
+
+        code, out, err = self.run_cli([])
+        self.assertEqual(code, 0, msg=err)
+        # relationships go again as ever (Core answers 409), and the required PUTs that change nothing
+        self.assertEqual([(r[1], r[3]) for r in writes(self.core) if r[1].endswith("/fields")], [(
+            "/api/metadata/objects/municipalidad/fields",
+            {"name": "escudo", "label": "Escudo", "type": "IMAGE", "required": False, "unique": False,
+             "description": "PNG o JPG de hasta 1 MiB, a la izquierda de la cabecera. Va dentro de cada PU y HR.",
+             "contentTypes": ["image/png", "image/jpeg"], "maxBytes": 1048576},
+        )])
+        self.assertIn("add    field municipalidad.escudo (201)", out)
+
     def test_an_empty_core_would_get_the_whole_model(self):
         code, out, err = self.run_cli(["--diff"])
         self.assertEqual(code, 0, msg=err)

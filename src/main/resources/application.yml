@@ -26,6 +26,12 @@ wasichai:
       # without GeoServer the lotes are served straight from PostGIS; only publishing WMS layers needs it
       enabled: ${WASICHAI_GEOSERVER_ENABLED:false}
       url: ${WASICHAI_GEOSERVER_URL:http://localhost:8081/geoserver}
+  files:
+    # wasichai-files: the FILE and IMAGE fields (the municipalidad's escudo). the rows in its table stored_files (created
+    # at startup), the bytes here with srtm.archivos.almacen=local. a real deployment points it at a persistent volume,
+    # the same for every instance. srtm.archivos.almacen=s3 keeps them in a bucket instead (never wasichai.files.store=s3)
+    local:
+      path: ${SRTM_ARCHIVOS_DIR:./data/archivos}
 
 logging:
   level:
@@ -39,10 +45,22 @@ srtm:
     # default), the fallback is the organization's own name in core: an install with several municipalidades never
     # prints another's
     nombre: ${SRTM_MUNICIPALIDAD_NOMBRE:}
-    # the escudo, a png or jpg: classpath:… or file:… (core has no image field). empty prints none
+    # the escudo is the record's (its IMAGE field, uploaded in the admin). this one, a png or jpg (classpath:… or
+    # file:…), is only the fallback of an organization whose record has none. empty prints none
     escudo: ${SRTM_MUNICIPALIDAD_ESCUDO:}
     # how long the header is kept per organization: an edit in the admin shows within it
     cache: 1m
+  archivos:
+    # where wasichai-files keeps the bytes of the FILE and IMAGE fields (ArchivosS3): local, on this server's disk under
+    # wasichai.files.local.path, or s3, in the bucket of s3.* (no shared volume: what k8s wants). the credentials as
+    # srtm.emision.s3's: the aws sdk's default chain
+    almacen: ${SRTM_ARCHIVOS_ALMACEN:local}
+    s3:
+      bucket: ${SRTM_ARCHIVOS_S3_BUCKET:}
+      region: ${SRTM_ARCHIVOS_S3_REGION:}
+      endpoint: ${SRTM_ARCHIVOS_S3_ENDPOINT:}
+      # the keys go under it: <prefijo>/<organization id>/<file id>; none: the bucket's root
+      prefijo: ${SRTM_ARCHIVOS_S3_PREFIJO:}
   pide:
     reniec:
       # the DNI's names from RENIEC through the PIDE (pages 3, 8 and 15). off until the municipality's convenio gives

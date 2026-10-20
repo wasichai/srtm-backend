@@ -336,8 +336,12 @@ class AlmacenS3Config {
 
 // without region, the sdk's chain (AWS_REGION, the profile, the instance); against another endpoint (minio), whose
 // region rarely matters, us-east-1. another endpoint goes path-style: its buckets are not dns names
-fun clienteS3(config: EmisionProperties.S3): S3Client {
-    require(config.bucket.isNotBlank()) { "srtm.emision.s3.bucket es obligatorio con srtm.emision.almacen=s3" }
+fun clienteS3(
+    config: EmisionProperties.S3,
+    // whose settings they are, for the message: srtm.emision, srtm.archivos
+    de: String = "srtm.emision"
+): S3Client {
+    require(config.bucket.isNotBlank()) { "$de.s3.bucket es obligatorio con $de.almacen=s3" }
     val endpoint = config.endpoint?.takeIf { it.isNotBlank() }
     val cliente = S3Client.builder()
     when {

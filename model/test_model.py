@@ -102,12 +102,31 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(len(self.model["relationships"]), 44)
 
     def test_the_municipalidad_holds_the_documents_header(self):
-        # the PU and HR's header, one record per organization edited in the admin (the escudo is a file, not a field)
+        # the PU and HR's header, one record per organization edited in the admin, its escudo an image of wasichai-files
         municipalidad = next(o for o in self.model["objects"] if o["name"] == "municipalidad")
         campos = {f["name"]: f for f in municipalidad["fields"]}
-        self.assertEqual(list(campos), ["nombre", "oficina", "ruc", "gerencia", "direccion"])
+        self.assertEqual(list(campos), ["nombre", "oficina", "ruc", "gerencia", "direccion", "escudo"])
         self.assertEqual([n for n, f in campos.items() if f.get("required")], ["nombre"])
-        self.assertTrue(all(f["type"] == "TEXT" for f in campos.values()))
+        self.assertEqual({n: f["type"] for n, f in campos.items() if f["type"] != "TEXT"}, {"escudo": "IMAGE"})
+
+    def test_the_escudo_is_a_png_or_a_jpg_of_at_most_a_mib(self):
+        # it goes inside every PU and HR: the types srtm.emision prints, small enough for a masiva
+        municipalidad = next(o for o in self.model["objects"] if o["name"] == "municipalidad")
+        escudo = next(f for f in object_payload(self.model, municipalidad)["fields"] if f["name"] == "escudo")
+        self.assertEqual(escudo, {
+            "name": "escudo",
+            "label": "Escudo",
+            "type": "IMAGE",
+            "required": False,
+            "unique": False,
+            "description": escudo["description"],
+            "contentTypes": ["image/png", "image/jpeg"],
+            "maxBytes": 1048576,
+        })
+
+    def test_the_files_are_only_the_escudo(self):
+        archivos = {(o["name"], f["name"]) for o in self.model["objects"] for f in o["fields"] if f["type"] in ("FILE", "IMAGE")}
+        self.assertEqual(archivos, {("municipalidad", "escudo")})
 
     def test_new_contribuyente_fields_are_optional(self):
         # 11 840 contribuyentes came from the padron without them: a required field would be refused by Core
@@ -499,6 +518,33 @@ class ValidationTests(unittest.TestCase):
         self.assertIn("object cuota_arbitrio: index (anio, nope) names 'nope', not a field of the object", cuota([["anio", "nope"]]))
         self.assertIn("object cuota_arbitrio: index (anio, anio) names 'anio' twice", cuota([["anio", "anio"]]))
         self.assertIn("object cuota_arbitrio: index (anio) is repeated", cuota([["anio"], ["anio"]]))
+
+    def test_a_file_field_is_checked_as_wasichai_files_does(self):
+        def escudo(**cambios):
+            def mutar(m):
+                municipalidad = next(o for o in m["objects"] if o["name"] == "municipalidad")
+                next(f for f in municipalidad["fields"] if f["name"] == "escudo").update(cambios)
+            return self.mutate(mutar)
+        self.assertEqual(escudo(type="FILE"), [])
+        self.assertEqual(escudo(contentTypes=["image/*"]), [])
+        unico = escudo(unique=True)
+        self.assertIn("object municipalidad field escudo: a file field cannot be unique", unico)
+        self.assertIn("object municipalidad field escudo: a file field cannot have a default", escudo(defaultValue="x"))
+        self.assertIn("object municipalidad field escudo: maxBytes must be a positive whole number of bytes", escudo(maxBytes=0))
+        self.assertIn("object municipalidad field escudo: maxBytes must be a positive whole number of bytes", escudo(maxBytes=1.5))
+        self.assertIn("object municipalidad field escudo: contentTypes must be a list of media types such as image/png",
+                      escudo(contentTypes="image/png"))
+        self.assertIn("object municipalidad field escudo: contentTypes must be a list of media types such as image/png",
+                      escudo(contentTypes=["png"]))
+        self.assertIn("object municipalidad field escudo: contentTypes must be a list of media types such as image/png",
+                      escudo(contentTypes=[]))
+        # only a file field has them
+        errors = self.mutate(lambda m: m["objects"][0]["fields"].append({"name": "x", "label": "X", "type": "TEXT", "maxBytes": 1}))
+        self.assertIn("object contribuyente field x: maxBytes and contentTypes are only for FILE and IMAGE", errors)
+
+    def test_a_file_is_not_indexed(self):
+        errors = self.mutate(lambda m: next(o for o in m["objects"] if o["name"] == "municipalidad").update(indexes=[["escudo"]]))
+        self.assertIn("object municipalidad: index (escudo) names 'escudo', a IMAGE, which Core does not index", errors)
 
     def test_a_long_text_is_not_indexed(self):
         errors = self.mutate(lambda m: next(o for o in m["objects"] if o["name"] == "emision_lote").update(indexes=[["contribuyentes"]]))
