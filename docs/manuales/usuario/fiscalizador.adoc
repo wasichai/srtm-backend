@@ -1113,15 +1113,15 @@ FERIADOS <año>:: Los feriados del año que no son nacionales; se suman a los na
 
 // fin de los pasos
 Son los vigentes al 1 de enero del año (en el año en curso, los de hoy). Si al año le falta alguno, un aviso lo dice
-(<<fig-plazos-2027>>): los actos que lo necesiten no se registrarán hasta que el administrador lo cargue.
+(<<fig-plazos-2025>>): los actos que lo necesiten no se registrarán hasta que el administrador lo cargue.
 
 [[fig-plazos-cargados]]
 .Los plazos y feriados de 2026
 image::{capturas}/usuario/fiscalizador/plazos-cargados.png[Recuadro Plazos cargados del año 2026 con PLAZO DESCARGO_PAPELETA de 5 días hábiles, PLAZO RG_RECURSO de 15 días hábiles, los feriados del 02/04/2026 y 03/04/2026 y la explicación de cómo se cargan]
 
-[[fig-plazos-2027]]
-.Un año al que le faltan sus feriados
-image::{capturas}/usuario/fiscalizador/plazos-2027.png[Recuadro Plazos cargados del año 2027 con el aviso Faltan para 2027: FERIADOS 2027 y los dos plazos vigentes]
+[[fig-plazos-2025]]
+.Un año al que le faltan sus plazos y feriados
+image::{capturas}/usuario/fiscalizador/plazos-2025.png[Recuadro Plazos cargados del año 2025 con el aviso Faltan para 2025]
 
 TIP: Revise *Plazos cargados* del año siguiente antes de que empiece: sin `FERIADOS` del año nuevo, el sistema no
 registrará descargos ni notificaciones cuyo cómputo llegue a ese año.

@@ -600,9 +600,9 @@
             }
         },
         {
-            "id": "fis-plazos-2027",
+            "id": "fis-plazos-2025",
             "perfil": "fiscalizador",
-            "archivo": "usuario/fiscalizador/plazos-2027.png",
+            "archivo": "usuario/fiscalizador/plazos-2025.png",
             "pasos": [
                 [
                     "ir",
@@ -615,11 +615,11 @@
                 [
                     "elegir",
                     "section:has(h2:has-text('Plazos cargados')) select",
-                    "2027"
+                    "2025"
                 ],
                 [
                     "esperarTexto",
-                    "Faltan para 2027"
+                    "Faltan para 2025"
                 ],
                 [
                     "desplazar",
