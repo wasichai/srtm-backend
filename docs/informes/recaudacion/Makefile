@@ -74,6 +74,6 @@ publicar: validar
 	@git archive --format=tar HEAD . | tar -x -C "$(EDICION)/metodo"
 	@git rev-parse HEAD > "$(EDICION)/metodo/COMMIT"
 	@git diff --quiet HEAD -- . || echo "aviso: hay cambios sin commit en el método; metodo/ es el de HEAD"
-	aws s3 sync "$(EDICION)" "$(S3)/$$(basename "$(EDICION)")/" --exclude "datos/mef/crudos/*" --exclude ".DS_Store" \
+	aws s3 sync "$(EDICION)" "$(S3)/$$(basename "$(EDICION)")/" --exclude "datos/mef/crudos/*" --exclude "*.DS_Store" \
 	  --sse AES256 --only-show-errors
 	@echo "publicado en $(S3)/$$(basename "$(EDICION)")/"
