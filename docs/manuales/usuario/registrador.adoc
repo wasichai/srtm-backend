@@ -783,7 +783,8 @@ Motivo:: INSCRIPCION al presentarla; ACTUALIZACION en cuanto se corrige; DESCARG
 sustituye a otra (<<rectificar-declaracion>>).
 Estado:: *Vigente*, *Anulada* o *Sustituida*. Una anulada o sustituida se conserva, pero no cuenta en nada
 (<<proc-anular-declaracion>>, <<rectificar-declaracion>>).
-Valores:: El *Autoavalúo* es el valor del predio (o del uso) declarado. El sistema calcula el *Valor de condominio*
+Valores:: El *Autoavalúo* es el valor del predio (o del uso): lo valúa el catastro de la municipalidad, o lo escribe
+el registrador donde no hay catastro (<<caracteristicas>>). El sistema calcula el *Valor de condominio*
 (el autoavalúo por el % de propiedad) y el *Valor afecto* (el valor de condominio menos la *Deducción*, nunca menos de
 cero). El impuesto predial se calcula con el valor afecto (<<liquidacion>>).
 
@@ -942,11 +943,11 @@ obras (<<fig-dj-caracteristicas>>).
 
 . En *Características de predio*, elija la *Clase de uso*, luego la *Sub clase de uso* y luego el *Uso del predio*:
   cada lista ofrece solo lo que corresponde a la anterior.
-. Escriba el *Área del terreno (m2)* (obligatoria), el *Área común del terreno (m2)*, el *Frontis (m)* y la *Cant. de
-  habitantes / Aforo*.
-. En *Valores*, escriba el *Autoavalúo (S/)* que resulta de la declaración, la *Deducción (S/)* si corresponde, y el
-  *Área construida (m2)*.
-. Si quiere contrastarlo con el catastro, pulse btn:[Calcular autoavalúo sugerido], en el título de *Valores*
+. Escriba el *Área del terreno (m2)* (obligatoria), el *Área común del terreno (m2)*, el *Frontis principal (m)* (el
+  del frente de la ubicación) y la *Cant. de habitantes / Aforo*.
+. En *Valores*, escriba la *Deducción (S/)* si corresponde. Si su municipalidad no tiene catastro configurado, escriba
+  también el *Autoavalúo (S/)* que resulta de la declaración.
+. Para ver cómo se llegó al autoavalúo, pulse btn:[Calcular autoavalúo sugerido], en el título de *Valores*
   (<<autoavaluo-sugerido>>).
 . Pulse btn:[Guardar] (o btn:[Siguiente] en el asistente).
 
@@ -957,16 +958,25 @@ image::{capturas}/usuario/registrador/dj-caracteristicas.png[Secciones Caracter�
 
 [IMPORTANT]
 ====
-* El sistema guarda el autoavalúo que usted escribe, no lo calcula por su cuenta. Revíselo contra el formulario de la
-  declaración; el autoavalúo sugerido (<<autoavaluo-sugerido>>) es una ayuda para hacerlo.
+* El *Área construida*, el *Área común construida* y la *Longitud de frente* son de solo lectura: el sistema las
+  calcula cada vez que se graba la declaración o uno de sus niveles, obras u otros frentes. El área construida es la
+  suma de los niveles activos, el área común la de su área común, y la longitud de frente el frontis principal más el
+  de los otros frentes activos (<<otros-frentes>>).
+* El *Autoavalúo* lo calcula el sistema con el catastro de la municipalidad, a partir del terreno, el uso, los niveles
+  y las obras, cada vez que algo de eso cambia. Es de solo lectura. Si la municipalidad no tiene catastro configurado,
+  el autoavalúo lo escribe usted, como antes. El autoavalúo sugerido (<<autoavaluo-sugerido>>) muestra el detalle
+  del cálculo.
+* *Autoavalúo por revisar*: si el catastro no pudo valuar la declaración (le falta un dato o un parámetro, o no
+  respondió), el sistema conserva el autoavalúo anterior y lo marca con el motivo. Complete lo que falta, o pulse
+  btn:[Recalcular] cuando el catastro ya responda.
 * *Valor de condominio* y *Valor afecto* los calcula el sistema al grabar (<<dj-conceptos>>): lo que escriba en esos
   dos campos se reemplaza.
 * La *Deducción* tampoco se calcula: escriba el monto que corresponde a la condición del predio (por ejemplo, la de
   un pensionista).
 ====
 
-*Frontis (m)* y *Área construida (m2)* son obligatorios cuando la ordenanza de arbitrios del año cobra según el
-frente o el área construida (en la demostración de 2026, ambos). Los arbitrios se explican en el {m-arbitrios}.
+La *Longitud de frente* y el *Área construida* (los niveles) son obligatorios cuando la ordenanza de arbitrios del año
+cobra según el frente o el área construida (en la demostración de 2026, ambos). Los arbitrios se explican en el {m-arbitrios}.
 
 [[autoavaluo-sugerido]]
 ===== El autoavalúo sugerido
@@ -974,6 +984,9 @@ frente o el área construida (en la demostración de 2026, ambos). Los arbitrios
 El botón btn:[Calcular autoavalúo sugerido] pide al catastro de la municipalidad que valúe la declaración con su año,
 su área de terreno, su uso, sus niveles y sus obras. Solo aparece en una declaración vigente que usted puede editar, y
 el cálculo se hace solo al pulsarlo.
+
+Es el mismo cálculo con el que el sistema fija el *Autoavalúo* cada vez que se graba la declaración: el diálogo
+muestra cómo se llegó a ese valor, piso por piso y obra por obra.
 
 . Pulse btn:[Calcular autoavalúo sugerido]. Se abre el diálogo *Autoavalúo sugerido*, con el año, la región, la
   *Versión de las tablas*, el arancel (de la declaración o de la ficha catastral), el *Terreno*, la *Construcción*,
@@ -1112,7 +1125,9 @@ Casos especiales::
 
 Un predio de esquina, o con salida a dos vías, registra sus frentes adicionales en *Otros frentes*, con *+*
 (*Agregar frente*): *Tipo vía*, *Descripción de la vía*, *N° principal*, *N° alterno*, *Frontis (m)*, *Lote*, *Cuadra*
-y *Lado* (PAR o IMPAR) (<<fig-dj-frentes>>). El frente principal es el de la ubicación del predio.
+y *Lado* (PAR o IMPAR) (<<fig-dj-frentes>>). El frente principal es el de la ubicación del predio, con su *Frontis
+principal* en *Características*. La *Longitud de frente* de la declaración suma el frontis principal y el de los otros
+frentes activos.
 
 [[fig-dj-frentes]]
 .El segundo frente de un predio de esquina
@@ -1543,7 +1558,9 @@ El valor afecto lo calcula el sistema: valor de condominio (autoavalúo por el %
 que se escribe es el *Autoavalúo* y la *Deducción* (<<caracteristicas>>).
 
 ¿El sistema calcula el autoavalúo con los niveles y las obras?::
-No. Registra los niveles y las obras declarados, pero el autoavalúo es el que usted escribe.
+Sí, si la municipalidad tiene catastro configurado: lo recalcula cada vez que cambian el terreno, el uso, los niveles o
+las obras. Si el catastro no puede valuarlo, conserva el anterior y lo marca *por revisar* con el motivo. Sin catastro,
+el autoavalúo es el que usted escribe (<<caracteristicas>>).
 
 ¿Cómo cambio el % de un condómino?::
 En *Datos de los condóminos* de cualquiera de sus declaraciones, con el lápiz de su fila (<<proc-agregar-condomino>>).
@@ -1577,7 +1594,8 @@ include::../comun/faq.adoc[]
 Este glosario reúne solo los términos de este manual. El glosario completo está en el {m-admin}.
 
 [glossary]
-Autoavalúo:: Valor del predio (o de uno de sus usos) que el titular declara. Lo escribe el registrador.
+Autoavalúo:: Valor del predio (o de uno de sus usos) que el titular declara. Lo calcula el sistema con el catastro de
+la municipalidad; donde no hay catastro, lo escribe el registrador.
 Catastro fiscal:: Registro de los lotes del distrito con su código CPU, su dirección catastral y su polígono.
 Código CPU:: Código del lote en el catastro fiscal; vincula el predio con su lote.
 Código de contribuyente:: Número de seis dígitos que el sistema asigna al inscribir a un contribuyente.
