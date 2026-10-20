@@ -195,6 +195,26 @@ class RectificacionApiTest : SrtmApiTest() {
     }
 
     @Test
+    fun `another year is not declared from a sustituida or an annulled declaration`() {
+        val contribuyente = inscribir()
+        val predio = predio()
+        val presentar = "/api/srtm/contribuyentes/$contribuyente/declaraciones-juradas"
+        val sustituida = declarar(contribuyente, predio, "anio" to 2025)["id"].asString()
+        rectificar(sustituida)
+        val anulada = declarar(contribuyente, predio, "anio" to 2024)["id"].asString()
+        send("POST", "/api/srtm/declaraciones/$anulada/anular", mapOf("motivo_anulacion" to "Vendido"), HttpStatus.OK)
+        val antes = lista("/api/srtm/predios/$predio/declaraciones").size
+
+        val deSustituida =
+            rejected("POST", presentar, mapOf("predio_id" to predio, "desde" to sustituida, "declaracion" to mapOf("anio" to 2026)), "desde")
+        assertEquals("La declaración fue sustituida: declara desde su rectificatoria", deSustituida["detail"].asString(), deSustituida.toString())
+        val deAnulada =
+            rejected("POST", presentar, mapOf("predio_id" to predio, "desde" to anulada, "declaracion" to mapOf("anio" to 2026)), "desde")
+        assertEquals("La declaración está anulada: no se puede declarar desde ella", deAnulada["detail"].asString(), deAnulada.toString())
+        assertEquals(antes, lista("/api/srtm/predios/$predio/declaraciones").size)
+    }
+
+    @Test
     fun `a declaration with an external padron's valuation keeps its year`() {
         val conValuacion = declarar(inscribir(), predio())
         importar(DECLARACION, conValuacion["id"].asString(), DECLARACION_ICA)

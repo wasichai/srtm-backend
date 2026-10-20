@@ -36,13 +36,18 @@ fun sustituida(
     return d.copy(estado = SUSTITUIDA, fechaSustitucion = hoy)
 }
 
-// a declaración of `anio` from another one (desde): the same contribuyente's, on the same predio, of another year
+// a declaración of `anio` from another one (desde): a vigente one (a sustituida's data is its rectificatoria's), the
+// same contribuyente's, on the same predio, of another year
 fun desdeOtroAnio(
     origen: Declaracion,
     contribuyente: String,
     predio: String?,
     anio: Int?
 ) {
+    when (origen.estado) {
+        SUSTITUIDA -> throw ValidationException("La declaración fue sustituida: declara desde su rectificatoria", "desde", "debe ser una declaración vigente")
+        ANULADA -> throw ValidationException("La declaración está anulada: no se puede declarar desde ella", "desde", "debe ser una declaración vigente")
+    }
     if (origen.contribuyente != contribuyente) {
         throw ValidationException("La declaración de partida es de otro contribuyente", "desde", "debe ser del mismo contribuyente")
     }

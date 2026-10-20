@@ -101,6 +101,16 @@ class RectificacionTest {
     }
 
     @Test
+    fun `another year is declared from a vigente declaration only`() {
+        val sustituida = assertThrows<ValidationException> { desdeOtroAnio(origen.copy(estado = SUSTITUIDA), "c-1", "p-1", 2026) }
+        assertEquals("desde", sustituida.violations.single().field)
+        assertEquals("La declaración fue sustituida: declara desde su rectificatoria", sustituida.message)
+        val anulada = assertThrows<ValidationException> { desdeOtroAnio(origen.copy(estado = ANULADA), "c-1", "p-1", 2026) }
+        assertEquals("desde", anulada.violations.single().field)
+        assertEquals("La declaración está anulada: no se puede declarar desde ella", anulada.message)
+    }
+
+    @Test
     fun `the same year is rectified, not declared again`() {
         val e = assertThrows<ValidationException> { desdeOtroAnio(origen, "c-1", "p-1", 2025) }
         assertEquals("anio", e.violations.single().field)
