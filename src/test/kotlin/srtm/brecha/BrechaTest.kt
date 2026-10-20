@@ -20,7 +20,7 @@ import java.math.BigDecimal
 import java.time.LocalDate
 
 // the brecha's pure rules: the cruce (D7), the categories (D10), the catastro's value split among the secuencias (D12)
-// and among condóminos (condominio, deducción kept), the impuesto by contribuyente (mínimo included) and its
+// and among condóminos (condominio, deducción kept but the Amazonía's 5 %), the impuesto by contribuyente (mínimo included) and its
 // attribution to the predios, the omisos' estimate, and the arbitrios' difference. the impuesto's figures are the
 // verified 2026 parameters (Parametros); every figure of the arbitrios ordinance is FICTITIOUS
 class BrechaTest {
@@ -237,6 +237,71 @@ class BrechaTest {
         assertEquals(listOf(BigDecimal("120000.00"), BigDecimal("70000.00")), nuevas.map { it.valorAfecto })
     }
 
+    // the 5 % deducción (Ley 27037, Amazonía): recognized in the DJ, recomputed over the catastro's value
+
+    @Test
+    fun `a deduccion of 5 percent of the declared valor condominio is 5 percent of the catastro's`() {
+        // 5 % of 100000.00 declared; the catastro's 200000.00 deducts 10000.00
+        val r = Brecha.recalcular(listOf(dj("1", "a", "p", "100000.00", deduccion = "5000.00")), BigDecimal("200000.00"))
+        assertEquals(BigDecimal("5000.00"), r.declarado.single().deduccion)
+        assertEquals(BigDecimal("95000.00"), r.declarado.single().valorAfecto)
+        assertEquals(BigDecimal("10000.00"), r.catastro.single().deduccion)
+        assertEquals(BigDecimal("190000.00"), r.catastro.single().valorAfecto)
+        assertEquals(1, r.deduccionProporcional)
+        // a centimo off is still the 5 %: the catastro's 123456.78 deducts 6172.84 (6172.839 half up)
+        val centimo = Brecha.recalcular(listOf(dj("1", "a", "p", "100000.00", deduccion = "4999.99")), BigDecimal("123456.78"))
+        assertEquals(BigDecimal("6172.84"), centimo.catastro.single().deduccion)
+        assertEquals(BigDecimal("117283.94"), centimo.catastro.single().valorAfecto)
+        assertEquals(1, centimo.deduccionProporcional)
+        // the impuesto: 95000.00 declared against 190000.00
+        val i = Brecha.impuestos(anio, listOf(dj("1", "a", "p", "100000.00", deduccion = "5000.00")), mapOf("p" to BigDecimal("200000.00")), parametros)
+        assertEquals(ImpuestoDelContribuyente(liquidar("95000.00"), liquidar("190000.00")), i.porContribuyente["a"])
+        assertEquals(1, i.deduccionProporcional)
+    }
+
+    @Test
+    fun `any other deduccion stays fixed`() {
+        // a pensionista's 50 UIT (S/ 5 500 in 2026): 275000.00 on both sides
+        val r = Brecha.recalcular(listOf(dj("1", "a", "p", "300000.00", deduccion = "275000.00")), BigDecimal("400000.00"))
+        assertEquals(BigDecimal("275000.00"), r.catastro.single().deduccion)
+        assertEquals(BigDecimal("125000.00"), r.catastro.single().valorAfecto)
+        assertEquals(0, r.deduccionProporcional)
+        // two centimos off the 5 % is not the 5 %
+        val fuera = Brecha.recalcular(listOf(dj("1", "a", "p", "100000.00", deduccion = "5000.02")), BigDecimal("200000.00"))
+        assertEquals(BigDecimal("5000.02"), fuera.catastro.single().deduccion)
+        assertEquals(BigDecimal("194999.98"), fuera.catastro.single().valorAfecto)
+        assertEquals(0, fuera.deduccionProporcional)
+    }
+
+    @Test
+    fun `each condomino deducts 5 percent of his own part of the catastro's value`() {
+        // 60 % and 40 % of 100000.00: 3000.00 and 2000.00 declared
+        val ds =
+            grupo(
+                dj("1", "a", "p", "100000.00", porcentaje = "60", deduccion = "3000.00"),
+                dj("2", "b", "p", "100000.00", porcentaje = "40", deduccion = "2000.00")
+            )
+        val r = Brecha.recalcular(ds, BigDecimal("123456.78"))
+        // 74074.068 -> 74074.07, 5 % 3703.7035 -> 3703.70; 49382.712 -> 49382.71, 5 % 2469.1355 -> 2469.14
+        assertEquals(listOf(BigDecimal("74074.07"), BigDecimal("49382.71")), r.catastro.map { it.valorCondominio })
+        assertEquals(listOf(BigDecimal("3703.70"), BigDecimal("2469.14")), r.catastro.map { it.deduccion })
+        assertEquals(listOf(BigDecimal("70370.37"), BigDecimal("46913.57")), r.catastro.map { it.valorAfecto })
+        assertEquals(listOf(BigDecimal("57000.00"), BigDecimal("38000.00")), r.declarado.map { it.valorAfecto })
+        assertEquals(2, r.deduccionProporcional)
+    }
+
+    @Test
+    fun `no deduccion, or one of 0, deducts nothing on the catastro's side`() {
+        val ninguna = Brecha.recalcular(listOf(dj("1", "a", "p", "100000.00")), BigDecimal("200000.00"))
+        assertNull(ninguna.catastro.single().deduccion)
+        assertEquals(BigDecimal("200000.00"), ninguna.catastro.single().valorAfecto)
+        // declared at 0 with a deducción of 0: 5 % of 0 is 0, but there is no deducción to recognize
+        val cero = Brecha.recalcular(listOf(dj("1", "a", "p", "0.00", deduccion = "0.00")), BigDecimal("200000.00"))
+        assertEquals(BigDecimal("0.00"), cero.catastro.single().deduccion)
+        assertEquals(BigDecimal("200000.00"), cero.catastro.single().valorAfecto)
+        assertEquals(0, ninguna.deduccionProporcional + cero.deduccionProporcional)
+    }
+
     // the impuesto
 
     @Test
@@ -408,6 +473,24 @@ class BrechaTest {
         assertEquals("Celda .....", fila.motivo)
         assertNull(fila.deltaImpuesto)
         assertNull(fila.deltaAutoavaluo)
+    }
+
+    @Test
+    fun `the corrida says how many deducciones of 5 percent it recomputed`() {
+        val m =
+            Brecha.medir(
+                anio,
+                listOf(item(municipal = "01-01-0001", autoavaluo = "200000.00")),
+                padron(dj("1", "a", "p1", "100000.00", deduccion = "5000.00")),
+                parametros,
+                null,
+                hoy
+            )
+        assertEquals(liquidar("190000.00") - liquidar("95000.00"), m.filas.first { it.predio == "p1" }.deltaImpuesto)
+        assertTrue(
+            "1 declaraciones con la deducción del 5 % (Amazonía, Ley 27037): se recalculó sobre el valor catastral" in m.avisos,
+            m.avisos.toString()
+        )
     }
 
     @Test
