@@ -9,7 +9,7 @@ import java.io.ByteArrayOutputStream
 
 // what the emisión tests read back from a pdf: its text (as PDFTextStripper extracts it), its pages, a blank one
 
-// the header the PU and HR tests print: the provisional data of model/data/municipalidad.json, with an address
+// the header the PU and HR tests print: the provisional data of model/data/perene/municipalidad.json, with an address
 val CABECERA =
     Cabecera(
         nombre = "MUNICIPALIDAD DISTRITAL DE PERENÉ",

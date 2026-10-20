@@ -9,10 +9,15 @@ same `direccion_predio` import_predios.py parses, its `<vía>` and `<habilitaci�
 
 The usos del predio follow the CSV by código: a código Core lacks is created, one whose clase, sub clase or uso
 changed is updated and one the CSV no longer has is deleted. Nothing references their records (a declaración keeps
-the names in its own ENUMs). The other catalogs are only created. The municipalidad (data/municipalidad.json, the
-provisional header) is created only when the organization has none: the real one is edited in the admin.
+the names in its own ENUMs). The other catalogs are only created. The municipalidad (--municipalidad-json, e.g.
+data/perene/municipalidad.json, the provisional header) is created only when the organization has none: the real
+one is edited in the admin.
 
-Run: python3 import_catalogos.py [--excel "CODIGO DE PREDIOS AL 2026.xlsx"] [--dry-run]
+--distrito (the ubigeo of the padrón's vías), --municipalidad-json and --obras-csv (the annex of its region) are required: nothing defaults to an organization.
+
+Run: python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json
+         --obras-csv data/obras_complementarias.csv
+         [--excel "CODIGO DE PREDIOS AL 2026.xlsx"] [--dry-run]
 Exit: 0 ok, 1 Core refused something.
 """
 import argparse
@@ -26,9 +31,6 @@ from core_client import Client, CoreError
 from import_predios import TIPOS_VIA, LoadError, clean_decimal, clean_text, parse_address, post_all, read_xlsx, split_tipo, split_zona
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-
-# Perené (JUNIN / CHANCHAMAYO): the district the padrón's vías and unidades urbanas belong to
-DEFAULT_UBIGEO = "120302"
 
 
 def read_ubigeo(path):
@@ -216,12 +218,12 @@ def _parse_args(argv):
     p = argparse.ArgumentParser(description="Load srtm's catalogs (ubigeo, categorías, obras, usos del predio, vías, unidades urbanas) into wasichai Core.")
     p.add_argument("--ubigeo-csv", default=os.path.join(HERE, "data", "ubigeo.csv"))
     p.add_argument("--categorias-csv", default=os.path.join(HERE, "data", "categorias_valor.csv"))
-    p.add_argument("--obras-csv", default=os.path.join(HERE, "data", "obras_complementarias.csv"))
+    p.add_argument("--obras-csv", required=True, help="the partidas of obras complementarias of the region, e.g. data/obras_complementarias.csv (selva)")
     p.add_argument("--usos-csv", default=os.path.join(HERE, "data", "usos_predio.csv"))
-    p.add_argument("--municipalidad-json", default=os.path.join(HERE, "data", "municipalidad.json"))
+    p.add_argument("--municipalidad-json", required=True, help="the organization's provisional header, e.g. data/perene/municipalidad.json")
     p.add_argument("--excel", default=None, help="padrón Excel; without it only ubigeo is loaded")
     p.add_argument("--sheet", default=None, help="sheet name (default: the first)")
-    p.add_argument("--distrito", default=DEFAULT_UBIGEO, help=f"ubigeo of the padrón's vías (default {DEFAULT_UBIGEO}, Perené)")
+    p.add_argument("--distrito", required=True, help="ubigeo of the padrón's vías, e.g. 120302 (Perené)")
     p.add_argument("--core", default=os.environ.get("WASICHAI_CORE", "http://localhost:8090"))
     p.add_argument("--email", default=os.environ.get("WASICHAI_EMAIL", "admin@wasichai.local"))
     p.add_argument("--password", default=os.environ.get("WASICHAI_PASSWORD", "admin"))
