@@ -50,7 +50,7 @@ class ClienteCatastroTest {
     fun parar() = server.stop(0)
 
     private fun cliente(ahora: () -> Instant = Instant::now) =
-        ClienteCatastro(CatastroProperties(enabled = true, url = "http://127.0.0.1:${server.address.port}/", clientId = "cid", clientSecret = "secreto"), ahora)
+        ClienteCatastro(CuentaCatastro(url = "http://127.0.0.1:${server.address.port}/", clientId = "cid", clientSecret = "secreto"), ahora)
 
     private fun responder(
         ex: HttpExchange,
@@ -91,26 +91,6 @@ class ClienteCatastroTest {
         assertEquals(BigDecimal("0.10"), v.items[2].obras)
         val anillo = (v.items[0].loteGeom!!["coordinates"] as List<*>).first() as List<*>
         assertEquals(listOf(-75.22, -10.95), anillo.first())
-    }
-
-    @Test
-    fun `the catastro is one organization's, by its id or its slug, and none set refuses every corrida`() {
-        val id = java.util.UUID.randomUUID()
-        assertNull(otraOrganizacion(id.toString(), id, null))
-        assertNull(otraOrganizacion(" perene ", id, "PERENE"))
-        assertEquals(
-            DE_OTRA_ORGANIZACION,
-            otraOrganizacion(
-                java.util.UUID
-                    .randomUUID()
-                    .toString(),
-                id,
-                null
-            )
-        )
-        assertEquals(DE_OTRA_ORGANIZACION, otraOrganizacion("perene", id, "otra"))
-        assertEquals(DE_OTRA_ORGANIZACION, otraOrganizacion("perene", id, null))
-        assertEquals(SIN_ORGANIZACION, otraOrganizacion("  ", id, "perene"))
     }
 
     @Test

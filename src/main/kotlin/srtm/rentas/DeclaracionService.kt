@@ -117,10 +117,27 @@ class DeclaracionService(
         contribuyentes.get(contribuyente)
         val creada = registrar(nueva(delPredio(origen).copy(porcentajeCondominio = body.porcentajeCondominio), contribuyente, UUID.fromString(origen.predio)))
         val nuevaId = UUID.fromString(creada.id)
-        niveles(id).forEach { agregarNivel(nuevaId, it.copy(id = null, declaracion = null)) }
+        copiarPadronExterno(DECLARACION, id, nuevaId, PADRON_EXTERNO_DECLARACION)
+        niveles(id).forEach { nivel ->
+            val copia = agregarNivel(nuevaId, nivel.copy(id = null, declaracion = null))
+            copiarPadronExterno(NIVEL_CONSTRUCCION, UUID.fromString(nivel.id), UUID.fromString(copia.id), PADRON_EXTERNO_NIVEL)
+        }
         obras(id).forEach { agregarObra(nuevaId, it.copy(id = null, declaracion = null)) }
         frentes(id).forEach { agregarFrente(nuevaId, it.copy(id = null, declaracion = null)) }
         return creada
+    }
+
+    // what an external padrón (Ica) brings and the dtos do not know: copied from the stored record, when it has any,
+    // merged over the copy
+    private suspend fun copiarPadronExterno(
+        objeto: String,
+        de: UUID,
+        a: UUID,
+        campos: List<String>
+    ) {
+        val origen = registros.get(objeto, Map::class.java, de)
+        val valores = campos.associateWith { origen[it] }.filterValues { it != null }
+        if (valores.isNotEmpty()) registros.replace(objeto, Map::class.java, a, valores)
     }
 
     // a predio of the srtm: its code comes from codigoPredio when blank, its direccion from its ubicación

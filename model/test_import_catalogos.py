@@ -104,6 +104,32 @@ class ObrasTests(unittest.TestCase):
         self.assertNotIn("valor_unitario", obras[2])
 
 
+class ShippedObrasCostaTests(unittest.TestCase):
+    """The partidas of annex III.2 (costa) of R.M. 277-2025-VIVIENDA, the one for Ica: same rows as
+    catastro-backend's obras-complementarias-costa-2026.csv, verified against the PDF."""
+
+    def setUp(self):
+        self.obras = ic.read_obras(os.path.join(HERE, "data", "ica", "obras_complementarias_costa.csv"))
+        self.selva = ic.read_obras(os.path.join(HERE, "data", "obras_complementarias.csv"))
+        with open(os.path.join(HERE, "model.json"), encoding="utf-8") as f:
+            self.enums = json.load(f)["enums"]
+
+    def test_the_96_items_with_the_keys_of_selva(self):
+        self.assertEqual([o["numero"] for o in self.obras], list(range(1, 97)))
+        self.assertEqual([(o["tipo_obra"], o["numero"]) for o in self.obras], [(o["tipo_obra"], o["numero"]) for o in self.selva])
+
+    def test_every_value_is_an_option_of_its_enum(self):
+        self.assertEqual(sorted({o["tipo_obra"] for o in self.obras} - set(self.enums["tipo_obra"])), [])
+        self.assertEqual(sorted({o["unidad_medida"] for o in self.obras} - set(self.enums["unidad_medida"])), [])
+        self.assertEqual(sorted({o["material"] for o in self.obras if "material" in o} - set(self.enums["material"])), [])
+
+    def test_values_of_the_annex(self):
+        valores = {(o["tipo_obra"], o["numero"]): o["valor_unitario"] for o in self.obras}
+        # anexo III.2, page 1
+        self.assertEqual(str(valores[("MUROS PERIMETRICOS O CERCOS", 1)]), "443.89")
+        self.assertEqual(str(valores[("TANQUES ELEVADOS", 17)]), "1288.35")
+
+
 class ShippedObrasTests(unittest.TestCase):
     """The partidas of annex III.4 (selva) of R.M. 277-2025-VIVIENDA, the one for Perené."""
 
