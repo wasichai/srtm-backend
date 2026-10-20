@@ -1277,8 +1277,8 @@ hojas: `padron` (una fila por predio y contribuyente) y `construcciones` (una fi
    ```bash
    cd model
    python3 apply.py --diff && python3 apply.py
-   python3 import_catalogos.py --distrito 110101 --municipalidad-json data/ica/municipalidad.json --dry-run
-   python3 import_catalogos.py --distrito 110101 --municipalidad-json data/ica/municipalidad.json
+   python3 import_catalogos.py --distrito 110101 --municipalidad-json data/ica/municipalidad.json --obras-csv data/ica/obras_complementarias_costa.csv --dry-run
+   python3 import_catalogos.py --distrito 110101 --municipalidad-json data/ica/municipalidad.json --obras-csv data/ica/obras_complementarias_costa.csv
    python3 import_parametros.py --dry-run && python3 import_parametros.py
    ```
 
@@ -1286,9 +1286,10 @@ hojas: `padron` (una fila por predio y contribuyente) y `construcciones` (una fi
      `import_padron_ica.py`.
    - `data/ica/municipalidad.json` trae solo el nombre. El RUC está por confirmar y no se inventa: vacío no se carga, y
      se completa en el admin.
-   - Las partidas de obras complementarias de `data/obras_complementarias.csv` traen valores de **selva**. Ica es costa,
-     así que esos valores no le sirven. Las descripciones de las letras (`categoria_valor`) son las mismas en las tres
-     regiones.
+   - Las partidas de obras complementarias de Ica son las de la **costa** (Anexo III.2, verificado contra el PDF):
+     `data/ica/obras_complementarias_costa.csv`, las mismas filas que `obras-complementarias-costa-2026.csv` de
+     catastro-backend y las mismas llaves que las de selva. Las descripciones de las letras (`categoria_valor`) son las
+     mismas en las tres regiones.
 3. **Padrón:**
 
    ```bash
