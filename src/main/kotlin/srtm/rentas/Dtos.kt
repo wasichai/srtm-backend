@@ -455,11 +455,29 @@ data class ContribuyenteFicha(
     val totales: Totales
 )
 
+// valuacion_origen: the predio's block of ValuacionOrigen, for a predio read without a declaración
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class PredioFicha(
     val predio: Predio,
     val anio: Int,
     val titulares: Int,
-    val totales: Totales
+    val totales: Totales,
+    val valuacionOrigen: ValuacionOrigenPredio
+)
+
+// {"predio": {...}}: PADRON_EXTERNO_PREDIO with a value, as in ValuacionOrigen
+data class ValuacionOrigenPredio(
+    val predio: Map<String, Any>
+)
+
+// GET /declaraciones/{id}/valuacion-origen: what an external padrón (Ica) brought to the declaración, its predio and its
+// niveles (PADRON_EXTERNO_*), read from the stored records because the dtos do not carry it. only the fields with a
+// value: a block without any is {}, and a nivel without any is not in niveles (keyed by the nivel's id). read-only:
+// it does not change the impuesto, which comes from valor_autoavaluo
+data class ValuacionOrigen(
+    val predio: Map<String, Any>,
+    val declaracion: Map<String, Any>,
+    val niveles: Map<String, Map<String, Any>>
 )
 
 data class Resumen(

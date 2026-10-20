@@ -1745,6 +1745,30 @@ DTO del portal no conocen estos campos: los escribe el importador por la API de 
 portal no los borra porque se fusiona con lo guardado (`Registros.replace`). Un condómino agregado desde una
 declaración copia también su valuación y la de sus niveles (`PADRON_EXTERNO_DECLARACION` y `PADRON_EXTERNO_NIVEL`).
 
+### Valuación del padrón de origen
+
+Como los DTO no los traen, el portal los lee aparte, en solo lectura (#132):
+
+```
+GET /api/srtm/declaraciones/{id}/valuacion-origen
+{
+  "predio":      { "codigo_via": "V0123", "codigo_unidad_urbana": "U045", "codigo_hu_armonizacion": "HU-01", "codigo_via_armonizacion": "VA-02" },
+  "declaracion": { "arancel": 35.50, "valor_terreno": 7100, "valor_construccion": 48250.75, "valor_otras_instalaciones": 1200 },
+  "niveles":     { "<id del nivel>": { "clasificacion": "…", "valor_unitario": 402.08, "incremento": 0, "porcentaje_depreciacion": 12, "valor_total": 48250.75 } }
+}
+```
+
+- Lee los registros guardados de la DJ, su predio y sus niveles con las listas `PADRON_EXTERNO_DECLARACION`,
+  `PADRON_EXTERNO_NIVEL` y `PADRON_EXTERNO_PREDIO` (`Condominio.kt`).
+- Devuelve solo los campos con valor (`conValor`: ni null ni texto en blanco). Un bloque sin valores es `{}` y un nivel
+  sin valores no aparece en `niveles`: una DJ de Perené responde `{"predio": {}, "declaracion": {}, "niveles": {}}`.
+- Los controles son los de `RecordService` sobre cada registro que lee, la DJ, su predio y sus niveles, como en
+  `GET /api/srtm/declaraciones/{id}` (que lee la DJ, su predio y su contribuyente): 404 si la DJ no existe y 403 si el
+  rol no puede leerla. Core no devuelve los campos que el rol no puede leer, así que tampoco aparecen aquí.
+- No cambia el impuesto, que sigue saliendo de `valor_autoavaluo`.
+- La ficha del predio (`GET /api/srtm/predios/{id}`) trae el mismo bloque en `valuacion_origen.predio`, para el predio
+  sin DJ.
+
 **`contribuyente`**: una persona natural, persona jurídica o sucesión. `numero_documento` es único.
 
 | Campo | Origen en el Excel |
@@ -1833,11 +1857,12 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET, POST | `/api/srtm/contribuyentes/{id}/{lista}` | las listas del contribuyente: `domicilios`, `relacionados`, `medios-contacto`, `sustentos` |
 | PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
 | GET, POST | `/api/srtm/predios?q&page&size` | búsqueda y alta |
-| GET, PUT, DELETE | `/api/srtm/predios/{id}?anio` | la ficha: datos, nº de titulares y totales del año; la edición; y la baja (409 si tiene declaraciones o cuotas de arbitrio) |
+| GET, PUT, DELETE | `/api/srtm/predios/{id}?anio` | la ficha: datos, nº de titulares y totales del año, y `valuacion_origen.predio` (los códigos del padrón externo con valor, [abajo](#valuación-del-padrón-de-origen)); la edición; y la baja (409 si tiene declaraciones o cuotas de arbitrio) |
 | GET | `/api/srtm/predios/{id}/declaraciones?anio` | sus declaraciones, cada una con su contribuyente |
 | POST | `/api/srtm/declaraciones` | alta corta, desde la ficha del predio (`contribuyente` y `predio` son ids) |
 | POST | `/api/srtm/contribuyentes/{id}/declaraciones-juradas` | presenta una DJ: `{declaracion, predio_id}` sobre un predio del padrón, o `{declaracion, predio}` registrando uno |
 | GET, PUT, DELETE | `/api/srtm/declaraciones/{id}` | la DJ con su predio y su contribuyente; la edición; y la baja (409 si alguna de sus listas tiene filas) |
+| GET | `/api/srtm/declaraciones/{id}/valuacion-origen` | solo lectura: lo que trajo un padrón externo (Ica) a la DJ, su predio y sus niveles, solo los campos con valor ([abajo](#valuación-del-padrón-de-origen)) |
 | POST | `/api/srtm/declaraciones/{id}/anular` | el descargo: `{motivo_anulacion}` la deja ANULADA |
 | POST | `/api/srtm/declaraciones/{id}/condominos` | "Datos de los condóminos": `{contribuyente, porcentaje_condominio}` agrega otro titular del mismo predio, año y secuencia |
 | GET, POST | `/api/srtm/declaraciones/{id}/{lista}` | las listas de la DJ: `transferentes`, `niveles`, `obras`, `frentes` |

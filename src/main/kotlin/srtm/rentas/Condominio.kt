@@ -96,8 +96,20 @@ fun delPredio(origen: Declaracion) =
     )
 
 // the valuation an external padrón (Ica) brings (model/model.json), which the dtos do not know: a condómino's copy
-// takes it from the stored records
+// takes it from the stored records, and GET /declaraciones/{id}/valuacion-origen reads it there (ValuacionOrigen)
 val PADRON_EXTERNO_DECLARACION = listOf("arancel", "valor_terreno", "valor_construccion", "valor_otras_instalaciones")
 val PADRON_EXTERNO_NIVEL = listOf("clasificacion", "valor_unitario", "incremento", "porcentaje_depreciacion", "valor_total")
+
+// the predio's codes in the source catastro and in the Formato Padrón Municipal Armonización: only read, never copied
+val PADRON_EXTERNO_PREDIO = listOf("codigo_via", "codigo_unidad_urbana", "codigo_hu_armonizacion", "codigo_via_armonizacion")
+
+// of a stored record, the fields of `campos` that have a value, in that order: null and blank text are none
+fun conValor(
+    registro: Map<*, *>,
+    campos: List<String>
+): Map<String, Any> =
+    campos
+        .mapNotNull { campo -> registro[campo]?.takeUnless { it is String && it.isBlank() }?.let { campo to it } }
+        .toMap()
 
 private const val PORCENTAJE = "porcentaje_condominio"

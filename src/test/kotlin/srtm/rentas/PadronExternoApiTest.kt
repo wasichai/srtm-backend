@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
 import tools.jackson.databind.JsonNode
 import java.math.BigDecimal
+import java.util.UUID
 
 // #124: what an external padrón (Ica) brings and the srtm's forms do not ask for. the fields are optional in the
 // model and the portal's dtos do not know them: they are written by the importer (core's record api) and a portal
@@ -79,6 +80,88 @@ class PadronExternoApiTest : SrtmApiTest() {
         val vias = tree(send("GET", "/api/srtm/vias?q=$nombre&tipo=JIRON", null, HttpStatus.OK))
         assertEquals(1, vias["totalElements"].asInt(), vias.toString())
         assertEquals(nombre, vias["content"][0]["nombre"].asString(), vias.toString())
+    }
+
+    // #132: what the dtos do not carry, read back for the portal to show. only the fields with a value, and only the
+    // niveles that have any
+    @Test
+    fun `the valuacion of the external padron is read with its predio and its niveles`() {
+        val (declaracion, predio) = declaracionConPredio()
+        val importado = post("/api/srtm/declaraciones/$declaracion/niveles", NIVEL)["id"].asString()
+        val propio = post("/api/srtm/declaraciones/$declaracion/niveles", NIVEL + ("numero_piso" to 2))["id"].asString()
+        importar(PREDIO, predio, PREDIO_ICA - "codigo_via_armonizacion")
+        importar(DECLARACION, declaracion, DECLARACION_ICA)
+        importar(NIVEL_CONSTRUCCION, importado, NIVEL_ICA)
+
+        val origen = tree(send("GET", "/api/srtm/declaraciones/$declaracion/valuacion-origen", null, HttpStatus.OK))
+
+        assertValores(PREDIO_ICA - "codigo_via_armonizacion", origen["predio"])
+        assertValores(DECLARACION_ICA, origen["declaracion"])
+        assertEquals(setOf(importado), origen["niveles"].propertyNames().toSet(), origen.toString())
+        assertValores(NIVEL_ICA, origen["niveles"][importado])
+        assertTrue(origen["niveles"][propio] == null, origen.toString())
+    }
+
+    @Test
+    fun `a declaracion with nothing of an external padron has empty blocks`() {
+        val declaracion = nuevaDeclaracion()
+        post("/api/srtm/declaraciones/$declaracion/niveles", NIVEL)
+
+        val origen = tree(send("GET", "/api/srtm/declaraciones/$declaracion/valuacion-origen", null, HttpStatus.OK))
+
+        for (bloque in listOf("predio", "declaracion", "niveles")) assertEquals(0, origen[bloque].size(), origen.toString())
+    }
+
+    @Test
+    fun `the valuacion of an unknown declaracion is a 404`() {
+        send("GET", "/api/srtm/declaraciones/${UUID.randomUUID()}/valuacion-origen", null, HttpStatus.NOT_FOUND)
+    }
+
+    // the same checks as the declaración's ficha: core's, on the records read
+    @Test
+    fun `a role that cannot read the declaracion is refused its valuacion as its ficha`() {
+        val declaracion = nuevaDeclaracion()
+        importar(DECLARACION, declaracion, DECLARACION_ICA)
+        val funcionario = funcionario(listOf(permiso(PREDIO, "READ"), permiso(NIVEL_CONSTRUCCION, "READ")))
+
+        val ficha = exchange("GET", "/api/srtm/declaraciones/$declaracion", null, funcionario)
+        val origen = exchange("GET", "/api/srtm/declaraciones/$declaracion/valuacion-origen", null, funcionario)
+
+        assertEquals(HttpStatus.FORBIDDEN, ficha.first, ficha.second)
+        assertEquals(ficha.first, origen.first, origen.second)
+    }
+
+    // the predio's ficha, without a declaración, carries the predio's block too
+    @Test
+    fun `the predio's ficha carries the codes of the external padron`() {
+        val (_, predio) = declaracionConPredio()
+        importar(PREDIO, predio, PREDIO_ICA)
+
+        val ficha = tree(send("GET", "/api/srtm/predios/$predio", null, HttpStatus.OK))
+
+        assertValores(PREDIO_ICA, ficha["valuacion_origen"]["predio"])
+        val sinPadron = tree(send("GET", "/api/srtm/predios/${predio()}", null, HttpStatus.OK))
+        assertEquals(0, sinPadron["valuacion_origen"]["predio"].size(), sinPadron.toString())
+    }
+
+    private fun declaracionConPredio(): Pair<String, String> {
+        val declaracion = nuevaDeclaracion()
+        return declaracion to registro(DECLARACION, declaracion)["predio"].asString()
+    }
+
+    // exactly these fields, a decimal compared by value
+    private fun assertValores(
+        esperado: Map<String, Any>,
+        leido: JsonNode
+    ) {
+        assertEquals(esperado.keys, leido.propertyNames().toSet(), leido.toString())
+        for ((campo, valor) in esperado) {
+            if (valor is BigDecimal) {
+                assertEquals(0, valor.compareTo(leido[campo].decimalValue()), "$campo: $leido")
+            } else {
+                assertEquals(valor, leido[campo].asString(), "$campo: $leido")
+            }
+        }
     }
 
     // what the importer does: core's record api, whose update replaces every field (so it sends them all)
