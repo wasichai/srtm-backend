@@ -819,13 +819,18 @@ secuencia de uso, una vez).
   declarado de cada una; si todas declaran 0, según su área construida; si tampoco, en partes iguales (D12), al
   céntimo y la última con el residuo;
 - las DJ de ese predio se recalculan **dos veces con la misma regla**, `condominio` (el % de cada condómino y su
-  `deduccion`; D8: ninguna deducción nueva): con el autoavalúo declarado y con la parte del catastro. Lo que el
+  `deduccion`): con el autoavalúo declarado y con la parte del catastro. Lo que el
   catastro mueve es la diferencia entre los dos valores afectos recalculados, nunca entre el afecto guardado y uno
   recalculado: en el padrón importado el afecto es el del Excel y el % está redondeado, y compararlos daría una brecha
   aunque los autoavalúos sean iguales. Un predio que el catastro no valorizó es el mismo en los dos lados;
 - **% de condominio vacío** (el importador lo deja vacío cuando el Excel no trae condominio o el autoavalúo es 0): un
   titular solo de la secuencia tiene el 100 %; entre varios, los que no tienen % se reparten en partes iguales lo que
   dejan los demás (nunca menos de 0). La corrida cuenta en `mensaje` cuántas DJ se completaron así;
+- **deducción del 5 %** (Amazonía, Ley 27037; D8): se reconoce en la DJ, no por un parámetro. Si la `deduccion` de
+  una DJ es mayor que 0 y es el 5 % de su valor de condominio declarado (recalculado, al céntimo, ±S/ 0,01), en el
+  lado catastral se recalcula: el 5 % del valor de condominio catastral (al céntimo, redondeo comercial), y el afecto
+  es ese valor menos esa deducción. Las demás deducciones (pensionista, etc.) quedan fijas en los dos lados. La
+  corrida cuenta en `mensaje` cuántas DJ se recalcularon así;
 - `Δ impuesto = liquidar(afecto guardado + lo que mueve el catastro) − liquidar(afecto guardado)`: el lado declarado
   es exactamente la liquidación de `/liquidacion` (el `impuestoAnual`, con sus tramos y el mínimo);
 - ese Δ se reparte entre sus predios en proporción a lo que movió cada uno: con su signo cuando todos se mueven en el
@@ -893,11 +898,12 @@ El JSON va en camelCase, como `/liquidacion`. `lote_geom` de `brecha_predio` es 
 guarda el lote del predio del padrón o, para un omiso, el del catastro; así `/lotes` lo lee de las filas y la capa gis
 (`/api/gis/objects/brecha_predio/features`) también puede servirlo.
 
-**Decisiones** (confirmadas por la municipalidad el 2026-10-19, salvo D8):
+**Decisiones** (confirmadas por la municipalidad el 2026-10-19; D8 decidida el 2026-10-20):
 - D5: una celda «.....» del cuadro de valores no es cero: el predio queda SIN_VALOR con su motivo.
 - D7: llave de cruce código municipal → CPU → sector, manzana y lote.
-- D8: la deducción Amazonía no se aplica (Perené no la tiene hoy); solo la `deduccion` que ya trae cada DJ. Abierta
-  para cuando se cargue una municipalidad de la Amazonía.
+- D8: la deducción del 5 % (Amazonía, Ley 27037) se reconoce en la DJ (su `deduccion` es el 5 % de su valor de
+  condominio declarado, ±S/ 0,01) y se recalcula sobre el valor de condominio catastral; las demás deducciones quedan
+  fijas.
 - D10: COINCIDE con |Δ autoavalúo| ≤ 5 %.
 - D11: solo 2026 (el año lo decide catastro; srtm acepta cualquiera con sus parámetros).
 - D12: reparto entre secuencias por autoavalúo declarado, si no por área construida, si no en partes iguales.
