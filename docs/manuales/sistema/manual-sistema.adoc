@@ -41,8 +41,8 @@ Este manual describe la rama `main` del repositorio `srtm-backend`, con `version
 wasichai {version-wasichai}.
 
 IMPORTANT: La etiqueta `v0.9.0` (release del 10 de octubre de 2026) se construyó con wasichai 0.6.0. La subida a
-wasichai 1.2.0 (#112) y la brecha de recaudación (#120) llegaron a `main` después de esa etiqueta y todavía no tienen
-release propio. Un jar descargado del release `v0.9.0` no trae la brecha ni aplica la migración V18 de Core.
+wasichai 1.2.0 (#112), luego a 1.3.0, y la brecha de recaudación (#120) llegaron a `main` después de esa etiqueta y
+salen en el release `v1.0.0` (`release-as` en la configuración). Un jar descargado del release `v0.9.0` no trae la brecha ni aplica la migración V18 de Core.
 Compruebe qué versión despliega antes de seguir los procedimientos de actualización (<<despliegue-actualizar>>).
 
 [[intro-alcance]]
@@ -100,7 +100,7 @@ y sanciones (CUIS). El <<glosario>> reúne los términos tributarios y técnicos
 |La referencia técnica detallada: modelo, reglas de cálculo, API, importadores, emisión masiva, brecha.
 
 |`docs/develop/README.md`
-|Guía de desarrollo local. Desactualizada en dos puntos: dice wasichai 0.6.0 (es 1.2.0) y que `apply.py` crea «21
+|Guía de desarrollo local. Desactualizada en dos puntos: dice wasichai 0.6.0 (es 1.3.0) y que `apply.py` crea «21
 objetos + 10 relaciones» (son 42 objetos y 44 relaciones).
 
 |`docs/develop/releasing.md`
@@ -1540,8 +1540,9 @@ Mientras la versión sea 0.x, un `feat:` sube el minor y un `fix:` el patch (`bu
 `release.yml` corra hace falta el secreto `RELEASE_PLEASE_TOKEN` (un PAT): un release creado con el `GITHUB_TOKEN`
 del workflow no dispara otros workflows, y entonces el jar habría que adjuntarlo a mano.
 
-NOTE: El primer release (`v0.9.0`) se forzó con `"release-as"` en `release-please-config.json`. Como indica
-`releasing.md`, esa línea se quitó después de publicarlo: desde entonces la versión la calculan los commits.
+NOTE: El primer release (`v0.9.0`) se forzó con `"release-as"` en `release-please-config.json`, y esa línea se quitó
+después de publicarlo. `v1.0.0` se fuerza igual (`"release-as": "1.0.0"`); como indica `releasing.md`, se quita
+después de publicarlo y desde entonces la versión la calculan los commits.
 
 [[desp-artefactos]]
 === Qué se publica
@@ -1660,7 +1661,8 @@ Efecto:: Las migraciones de Core que traiga la versión nueva se aplican al arra
 // fin de los pasos
 Resultado esperado:: El backend nuevo arranca, Flyway aplica sus migraciones y `apply.py --diff` dice
 `diff: nothing pending`.
-Casos especiales:: De wasichai 0.6 a 1.2, Core aplica V18 (`custom_fields.time_zone`, una columna sin datos). De
+Casos especiales:: De wasichai 1.2 a 1.3, wasichai-files aplica su V2 (`stored_files.platform_run`, una columna sin
+datos). De wasichai 0.6 a 1.2, Core aplica V18 (`custom_fields.time_zone`, una columna sin datos). De
 0.3.2 a 0.6, V9 a V17: entre ellas los disparadores de `audit_log`, que exigen que el rol que migra sea dueño de la
 tabla, y un índice sobre `audit_log` sin `CONCURRENTLY` (en una base con mucha auditoría, arranque sin tráfico).
 La versión con la HLA agrega `emision_masiva.documentos`: sin ese campo el backend no ve las tablas de emisión de la
@@ -2289,8 +2291,8 @@ un solo rol de base de datos en los entornos actuales. `SECURITY.md` sin complet
 |Falta la cifra de la emisión masiva con el padrón real en dev (#55).
 
 |Release
-|`v0.9.0` usa wasichai 0.6.0; `main` (wasichai 1.2.0, brecha) no tiene release propio y `release-as` sigue en la
-configuración.
+|`v0.9.0` usa wasichai 0.6.0; `main` (wasichai 1.3.0, brecha) sale como `v1.0.0` con `release-as`, que hay que
+quitar de la configuración después de publicarlo.
 |===
 
 :glosario-estilo: appendix

@@ -18,6 +18,13 @@ La línea parte de `0.8.0` (manifest y `gradle.properties`) y `release-please-co
 `release-as` de la config**; si no, cada PR siguiente volvería a proponer 0.9.0. Mientras la versión sea 0.x, un
 `feat:` sube el minor y un `fix:` el patch (`bump-minor-pre-major`).
 
+## Release 1.0.0
+
+`release-please-config.json` trae `"release-as": "1.0.0"`: el siguiente PR de release propone exactamente 1.0.0 (con
+wasichai 1.3.0 y todo lo de `main` desde 0.9.0). **Después de mergearlo, quitar `release-as` de la config**, igual
+que tras 0.9.0. Desde 1.x, `bump-minor-pre-major` ya no aplica: un `feat:` sube el minor y un `fix:` el patch, y un
+cambio que rompe (`!` o `BREAKING CHANGE:`) sube el major.
+
 ## Secreto (una vez)
 
 `RELEASE_PLEASE_TOKEN`: PAT fine-grained sobre este repo con Contents y Pull requests en lectura/escritura. Un

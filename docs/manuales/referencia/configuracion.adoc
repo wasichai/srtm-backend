@@ -1,7 +1,7 @@
 // Referencia de configuración de srtm-backend. La incluyen el manual técnico del sistema y el del administrador,
 // como capítulo (include::../referencia/configuracion.adoc[]) o dentro de otro capítulo ([leveloffset=+1]).
 // Empieza en el nivel 2 (==) y no tiene cabecera de documento. Fuentes: src/main/resources/application.yml,
-// develop/example.env, compose.yml, build.gradle.kts y la referencia de wasichai 1.2.0 (docs/modules/core.md).
+// develop/example.env, compose.yml, build.gradle.kts y la referencia de wasichai 1.3.0 (docs/modules/core.md).
 // Ningún valor de aquí es un secreto real: las claves se muestran como <marcador>.
 
 [[ref-configuracion]]
