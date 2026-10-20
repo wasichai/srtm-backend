@@ -476,11 +476,13 @@
           "source": "estado_construccion_desc",
           "description": "Heredado del padrón. No es un dato de la DJ del SRTM: sus niveles llevan estado de conservación (M01-1-014)."},
         {"name": "area_terreno", "label": "Área de terreno (m²)", "type": "DECIMAL", "source": "area_terreno"},
-        {"name": "area_construida", "label": "Área construida (m²)", "type": "DECIMAL", "source": "area_construida"},
-        {"name": "longitud_frente", "label": "Longitud de frente (m)", "type": "DECIMAL", "source": "longitud_frente"},
+        {"name": "area_construida", "label": "Área construida (m²)", "type": "DECIMAL", "source": "area_construida",
+          "description": "Derivado: la suma del área construida de los niveles activos. El portal la recalcula en cada escritura de la DJ o de sus niveles; las importadas conservan la suya hasta su primer cambio."},
+        {"name": "longitud_frente", "label": "Longitud de frente (m)", "type": "DECIMAL", "source": "longitud_frente",
+          "description": "Derivado: frontis_principal más el frontis de los otros frentes activos. Es la base de los arbitrios (FRONTIS_ML)."},
         {"name": "numero_habitantes", "label": "Número de habitantes", "type": "INTEGER", "source": "cantidad_habitantes"},
         {"name": "valor_autoavaluo", "label": "Valor del autoavalúo", "type": "DECIMAL", "source": "autoavaluo_total",
-          "description": "Autoavalúo total del predio (o de la secuencia de uso)."},
+          "description": "Autoavalúo total del predio (o de la secuencia de uso). Derivado: lo valúa el catastro de la organización en cada escritura de la DJ o de sus listas; si no lo valúa, se conserva y se marca autoavaluo_por_revisar. Sin catastro configurado lo escribe el usuario."},
         {"name": "valor_condominio", "label": "Valor en condominio", "type": "DECIMAL", "source": "condominio",
           "description": "Parte del autoavalúo que corresponde a este titular: valor_autoavaluo × porcentaje_condominio / 100."},
         {"name": "deduccion", "label": "Deducción", "type": "DECIMAL", "source": "deduccion"},
@@ -528,7 +530,15 @@
         {"name": "sustituye", "label": "Sustituye a", "type": "UUID",
           "description": "En una rectificatoria: el id de la declaración que sustituye, que queda SUSTITUIDA. Un id y no una relación: el modelo no admite que una declaración apunte a otra."},
         {"name": "fecha_sustitucion", "label": "Fecha de sustitución", "type": "DATE",
-          "description": "En una declaración SUSTITUIDA: el día en que se presentó su rectificatoria."}
+          "description": "En una declaración SUSTITUIDA: el día en que se presentó su rectificatoria."},
+        {"name": "frontis_principal", "label": "Frontis principal (m)", "type": "DECIMAL",
+          "description": "Lo que se escribe del frente principal. longitud_frente es la suma de este y los otros frentes."},
+        {"name": "area_comun_construida", "label": "Área común construida (m²)", "type": "DECIMAL",
+          "description": "Derivado: la suma del área común de los niveles activos."},
+        {"name": "autoavaluo_por_revisar", "label": "Autoavalúo por revisar", "type": "BOOLEAN",
+          "description": "El catastro no valuó la DJ en su último cambio: valor_autoavaluo es el anterior. Vacío cuenta como no."},
+        {"name": "autoavaluo_motivo", "label": "Motivo del autoavalúo por revisar", "type": "TEXT",
+          "description": "Por qué el catastro no valuó la DJ (su motivo, o que no respondió)."}
       ]
     },
     {
@@ -731,7 +741,9 @@
         {"name": "porcentaje_depreciacion", "label": "% de depreciación", "type": "DECIMAL",
           "description": "Heredado de un padrón externo (Ica)."},
         {"name": "valor_total", "label": "Valor del nivel", "type": "DECIMAL",
-          "description": "Heredado de un padrón externo (Ica): el valor de la construcción del nivel, ya depreciado, como lo trae el padrón."}
+          "description": "Heredado de un padrón externo (Ica): el valor de la construcción del nivel, ya depreciado, como lo trae el padrón."},
+        {"name": "fila", "label": "Fila", "type": "UUID",
+          "description": "Identifica la misma fila en las DJ de los condóminos."}
       ]
     },
     {
@@ -754,7 +766,9 @@
         {"name": "metrado", "label": "Metrado", "type": "DECIMAL", "required": true},
         {"name": "unidad_medida", "label": "Unidad de medida", "type": "ENUM", "enum": "unidad_medida"},
         {"name": "total_metrado", "label": "Total metrado", "type": "DECIMAL", "description": "cantidad x metrado, lo calcula el backend."},
-        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"}
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"},
+        {"name": "fila", "label": "Fila", "type": "UUID",
+          "description": "Identifica la misma fila en las DJ de los condóminos."}
       ]
     },
     {
@@ -771,7 +785,9 @@
         {"name": "lote", "label": "Lote", "type": "TEXT"},
         {"name": "cuadra", "label": "Cuadra", "type": "TEXT"},
         {"name": "lado", "label": "Lado", "type": "ENUM", "enum": "lado"},
-        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"}
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_registro"},
+        {"name": "fila", "label": "Fila", "type": "UUID",
+          "description": "Identifica la misma fila en las DJ de los condóminos."}
       ]
     },
     {
