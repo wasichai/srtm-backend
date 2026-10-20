@@ -1,0 +1,177 @@
+{
+  "generado": "2026-10-19T23:54:23+00:00",
+  "base": "srtm_demo",
+  "versiones": {
+    "srtm_backend": "0.9.0",
+    "postgresql": "18.6 (Debian 18.6-1.pgdg13+2)",
+    "postgis": "3.6.4",
+    "imagen_docker": "postgis/postgis:18-3.6",
+    "flyway": {
+      "core": {
+        "ultima": "18",
+        "migraciones": 16,
+        "fallidas": 0
+      },
+      "core_seed": {
+        "ultima": "1",
+        "migraciones": 2,
+        "fallidas": 0
+      },
+      "documents": {
+        "ultima": "1",
+        "migraciones": 2,
+        "fallidas": 0
+      },
+      "forms": {
+        "ultima": "1",
+        "migraciones": 2,
+        "fallidas": 0
+      },
+      "gis": {
+        "ultima": "1",
+        "migraciones": 2,
+        "fallidas": 0
+      },
+      "pages": {
+        "ultima": "1",
+        "migraciones": 2,
+        "fallidas": 0
+      },
+      "views": {
+        "ultima": "1",
+        "migraciones": 2,
+        "fallidas": 0
+      },
+      "workflow": {
+        "ultima": "1",
+        "migraciones": 2,
+        "fallidas": 0
+      }
+    }
+  },
+  "restauracion": [
+    "1. docker compose -p srtm-docs -f docs/manuales/demo/compose.demo.yml up -d  (o una base PostgreSQL 18 con PostGIS 3.6)",
+    "2. createdb srtm_demo_restaurada  (vacía: el respaldo trae extensiones, esquemas e historial de Flyway)",
+    "3. pg_restore --no-owner --no-privileges -d srtm_demo_restaurada srtm_demo.dump  (o psql -f srtm_demo.sql)",
+    "4. tar -xzf emisiones.tar.gz -C <SRTM_EMISION_DIR del Core>",
+    "5. python3 docs/manuales/demo/verificar.py --base srtm_demo_restaurada",
+    "6. Core de la misma versión (srtm_backend) con WASICHAI_DB_NAME=srtm_demo_restaurada: las migraciones no tienen nada que hacer"
+  ],
+  "archivos": {
+    "srtm_demo.dump": {
+      "bytes": 1260111,
+      "sha256": "910621a4a1e37aa03e744dfbfd8ed4e2aba91ddd86e44de8fb8f7a0f08fc8c13"
+    },
+    "srtm_demo.sql": {
+      "bytes": 8638542,
+      "sha256": "b0f9363b72142eccc460131b53e9bbdd3018d2c3beb8f8137cdffc62c3c45c5b"
+    },
+    "datos.sql": {
+      "bytes": 12374092,
+      "sha256": "8104b6b6f6e9fd62c3dd94fd9a5e1740bef277963bcb7a680a1abbf4f41f09a5"
+    },
+    "emisiones.tar.gz": {
+      "bytes": 4041478,
+      "sha256": "e5e172d8e8079ea04d0fa30689b7e75be88415f9ccfb3afe3166a74c93b0124e"
+    }
+  },
+  "restricciones_sin_validar": [
+    "audit_log_correlation_id_valid",
+    "audit_log_source_valid"
+  ],
+  "entidades": {
+    "usuarios": 6,
+    "roles": 6,
+    "contribuyentes": 40,
+    "predios": 55,
+    "declaraciones": 58,
+    "declaraciones_anuladas": 1,
+    "condominos": 2,
+    "lotes_catastro": 45,
+    "cuotas_arbitrio": 2629,
+    "cuotas_anuladas": 1,
+    "emisiones_terminadas": 1,
+    "actas": 3,
+    "actas_anuladas": 1,
+    "resoluciones": 1,
+    "notificaciones_previas": 3,
+    "anuncios": 5,
+    "movimientos_anuncio": 9,
+    "parametros": 90
+  },
+  "tablas": {
+    "app_data.anulacion_cuota_arbitrio__00000000": 1,
+    "app_data.anulacion_papeleta__00000000": 1,
+    "app_data.anuncio__00000000": 5,
+    "app_data.brecha_corrida__00000000": 0,
+    "app_data.brecha_predio__00000000": 0,
+    "app_data.catastro_fiscal__00000000": 45,
+    "app_data.categoria_valor__00000000": 57,
+    "app_data.codigo_infraccion__00000000": 248,
+    "app_data.contribuyente__00000000": 40,
+    "app_data.cuota_arbitrio__00000000": 2629,
+    "app_data.declaracion_predial__00000000": 58,
+    "app_data.descargo_papeleta__00000000": 1,
+    "app_data.determinacion_arbitrio_lote__00000000": 1,
+    "app_data.determinacion_arbitrio_masiva__00000000": 1,
+    "app_data.domicilio__00000000": 40,
+    "app_data.emision_lote__00000000": 1,
+    "app_data.emision_masiva__00000000": 1,
+    "app_data.inafectacion_arbitrio__00000000": 1,
+    "app_data.medio_contacto__00000000": 47,
+    "app_data.movimiento_anuncio__00000000": 9,
+    "app_data.municipalidad__00000000": 1,
+    "app_data.nivel_construccion__00000000": 81,
+    "app_data.notificacion_administrativa__00000000": 3,
+    "app_data.notificacion_resolucion__00000000": 1,
+    "app_data.obra_categoria__00000000": 96,
+    "app_data.obra_complementaria__00000000": 28,
+    "app_data.ordenanza_arbitrio__00000000": 1,
+    "app_data.otro_frente__00000000": 1,
+    "app_data.papeleta__00000000": 3,
+    "app_data.parametro_tributario__00000000": 90,
+    "app_data.predio__00000000": 55,
+    "app_data.relacionado__00000000": 10,
+    "app_data.resolucion_gerencia__00000000": 1,
+    "app_data.servicio_arbitrio__00000000": 4,
+    "app_data.subsanacion_notificacion__00000000": 1,
+    "app_data.sustento__00000000": 10,
+    "app_data.transferente__00000000": 1,
+    "app_data.ubigeo__00000000": 1893,
+    "app_data.unidad_urbana__00000000": 2,
+    "app_data.uso_predio__00000000": 276,
+    "app_data.via__00000000": 7,
+    "app_data.zona_arbitrio_ubicacion__00000000": 1,
+    "wasichai.audit_log": 6183,
+    "wasichai.custom_fields": 570,
+    "wasichai.custom_objects": 42,
+    "wasichai.document_counters": 0,
+    "wasichai.document_types": 0,
+    "wasichai.documents": 0,
+    "wasichai.field_permissions": 0,
+    "wasichai.flyway_history_core": 18,
+    "wasichai.flyway_history_core_seed": 2,
+    "wasichai.flyway_history_documents": 2,
+    "wasichai.flyway_history_forms": 2,
+    "wasichai.flyway_history_gis": 2,
+    "wasichai.flyway_history_pages": 2,
+    "wasichai.flyway_history_views": 2,
+    "wasichai.flyway_history_workflow": 2,
+    "wasichai.forms": 0,
+    "wasichai.idempotency_keys": 0,
+    "wasichai.object_actions": 0,
+    "wasichai.org_units": 0,
+    "wasichai.organizations": 1,
+    "wasichai.pages": 0,
+    "wasichai.permissions": 196,
+    "wasichai.relationships": 44,
+    "wasichai.roles": 6,
+    "wasichai.service_accounts": 0,
+    "wasichai.user_org_units": 0,
+    "wasichai.user_preferences": 6,
+    "wasichai.user_roles": 6,
+    "wasichai.users": 6,
+    "wasichai.views": 0,
+    "wasichai.workflows": 0
+  }
+}

@@ -10,7 +10,8 @@ de los respaldos y el orden de restauración.
 Sin él, compara la base con el manifiesto y comprueba su integridad:
 - las mismas tablas con los mismos conteos;
 - el mismo historial de Flyway, sin migraciones fallidas;
-- ninguna restricción sin validar y ninguna clave foránea rota (lo vuelve a comprobar fila a fila);
+- las mismas restricciones sin validar que el original (las migraciones de wasichai agregan algunas NOT VALID a
+  propósito) y ninguna clave foránea rota (lo vuelve a comprobar fila a fila);
 - las entidades que muestran los manuales: contribuyentes con DJ vigentes, el condominio, la DJ anulada, cuotas y su
   anulación, la emisión TERMINADA, actas, anuncios en sus cuatro estados, los seis usuarios y sus roles.
 
@@ -134,6 +135,11 @@ def entidades(base):
     }
 
 
+def sin_validar(base):
+    return [c for (c,) in consulta(base, """select conname from pg_constraint c join pg_namespace n on n.oid = c.connamespace
+        where not c.convalidated and n.nspname in ('wasichai', 'app_data') order by 1""")]
+
+
 def claves_foraneas_rotas(base):
     """Cada clave foránea de app_data y wasichai, comprobada fila a fila (una restauración con triggers apagados
     podría haber dejado una sin padre)."""
@@ -181,6 +187,7 @@ def escribir_manifiesto(base):
             nombre: {"bytes": (RESPALDOS / nombre).stat().st_size, "sha256": sha256(RESPALDOS / nombre)}
             for nombre in ARCHIVOS if (RESPALDOS / nombre).exists()
         },
+        "restricciones_sin_validar": sin_validar(base),
         "entidades": entidades(base),
         "tablas": conteos(base),
     }
@@ -211,9 +218,9 @@ def verificar(base):
         if h["fallidas"]:
             fallas.append(f"Flyway {modulo}: {h['fallidas']} migraciones fallidas")
 
-    sin_validar = consulta(base, """select conname from pg_constraint c join pg_namespace n on n.oid = c.connamespace
-        where not c.convalidated and n.nspname in ('wasichai', 'app_data')""")
-    fallas += [f"restricción sin validar: {c}" for (c,) in sin_validar]
+    pendientes = sin_validar(base)
+    if pendientes != esperado.get("restricciones_sin_validar", []):
+        fallas.append(f"restricciones sin validar {pendientes}, el manifiesto dice {esperado.get('restricciones_sin_validar')}")
     rotas, total_fk = claves_foraneas_rotas(base)
     fallas += [f"clave foránea rota: {n} ({c} filas)" for n, c in rotas]
 
