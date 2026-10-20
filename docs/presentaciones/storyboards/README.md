@@ -4,20 +4,20 @@
 
 Cada vídeo, cada escena y la sección de los manuales de la que sale. El detalle de cada escena está en su storyboard.
 
-10 vídeos, 193 escenas, 72:56 en total.
+10 vídeos, 195 escenas, 73:55 en total.
 
 | Vídeo | Audiencia | Duración | Escenas | Storyboard |
 |---|---|---|---|---|
 | 01 · Rentas municipales de un vistazo | Todo el personal de rentas, la gerencia y quien empieza a usar el sistema | 3:54 | 10 | [srtm-01-introduccion.md](srtm-01-introduccion.md) |
 | 02 · Primeros pasos en el portal | Todos los usuarios del portal, de cualquier perfil | 7:21 | 21 | [srtm-02-primeros-pasos.md](srtm-02-primeros-pasos.md) |
-| 03 · Registro tributario | Personal de ventanilla y del registro tributario (perfil REGISTRADOR) | 8:15 | 26 | [srtm-03-registro-tributario.md](srtm-03-registro-tributario.md) |
+| 03 · Registro tributario | Personal de ventanilla y del registro tributario (perfil REGISTRADOR) | 9:02 | 28 | [srtm-03-registro-tributario.md](srtm-03-registro-tributario.md) |
 | 04 · Arbitrios y emisión | Personal del área de arbitrios y de emisión (perfil ARBITRIOS_EMISION) | 8:27 | 24 | [srtm-04-arbitrios-emision.md](srtm-04-arbitrios-emision.md) |
 | 05 · Infracciones administrativas | Personal de fiscalización (perfil FISCALIZADOR) | 9:32 | 23 | [srtm-05-infracciones.md](srtm-05-infracciones.md) |
 | 06 · Anuncios y propaganda | Personal que autoriza anuncios (perfil ANUNCIOS) | 4:59 | 12 | [srtm-06-anuncios.md](srtm-06-anuncios.md) |
 | 07 · Consulta y brecha de recaudación | Orientación al contribuyente, supervisión, auditoría interna y gerencia (perfil CONSULTA) | 4:10 | 13 | [srtm-07-consulta.md](srtm-07-consulta.md) |
-| 08 · Administración del sistema | Administradores del sistema (rol ADMIN) y quien coordina con el área de sistemas | 9:41 | 27 | [srtm-08-administrador.md](srtm-08-administrador.md) |
-| 09 · Arquitectura técnica | Ingenieros de software, arquitectos y DevOps | 7:31 | 15 | [srtm-09-arquitectura.md](srtm-09-arquitectura.md) |
-| 10 · Instalación, operación y recuperación | DevOps y administradores de bases de datos | 9:06 | 22 | [srtm-10-operacion.md](srtm-10-operacion.md) |
+| 08 · Administración del sistema | Administradores del sistema (rol ADMIN) y quien coordina con el área de sistemas | 9:44 | 27 | [srtm-08-administrador.md](srtm-08-administrador.md) |
+| 09 · Arquitectura técnica | Ingenieros de software, arquitectos y DevOps | 7:32 | 15 | [srtm-09-arquitectura.md](srtm-09-arquitectura.md) |
+| 10 · Instalación, operación y recuperación | DevOps y administradores de bases de datos | 9:13 | 22 | [srtm-10-operacion.md](srtm-10-operacion.md) |
 
 ## 01 · Rentas municipales de un vistazo
 
@@ -84,12 +84,14 @@ Cada vídeo, cada escena y la sección de los manuales de la que sale. El detall
 | 18 | Del autoavalúo al valor afecto | `usuario/registrador.adoc#dj-conceptos` (Lo que hay que saber antes)<br>`usuario/registrador.adoc#condominos` (Datos de los condóminos) |
 | 19 | Varios titulares de un mismo predio | `usuario/registrador.adoc#condominos` (Datos de los condóminos)<br>`usuario/registrador.adoc#proc-agregar-condomino` (Agregar un condómino) |
 | 20 | La anulación es el descargo | `usuario/registrador.adoc#proc-anular-declaracion` (Anular una declaración (descargo)) |
-| 21 | Cuando un predio se vende | `usuario/registrador.adoc#proc-cambio-titular` (Registrar un cambio de dueño) |
-| 22 | Documentos | `usuario/registrador.adoc#documentos` (Documentos: PU, HR y HLA) |
-| 23 | PU, HR y HLA desde las fichas | `usuario/registrador.adoc#documentos-que-son` (Qué documento entregar)<br>`usuario/registrador.adoc#proc-ver-documento` (Ver, imprimir o descargar un documento) |
-| 24 | QUISPE ROJAS ROSA ELENA, 2026 | `usuario/registrador.adoc#liquidacion` (Cómo se calcula el impuesto predial) |
-| 25 | La HR, sección por sección | `usuario/registrador.adoc#hr` (La HR) |
-| 26 | El registro tributario, en resumen | `usuario/registrador.adoc#faq-registro` (Preguntas del registro tributario) |
+| 21 | Corregir sin perder la historia | `usuario/registrador.adoc#rectificar-declaracion` (Rectificar una declaración o declarar otro año desde la anterior) |
+| 22 | Valuación de origen y autoavalúo sugerido | `usuario/registrador.adoc#valuacion-origen` (Valuación del padrón de origen y autoavalúo sugerido)<br>`usuario/registrador.adoc#rectificar-declaracion` (Rectificar una declaración o declarar otro año desde la anterior) |
+| 23 | Cuando un predio se vende | `usuario/registrador.adoc#proc-cambio-titular` (Registrar un cambio de dueño) |
+| 24 | Documentos | `usuario/registrador.adoc#documentos` (Documentos: PU, HR y HLA) |
+| 25 | PU, HR y HLA desde las fichas | `usuario/registrador.adoc#documentos-que-son` (Qué documento entregar)<br>`usuario/registrador.adoc#proc-ver-documento` (Ver, imprimir o descargar un documento) |
+| 26 | QUISPE ROJAS ROSA ELENA, 2026 | `usuario/registrador.adoc#liquidacion` (Cómo se calcula el impuesto predial) |
+| 27 | La HR, sección por sección | `usuario/registrador.adoc#hr` (La HR) |
+| 28 | El registro tributario, en resumen | `usuario/registrador.adoc#faq-registro` (Preguntas del registro tributario) |
 
 ## 04 · Arbitrios y emisión
 
@@ -251,7 +253,7 @@ Cada vídeo, cada escena y la sección de los manuales de la que sale. El detall
 | 10 | Respaldo primero, todas las instancias juntas | `sistema/manual-sistema.adoc#proc-actualizar` (Actualizar el backend) |
 | 11 | Rutas de salud, sin token | `sistema/manual-sistema.adoc#op-salud` (Salud) |
 | 12 | Las líneas que conviene vigilar | `sistema/manual-sistema.adoc#op-logs` (Registros (logs)) |
-| 13 | Cuatro cosas que respaldar | `sistema/manual-sistema.adoc#resp-que` (Qué hay que respaldar) |
+| 13 | Cinco cosas que respaldar | `sistema/manual-sistema.adoc#resp-que` (Qué hay que respaldar) |
 | 14 | Un volcado completo, y su prueba | `sistema/manual-sistema.adoc#proc-respaldo-base` (Respaldar la base)<br>`sistema/manual-sistema.adoc#proc-respaldo-almacen` (Respaldar el almacén de emisiones) |
 | 15 | Siempre en una base nueva y vacía | `sistema/manual-sistema.adoc#proc-restaurar` (Restaurar la base en una base nueva)<br>`sistema/manual-sistema.adoc#resp-restaurar` (Restaurar) |
 | 16 | Siete comprobaciones antes de usarla | `sistema/manual-sistema.adoc#proc-verificar-restauracion` (Verificar una restauración) |

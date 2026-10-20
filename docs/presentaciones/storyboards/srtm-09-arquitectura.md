@@ -5,26 +5,26 @@
 - **Composición:** `S09-Arquitectura` · **vídeo:** `salida/videos/srtm-09-arquitectura.mp4` · **miniatura:** `salida/miniaturas/srtm-09-arquitectura.jpg`
 - **Audiencia:** Ingenieros de software, arquitectos y DevOps
 - **Objetivo:** Entender cómo está construido srtm-backend sobre wasichai, cómo recorre una petición, cómo se guarda el modelo y qué garantías aplica el código.
-- **Duración:** 7:31 (13518 fotogramas a 30 fps, 1920 × 1080) · **escenas:** 15
+- **Duración:** 7:32 (13563 fotogramas a 30 fps, 1920 × 1080) · **escenas:** 15
 - **Manuales:** Manual técnico del sistema
 
 | # | Escena | Tipo | Inicio | Duración | Fuente |
 |---|---|---|---|---|---|
 | 1 | Arquitectura técnica | Portada | 0:00 | 11,0 s | Manual técnico del sistema › A quién está dirigido |
-| 2 | Un backend, un portal y una base | Diagrama | 0:10 | 36,0 s | Manual técnico del sistema › Contexto |
-| 3 | La pila y sus versiones | Tabla | 0:46 | 25,0 s | Manual técnico del sistema › Versiones |
-| 4 | Los paquetes de srtm y la plataforma | Diagrama | 1:10 | 34,0 s | Manual técnico del sistema › Componentes |
-| 5 | Lo que da la plataforma y lo que agrega SRTM | Comparación | 1:44 | 26,0 s | Manual técnico del sistema › La plataforma wasichai |
-| 6 | De la petición a la fila y su auditoría | Secuencia | 2:09 | 68,5 s | Manual técnico del sistema › Recorrido de una petición |
-| 7 | El modelo se carga por REST, no con SQL | Proceso | 3:17 | 27,0 s | Manual técnico del sistema › Modelo de metadata cargado por REST |
-| 8 | El padrón: contribuyente, predio y DJ | Diagrama | 3:43 | 24,5 s | Manual técnico del sistema › Diagramas entidad-relación |
-| 9 | Garantías que no dependen del portal | Tabla | 4:07 | 35,0 s | Manual técnico del sistema › Decisiones verificables en el código |
-| 10 | Lotes repartidos entre instancias | Diagrama | 4:42 | 39,0 s | Manual técnico del sistema › Emisión masiva |
-| 11 | Cuántos trabajadores corre una instancia | Cálculo | 5:20 | 27,0 s | Manual técnico del sistema › Trabajadores |
-| 12 | Disco local o bucket S3 | Comparación | 5:46 | 25,0 s | Manual técnico del sistema › Almacén de archivos |
-| 13 | Autenticación, permisos y auditoría | Tarjetas | 6:11 | 34,0 s | Manual técnico del sistema › Autenticación |
-| 14 | Cuatro suites, todas en el CI | Tabla | 6:44 | 26,0 s | Manual técnico del sistema › Pruebas |
-| 15 | La arquitectura, en pocas palabras | Cierre | 7:10 | 21,0 s | Manual técnico del sistema › Arquitectura |
+| 2 | Un backend, un portal y una base | Diagrama | 0:10 | 37,5 s | Manual técnico del sistema › Contexto |
+| 3 | La pila y sus versiones | Tabla | 0:47 | 25,0 s | Manual técnico del sistema › Versiones |
+| 4 | Los paquetes de srtm y la plataforma | Diagrama | 1:12 | 34,0 s | Manual técnico del sistema › Componentes |
+| 5 | Lo que da la plataforma y lo que agrega SRTM | Comparación | 1:45 | 26,0 s | Manual técnico del sistema › La plataforma wasichai |
+| 6 | De la petición a la fila y su auditoría | Secuencia | 2:11 | 68,5 s | Manual técnico del sistema › Recorrido de una petición |
+| 7 | El modelo se carga por REST, no con SQL | Proceso | 3:18 | 27,0 s | Manual técnico del sistema › Modelo de metadata cargado por REST |
+| 8 | El padrón: contribuyente, predio y DJ | Diagrama | 3:45 | 24,5 s | Manual técnico del sistema › Diagramas entidad-relación |
+| 9 | Garantías que no dependen del portal | Tabla | 4:09 | 35,0 s | Manual técnico del sistema › Decisiones verificables en el código |
+| 10 | Lotes repartidos entre instancias | Diagrama | 4:43 | 39,0 s | Manual técnico del sistema › Emisión masiva |
+| 11 | Cuántos trabajadores corre una instancia | Cálculo | 5:22 | 27,0 s | Manual técnico del sistema › Trabajadores |
+| 12 | Disco local o bucket S3 | Comparación | 5:48 | 25,0 s | Manual técnico del sistema › Almacén de archivos |
+| 13 | Autenticación, permisos y auditoría | Tarjetas | 6:12 | 34,0 s | Manual técnico del sistema › Autenticación |
+| 14 | Cuatro suites, todas en el CI | Tabla | 6:46 | 26,0 s | Manual técnico del sistema › Pruebas |
+| 15 | La arquitectura, en pocas palabras | Cierre | 7:11 | 21,0 s | Manual técnico del sistema › Arquitectura |
 
 ## 1. Arquitectura técnica
 
@@ -42,7 +42,7 @@
 
 ## 2. Un backend, un portal y una base
 
-- **Id:** `contexto` · **tipo:** Diagrama · **inicio:** 0:10 · **duración:** 36,0 s
+- **Id:** `contexto` · **tipo:** Diagrama · **inicio:** 0:10 · **duración:** 37,5 s
 - **Objetivo de aprendizaje:** Situar srtm-backend entre sus usuarios, el portal, la base, el almacén y los servicios externos.
 - **Imagen:** diagrama de 13 nodos y 10 flechas, dibujado en la escena
 - **Animación:** Los nodos aparecen por pasos y las flechas se dibujan; lo nuevo de cada paso se resalta un momento y su explicación aparece al pie.
@@ -54,11 +54,11 @@
   > Paso 1: Los funcionarios usan el portal tributario; el administrador, la consola /admin. Los dos llaman a la misma API.
   > Paso 2: srtm-backend es un solo proceso en el puerto 8090: la API de SRTM (/api/srtm/**) y la de Core (/api/**).
   > Paso 3: La base y el almacén de los PDF y ZIP de la emisión son el único estado compartido entre instancias.
-  > Paso 4: Opcionales: catastro-backend para la brecha y PIDE RENIEC, apagado. Las teselas de los mapas las pide el navegador.
+  > Paso 4: Opcionales: el catastro-backend de cada organización, para la brecha y el autoavalúo sugerido, y PIDE RENIEC, apagado. Las teselas las pide el navegador.
 
 ## 3. La pila y sus versiones
 
-- **Id:** `versiones` · **tipo:** Tabla · **inicio:** 0:46 · **duración:** 25,0 s
+- **Id:** `versiones` · **tipo:** Tabla · **inicio:** 0:47 · **duración:** 25,0 s
 - **Objetivo de aprendizaje:** Conocer las versiones de la pila y dónde se fija cada una.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
@@ -79,7 +79,7 @@
 
 ## 4. Los paquetes de srtm y la plataforma
 
-- **Id:** `componentes` · **tipo:** Diagrama · **inicio:** 1:10 · **duración:** 34,0 s
+- **Id:** `componentes` · **tipo:** Diagrama · **inicio:** 1:12 · **duración:** 34,0 s
 - **Objetivo de aprendizaje:** Ver los paquetes de srtm-backend, en qué dirección se usan y sobre qué starters de wasichai corren.
 - **Imagen:** diagrama de 18 nodos y 12 flechas, dibujado en la escena
 - **Animación:** Los nodos aparecen por pasos y las flechas se dibujan; lo nuevo de cada paso se resalta un momento y su explicación aparece al pie.
@@ -95,7 +95,7 @@
 
 ## 5. Lo que da la plataforma y lo que agrega SRTM
 
-- **Id:** `wasichai` · **tipo:** Comparación · **inicio:** 1:44 · **duración:** 26,0 s
+- **Id:** `wasichai` · **tipo:** Comparación · **inicio:** 1:45 · **duración:** 26,0 s
 - **Objetivo de aprendizaje:** Distinguir lo que da la plataforma wasichai de lo que SRTM agrega por su cuenta.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Las dos columnas entran y sus puntos aparecen uno a uno.
@@ -116,7 +116,7 @@
 
 ## 6. De la petición a la fila y su auditoría
 
-- **Id:** `peticion` · **tipo:** Secuencia · **inicio:** 2:09 · **duración:** 68,5 s
+- **Id:** `peticion` · **tipo:** Secuencia · **inicio:** 2:11 · **duración:** 68,5 s
 - **Objetivo de aprendizaje:** Seguir una petición desde el filtro JWT hasta la auditoría y la respuesta de error.
 - **Imagen:** diagrama de secuencia: srtm-ui, filtro JWT, controlador, Permisos, Registros, RecordService, PostgreSQL
 - **Animación:** Los participantes aparecen; cada mensaje se dibuja en orden, resaltado mientras se explica al pie.
@@ -135,7 +135,7 @@
 
 ## 7. El modelo se carga por REST, no con SQL
 
-- **Id:** `metadata` · **tipo:** Proceso · **inicio:** 3:17 · **duración:** 27,0 s
+- **Id:** `metadata` · **tipo:** Proceso · **inicio:** 3:18 · **duración:** 27,0 s
 - **Objetivo de aprendizaje:** Entender que el modelo es metadata cargada por REST y qué consecuencias tiene.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Los pasos entran en orden, unidos por flechas o por una línea que crece.
@@ -151,7 +151,7 @@
 
 ## 8. El padrón: contribuyente, predio y DJ
 
-- **Id:** `padron` · **tipo:** Diagrama · **inicio:** 3:43 · **duración:** 24,5 s
+- **Id:** `padron` · **tipo:** Diagrama · **inicio:** 3:45 · **duración:** 24,5 s
 - **Objetivo de aprendizaje:** Reconocer los objetos del padrón y sus relaciones principales.
 - **Imagen:** diagrama de 12 nodos y 11 flechas, dibujado en la escena
 - **Animación:** Los nodos aparecen por pasos y las flechas se dibujan; lo nuevo de cada paso se resalta un momento y su explicación aparece al pie.
@@ -166,7 +166,7 @@
 
 ## 9. Garantías que no dependen del portal
 
-- **Id:** `decisiones` · **tipo:** Tabla · **inicio:** 4:07 · **duración:** 35,0 s
+- **Id:** `decisiones` · **tipo:** Tabla · **inicio:** 4:09 · **duración:** 35,0 s
 - **Objetivo de aprendizaje:** Conocer las garantías que el código aplica siempre, y dónde están.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
@@ -185,7 +185,7 @@
 
 ## 10. Lotes repartidos entre instancias
 
-- **Id:** `emision` · **tipo:** Diagrama · **inicio:** 4:42 · **duración:** 39,0 s
+- **Id:** `emision` · **tipo:** Diagrama · **inicio:** 4:43 · **duración:** 39,0 s
 - **Objetivo de aprendizaje:** Entender cómo se reparte la emisión masiva en lotes entre instancias y cómo termina.
 - **Imagen:** diagrama de 6 nodos y 7 flechas, dibujado en la escena
 - **Animación:** Los nodos aparecen por pasos y las flechas se dibujan; lo nuevo de cada paso se resalta un momento y su explicación aparece al pie.
@@ -201,7 +201,7 @@
 
 ## 11. Cuántos trabajadores corre una instancia
 
-- **Id:** `trabajadores` · **tipo:** Cálculo · **inicio:** 5:20 · **duración:** 27,0 s
+- **Id:** `trabajadores` · **tipo:** Cálculo · **inicio:** 5:22 · **duración:** 27,0 s
 - **Objetivo de aprendizaje:** Saber cuántos trabajadores corre cada instancia y qué los limita.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La fórmula aparece primero y luego cada fila de la cuenta, hasta el total.
@@ -218,7 +218,7 @@
 
 ## 12. Disco local o bucket S3
 
-- **Id:** `almacen` · **tipo:** Comparación · **inicio:** 5:46 · **duración:** 25,0 s
+- **Id:** `almacen` · **tipo:** Comparación · **inicio:** 5:48 · **duración:** 25,0 s
 - **Objetivo de aprendizaje:** Elegir entre el almacén local y S3 según cuántas instancias haya.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Las dos columnas entran y sus puntos aparecen uno a uno.
@@ -239,7 +239,7 @@
 
 ## 13. Autenticación, permisos y auditoría
 
-- **Id:** `seguridad` · **tipo:** Tarjetas · **inicio:** 6:11 · **duración:** 34,0 s
+- **Id:** `seguridad` · **tipo:** Tarjetas · **inicio:** 6:12 · **duración:** 34,0 s
 - **Objetivo de aprendizaje:** Conocer las piezas de seguridad y lo que hay que cambiar fuera de desarrollo.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Las tarjetas entran una a una, en orden de lectura; al final, la nota.
@@ -257,7 +257,7 @@
 
 ## 14. Cuatro suites, todas en el CI
 
-- **Id:** `pruebas` · **tipo:** Tabla · **inicio:** 6:44 · **duración:** 26,0 s
+- **Id:** `pruebas` · **tipo:** Tabla · **inicio:** 6:46 · **duración:** 26,0 s
 - **Objetivo de aprendizaje:** Saber qué pruebas hay, qué cubren y cómo se corren.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
@@ -274,7 +274,7 @@
 
 ## 15. La arquitectura, en pocas palabras
 
-- **Id:** `cierre` · **tipo:** Cierre · **inicio:** 7:10 · **duración:** 21,0 s
+- **Id:** `cierre` · **tipo:** Cierre · **inicio:** 7:11 · **duración:** 21,0 s
 - **Objetivo de aprendizaje:** Recordar lo esencial de la arquitectura y saber dónde seguir.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Los puntos del resumen entran uno a uno; luego los manuales y el vídeo siguiente.

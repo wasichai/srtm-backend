@@ -86,12 +86,12 @@ Contribuyente. Persona natural, persona jurídica o sucesión obligada al pago d
 a|Únicos: `numero_documento`, `codigo`
 a|`predio` +
 Predio. Predio urbano o rústico del distrito: identidad y ubicación. Código `SS-MM-NNNN`, el código municipal de su lote o `P-NNNNNN`.
-|37 (2)
+|41 (2)
 a|Únicos: `codigo`, `numero_registro` +
 Geometría: `lote_geom` (POLYGON 32718)
 a|`declaracion_predial` +
 Declaración predial. Lo que un contribuyente declara sobre un predio en un año y una secuencia de uso: características, autoavalúo y su parte en el condominio.
-|42 (2)
+|49 (2)
 a|Únicos: `numero_declaracion` +
 `contribuyente` → `contribuyente` +
 `predio` → `predio`
@@ -134,7 +134,7 @@ Transferente. Quien transfirió el predio al declarante, con el porcentaje trans
 a|`declaracion` → `declaracion_predial`
 a|`nivel_construccion` +
 Nivel de construcción. Piso, sótano, mezanine o azotea declarado, con las letras de sus siete categorías.
-|17 (7)
+|22 (6)
 a|`declaracion` → `declaracion_predial`
 a|`obra_complementaria` +
 Obra complementaria. Obra complementaria o instalación fija y permanente declarada.
@@ -145,6 +145,44 @@ Otro frente. Frente del predio a otra vía, además de la principal.
 |9 (3)
 a|`declaracion` → `declaracion_predial`
 |===
+
+[[ref-modelo-padron-externo]]
+==== Campos de un padrón externo y de la rectificatoria
+
+Para los padrones externos (Ica) los objetos del padrón ganaron campos opcionales, al final de cada objeto. Los DTO del
+portal no los conocen: los escribe el importador (`import_padron_ica.py`) por la API de registros de Core, y un
+guardado del portal no los borra. Se leen con `GET /api/srtm/declaraciones/{id}/valuacion-origen`. El impuesto se
+sigue liquidando sobre `valor_autoavaluo`.
+
+[cols="3,5,6",options="header"]
+|===
+|Objeto |Campos |Qué guardan
+
+|`predio`
+|`codigo_via`, `codigo_unidad_urbana`, `codigo_hu_armonizacion`, `codigo_via_armonizacion` (TEXT)
+|Los códigos del catastro de origen y del Formato Padrón Municipal Armonización.
+
+|`declaracion_predial`
+|`arancel`, `valor_terreno`, `valor_construccion`, `valor_otras_instalaciones` (DECIMAL)
+|La valuación como la trae el padrón.
+
+|`nivel_construccion`
+|`clasificacion` (el enum de la declaración), `valor_unitario`, `incremento` (S/ por m²), `porcentaje_depreciacion`,
+`valor_total` (DECIMAL)
+|La valuación de cada nivel. `mes_construccion` dejó de ser obligatorio: Ica no lo trae.
+
+|`via`, `unidad_urbana`
+|`codigo` (TEXT, no único)
+|El código del catastro de origen; los del padrón de Perené no lo tienen.
+|===
+
+`declaracion_predial` lleva además:
+
+* `origen_modificado` (BOOLEAN): la DJ cambió después de importar su valuación de origen. Lo pone el portal; vacío
+  cuenta como `false`.
+* `sustituye` (UUID): en una rectificatoria, el id de la declaración que sustituye. Es un id y no una relación,
+  porque el modelo no admite que un objeto apunte a sí mismo.
+* `fecha_sustitucion` (DATE): en una declaración SUSTITUIDA, el día en que se presentó su rectificatoria.
 
 [[ref-modelo-catastro]]
 ==== Catastro fiscal
@@ -171,11 +209,11 @@ Ubigeo. Distritos del INEI (`model/data/ubigeo.csv`).
 a|Únicos: `codigo`
 a|`via` +
 Vía. Vías del distrito, sacadas de las direcciones del padrón.
-|3 (2)
+|4 (2)
 a|Sin campos únicos ni relaciones.
 a|`unidad_urbana` +
 Unidad urbana. Habilitaciones urbanas del distrito, sacadas del padrón.
-|3 (2)
+|4 (2)
 a|Sin campos únicos ni relaciones.
 a|`categoria_valor` +
 Categoría de valor unitario. Descripción de cada letra (A-I) de las siete columnas del cuadro de valores unitarios.
@@ -203,7 +241,7 @@ Parámetro tributario. Valores normativos con vigencia y doble firma: UIT, tramo
 a|Sin campos únicos ni relaciones.
 a|`municipalidad` +
 Municipalidad. Datos de la cabecera de los documentos emitidos; uno por organización.
-|5 (1)
+|6 (1)
 a|Sin campos únicos ni relaciones.
 |===
 
@@ -665,10 +703,10 @@ De las 61 listas, estas gobiernan estados y reglas. Las opciones de Core no admi
 |Lista |Opciones
 
 |`estado_declaracion`
-|VIGENTE, ANULADA. Una DJ importada sin estado cuenta como VIGENTE.
+|VIGENTE, ANULADA, SUSTITUIDA (por su rectificatoria). Una DJ importada sin estado cuenta como VIGENTE.
 
 |`motivo_declaracion`
-|INSCRIPCION, ACTUALIZACION, DESCARGO.
+|INSCRIPCION, ACTUALIZACION, DESCARGO, RECTIFICACION.
 
 |`estado_emision`
 |PENDIENTE, EN_PROCESO, ENSAMBLANDO, TERMINADA, FALLIDA (también la usa `determinacion_arbitrio_masiva`, que no pasa

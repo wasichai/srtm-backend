@@ -963,6 +963,29 @@ image::{capturas}/usuario/registrador/dj-caracteristicas.png[Secciones Caracter�
   un pensionista).
 ====
 
+[[valuacion-origen]]
+===== Valuación del padrón de origen y autoavalúo sugerido
+
+Las declaraciones que vienen de un *padrón externo* (por ejemplo, el de la Municipalidad de Ica) traen además la
+valuación con la que ese padrón calculó el autoavalúo: el arancel del terreno, los valores de terreno, construcción y
+otras instalaciones, y el valor unitario, la depreciación y el valor de cada nivel. Es la *valuación de origen*: se
+conserva tal como llegó, no se edita y no cambia el impuesto, que sigue saliendo del *Autoavalúo (S/)* de la
+declaración. Si después se corrige la declaración o uno de sus niveles, obras o frentes, el sistema la marca como
+*modificada*: la valuación de origen ya no describe lo que la declaración dice. Las declaraciones registradas en el
+portal no tienen valuación de origen.
+
+El *autoavalúo sugerido* es el valor que calcula el catastro de la municipalidad con los datos de la declaración (el
+arancel de origen o el del catastro, el uso, los niveles y las obras), con su detalle por piso y por obra. Sirve para
+revisar el autoavalúo declarado: el sistema no lo guarda ni lo copia. Si falta un dato para valuar (por ejemplo, el
+arancel del lote), el sistema dice cuál.
+
+.La valuación de origen y el autoavalúo sugerido en esta versión
+[IMPORTANT]
+====
+El sistema ya los calcula, pero el portal *todavía no los muestra*. Mientras tanto, pídalos al área de sistemas con
+el número de la declaración. El autoavalúo sugerido necesita que la municipalidad tenga su catastro conectado.
+====
+
 *Frontis (m)* y *Área construida (m2)* son obligatorios cuando la ordenanza de arbitrios del año cobra según el
 frente o el área construida (en la demostración de 2026, ambos). Los arbitrios se explican en el {m-arbitrios}.
 
@@ -1150,6 +1173,8 @@ HR ni los arbitrios. En un condominio, la rectificatoria toma el lugar de la ant
 
 La declaración de otro año también puede partir de la de un año anterior del mismo predio y titular: se copia con sus
 listas y su autoavalúo como punto de partida, y nace con motivo INSCRIPCION. Para el mismo año, corresponde rectificar.
+Se parte siempre de una declaración vigente: de una sustituida, se parte de su rectificatoria; una anulada no sirve
+de partida.
 
 La valuación que trajo un padrón externo (por ejemplo, el de Ica) se queda en la declaración importada: ni la
 rectificatoria ni la del otro año la copian. Por eso, una declaración con esa valuación no puede cambiar de año: declare

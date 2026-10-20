@@ -5,7 +5,7 @@
 - **Composición:** `S10-Operacion` · **vídeo:** `salida/videos/srtm-10-operacion.mp4` · **miniatura:** `salida/miniaturas/srtm-10-operacion.jpg`
 - **Audiencia:** DevOps y administradores de bases de datos
 - **Objetivo:** Levantar un entorno, cargar el modelo y los datos, publicar y actualizar versiones, vigilar el servicio y respaldar y restaurar sin perder datos.
-- **Duración:** 9:06 (16392 fotogramas a 30 fps, 1920 × 1080) · **escenas:** 22
+- **Duración:** 9:13 (16602 fotogramas a 30 fps, 1920 × 1080) · **escenas:** 22
 - **Manuales:** Manual técnico del sistema · Base de demostración
 
 | # | Escena | Tipo | Inicio | Duración | Fuente |
@@ -22,16 +22,16 @@
 | 10 | Respaldo primero, todas las instancias juntas | Proceso | 3:16 | 25,0 s | Manual técnico del sistema › Actualizar el backend |
 | 11 | Rutas de salud, sin token | Tabla | 3:40 | 22,0 s | Manual técnico del sistema › Salud |
 | 12 | Las líneas que conviene vigilar | Tabla | 4:01 | 36,0 s | Manual técnico del sistema › Registros (logs) |
-| 13 | Cuatro cosas que respaldar | Tabla | 4:37 | 30,0 s | Manual técnico del sistema › Qué hay que respaldar |
-| 14 | Un volcado completo, y su prueba | Comandos | 5:06 | 25,0 s | Manual técnico del sistema › Respaldar la base |
-| 15 | Siempre en una base nueva y vacía | Comandos | 5:31 | 25,0 s | Manual técnico del sistema › Restaurar la base en una base nueva |
-| 16 | Siete comprobaciones antes de usarla | Proceso | 5:55 | 25,0 s | Manual técnico del sistema › Verificar una restauración |
-| 17 | Qué se pierde y cómo se recupera | Tabla | 6:19 | 34,0 s | Manual técnico del sistema › Recuperación ante desastres |
-| 18 | La base de demostración, de punta a punta | Diagrama | 6:53 | 22,0 s | Manual técnico del sistema › Ensayo con la base de demostración |
-| 19 | Lista de verificación | Tabla | 7:14 | 37,0 s | Manual técnico del sistema › Lista de verificación posterior al despliegue |
-| 20 | Síntomas frecuentes | Tabla | 7:51 | 31,0 s | Manual técnico del sistema › Diagnóstico de problemas frecuentes |
-| 21 | Lo que todavía falta | Tabla | 8:21 | 26,0 s | Manual técnico del sistema › Pendientes y limitaciones conocidas |
-| 22 | La operación, en pocas palabras | Cierre | 8:46 | 20,0 s | Manual técnico del sistema › Operación |
+| 13 | Cinco cosas que respaldar | Tabla | 4:37 | 37,0 s | Manual técnico del sistema › Qué hay que respaldar |
+| 14 | Un volcado completo, y su prueba | Comandos | 5:13 | 25,0 s | Manual técnico del sistema › Respaldar la base |
+| 15 | Siempre en una base nueva y vacía | Comandos | 5:38 | 25,0 s | Manual técnico del sistema › Restaurar la base en una base nueva |
+| 16 | Siete comprobaciones antes de usarla | Proceso | 6:02 | 25,0 s | Manual técnico del sistema › Verificar una restauración |
+| 17 | Qué se pierde y cómo se recupera | Tabla | 6:26 | 34,0 s | Manual técnico del sistema › Recuperación ante desastres |
+| 18 | La base de demostración, de punta a punta | Diagrama | 7:00 | 22,0 s | Manual técnico del sistema › Ensayo con la base de demostración |
+| 19 | Lista de verificación | Tabla | 7:21 | 37,0 s | Manual técnico del sistema › Lista de verificación posterior al despliegue |
+| 20 | Síntomas frecuentes | Tabla | 7:58 | 31,0 s | Manual técnico del sistema › Diagnóstico de problemas frecuentes |
+| 21 | Lo que todavía falta | Tabla | 8:28 | 26,0 s | Manual técnico del sistema › Pendientes y limitaciones conocidas |
+| 22 | La operación, en pocas palabras | Cierre | 8:53 | 20,0 s | Manual técnico del sistema › Operación |
 
 ## 1. Instalación, operación y recuperación
 
@@ -96,7 +96,7 @@
   > → done: N created, M updated, K skipped
   > # parámetros del predial y catálogos
   > $ python3 import_parametros.py
-  > $ python3 import_catalogos.py
+  > $ python3 import_catalogos.py --distrito 120302 …
   > → parametro_tributario: 13 created, …
   > # una segunda pasada no tiene nada que hacer
   > $ python3 apply.py --diff
@@ -117,7 +117,7 @@
   > 3. import_catalogos.py: ubigeo, categorías, obras, usos
   > 4. import_parametros.py: UIT, tramos, tasas
   > 5. import_cuis.py · import_arbitrios.py: CUIS y ordenanza de arbitrios
-  > 6. import_predios.py: padrón (Excel)
+  > 6. import_predios.py: padrón (Excel; Ica: import_padron_ica.py)
   > 7. import_catastro.py: lotes (GeoJSON)
   > Nota: Todos los importadores son idempotentes y aceptan --dry-run: úselo primero con cada uno.
 
@@ -228,7 +228,7 @@
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
 - **Fuentes:** Manual técnico del sistema › Registros (logs) (`docs/manuales/sistema/manual-sistema.adoc#op-logs`)
-- **Sigue:** 13. Cuatro cosas que respaldar
+- **Sigue:** 13. Cinco cosas que respaldar
 - **Contenido:**
 
   > Mensaje (comienzo) | Nivel | Qué hacer
@@ -240,9 +240,9 @@
   > la corrida de brecha <id> falló | ERROR | El motivo está en el mensaje de la corrida.
   > Nota: El backend escribe en la salida estándar. Cada respuesta lleva X-Correlation-Id, que también queda en audit_log.
 
-## 13. Cuatro cosas que respaldar
+## 13. Cinco cosas que respaldar
 
-- **Id:** `que-respaldar` · **tipo:** Tabla · **inicio:** 4:37 · **duración:** 30,0 s
+- **Id:** `que-respaldar` · **tipo:** Tabla · **inicio:** 4:37 · **duración:** 37,0 s
 - **Objetivo de aprendizaje:** Saber qué partes forman un respaldo completo.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
@@ -253,13 +253,14 @@
   > Qué | Por qué | Cómo
   > La base completa | Esquemas wasichai (metadata, usuarios, auditoría) y app_data, y las extensiones. | pg_dump de la base entera
   > El almacén de emisiones | La base guarda solo la clave del archivo: sin él, la descarga da 404. | Copia del directorio o del bucket
-  > La configuración | El archivo de entorno o los secretos, y el escudo. | Cifrada, con los secretos
+  > El almacén de archivos | El escudo de cada municipalidad (campos FILE e IMAGE). | Copia del directorio o del bucket
+  > La configuración | El archivo de entorno o los secretos, y el escudo de respaldo. | Cifrada, con los secretos
   > Los datos de entrada | Excel del padrón, GeoJSON, CSV y JSON de ordenanzas. | Almacenamiento privado
   > Nota: Nunca un solo esquema: app_data sin wasichai no sirve, y wasichai sin app_data restaura un modelo sin registros.
 
 ## 14. Un volcado completo, y su prueba
 
-- **Id:** `respaldar` · **tipo:** Comandos · **inicio:** 5:06 · **duración:** 25,0 s
+- **Id:** `respaldar` · **tipo:** Comandos · **inicio:** 5:13 · **duración:** 25,0 s
 - **Objetivo de aprendizaje:** Tomar un volcado completo y comprobar que se puede leer.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Los bloques de comandos entran uno a uno, con lo que deben responder.
@@ -274,7 +275,7 @@
 
 ## 15. Siempre en una base nueva y vacía
 
-- **Id:** `restaurar` · **tipo:** Comandos · **inicio:** 5:31 · **duración:** 25,0 s
+- **Id:** `restaurar` · **tipo:** Comandos · **inicio:** 5:38 · **duración:** 25,0 s
 - **Objetivo de aprendizaje:** Restaurar en una base nueva sin tocar la original.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Los bloques de comandos entran uno a uno, con lo que deben responder.
@@ -290,7 +291,7 @@
 
 ## 16. Siete comprobaciones antes de usarla
 
-- **Id:** `verificar` · **tipo:** Proceso · **inicio:** 5:55 · **duración:** 25,0 s
+- **Id:** `verificar` · **tipo:** Proceso · **inicio:** 6:02 · **duración:** 25,0 s
 - **Objetivo de aprendizaje:** Comprobar que la base restaurada está completa antes de usarla.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Los pasos entran en orden, unidos por flechas o por una línea que crece.
@@ -308,7 +309,7 @@
 
 ## 17. Qué se pierde y cómo se recupera
 
-- **Id:** `desastres` · **tipo:** Tabla · **inicio:** 6:19 · **duración:** 34,0 s
+- **Id:** `desastres` · **tipo:** Tabla · **inicio:** 6:26 · **duración:** 34,0 s
 - **Objetivo de aprendizaje:** Saber qué se pierde y cómo se recupera en cada situación.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
@@ -325,7 +326,7 @@
 
 ## 18. La base de demostración, de punta a punta
 
-- **Id:** `demo` · **tipo:** Diagrama · **inicio:** 6:53 · **duración:** 22,0 s
+- **Id:** `demo` · **tipo:** Diagrama · **inicio:** 7:00 · **duración:** 22,0 s
 - **Objetivo de aprendizaje:** Usar la base de demostración para ensayar el respaldo y la restauración sin datos reales.
 - **Imagen:** diagrama de 7 nodos y 6 flechas, dibujado en la escena
 - **Animación:** Los nodos aparecen por pasos y las flechas se dibujan; lo nuevo de cada paso se resalta un momento y su explicación aparece al pie.
@@ -338,7 +339,7 @@
 
 ## 19. Lista de verificación
 
-- **Id:** `checklist` · **tipo:** Tabla · **inicio:** 7:14 · **duración:** 37,0 s
+- **Id:** `checklist` · **tipo:** Tabla · **inicio:** 7:21 · **duración:** 37,0 s
 - **Objetivo de aprendizaje:** Recorrer las comprobaciones posteriores a un despliegue.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
@@ -361,7 +362,7 @@
 
 ## 20. Síntomas frecuentes
 
-- **Id:** `diagnostico` · **tipo:** Tabla · **inicio:** 7:51 · **duración:** 31,0 s
+- **Id:** `diagnostico` · **tipo:** Tabla · **inicio:** 7:58 · **duración:** 31,0 s
 - **Objetivo de aprendizaje:** Resolver los problemas más frecuentes por su síntoma.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
@@ -373,14 +374,14 @@
   > Could not find wasichai:… | Sin token de GitHub Packages. | Configurar gpr.user y gpr.key.
   > Connection refused a :5433 | Base apagada o sin túnel. | docker compose up -d o el túnel SSH.
   > 401 en toda llamada | Token vencido (8 h) u otro secreto. | Iniciar sesión otra vez.
-  > 409 «Catastro no configurado…» | SRTM_CATASTRO_ENABLED=false. | Configurar catastro-backend.
+  > 409 «Catastro no configurado…» | Apagado o sin entrada para la organización. | SRTM_CATASTRO_ORGANIZACIONES_*.
   > 422 con faltan | Falta un parámetro del año. | import_parametros.py --csv.
   > 410 en la descarga | La retención depuró el archivo. | Volver a emitir el año.
   > Los trabajos no avanzan | Trabajadores en 0 o pool agotado. | Revisar la línea de arranque.
 
 ## 21. Lo que todavía falta
 
-- **Id:** `pendientes` · **tipo:** Tabla · **inicio:** 8:21 · **duración:** 26,0 s
+- **Id:** `pendientes` · **tipo:** Tabla · **inicio:** 8:28 · **duración:** 26,0 s
 - **Objetivo de aprendizaje:** Conocer las limitaciones conocidas antes de operar en producción.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
@@ -398,7 +399,7 @@
 
 ## 22. La operación, en pocas palabras
 
-- **Id:** `cierre` · **tipo:** Cierre · **inicio:** 8:46 · **duración:** 20,0 s
+- **Id:** `cierre` · **tipo:** Cierre · **inicio:** 8:53 · **duración:** 20,0 s
 - **Objetivo de aprendizaje:** Recordar lo esencial de la operación y saber dónde seguir.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Los puntos del resumen entran uno a uno; luego los manuales y el vídeo siguiente.

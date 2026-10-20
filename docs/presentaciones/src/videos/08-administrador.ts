@@ -377,10 +377,10 @@ export const administrador: Video = {
       focos: [
         {
           titulo: 'Un solo registro',
-          texto: 'Nombre, oficina, RUC, gerencia y dirección encabezan el PU, la HR, la HLA y las resoluciones.',
+          texto: 'Nombre, oficina, RUC, gerencia, dirección y escudo encabezan el PU, la HR, la HLA y las resoluciones.',
           region: { x: 33, y: 250, w: 1135, h: 62 },
           acercar: false,
-          segundos: 8,
+          segundos: 9,
         },
         {
           titulo: 'Corregir y grabar',
@@ -389,9 +389,9 @@ export const administrador: Video = {
           segundos: 7.5,
         },
         {
-          titulo: 'El escudo, por sistemas',
-          texto: 'No se carga en la consola: es un archivo que configura el área de sistemas.',
-          segundos: 8,
+          titulo: 'El escudo, en el mismo registro',
+          texto: 'Cada municipalidad tiene el suyo. La consola aún no sube archivos: lo sube el área de sistemas.',
+          segundos: 10,
         },
       ],
     },

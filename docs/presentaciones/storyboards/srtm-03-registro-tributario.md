@@ -5,7 +5,7 @@
 - **Composición:** `S03-RegistroTributario` · **vídeo:** `salida/videos/srtm-03-registro-tributario.mp4` · **miniatura:** `salida/miniaturas/srtm-03-registro-tributario.jpg`
 - **Audiencia:** Personal de ventanilla y del registro tributario (perfil REGISTRADOR)
 - **Objetivo:** Inscribir contribuyentes, registrar predios, presentar, completar y anular declaraciones juradas y entregar sus documentos.
-- **Duración:** 8:15 (14835 fotogramas a 30 fps, 1920 × 1080) · **escenas:** 26
+- **Duración:** 9:02 (16269 fotogramas a 30 fps, 1920 × 1080) · **escenas:** 28
 - **Manuales:** Manual del registrador
 
 | # | Escena | Tipo | Inicio | Duración | Fuente |
@@ -30,12 +30,14 @@
 | 18 | Del autoavalúo al valor afecto | Cálculo | 5:10 | 21,5 s | Manual del registrador › Lo que hay que saber antes |
 | 19 | Varios titulares de un mismo predio | Captura recorrida | 5:31 | 24,5 s | Manual del registrador › Datos de los condóminos |
 | 20 | La anulación es el descargo | Captura recorrida | 5:55 | 22,0 s | Manual del registrador › Anular una declaración (descargo) |
-| 21 | Cuando un predio se vende | Proceso | 6:17 | 22,0 s | Manual del registrador › Registrar un cambio de dueño |
-| 22 | Documentos | Separador de sección | 6:38 | 6,0 s | Manual del registrador › Documentos: PU, HR y HLA |
-| 23 | PU, HR y HLA desde las fichas | Tabla | 6:43 | 26,0 s | Manual del registrador › Qué documento entregar |
-| 24 | QUISPE ROJAS ROSA ELENA, 2026 | Cálculo | 7:09 | 29,0 s | Manual del registrador › Cómo se calcula el impuesto predial |
-| 25 | La HR, sección por sección | Captura recorrida | 7:37 | 16,0 s | Manual del registrador › La HR |
-| 26 | El registro tributario, en resumen | Cierre | 7:53 | 22,0 s | Manual del registrador › Preguntas del registro tributario |
+| 21 | Corregir sin perder la historia | Tarjetas | 6:17 | 24,0 s | Manual del registrador › Rectificar una declaración o declarar otro año desde la anterior |
+| 22 | Valuación de origen y autoavalúo sugerido | Aviso | 6:40 | 25,0 s | Manual del registrador › Valuación del padrón de origen y autoavalúo sugerido |
+| 23 | Cuando un predio se vende | Proceso | 7:04 | 22,0 s | Manual del registrador › Registrar un cambio de dueño |
+| 24 | Documentos | Separador de sección | 7:26 | 6,0 s | Manual del registrador › Documentos: PU, HR y HLA |
+| 25 | PU, HR y HLA desde las fichas | Tabla | 7:31 | 26,0 s | Manual del registrador › Qué documento entregar |
+| 26 | QUISPE ROJAS ROSA ELENA, 2026 | Cálculo | 7:57 | 29,0 s | Manual del registrador › Cómo se calcula el impuesto predial |
+| 27 | La HR, sección por sección | Captura recorrida | 8:25 | 16,0 s | Manual del registrador › La HR |
+| 28 | El registro tributario, en resumen | Cierre | 8:40 | 22,0 s | Manual del registrador › Preguntas del registro tributario |
 
 ## 1. Registro tributario
 
@@ -231,8 +233,8 @@
   > Año: Cada declaración es de un año.
   > Secuencia de uso: Una declaración por uso: casa 001, tienda 002.
   > Titular y condominio: Uno solo: propietario único al 100 %. Dos o más: condóminos.
-  > Motivo: INSCRIPCION; ACTUALIZACION al corregirla; DESCARGO al anularla.
-  > Estado: Vigente o Anulada: la anulada no cuenta en nada.
+  > Motivo: INSCRIPCION; ACTUALIZACION al corregirla; DESCARGO al anularla; RECTIFICACION si sustituye a otra.
+  > Estado: Vigente, Anulada o Sustituida: las dos últimas no cuentan en nada.
   > Valores: Usted escribe el autoavalúo; el sistema calcula el valor afecto.
 
 ## 15. Dos pasos y queda presentada
@@ -316,21 +318,51 @@
 - **Imagen:** captura real `usuario/registrador/anular-declaracion.png`, captura real `usuario/registrador/dj-anulada.png`
 - **Animación:** Vista general de la captura; en cada foco la cámara se acerca a la región, atenúa lo demás y la rodea con el recuadro naranja numerado; el panel de pasos marca el paso en curso.
 - **Fuentes:** Manual del registrador › Anular una declaración (descargo) (`docs/manuales/usuario/registrador.adoc#proc-anular-declaracion`)
-- **Sigue:** 21. Cuando un predio se vende
+- **Sigue:** 21. Corregir sin perder la historia
 - **Contenido:**
 
   > 1. Anular declaración: Queda ANULADA, motivo DESCARGO: se conserva, pero no cuenta.
   > 2. Motivo de la anulación: Obligatorio: qué pasó y con qué documento.
   > 3. Solo lectura: Aviso rojo con fecha y motivo. No se puede deshacer.
 
-## 21. Cuando un predio se vende
+## 21. Corregir sin perder la historia
 
-- **Id:** `cambio-dueno` · **tipo:** Proceso · **inicio:** 6:17 · **duración:** 22,0 s
+- **Id:** `rectificar` · **tipo:** Tarjetas · **inicio:** 6:17 · **duración:** 24,0 s
+- **Objetivo de aprendizaje:** Saber qué es una rectificatoria y cuándo declarar otro año desde la declaración anterior.
+- **Imagen:** composición tipográfica, sin captura
+- **Animación:** Las tarjetas entran una a una, en orden de lectura; al final, la nota.
+- **Fuentes:** Manual del registrador › Rectificar una declaración o declarar otro año desde la anterior (`docs/manuales/usuario/registrador.adoc#rectificar-declaracion`)
+- **Sigue:** 22. Valuación de origen y autoavalúo sugerido
+- **Contenido:**
+
+  > La rectificatoria: Una declaración nueva, motivo RECTIFICACION, con todo lo de la anterior para corregirlo.
+  > La anterior, sustituida: Se conserva de solo lectura y no cuenta en el impuesto, el PU, la HR ni los arbitrios.
+  > Otro año, desde la anterior: Copia la de otro año como punto de partida; el mismo año se rectifica.
+  > Siempre desde una vigente: Ni una anulada ni una sustituida sirven de partida.
+
+## 22. Valuación de origen y autoavalúo sugerido
+
+- **Id:** `valuacion-origen` · **tipo:** Aviso · **inicio:** 6:40 · **duración:** 25,0 s
+- **Objetivo de aprendizaje:** Reconocer la valuación de un padrón externo y el autoavalúo sugerido, y dónde están hoy.
+- **Imagen:** recuadro de aviso
+- **Animación:** El recuadro del aviso entra y sus puntos aparecen uno a uno; a su lado, la captura, si la hay.
+- **Fuentes:** Manual del registrador › Valuación del padrón de origen y autoavalúo sugerido (`docs/manuales/usuario/registrador.adoc#valuacion-origen`); Manual del registrador › Rectificar una declaración o declarar otro año desde la anterior (`docs/manuales/usuario/registrador.adoc#rectificar-declaracion`)
+- **Sigue:** 23. Cuando un predio se vende
+- **Contenido:**
+
+  > Valuación de origen y autoavalúo sugerido: El sistema ya los registra; el portal todavía no tiene sus botones. Mientras tanto, pídalos al área de sistemas.
+  >   - Valuación de origen: la que trajo un padrón externo, como el de Ica. No cambia el impuesto.
+  >   - Si se corrige la declaración, queda marcada como modificada.
+  >   - Autoavalúo sugerido: el valor que calcula el catastro. Es una referencia: no se guarda.
+
+## 23. Cuando un predio se vende
+
+- **Id:** `cambio-dueno` · **tipo:** Proceso · **inicio:** 7:04 · **duración:** 22,0 s
 - **Objetivo de aprendizaje:** Registrar la venta, donación o herencia de un predio.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Los pasos entran en orden, unidos por flechas o por una línea que crece.
 - **Fuentes:** Manual del registrador › Registrar un cambio de dueño (`docs/manuales/usuario/registrador.adoc#proc-cambio-titular`)
-- **Sigue:** 22. Documentos
+- **Sigue:** 24. Documentos
 - **Contenido:**
 
   > 1. Anule la declaración del anterior: Con el motivo y el documento de la transferencia.
@@ -339,27 +371,27 @@
   > 4. Registre al transferente: El dueño anterior, con el % que transfirió.
   > Nota: Si vendió solo una parte, no anule: agregue al comprador como condómino y ajuste los %.
 
-## 22. Documentos
+## 24. Documentos
 
-- **Id:** `parte-documentos` · **tipo:** Separador de sección · **inicio:** 6:38 · **duración:** 6,0 s
+- **Id:** `parte-documentos` · **tipo:** Separador de sección · **inicio:** 7:26 · **duración:** 6,0 s
 - **Objetivo de aprendizaje:** Abrir la parte de documentos.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** El rótulo de la parte y el filete crecen; entran el título y la bajada.
 - **Fuentes:** Manual del registrador › Documentos: PU, HR y HLA (`docs/manuales/usuario/registrador.adoc#documentos`)
-- **Sigue:** 23. PU, HR y HLA desde las fichas
+- **Sigue:** 25. PU, HR y HLA desde las fichas
 - **Contenido:**
 
   > Parte 4: Documentos
   > PU, HR, HLA y el impuesto predial.
 
-## 23. PU, HR y HLA desde las fichas
+## 25. PU, HR y HLA desde las fichas
 
-- **Id:** `que-documento` · **tipo:** Tabla · **inicio:** 6:43 · **duración:** 26,0 s
+- **Id:** `que-documento` · **tipo:** Tabla · **inicio:** 7:31 · **duración:** 26,0 s
 - **Objetivo de aprendizaje:** Saber qué documento entregar, dónde se emite y cuándo no sale.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
 - **Fuentes:** Manual del registrador › Qué documento entregar (`docs/manuales/usuario/registrador.adoc#documentos-que-son`); Manual del registrador › Ver, imprimir o descargar un documento (`docs/manuales/usuario/registrador.adoc#proc-ver-documento`)
-- **Sigue:** 24. QUISPE ROJAS ROSA ELENA, 2026
+- **Sigue:** 26. QUISPE ROJAS ROSA ELENA, 2026
 - **Contenido:**
 
   > Documento | Contiene | Dónde | No sale si
@@ -368,14 +400,14 @@
   > HLA | Sus cuotas de arbitrios, por mes | Ficha del contribuyente | Arbitrios sin determinar
   > Nota: Del año elegido en la ficha. Con varios titulares, Ver PU pregunta de quién.
 
-## 24. QUISPE ROJAS ROSA ELENA, 2026
+## 26. QUISPE ROJAS ROSA ELENA, 2026
 
-- **Id:** `impuesto` · **tipo:** Cálculo · **inicio:** 7:09 · **duración:** 29,0 s
+- **Id:** `impuesto` · **tipo:** Cálculo · **inicio:** 7:57 · **duración:** 29,0 s
 - **Objetivo de aprendizaje:** Entender cómo calcula el sistema el impuesto predial de la HR.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La fórmula aparece primero y luego cada fila de la cuenta, hasta el total.
 - **Fuentes:** Manual del registrador › Cómo se calcula el impuesto predial (`docs/manuales/usuario/registrador.adoc#liquidacion`)
-- **Sigue:** 25. La HR, sección por sección
+- **Sigue:** 27. La HR, sección por sección
 - **Contenido:**
 
   > base imponible = suma de sus valores afectos vigentes
@@ -387,22 +419,22 @@
   > Cuatro cuotas (27/02, 29/05, 31/08, 30/11): S/ 880.85
   > Nota: Sin el reajuste por IPM de las cuotas 2 a 4.
 
-## 25. La HR, sección por sección
+## 27. La HR, sección por sección
 
-- **Id:** `hr` · **tipo:** Captura recorrida · **inicio:** 7:37 · **duración:** 16,0 s
+- **Id:** `hr` · **tipo:** Captura recorrida · **inicio:** 8:25 · **duración:** 16,0 s
 - **Objetivo de aprendizaje:** Reconocer las cuatro secciones de la HR.
 - **Imagen:** captura real `usuario/registrador/pdf-hr.png`
 - **Animación:** Vista general de la captura; en cada foco la cámara se acerca a la región, atenúa lo demás y la rodea con el recuadro naranja numerado; el panel de pasos marca el paso en curso.
 - **Fuentes:** Manual del registrador › La HR (`docs/manuales/usuario/registrador.adoc#hr`)
-- **Sigue:** 26. El registro tributario, en resumen
+- **Sigue:** 28. El registro tributario, en resumen
 - **Contenido:**
 
   > 1. III. Determinación del impuesto: UIT, base imponible, tramos e impuesto anual.
   > 2. IV. Cuotas: Cuatro cuotas con su vencimiento, y Al contado.
 
-## 26. El registro tributario, en resumen
+## 28. El registro tributario, en resumen
 
-- **Id:** `cierre` · **tipo:** Cierre · **inicio:** 7:53 · **duración:** 22,0 s
+- **Id:** `cierre` · **tipo:** Cierre · **inicio:** 8:40 · **duración:** 22,0 s
 - **Objetivo de aprendizaje:** Recordar las reglas esenciales del registro tributario.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Los puntos del resumen entran uno a uno; luego los manuales y el vídeo siguiente.

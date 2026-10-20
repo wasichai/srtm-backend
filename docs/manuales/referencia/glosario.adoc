@@ -49,6 +49,10 @@ Autoavalúo::
 Valor del predio que el contribuyente declara (terreno, construcción y obras complementarias). Es la base del
 impuesto predial.
 
+Autoavalúo sugerido::
+Valor del predio que calcula el motor de valuación de catastro-backend con los datos de la declaración, sus niveles
+y sus obras. Es una referencia: {sigla} no lo guarda y el autoavalúo declarado lo sigue escribiendo el usuario.
+
 Brecha de recaudación::
 Diferencia entre lo que el padrón declara y lo que valoriza el catastro (catastro-backend), expresada en
 autoavalúo, impuesto predial y arbitrios.
@@ -145,6 +149,11 @@ propias.
 Padrón::
 Conjunto de contribuyentes, predios y declaraciones juradas registrados.
 
+Padrón externo::
+Padrón de otra municipalidad cargado con su propio importador (hoy, el de Ica con `import_padron_ica.py`). Trae su
+valuación (arancel, valores de terreno, construcción y niveles), que {sigla} guarda en campos opcionales: la
+*valuación de origen*.
+
 Parámetro tributario::
 Valor normativo con vigencia y doble firma (quien transcribió y quien verificó): UIT, tramos y mínimo del predial,
 tasas de arbitrios, plazos, feriados, tasas de anuncios.
@@ -163,6 +172,10 @@ Formato estándar de los errores de la API (RFC 7807): `type`, `title`, `status`
 
 RBAC::
 Control de acceso basado en roles: los permisos se dan a roles, y los roles a usuarios.
+
+Rectificatoria::
+Declaración jurada que sustituye a otra del mismo predio, año y secuencia de uso, con motivo RECTIFICACION. La
+anterior queda *sustituida*: se conserva, de solo lectura, y no cuenta en los totales, el impuesto ni los arbitrios.
 
 Resolución de gerencia (RIS, RGR)::
 Resolución que sanciona un acta (RIS, de tipo administrativo) o resuelve un descargo o recurso (RGR).
@@ -189,6 +202,10 @@ Código del INEI de un distrito (seis dígitos; Perené es `120302`).
 
 Unidad impositiva tributaria (UIT)::
 Valor de referencia que fija el Estado cada año, en soles. Se usa en los tramos del predial, el mínimo y las multas.
+
+Valuación de origen::
+La valuación que trajo un padrón externo a una declaración, su predio y sus niveles. Se consulta en solo lectura y
+no cambia el impuesto; si la declaración se modifica después, queda marcada como *modificada*.
 
 Valor afecto::
 Parte del autoavalúo sobre la que se calcula el impuesto: el valor de condominio menos la deducción, nunca menos de 0.

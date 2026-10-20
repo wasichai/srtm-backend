@@ -106,6 +106,21 @@ objetos + 10 relaciones» (son 42 objetos y 44 relaciones).
 |`docs/develop/releasing.md`
 |Flujo de versiones con release-please.
 
+|`docs/develop/alta-organizacion.md`
+|El alta de una municipalidad junto a Perené, en {sigla} y en catastro-backend, hasta su brecha, con el registro de
+lo hecho con Ica en dev el 20 de octubre de 2026.
+
+|`develop/pruebas/`
+|Entorno de pruebas en Docker, aparte de dev: una base, los dos Core y los dos portales, con un generador de padrón y
+catastro ficticios (`generar_ficticio.py`). Las claves van en archivos `.env` que no se versionan.
+
+|`docs/presentaciones/`
+|Las presentaciones en vídeo de estos manuales, hechas con Remotion (<<desp-artefactos>>).
+
+|`docs/informes/recaudacion/`
+|Método y plantilla del informe ejecutivo de recaudación municipal. Las ediciones, con cifras, viven fuera del
+repositorio.
+
 |`compose.yml`, `develop/example.env`
 |Base local y variables de ejemplo.
 
@@ -565,8 +580,13 @@ python3 apply.py
 [source,bash]
 ----
 python3 import_parametros.py
-python3 import_catalogos.py
+python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json \
+  --obras-csv data/obras_complementarias.csv
 ----
++
+`--distrito`, `--municipalidad-json` y `--obras-csv` son obligatorios: ningún script elige una organización por
+defecto. Los de arriba son los de Perené; los de Ica, `110101`, `data/ica/municipalidad.json` y
+`data/ica/obras_complementarias_costa.csv` (<<carga-ica>>).
 
 // fin de los pasos
 Resultado esperado:: `apply.py` termina con `done: N created, M updated, K skipped` y código de salida 0; una
@@ -718,8 +738,8 @@ Casos especiales:: Con varias instancias del backend, las demás ven el cambio a
 |`import_catalogos.py`
 |`municipalidad` (solo si la organización no tiene), `ubigeo`, `categoria_valor`, `obra_categoria`, `uso_predio`;
 con `--excel`, además `via` y `unidad_urbana` del padrón.
-|`--excel`, `--sheet`, `--distrito` (`120302`), `--dry-run`, `--workers` (4), `--ubigeo-csv`, `--categorias-csv`,
-`--obras-csv`, `--usos-csv`, `--municipalidad-json`
+|`--distrito`, `--municipalidad-json` y `--obras-csv` (obligatorios), `--excel`, `--sheet`, `--dry-run`, `--workers`
+(4), `--ubigeo-csv`, `--categorias-csv`, `--usos-csv`
 
 |`import_parametros.py`
 |Filas de `parametro_tributario` por clave natural (`tipo`, `clave`, `vigencia_desde`). Por omisión, el CSV del
@@ -746,7 +766,16 @@ predial; con `--csv`, los de arbitrios, sanciones o anuncios.
 |`import_catastro.py`
 |Lotes de `catastro_fiscal` desde un GeoJSON en EPSG:4326.
 |`--geojson` (obligatorio), `--map campo=propiedad` (repetible), `--model`, `--workers` (4), `--dry-run`
+
+|`import_padron_ica.py`
+|Vías, unidades urbanas, contribuyentes, predios, DJ y niveles de un padrón externo (Ica, `PADRON_CONSTRUCCION.xlsx`),
+con su valuación de origen (<<carga-ica>>).
+|`--excel` (obligatorio), `--anio` (2026), `--limit`, `--workers`, `--report`, `--codigos`, `--model`, `--dry-run`
 |===
+
+Todos los comandos de `model/` ponen en `sys.path` solo su propio directorio, así que corren aislados
+(`python3 -I …`) desde cualquier directorio; `model/test_isolated.py` lo comprueba. Úselo siempre con un archivo de
+afuera (un Excel, un GeoJSON): con `-I`, Python no carga nada del directorio actual.
 
 Scripts que no llaman a Core, solo derivan archivos: `import_tasas_arbitrio.py` (de la tabla de tasas de una
 ordenanza al CSV de `import_parametros.py`), `derivar_ipc_arbitrio.py` (tasas del año siguiente reajustadas por IPC)
@@ -758,6 +787,27 @@ el modelo, y en ese caso no se envía nada.
 TIP: Use `--dry-run` primero con cada importador. En los que llaman a Core, `--dry-run` lee Core y dice qué
 crearía o actualizaría; en `import_predios.py` e `import_catastro.py` solo lee y transforma el archivo, sin
 llamar a Core.
+
+[[carga-ica]]
+=== Un padrón externo: la Municipalidad de Ica
+
+Ica es una organización aparte en el mismo Core. Su padrón (`PADRON_CONSTRUCCION.xlsx`, hojas `padron` y
+`construcciones`) lo carga `import_padron_ica.py`, que llena los campos opcionales de padrón externo del modelo
+(<<ref-modelo-padron-externo>>). El alta completa de una organización nueva, en {sigla} y en catastro-backend hasta su
+brecha, está en `docs/develop/alta-organizacion.md`; para ensayarla sin tocar dev está `develop/pruebas/`.
+
+. Organización: `POST /api/organizations` como superadministrador, con su administrador (un correo distinto al de las
+  demás organizaciones: el ingreso es por correo). Para la brecha y el autoavalúo sugerido, la misma organización en
+  catastro-backend (región COSTA) y su entrada `SRTM_CATASTRO_ORGANIZACIONES_ICA_*` (<<ref-config-catastro>>).
+. Modelo y catálogos, con la cuenta de su administrador: `apply.py`, `import_catalogos.py --distrito 110101
+  --municipalidad-json data/ica/municipalidad.json --obras-csv data/ica/obras_complementarias_costa.csv` (sin
+  `--excel`: las vías y unidades urbanas de Ica las carga el importador) e `import_parametros.py`.
+. Padrón: `python3 -I import_padron_ica.py --excel … --dry-run`, luego con `--limit 50` y por último completo. Lo que
+  Core ya tiene se omite, así que una segunda corrida no crea nada.
+
+Las tablas de códigos de Ica (`model/data/ica/codigos.json`) no están confirmadas. El reporte (`--report`, por
+omisión `model/reports/padron_ica.csv`) lleva solo códigos, sin nombres ni documentos, y no se versiona. Salida: `0`
+bien; `1` Core rechazó algo y la carga se detiene en ese registro; `2` el modelo no tiene los campos de padrón externo.
 
 [[carga-orden-arbitrios]]
 === Arbitrios y sanciones: orden interno
@@ -867,7 +917,7 @@ qué bloquea, qué corre en segundo plano y qué puede fallar. Las fórmulas tri
 `PredioService`, `CatalogoService`) que devuelven DTO tipados con los nombres de campo del modelo.
 
 .Ciclo de una declaración jurada
-image::{diagramas}/ciclo-dj.{diagext}[Estados de la declaración jurada: VIGENTE, edición con motivo ACTUALIZACIÓN, ANULADA de solo lectura,role=diagrama]
+image::{diagramas}/ciclo-dj.{diagext}[Estados de la declaración jurada: VIGENTE, edición con motivo ACTUALIZACIÓN, ANULADA y SUSTITUIDA de solo lectura,role=diagrama]
 
 Comportamiento que conviene conocer al operar:
 
@@ -879,6 +929,28 @@ Comportamiento que conviene conocer al operar:
   y secuencia de uso: condición, porcentajes, `valor_condominio` y `valor_afecto`.
 * *Anulación.* Anular una DJ es su descargo: queda ANULADA, sale del condominio y de los totales, y es de solo lectura
   en el portal (400 sobre `estado` al editarla).
+* *Rectificatoria* (`Rectificacion.kt`, `DeclaracionService.copiar`). `POST /declaraciones/{id}/rectificar` crea una
+  DJ nueva, numerada, con motivo RECTIFICACION, `sustituye` = el id de la anterior y una copia de lo que declara (datos
+  del titular incluidos) y de sus transferentes, niveles, obras y otros frentes, sin la valuación del padrón externo.
+  La anterior queda SUSTITUIDA con `fecha_sustitucion`, de solo lectura, y la nueva toma su lugar en el condominio. Si
+  la copia falla a medias, se borra lo que alcanzó a copiar. `vigente()` excluye SUSTITUIDA: la liquidación, las
+  fichas, el PU y la HR, la emisión y la brecha cuentan solo la rectificatoria, y en arbitrios una sustituida no
+  cubre ningún día. Una sustituida o una rectificatoria no se borran, y una rectificatoria no cambia de predio, año ni
+  secuencia.
+* *DJ de otro año desde la anterior.* Con `desde`, presentar una DJ copia otra del mismo predio y contribuyente de
+  otro año, con motivo INSCRIPCION y el año y los medios del cuerpo. El mismo año se rectifica (400), y `desde` con
+  una DJ ANULADA o SUSTITUIDA también es 400.
+* *Valuación del padrón de origen.* Los campos de padrón externo (<<ref-modelo-padron-externo>>) no están en los DTO:
+  los escribe el importador y un guardado del portal no los borra, porque se fusiona con lo guardado
+  (`Registros.replace`). Se leen aparte con `GET /declaraciones/{id}/valuacion-origen` (listas
+  `PADRON_EXTERNO_DECLARACION`, `PADRON_EXTERNO_NIVEL` y `PADRON_EXTERNO_PREDIO`, solo los campos con valor:
+  `conValor`). Al guardar la DJ o una fila de sus niveles, obras o frentes, si la DJ o algún nivel tiene valuación de
+  origen, el backend pone `origen_modificado` en `true` sin tocar el motivo. Un condómino agregado copia la valuación
+  y la marca de su origen. Una DJ con valuación de origen no cambia de año (PUT 400).
+* *Autoavalúo sugerido* (`AutoavaluoSugerido.kt`, `AutoavaluoSugeridoService`). Arma los insumos del motor de
+  valuación con la DJ, su predio, sus niveles y sus obras activos (una función pura) y los valúa con
+  `POST /api/catastro/valuacion` del catastro-backend de la organización (`ClienteCatastro.valuar`, la misma cuenta y
+  el mismo token que la brecha). No guarda nada (<<ref-api-autoavaluo-sugerido>>).
 * *Baja protegida.* Un predio o contribuyente con declaraciones o cuotas no se borra (409); una DJ con filas en sus
   listas tampoco. Core respondería un 500 por la clave foránea: la comprobación va antes.
 * *Grabado fuera del portal* (`ReglasFueraDelPortal`). Core no tiene gancho previo a la escritura para estos objetos;
@@ -913,7 +985,15 @@ wasichai no genera PDF en el servidor, así que {sigla} trae su propia infraestr
   la memoria.
 * `DocumentosPrediales` es la única fachada del PU y la HR; la HLA y la resolución de infracciones usan la misma
   cabecera (`templates/emision/cabecera.html`), cuyos datos salen del registro `municipalidad` de la organización
-  (uno por organización; si hay más, vale el más antiguo y el log lo avisa).
+  (uno por organización; si hay más, vale el más antiguo y el log lo avisa). El escudo es su campo `escudo` (IMAGE,
+  PNG o JPG de hasta 1 MiB, en el almacén de archivos, <<ref-config-archivos>>); sin él, el de respaldo
+  `SRTM_MUNICIPALIDAD_ESCUDO`. Se sube con `POST /api/objects/municipalidad/records/{id}/files/escudo` (multipart,
+  parte `file`), con permiso de modificar `municipalidad`: el admin de wasichai-ui todavía no sube archivos. Un
+  escudo ilegible se imprime como ninguno, con un WARN. La emisión masiva lo lee con la identidad de quien la creó.
+* `MunicipalidadController` (`GET /api/srtm/municipalidad`) da al portal el nombre, la oficina y el escudo de esa
+  misma cabecera, la extensión y el centro de los lotes de `predio` y `catastro_fiscal` (un `ST_Extent` por tabla, en
+  EPSG:4326) y el ubigeo más frecuente de los predios, para que el portal no fije ninguna municipalidad
+  (<<ref-api-municipalidad>>).
 * El log de openhtmltopdf va en WARN (`logging.level.com.openhtmltopdf`).
 
 [[comp-emision-masiva]]
@@ -1127,10 +1207,11 @@ documentación del convenio. Una clave vencida (`coResultado` 1002) no se renuev
 Compara el autoavalúo declarado (las DJ) con el valorizado por catastro-backend y recalcula el impuesto predial y los
 arbitrios con él, reusando `totalesDePredio`, `condominio`, `ImpuestoPredial.liquidar` y `Arbitrios.determinar`.
 
-*Requiere catastro-backend.* Con `SRTM_CATASTRO_ENABLED=false` (por defecto), o sin URL o cuenta de servicio,
-`POST /api/srtm/brecha/corridas` responde *409* «Catastro no configurado». Con el catastro encendido pero sin
-`SRTM_CATASTRO_ORGANIZACION`, o pedida desde otra organización, también 409: nunca se cruza el padrón de una
-organización con el catastro de otra.
+*Requiere catastro-backend.* Cada organización lee el suyo (<<ref-config-catastro>>). Con
+`SRTM_CATASTRO_ENABLED=false` (por defecto), o sin ninguna organización con URL y cuenta de servicio,
+`POST /api/srtm/brecha/corridas` responde *409* «Catastro no configurado». Una organización sin entrada propia responde
+409 `SIN_CATASTRO_CONFIGURADO`, y una nombrada por dos entradas 409 «Catastro configurado dos veces»: nunca se cruza
+el padrón de una organización con el catastro de otra.
 
 [cols="2,7",options="header"]
 |===
@@ -1158,12 +1239,14 @@ también al consultarla.
 vacío, o faltan la UIT, los tramos o el mínimo del año: la corrida queda FALLIDA con el motivo en `mensaje`.
 |===
 
-NOTE: Las decisiones del cruce y del cálculo las confirmó la municipalidad el 19 de octubre de 2026, salvo D8: D5
+NOTE: Las decisiones del cruce y del cálculo las confirmó la municipalidad el 19 de octubre de 2026, y D8 el 20: D5
 (una celda «.....» del cuadro de valores no es cero: el predio queda SIN_VALOR), D7 (llave de cruce: código municipal,
-CPU, sector-manzana-lote), D10 (COINCIDE con |Δ autoavalúo| ≤ 5 %), D11 (el año lo decide catastro) y D12 (reparto
-entre secuencias por autoavalúo declarado, si no por área construida, si no en partes iguales). D8 (la deducción
-Amazonía no se aplica) sigue abierta para una municipalidad de la Amazonía. Las demás (D1-D4, D6, D9) son de
-catastro-backend.
+CPU, sector-manzana-lote), D8 (la deducción del 5 % de la Amazonía, Ley 27037, se reconoce en la DJ, cuando su
+`deduccion` es el 5 % de su valor de condominio declarado, ±S/ 0,01, y se recalcula sobre el valor de condominio
+catastral; las demás deducciones quedan fijas en los dos lados), D10 (COINCIDE con |Δ autoavalúo| ≤ 5 %), D11 (el año
+lo decide catastro) y D12 (reparto entre secuencias por autoavalúo declarado, si no por área construida, si no en
+partes iguales). La corrida cuenta en `mensaje` cuántas DJ recalculó con la deducción del 5 %. Las demás (D1-D4, D6,
+D9) son de catastro-backend.
 
 La brecha la consulta cualquier usuario de la municipalidad: por decisión del 19 de octubre de 2026, *todo rol* lleva
 lectura sobre `brecha_corrida` y `brecha_predio` (wasichai no tiene un permiso para «cualquier usuario autenticado»,
@@ -1286,7 +1369,7 @@ un superusuario. Pruebe el procedimiento en una base de ensayo antes de aplicarl
 |Ídem. `application.yml` advierte: «set them in the environment, never here».
 
 |Cuenta de servicio de catastro-backend
-|`SRTM_CATASTRO_CLIENT_SECRET`
+|`SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_CLIENT_SECRET`, una por organización (o `SRTM_CATASTRO_CLIENT_SECRET`)
 |Ídem. catastro-backend la muestra una sola vez al crearla.
 
 |Credenciales de S3
@@ -1885,7 +1968,7 @@ determinación no duplica lo ya escrito.
 
 |9
 |La cabecera de los documentos es la de la municipalidad (no los datos provisionales de
-`model/data/municipalidad.json`).
+`model/data/<organización>/municipalidad.json`), con su escudo subido al registro.
 |Un PU o una HR de prueba.
 
 |10
@@ -1926,8 +2009,13 @@ determinación no duplica lo ya escrito.
 |Los PDF y ZIP generados. La base solo guarda su clave y su tamaño: sin el archivo, la descarga da 404.
 |Copia del directorio `SRTM_EMISION_DIR` o del bucket (<<proc-respaldo-almacen>>).
 
+|El almacén de archivos
+|Los archivos de los campos `FILE` e `IMAGE` (hoy, el escudo de cada municipalidad). La base guarda la fila de
+`stored_files`; sin el archivo, el documento sale sin escudo.
+|Copia del directorio `SRTM_ARCHIVOS_DIR` o del bucket de `SRTM_ARCHIVOS_S3_BUCKET`, junto con la base.
+
 |La configuración
-|El archivo de entorno o los secretos del orquestador, y el escudo (`SRTM_MUNICIPALIDAD_ESCUDO`).
+|El archivo de entorno o los secretos del orquestador, y el escudo de respaldo (`SRTM_MUNICIPALIDAD_ESCUDO`).
 |Con el mecanismo de secretos de la organización, cifrado.
 
 |Los datos de entrada
@@ -2180,12 +2268,21 @@ image::{diagramas}/demo-reconstruccion.{diagext}[Ciclo de la demo: levantar, sem
 |Espere a que termine o bórrela.
 
 |409 «Catastro no configurado…» al lanzar la brecha
-|`SRTM_CATASTRO_ENABLED=false` (por defecto) o faltan URL, `client-id` o `client-secret`.
+|`SRTM_CATASTRO_ENABLED=false` (por defecto) o ninguna organización tiene URL, `client-id` y `client-secret`.
 |Configure catastro-backend (<<ref-config-catastro>>).
 
-|409 «Catastro sin organización…» o «… para esta organización»
-|Falta `SRTM_CATASTRO_ORGANIZACION`, o la corrida es de otra organización.
-|Fije el slug o el id de la organización correcta.
+|409 `SIN_CATASTRO_CONFIGURADO` («… para esta organización») en la brecha o en el autoavalúo sugerido
+|La organización del usuario no tiene entrada `SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_*`, o la entrada se saltó por
+incompleta (aviso en el log al arrancar), o `SRTM_CATASTRO_ORGANIZACION` está vacía en la forma de una sola.
+|Agregue la entrada de esa organización con su slug o su id.
+
+|409 «Catastro configurado dos veces para esta organización»
+|Dos entradas nombran a la misma organización (por su slug y por su id).
+|Deje una sola; el mensaje nombra las claves.
+
+|502 en `GET /declaraciones/{id}/autoavaluo-sugerido`
+|El catastro-backend de la organización no respondió o rechazó el pedido.
+|Revise que esté arriba y que su cuenta de servicio pueda valuar.
 
 |Corrida de la brecha FALLIDA con «catastro-backend no respondió las valuaciones de <año> (página N):
 DataBufferLimitException»
@@ -2265,8 +2362,17 @@ cambio en {sigla} o páginas más livianas en catastro-backend.
 |El contrato de `PideReniec` sale de ejemplos publicados y nunca se probó contra la PIDE real. Apagado.
 
 |Brecha de recaudación
-|D8 (deducción Amazonía) sigue abierta; las demás decisiones están confirmadas. Requiere catastro-backend y su
-cuenta de servicio; apagada por defecto.
+|Todas las decisiones están confirmadas (D8, el 20 de octubre de 2026). Requiere el catastro-backend de cada
+organización y su cuenta de servicio; apagada por defecto.
+
+|Portal
+|La rectificatoria, la DJ de otro año desde la anterior, la valuación del padrón de origen y el autoavalúo sugerido
+están en la API; sus pantallas en srtm-ui están en desarrollo. El admin de wasichai-ui todavía no sube archivos: el
+escudo se sube por la API.
+
+|Padrón de Ica
+|Las tablas de códigos (`model/data/ica/codigos.json`) no están confirmadas y el extracto cargado es parte del
+padrón: hasta tener el completo, la brecha de Ica infla los OMISOS.
 
 |Tasas de arbitrios de Perené
 |No cargadas: falta una transcripción verificada de la ordenanza y su ratificación. Solo hay datos ficticios.
@@ -2289,8 +2395,7 @@ un solo rol de base de datos en los entornos actuales. `SECURITY.md` sin complet
 |Falta la cifra de la emisión masiva con el padrón real en dev (#55).
 
 |Release
-|`v0.9.0` usa wasichai 0.6.0; `main` (wasichai 1.2.0, brecha) no tiene release propio y `release-as` sigue en la
-configuración.
+|`v0.9.0` usa wasichai 0.6.0; `main` (wasichai 1.2.0, brecha) no tiene release propio todavía.
 |===
 
 :glosario-estilo: appendix

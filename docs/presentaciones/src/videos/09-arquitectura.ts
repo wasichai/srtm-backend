@@ -41,7 +41,7 @@ export const arquitectura: Video = {
         { id: 'api', x: 795, y: 150, w: 350, h: 110, titulo: 'API /api/srtm/**', texto: 'módulos de SRTM', paso: 2 },
         { id: 'core', x: 795, y: 455, w: 350, h: 120, titulo: 'wasichai Core', texto: '/api/** · JWT · RBAC · auditoría', paso: 2 },
         { id: 'osm', x: 1250, y: 0, w: 390, h: 70, tipo: 'externo', titulo: 'Teselas de OpenStreetMap', paso: 4 },
-        { id: 'cat', x: 1250, y: 110, w: 390, h: 90, tipo: 'externo', titulo: 'catastro-backend', texto: 'opcional · brecha', paso: 4 },
+        { id: 'cat', x: 1250, y: 110, w: 390, h: 90, tipo: 'externo', titulo: 'catastro-backend', texto: 'uno por organización · brecha', paso: 4 },
         { id: 'pide', x: 1250, y: 215, w: 390, h: 90, tipo: 'externo', titulo: 'PIDE RENIEC', texto: 'opcional · apagado', paso: 4 },
         { id: 'al', x: 1250, y: 330, w: 390, h: 90, tipo: 'dato', titulo: 'Almacén de emisiones', texto: 'disco local o S3', paso: 3 },
         { id: 'db', x: 1250, y: 465, w: 390, h: 100, tipo: 'dato', titulo: 'PostgreSQL 18', texto: '+ PostGIS 3.6', paso: 3 },
@@ -62,7 +62,7 @@ export const arquitectura: Video = {
         { texto: 'Los funcionarios usan el portal tributario; el administrador, la consola /admin. Los dos llaman a la misma API.', segundos: 8 },
         { texto: 'srtm-backend es un solo proceso en el puerto 8090: la API de SRTM (/api/srtm/**) y la de Core (/api/**).', segundos: 8.5 },
         { texto: 'La base y el almacén de los PDF y ZIP de la emisión son el único estado compartido entre instancias.', segundos: 8.5 },
-        { texto: 'Opcionales: catastro-backend para la brecha y PIDE RENIEC, apagado. Las teselas de los mapas las pide el navegador.', segundos: 8.5 },
+        { texto: 'Opcionales: el catastro-backend de cada organización, para la brecha y el autoavalúo sugerido, y PIDE RENIEC, apagado. Las teselas las pide el navegador.', segundos: 10 },
       ],
     },
     {

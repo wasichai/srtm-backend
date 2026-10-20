@@ -3,4 +3,6 @@ stateDiagram-v2
   [*] --> VIGENTE: registro de la DJ (motivo INSCRIPCION)
   VIGENTE --> VIGENTE: edición en el portal<br/>(motivo ACTUALIZACION)
   VIGENTE --> ANULADA: Anular declaración<br/>(motivo obligatorio)
+  VIGENTE --> SUSTITUIDA: Rectificar<br/>(nace la rectificatoria, motivo RECTIFICACION)
   ANULADA --> [*]: solo lectura
+  SUSTITUIDA --> [*]: solo lectura

@@ -190,6 +190,11 @@ Base: `/api/srtm`. Controlador `RentasController`.
 |Totales del padrón del año en curso.
 |200 `{anio, contribuyentes, predios, declaraciones}`.
 
+|`GET /municipalidad`
+|Cabecera y mapa del portal para la organización del usuario: `{nombre, oficina, escudo, extension, centro, lugar}`
+(<<ref-api-municipalidad>>). Controlador `MunicipalidadController` (`srtm.emision`).
+|200; 403 sin lectura sobre `municipalidad`.
+
 |`GET /catalogos`
 |Opciones de las listas por objeto y campo, solo de los objetos que el rol puede leer.
 |200.
@@ -228,7 +233,8 @@ Base: `/api/srtm`. Controlador `RentasController`.
 |200; 201.
 
 |`GET /predios/{id}?anio`, `PUT`, `DELETE /predios/{id}`
-|Ficha con titulares y totales; edición; baja.
+|Ficha con titulares y totales, y `valuacion_origen.predio` (los códigos del padrón externo con valor); edición;
+baja.
 |200; 204; 409 si tiene declaraciones o cuotas.
 
 |`GET /predios/{id}/declaraciones?anio`
@@ -251,12 +257,24 @@ Base: `/api/srtm`. Controlador `RentasController`.
 |`POST /contribuyentes/{id}/declaraciones-juradas`
 |Presenta una DJ: `{declaracion, predio_id}` sobre un predio existente o `{declaracion, predio}` registrándolo. Con
 `desde` (el id de una DJ de otro año del mismo predio y contribuyente), la copia con sus listas al año del cuerpo.
-|201; 400 por campo; 400 si `desde` es del mismo año.
+|201; 400 por campo; 400 si `desde` es del mismo año, o es una DJ ANULADA o SUSTITUIDA (se parte de la
+rectificatoria vigente).
 
 |`GET`, `PUT`, `DELETE /declaraciones/{id}`
 |La DJ con su predio y su contribuyente; edición; baja.
 |200; 204; DELETE 409 si alguna lista tiene filas o es parte de una rectificación; PUT 400 si está ANULADA o
 SUSTITUIDA, o si cambia el año de una DJ con valuación de un padrón externo.
+
+|`GET /declaraciones/{id}/valuacion-origen`
+|Solo lectura: lo que trajo un padrón externo (Ica) a la DJ, su predio y sus niveles, solo los campos con valor, y
+`modificada` (<<ref-api-valuacion-origen>>).
+|200; 403; 404.
+
+|`GET /declaraciones/{id}/autoavaluo-sugerido`
+|Solo lectura: la DJ valuada por el motor del catastro-backend de la organización, con su detalle; no guarda nada
+(<<ref-api-autoavaluo-sugerido>>). Controlador `AutoavaluoSugeridoController`.
+|200; 404 si no existe o es de otra organización; 409 `SIN_CATASTRO_CONFIGURADO`; 502 si el catastro no responde o
+rechaza el pedido.
 
 |`POST /declaraciones/{id}/anular` +
 `{motivo_anulacion}`
@@ -279,6 +297,98 @@ valuación del padrón externo); esta queda SUSTITUIDA, de solo lectura. Devuelv
 |Listas de la DJ: `transferentes`, `niveles`, `obras`, `frentes`.
 |200; 201; 204.
 |===
+
+[[ref-api-valuacion-origen]]
+==== Valuación del padrón de origen
+
+`GET /declaraciones/{id}/valuacion-origen` devuelve, en solo lectura, la valuación que trajo un padrón externo
+(`import_padron_ica.py`) a la DJ, a su predio y a sus niveles. Cada bloque lleva solo los campos con valor:
+
+[source,json]
+----
+{
+  "predio":      { "codigo_via": "V0123", "codigo_unidad_urbana": "U045", "codigo_hu_armonizacion": "HU-01", "codigo_via_armonizacion": "VA-02" },
+  "declaracion": { "arancel": 35.50, "valor_terreno": 7100, "valor_construccion": 48250.75, "valor_otras_instalaciones": 1200 },
+  "niveles":     { "<id del nivel>": { "clasificacion": "…", "valor_unitario": 402.08, "incremento": 0, "porcentaje_depreciacion": 12, "valor_total": 48250.75 } },
+  "modificada":  false
+}
+----
+
+* Los permisos son los de `GET /declaraciones/{id}`: 404 si la DJ no existe, 403 si el rol no puede leerla. Core no
+  devuelve los campos que el rol no puede leer, así que tampoco aparecen aquí.
+* No cambia el impuesto, que sigue saliendo de `valor_autoavaluo`.
+* `modificada` dice si la DJ cambió después de importar su valuación: el portal pone
+  `declaracion_predial.origen_modificado` en `true` al guardar la DJ o al agregar, cambiar o quitar uno de sus niveles,
+  obras o frentes, si la DJ o alguno de sus niveles tiene valuación de origen. No toca el motivo. El campo nace vacío
+  (el importador no lo escribe), que cuenta como `false`. La copia de un condómino lo hereda de su origen.
+* Ni la rectificatoria ni la DJ de otro año copian la valuación de origen; por eso una DJ con valuación de origen no
+  puede cambiar de año (PUT 400).
+
+[[ref-api-autoavaluo-sugerido]]
+==== Autoavalúo sugerido
+
+`GET /declaraciones/{id}/autoavaluo-sugerido` arma los insumos del motor de valuación con la DJ, su predio, sus
+niveles y sus obras activos (`AutoavaluoSugerido.insumos`, una función pura) y los envía a
+`POST /api/catastro/valuacion` del catastro-backend de la organización, con la misma cuenta de servicio que la brecha
+(`ClienteCatastro.valuar`). Devuelve la respuesta del catastro en snake_case y *no guarda nada*: `valor_autoavaluo`
+lo sigue escribiendo el usuario.
+
+[source,json]
+----
+{ "anio": 2026, "version": "valuacion-v2", "region": "SELVA", "codigo_municipal": "01-01-0006", "arancel_m2": 45.5,
+  "origen_arancel": "CUERPO", "terreno": 9100.0, "construccion": 78781.6, "obras": 8870.61, "autoavaluo": 96752.21,
+  "motivo": null, "llave": null,
+  "detalle": { "pisos": [ … ], "obras": [ … ] } }
+----
+
+[cols="2,7",options="header"]
+|===
+|Insumo |Cómo se arma
+
+|Arancel
+|El `arancel` del padrón externo guardado en la DJ (`origen_arancel` = `CUERPO`). Sin él, el catastro toma el de su
+ficha por `codigo_municipal`, que es el `codigo` del predio, la misma llave de la brecha (`FICHA`).
+
+|Uso
+|El `codigo` de `uso_predio` que corresponde a la clase, sub clase y uso de la DJ. Si no hay uno solo, va `null` y el
+catastro responde su motivo.
+
+|Niveles
+|`piso` es el número (`1`), `S1` un sótano, `M1` un mezanine y `AZ` la azotea. La `clasificacion` es la del nivel o,
+si no tiene, la de la DJ. El área común no se valúa.
+
+|Obras
+|`codigoVu` = `tipo_obra\|n`, donde `n` es el número con que empieza la `categoria`. Sin número va `null` y el catastro
+nombra la obra que no valúa. `cantidad` es el total metrado.
+
+|Edificio
+|El 5 % desde el 5.º piso: si el predio tiene `edificacion` o un nivel PISO por encima del primero.
+|===
+
+Sin valor, `terreno`, `construccion`, `obras`, `autoavaluo` y `detalle` son `null`, y `motivo` y `llave` dicen por
+qué (`ARANCEL_FALTANTE`, `PARAMETRO_FALTANTE:PORCENTAJE_ACTUALIZACION:2027`…).
+
+[[ref-api-municipalidad]]
+==== El portal y su municipalidad
+
+`GET /municipalidad` da al portal lo que muestra de la organización del usuario, para que el frontend no fije ninguna
+municipalidad:
+
+[source,json]
+----
+{"nombre": "MUNICIPALIDAD DISTRITAL DE PERENÉ", "oficina": "…", "escudo": "data:image/png;base64,…",
+ "extension": [-75.31, -10.99, -75.18, -10.90], "centro": [-75.245, -10.945],
+ "lugar": {"ubigeo": "120302", "departamento": "JUNIN", "provincia": "CHANCHAMAYO", "distrito": "PERENE", "region": "SELVA"}}
+----
+
+* `nombre`, `oficina` y `escudo` son los de la cabecera de los documentos (`CabeceraDocumento`): el registro
+  `municipalidad` y el escudo como data URI (o `null`).
+* `extension` (`[oeste, sur, este, norte]`, EPSG:4326) cubre los lotes de `predio` y de `catastro_fiscal` de la
+  organización, y `centro` es su punto medio; sin lotes, los dos son `null`.
+* `lugar` es el ubigeo que más predios tienen; el portal lo propone al registrar un predio, un domicilio, un
+  transferente o un lote. Sin predios con ubigeo es `null`.
+* `extension` y `lugar` solo cuentan los objetos que el rol puede leer. Si un cálculo falla, el campo sale `null` y el
+  log lo avisa (WARN): la cabecera nunca se pierde por el mapa.
 
 [[ref-api-impuesto]]
 === Impuesto predial y documentos prediales

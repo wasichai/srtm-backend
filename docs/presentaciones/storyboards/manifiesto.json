@@ -651,8 +651,8 @@
       "titulo": "Registro tributario",
       "audiencia": "Personal de ventanilla y del registro tributario (perfil REGISTRADOR)",
       "objetivo": "Inscribir contribuyentes, registrar predios, presentar, completar y anular declaraciones juradas y entregar sus documentos.",
-      "fotogramas": 14835,
-      "duracion": "8:15",
+      "fotogramas": 16269,
+      "duracion": "9:02",
       "salida": {
         "video": "salida/videos/srtm-03-registro-tributario.mp4",
         "miniatura": "salida/miniaturas/srtm-03-registro-tributario.jpg"
@@ -1060,11 +1060,50 @@
           ]
         },
         {
+          "id": "rectificar",
+          "tipo": "tarjetas",
+          "titulo": "Corregir sin perder la historia",
+          "objetivo": "Saber qué es una rectificatoria y cuándo declarar otro año desde la declaración anterior.",
+          "inicio": 11295,
+          "fotogramas": 720,
+          "segundos": 24,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "rectificar-declaracion",
+              "seccion": "Rectificar una declaración o declarar otro año desde la anterior"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "valuacion-origen",
+          "tipo": "aviso",
+          "titulo": "Valuación de origen y autoavalúo sugerido",
+          "objetivo": "Reconocer la valuación de un padrón externo y el autoavalúo sugerido, y dónde están hoy.",
+          "inicio": 11997,
+          "fotogramas": 750,
+          "segundos": 25,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "valuacion-origen",
+              "seccion": "Valuación del padrón de origen y autoavalúo sugerido"
+            },
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "rectificar-declaracion",
+              "seccion": "Rectificar una declaración o declarar otro año desde la anterior"
+            }
+          ],
+          "capturas": []
+        },
+        {
           "id": "cambio-dueno",
           "tipo": "proceso",
           "titulo": "Cuando un predio se vende",
           "objetivo": "Registrar la venta, donación o herencia de un predio.",
-          "inicio": 11295,
+          "inicio": 12729,
           "fotogramas": 660,
           "segundos": 22,
           "fuentes": [
@@ -1081,7 +1120,7 @@
           "tipo": "seccion",
           "titulo": "Documentos",
           "objetivo": "Abrir la parte de documentos.",
-          "inicio": 11937,
+          "inicio": 13371,
           "fotogramas": 180,
           "segundos": 6,
           "fuentes": [
@@ -1098,7 +1137,7 @@
           "tipo": "tabla",
           "titulo": "PU, HR y HLA desde las fichas",
           "objetivo": "Saber qué documento entregar, dónde se emite y cuándo no sale.",
-          "inicio": 12099,
+          "inicio": 13533,
           "fotogramas": 780,
           "segundos": 26,
           "fuentes": [
@@ -1120,7 +1159,7 @@
           "tipo": "calculo",
           "titulo": "QUISPE ROJAS ROSA ELENA, 2026",
           "objetivo": "Entender cómo calcula el sistema el impuesto predial de la HR.",
-          "inicio": 12861,
+          "inicio": 14295,
           "fotogramas": 870,
           "segundos": 29,
           "fuentes": [
@@ -1137,7 +1176,7 @@
           "tipo": "pantalla",
           "titulo": "La HR, sección por sección",
           "objetivo": "Reconocer las cuatro secciones de la HR.",
-          "inicio": 13713,
+          "inicio": 15147,
           "fotogramas": 480,
           "segundos": 16,
           "fuentes": [
@@ -1156,7 +1195,7 @@
           "tipo": "cierre",
           "titulo": "El registro tributario, en resumen",
           "objetivo": "Recordar las reglas esenciales del registro tributario.",
-          "inicio": 14175,
+          "inicio": 15609,
           "fotogramas": 660,
           "segundos": 22,
           "fuentes": [
@@ -2651,8 +2690,8 @@
       "titulo": "Administración del sistema",
       "audiencia": "Administradores del sistema (rol ADMIN) y quien coordina con el área de sistemas",
       "objetivo": "Dar acceso con roles acotados, mantener los datos maestros, seguir la auditoría y coordinar con el área de sistemas el año tributario, los respaldos y las operaciones críticas.",
-      "fotogramas": 17427,
-      "duracion": "9:41",
+      "fotogramas": 17517,
+      "duracion": "9:44",
       "salida": {
         "video": "salida/videos/srtm-08-administrador.mp4",
         "miniatura": "salida/miniaturas/srtm-08-administrador.jpg"
@@ -2948,8 +2987,8 @@
           "titulo": "La cabecera de los documentos",
           "objetivo": "Corregir la cabecera de los documentos y saber qué no se hace en la consola.",
           "inicio": 9000,
-          "fotogramas": 840,
-          "segundos": 28,
+          "fotogramas": 930,
+          "segundos": 31,
           "fuentes": [
             {
               "archivo": "docs/manuales/administrador/manual-administrador.adoc",
@@ -2971,7 +3010,7 @@
           "tipo": "pantalla",
           "titulo": "Las cifras de los cálculos",
           "objetivo": "Leer una fila de los parámetros tributarios.",
-          "inicio": 9822,
+          "inicio": 9912,
           "fotogramas": 810,
           "segundos": 27,
           "fuentes": [
@@ -2990,7 +3029,7 @@
           "tipo": "aviso",
           "titulo": "No edite un parámetro ya usado",
           "objetivo": "No alterar un parámetro con el que ya se calculó.",
-          "inicio": 10614,
+          "inicio": 10704,
           "fotogramas": 540,
           "segundos": 18,
           "fuentes": [
@@ -3007,7 +3046,7 @@
           "tipo": "tabla",
           "titulo": "Lo que solo se agrega, se corrige con otro acto",
           "objetivo": "Saber cómo se corrige lo que solo se agrega.",
-          "inicio": 11136,
+          "inicio": 11226,
           "fotogramas": 690,
           "segundos": 23,
           "fuentes": [
@@ -3029,7 +3068,7 @@
           "tipo": "pantalla",
           "titulo": "Quién cambió qué, y cuándo",
           "objetivo": "Consultar quién cambió qué y cuándo.",
-          "inicio": 11808,
+          "inicio": 11898,
           "fotogramas": 810,
           "segundos": 27,
           "fuentes": [
@@ -3049,7 +3088,7 @@
           "tipo": "seccion",
           "titulo": "Operación",
           "objetivo": "Situar la parte del vídeo sobre la operación.",
-          "inicio": 12600,
+          "inicio": 12690,
           "fotogramas": 180,
           "segundos": 6,
           "fuentes": [
@@ -3066,7 +3105,7 @@
           "tipo": "tarjetas",
           "titulo": "Lo que conviene saber al vigilarlos",
           "objetivo": "Vigilar la determinación y la emisión masivas.",
-          "inicio": 12762,
+          "inicio": 12852,
           "fotogramas": 810,
           "segundos": 27,
           "fuentes": [
@@ -3083,7 +3122,7 @@
           "tipo": "tabla",
           "titulo": "Preparar un año tributario",
           "objetivo": "Preparar el año tributario con cada área responsable.",
-          "inicio": 13554,
+          "inicio": 13644,
           "fotogramas": 960,
           "segundos": 32,
           "fuentes": [
@@ -3100,7 +3139,7 @@
           "tipo": "tarjetas",
           "titulo": "Un respaldo completo tiene dos partes",
           "objetivo": "Coordinar con sistemas los respaldos y sus precauciones.",
-          "inicio": 14496,
+          "inicio": 14586,
           "fotogramas": 780,
           "segundos": 26,
           "fuentes": [
@@ -3117,7 +3156,7 @@
           "tipo": "tabla",
           "titulo": "Síntomas frecuentes y qué hacer",
           "objetivo": "Saber qué hacer ante las incidencias más comunes.",
-          "inicio": 15258,
+          "inicio": 15348,
           "fotogramas": 750,
           "segundos": 25,
           "fuentes": [
@@ -3134,7 +3173,7 @@
           "tipo": "tabla",
           "titulo": "Antes de una operación crítica",
           "objetivo": "Comprobar lo necesario antes de cada operación crítica.",
-          "inicio": 15990,
+          "inicio": 16080,
           "fotogramas": 885,
           "segundos": 29.5,
           "fuentes": [
@@ -3151,7 +3190,7 @@
           "tipo": "cierre",
           "titulo": "Administrar, en pocas palabras",
           "objetivo": "Recordar lo esencial y saber dónde seguir.",
-          "inicio": 16857,
+          "inicio": 16947,
           "fotogramas": 570,
           "segundos": 19,
           "fuentes": [
@@ -3171,8 +3210,8 @@
       "titulo": "Arquitectura técnica",
       "audiencia": "Ingenieros de software, arquitectos y DevOps",
       "objetivo": "Entender cómo está construido srtm-backend sobre wasichai, cómo recorre una petición, cómo se guarda el modelo y qué garantías aplica el código.",
-      "fotogramas": 13518,
-      "duracion": "7:31",
+      "fotogramas": 13563,
+      "duracion": "7:32",
       "salida": {
         "video": "salida/videos/srtm-09-arquitectura.mp4",
         "miniatura": "salida/miniaturas/srtm-09-arquitectura.jpg"
@@ -3202,8 +3241,8 @@
           "titulo": "Un backend, un portal y una base",
           "objetivo": "Situar srtm-backend entre sus usuarios, el portal, la base, el almacén y los servicios externos.",
           "inicio": 312,
-          "fotogramas": 1080,
-          "segundos": 36,
+          "fotogramas": 1125,
+          "segundos": 37.5,
           "fuentes": [
             {
               "archivo": "docs/manuales/sistema/manual-sistema.adoc",
@@ -3218,7 +3257,7 @@
           "tipo": "tabla",
           "titulo": "La pila y sus versiones",
           "objetivo": "Conocer las versiones de la pila y dónde se fija cada una.",
-          "inicio": 1374,
+          "inicio": 1419,
           "fotogramas": 750,
           "segundos": 25,
           "fuentes": [
@@ -3240,7 +3279,7 @@
           "tipo": "diagrama",
           "titulo": "Los paquetes de srtm y la plataforma",
           "objetivo": "Ver los paquetes de srtm-backend, en qué dirección se usan y sobre qué starters de wasichai corren.",
-          "inicio": 2106,
+          "inicio": 2151,
           "fotogramas": 1020,
           "segundos": 34,
           "fuentes": [
@@ -3262,7 +3301,7 @@
           "tipo": "comparacion",
           "titulo": "Lo que da la plataforma y lo que agrega SRTM",
           "objetivo": "Distinguir lo que da la plataforma wasichai de lo que SRTM agrega por su cuenta.",
-          "inicio": 3108,
+          "inicio": 3153,
           "fotogramas": 780,
           "segundos": 26,
           "fuentes": [
@@ -3279,7 +3318,7 @@
           "tipo": "secuencia",
           "titulo": "De la petición a la fila y su auditoría",
           "objetivo": "Seguir una petición desde el filtro JWT hasta la auditoría y la respuesta de error.",
-          "inicio": 3870,
+          "inicio": 3915,
           "fotogramas": 2055,
           "segundos": 68.5,
           "fuentes": [
@@ -3296,7 +3335,7 @@
           "tipo": "proceso",
           "titulo": "El modelo se carga por REST, no con SQL",
           "objetivo": "Entender que el modelo es metadata cargada por REST y qué consecuencias tiene.",
-          "inicio": 5907,
+          "inicio": 5952,
           "fotogramas": 810,
           "segundos": 27,
           "fuentes": [
@@ -3318,7 +3357,7 @@
           "tipo": "diagrama",
           "titulo": "El padrón: contribuyente, predio y DJ",
           "objetivo": "Reconocer los objetos del padrón y sus relaciones principales.",
-          "inicio": 6699,
+          "inicio": 6744,
           "fotogramas": 735,
           "segundos": 24.5,
           "fuentes": [
@@ -3335,7 +3374,7 @@
           "tipo": "tabla",
           "titulo": "Garantías que no dependen del portal",
           "objetivo": "Conocer las garantías que el código aplica siempre, y dónde están.",
-          "inicio": 7416,
+          "inicio": 7461,
           "fotogramas": 1050,
           "segundos": 35,
           "fuentes": [
@@ -3352,7 +3391,7 @@
           "tipo": "diagrama",
           "titulo": "Lotes repartidos entre instancias",
           "objetivo": "Entender cómo se reparte la emisión masiva en lotes entre instancias y cómo termina.",
-          "inicio": 8448,
+          "inicio": 8493,
           "fotogramas": 1170,
           "segundos": 39,
           "fuentes": [
@@ -3374,7 +3413,7 @@
           "tipo": "calculo",
           "titulo": "Cuántos trabajadores corre una instancia",
           "objetivo": "Saber cuántos trabajadores corre cada instancia y qué los limita.",
-          "inicio": 9600,
+          "inicio": 9645,
           "fotogramas": 810,
           "segundos": 27,
           "fuentes": [
@@ -3396,7 +3435,7 @@
           "tipo": "comparacion",
           "titulo": "Disco local o bucket S3",
           "objetivo": "Elegir entre el almacén local y S3 según cuántas instancias haya.",
-          "inicio": 10392,
+          "inicio": 10437,
           "fotogramas": 750,
           "segundos": 25,
           "fuentes": [
@@ -3413,7 +3452,7 @@
           "tipo": "tarjetas",
           "titulo": "Autenticación, permisos y auditoría",
           "objetivo": "Conocer las piezas de seguridad y lo que hay que cambiar fuera de desarrollo.",
-          "inicio": 11124,
+          "inicio": 11169,
           "fotogramas": 1020,
           "segundos": 34,
           "fuentes": [
@@ -3455,7 +3494,7 @@
           "tipo": "tabla",
           "titulo": "Cuatro suites, todas en el CI",
           "objetivo": "Saber qué pruebas hay, qué cubren y cómo se corren.",
-          "inicio": 12126,
+          "inicio": 12171,
           "fotogramas": 780,
           "segundos": 26,
           "fuentes": [
@@ -3477,7 +3516,7 @@
           "tipo": "cierre",
           "titulo": "La arquitectura, en pocas palabras",
           "objetivo": "Recordar lo esencial de la arquitectura y saber dónde seguir.",
-          "inicio": 12888,
+          "inicio": 12933,
           "fotogramas": 630,
           "segundos": 21,
           "fuentes": [
@@ -3497,8 +3536,8 @@
       "titulo": "Instalación, operación y recuperación",
       "audiencia": "DevOps y administradores de bases de datos",
       "objetivo": "Levantar un entorno, cargar el modelo y los datos, publicar y actualizar versiones, vigilar el servicio y respaldar y restaurar sin perder datos.",
-      "fotogramas": 16392,
-      "duracion": "9:06",
+      "fotogramas": 16602,
+      "duracion": "9:13",
       "salida": {
         "video": "salida/videos/srtm-10-operacion.mp4",
         "miniatura": "salida/miniaturas/srtm-10-operacion.jpg"
@@ -3737,11 +3776,11 @@
         {
           "id": "que-respaldar",
           "tipo": "tabla",
-          "titulo": "Cuatro cosas que respaldar",
+          "titulo": "Cinco cosas que respaldar",
           "objetivo": "Saber qué partes forman un respaldo completo.",
           "inicio": 8304,
-          "fotogramas": 900,
-          "segundos": 30,
+          "fotogramas": 1110,
+          "segundos": 37,
           "fuentes": [
             {
               "archivo": "docs/manuales/sistema/manual-sistema.adoc",
@@ -3756,7 +3795,7 @@
           "tipo": "codigo",
           "titulo": "Un volcado completo, y su prueba",
           "objetivo": "Tomar un volcado completo y comprobar que se puede leer.",
-          "inicio": 9186,
+          "inicio": 9396,
           "fotogramas": 750,
           "segundos": 25,
           "fuentes": [
@@ -3778,7 +3817,7 @@
           "tipo": "codigo",
           "titulo": "Siempre en una base nueva y vacía",
           "objetivo": "Restaurar en una base nueva sin tocar la original.",
-          "inicio": 9918,
+          "inicio": 10128,
           "fotogramas": 750,
           "segundos": 25,
           "fuentes": [
@@ -3800,7 +3839,7 @@
           "tipo": "proceso",
           "titulo": "Siete comprobaciones antes de usarla",
           "objetivo": "Comprobar que la base restaurada está completa antes de usarla.",
-          "inicio": 10650,
+          "inicio": 10860,
           "fotogramas": 750,
           "segundos": 25,
           "fuentes": [
@@ -3817,7 +3856,7 @@
           "tipo": "tabla",
           "titulo": "Qué se pierde y cómo se recupera",
           "objetivo": "Saber qué se pierde y cómo se recupera en cada situación.",
-          "inicio": 11382,
+          "inicio": 11592,
           "fotogramas": 1020,
           "segundos": 34,
           "fuentes": [
@@ -3834,7 +3873,7 @@
           "tipo": "diagrama",
           "titulo": "La base de demostración, de punta a punta",
           "objetivo": "Usar la base de demostración para ensayar el respaldo y la restauración sin datos reales.",
-          "inicio": 12384,
+          "inicio": 12594,
           "fotogramas": 660,
           "segundos": 22,
           "fuentes": [
@@ -3856,7 +3895,7 @@
           "tipo": "tabla",
           "titulo": "Lista de verificación",
           "objetivo": "Recorrer las comprobaciones posteriores a un despliegue.",
-          "inicio": 13026,
+          "inicio": 13236,
           "fotogramas": 1110,
           "segundos": 37,
           "fuentes": [
@@ -3873,7 +3912,7 @@
           "tipo": "tabla",
           "titulo": "Síntomas frecuentes",
           "objetivo": "Resolver los problemas más frecuentes por su síntoma.",
-          "inicio": 14118,
+          "inicio": 14328,
           "fotogramas": 930,
           "segundos": 31,
           "fuentes": [
@@ -3890,7 +3929,7 @@
           "tipo": "tabla",
           "titulo": "Lo que todavía falta",
           "objetivo": "Conocer las limitaciones conocidas antes de operar en producción.",
-          "inicio": 15030,
+          "inicio": 15240,
           "fotogramas": 780,
           "segundos": 26,
           "fuentes": [
@@ -3907,7 +3946,7 @@
           "tipo": "cierre",
           "titulo": "La operación, en pocas palabras",
           "objetivo": "Recordar lo esencial de la operación y saber dónde seguir.",
-          "inicio": 15792,
+          "inicio": 16002,
           "fotogramas": 600,
           "segundos": 20,
           "fuentes": [

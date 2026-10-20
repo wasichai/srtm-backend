@@ -121,6 +121,18 @@ si la DJ registra uno; las listas de la DJ con sus propias acciones.
 |Catastro fiscal en el portal
 |`READ`, `CREATE` o `UPDATE` sobre `catastro_fiscal`.
 
+|Rectificar una DJ o declarar otro año desde la anterior
+|`CREATE` y `UPDATE` sobre `declaracion_predial` (la anterior pasa a SUSTITUIDA) y `CREATE` sobre las listas que se
+copian (`transferente`, `nivel_construccion`, `obra_complementaria`, `otro_frente`).
+
+|Valuación del padrón de origen, autoavalúo sugerido
+|`READ` sobre la DJ, su predio y sus niveles (el sugerido también sobre `obra_complementaria` y `uso_predio`). Core no
+devuelve los campos que el rol no puede leer.
+
+|Cabecera y mapa del portal (`GET /api/srtm/municipalidad`)
+|`READ` sobre `municipalidad` (sin ella, 403). La extensión del mapa y el lugar por omisión solo cuentan `predio` y
+`catastro_fiscal` si el rol puede leerlos.
+
 |Liquidación del predial, HR
 |`READ` sobre el padrón y `parametro_tributario`; la HR también sobre `municipalidad` (la cabecera se lee como el
 usuario que emite).

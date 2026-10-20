@@ -5,7 +5,7 @@
 - **Composición:** `S08-Administrador` · **vídeo:** `salida/videos/srtm-08-administrador.mp4` · **miniatura:** `salida/miniaturas/srtm-08-administrador.jpg`
 - **Audiencia:** Administradores del sistema (rol ADMIN) y quien coordina con el área de sistemas
 - **Objetivo:** Dar acceso con roles acotados, mantener los datos maestros, seguir la auditoría y coordinar con el área de sistemas el año tributario, los respaldos y las operaciones críticas.
-- **Duración:** 9:41 (17427 fotogramas a 30 fps, 1920 × 1080) · **escenas:** 27
+- **Duración:** 9:44 (17517 fotogramas a 30 fps, 1920 × 1080) · **escenas:** 27
 - **Manuales:** Manual del administrador
 
 | # | Escena | Tipo | Inicio | Duración | Fuente |
@@ -25,18 +25,18 @@
 | 13 | La matriz de permisos de un rol | Captura recorrida | 3:56 | 27,5 s | Manual del administrador › Asignar los permisos de un rol |
 | 14 | Cinco perfiles de partida | Tabla | 4:23 | 32,0 s | Manual del administrador › Perfiles sugeridos |
 | 15 | Datos maestros | Separador de sección | 4:55 | 6,0 s | Manual del administrador › Datos maestros y parámetros |
-| 16 | La cabecera de los documentos | Captura recorrida | 5:00 | 28,0 s | Manual del administrador › Corregir la cabecera de los documentos |
-| 17 | Las cifras de los cálculos | Captura recorrida | 5:27 | 27,0 s | Manual del administrador › Parámetros tributarios |
-| 18 | No edite un parámetro ya usado | Aviso | 5:54 | 18,0 s | Manual del administrador › Parámetros tributarios |
-| 19 | Lo que solo se agrega, se corrige con otro acto | Tabla | 6:11 | 23,0 s | Manual del administrador › Registros que no se corrigen |
-| 20 | Quién cambió qué, y cuándo | Captura recorrida | 6:34 | 27,0 s | Manual del administrador › Auditoría |
-| 21 | Operación | Separador de sección | 7:00 | 6,0 s | Manual del administrador › Procesos masivos |
-| 22 | Lo que conviene saber al vigilarlos | Tarjetas | 7:05 | 27,0 s | Manual del administrador › Procesos masivos |
-| 23 | Preparar un año tributario | Tabla | 7:32 | 32,0 s | Manual del administrador › Preparar un año tributario |
-| 24 | Un respaldo completo tiene dos partes | Tarjetas | 8:03 | 26,0 s | Manual del administrador › Respaldos y restauración |
-| 25 | Síntomas frecuentes y qué hacer | Tabla | 8:29 | 25,0 s | Manual del administrador › Monitoreo e incidencias |
-| 26 | Antes de una operación crítica | Tabla | 8:53 | 29,5 s | Manual del administrador › Lista de comprobación de operaciones críticas |
-| 27 | Administrar, en pocas palabras | Cierre | 9:22 | 19,0 s | Manual del administrador › Funciones del administrador |
+| 16 | La cabecera de los documentos | Captura recorrida | 5:00 | 31,0 s | Manual del administrador › Corregir la cabecera de los documentos |
+| 17 | Las cifras de los cálculos | Captura recorrida | 5:30 | 27,0 s | Manual del administrador › Parámetros tributarios |
+| 18 | No edite un parámetro ya usado | Aviso | 5:57 | 18,0 s | Manual del administrador › Parámetros tributarios |
+| 19 | Lo que solo se agrega, se corrige con otro acto | Tabla | 6:14 | 23,0 s | Manual del administrador › Registros que no se corrigen |
+| 20 | Quién cambió qué, y cuándo | Captura recorrida | 6:37 | 27,0 s | Manual del administrador › Auditoría |
+| 21 | Operación | Separador de sección | 7:03 | 6,0 s | Manual del administrador › Procesos masivos |
+| 22 | Lo que conviene saber al vigilarlos | Tarjetas | 7:08 | 27,0 s | Manual del administrador › Procesos masivos |
+| 23 | Preparar un año tributario | Tabla | 7:35 | 32,0 s | Manual del administrador › Preparar un año tributario |
+| 24 | Un respaldo completo tiene dos partes | Tarjetas | 8:06 | 26,0 s | Manual del administrador › Respaldos y restauración |
+| 25 | Síntomas frecuentes y qué hacer | Tabla | 8:32 | 25,0 s | Manual del administrador › Monitoreo e incidencias |
+| 26 | Antes de una operación crítica | Tabla | 8:56 | 29,5 s | Manual del administrador › Lista de comprobación de operaciones críticas |
+| 27 | Administrar, en pocas palabras | Cierre | 9:25 | 19,0 s | Manual del administrador › Funciones del administrador |
 
 ## 1. Administrar Rentas municipales
 
@@ -261,7 +261,7 @@
 
 ## 16. La cabecera de los documentos
 
-- **Id:** `cabecera` · **tipo:** Captura recorrida · **inicio:** 5:00 · **duración:** 28,0 s
+- **Id:** `cabecera` · **tipo:** Captura recorrida · **inicio:** 5:00 · **duración:** 31,0 s
 - **Objetivo de aprendizaje:** Corregir la cabecera de los documentos y saber qué no se hace en la consola.
 - **Imagen:** captura real `administrador/municipalidad.png`
 - **Animación:** Vista general de la captura; en cada foco la cámara se acerca a la región, atenúa lo demás y la rodea con el recuadro naranja numerado; el panel de pasos marca el paso en curso.
@@ -269,13 +269,13 @@
 - **Sigue:** 17. Las cifras de los cálculos
 - **Contenido:**
 
-  > 1. Un solo registro: Nombre, oficina, RUC, gerencia y dirección encabezan el PU, la HR, la HLA y las resoluciones.
+  > 1. Un solo registro: Nombre, oficina, RUC, gerencia, dirección y escudo encabezan el PU, la HR, la HLA y las resoluciones.
   > 2. Corregir y grabar: Pulse la fila, corrija y grabe. Los documentos nuevos lo muestran en hasta un minuto.
-  > 3. El escudo, por sistemas: No se carga en la consola: es un archivo que configura el área de sistemas.
+  > 3. El escudo, en el mismo registro: Cada municipalidad tiene el suyo. La consola aún no sube archivos: lo sube el área de sistemas.
 
 ## 17. Las cifras de los cálculos
 
-- **Id:** `parametros` · **tipo:** Captura recorrida · **inicio:** 5:27 · **duración:** 27,0 s
+- **Id:** `parametros` · **tipo:** Captura recorrida · **inicio:** 5:30 · **duración:** 27,0 s
 - **Objetivo de aprendizaje:** Leer una fila de los parámetros tributarios.
 - **Imagen:** captura real `administrador/parametros.png`
 - **Animación:** Vista general de la captura; en cada foco la cámara se acerca a la región, atenúa lo demás y la rodea con el recuadro naranja numerado; el panel de pasos marca el paso en curso.
@@ -289,7 +289,7 @@
 
 ## 18. No edite un parámetro ya usado
 
-- **Id:** `parametro-usado` · **tipo:** Aviso · **inicio:** 5:54 · **duración:** 18,0 s
+- **Id:** `parametro-usado` · **tipo:** Aviso · **inicio:** 5:57 · **duración:** 18,0 s
 - **Objetivo de aprendizaje:** No alterar un parámetro con el que ya se calculó.
 - **Imagen:** recuadro de aviso
 - **Animación:** El recuadro del aviso entra y sus puntos aparecen uno a uno; a su lado, la captura, si la hay.
@@ -302,7 +302,7 @@
 
 ## 19. Lo que solo se agrega, se corrige con otro acto
 
-- **Id:** `correcciones` · **tipo:** Tabla · **inicio:** 6:11 · **duración:** 23,0 s
+- **Id:** `correcciones` · **tipo:** Tabla · **inicio:** 6:14 · **duración:** 23,0 s
 - **Objetivo de aprendizaje:** Saber cómo se corrige lo que solo se agrega.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
@@ -318,7 +318,7 @@
 
 ## 20. Quién cambió qué, y cuándo
 
-- **Id:** `auditoria` · **tipo:** Captura recorrida · **inicio:** 6:34 · **duración:** 27,0 s
+- **Id:** `auditoria` · **tipo:** Captura recorrida · **inicio:** 6:37 · **duración:** 27,0 s
 - **Objetivo de aprendizaje:** Consultar quién cambió qué y cuándo.
 - **Imagen:** captura real `administrador/auditoria.png`, captura real `administrador/auditoria-cambios.png`
 - **Animación:** Vista general de la captura; en cada foco la cámara se acerca a la región, atenúa lo demás y la rodea con el recuadro naranja numerado; el panel de pasos marca el paso en curso.
@@ -332,7 +332,7 @@
 
 ## 21. Operación
 
-- **Id:** `seccion-operacion` · **tipo:** Separador de sección · **inicio:** 7:00 · **duración:** 6,0 s
+- **Id:** `seccion-operacion` · **tipo:** Separador de sección · **inicio:** 7:03 · **duración:** 6,0 s
 - **Objetivo de aprendizaje:** Situar la parte del vídeo sobre la operación.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** El rótulo de la parte y el filete crecen; entran el título y la bajada.
@@ -345,7 +345,7 @@
 
 ## 22. Lo que conviene saber al vigilarlos
 
-- **Id:** `procesos-masivos` · **tipo:** Tarjetas · **inicio:** 7:05 · **duración:** 27,0 s
+- **Id:** `procesos-masivos` · **tipo:** Tarjetas · **inicio:** 7:08 · **duración:** 27,0 s
 - **Objetivo de aprendizaje:** Vigilar la determinación y la emisión masivas.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Las tarjetas entran una a una, en orden de lectura; al final, la nota.
@@ -362,7 +362,7 @@
 
 ## 23. Preparar un año tributario
 
-- **Id:** `anio-tributario` · **tipo:** Tabla · **inicio:** 7:32 · **duración:** 32,0 s
+- **Id:** `anio-tributario` · **tipo:** Tabla · **inicio:** 7:35 · **duración:** 32,0 s
 - **Objetivo de aprendizaje:** Preparar el año tributario con cada área responsable.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
@@ -385,7 +385,7 @@
 
 ## 24. Un respaldo completo tiene dos partes
 
-- **Id:** `respaldos` · **tipo:** Tarjetas · **inicio:** 8:03 · **duración:** 26,0 s
+- **Id:** `respaldos` · **tipo:** Tarjetas · **inicio:** 8:06 · **duración:** 26,0 s
 - **Objetivo de aprendizaje:** Coordinar con sistemas los respaldos y sus precauciones.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Las tarjetas entran una a una, en orden de lectura; al final, la nota.
@@ -401,7 +401,7 @@
 
 ## 25. Síntomas frecuentes y qué hacer
 
-- **Id:** `monitoreo` · **tipo:** Tabla · **inicio:** 8:29 · **duración:** 25,0 s
+- **Id:** `monitoreo` · **tipo:** Tabla · **inicio:** 8:32 · **duración:** 25,0 s
 - **Objetivo de aprendizaje:** Saber qué hacer ante las incidencias más comunes.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
@@ -418,7 +418,7 @@
 
 ## 26. Antes de una operación crítica
 
-- **Id:** `operaciones-criticas` · **tipo:** Tabla · **inicio:** 8:53 · **duración:** 29,5 s
+- **Id:** `operaciones-criticas` · **tipo:** Tabla · **inicio:** 8:56 · **duración:** 29,5 s
 - **Objetivo de aprendizaje:** Comprobar lo necesario antes de cada operación crítica.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** La tabla aparece y sus filas entran en orden; las filas destacadas llevan el filete azul.
@@ -437,7 +437,7 @@
 
 ## 27. Administrar, en pocas palabras
 
-- **Id:** `cierre` · **tipo:** Cierre · **inicio:** 9:22 · **duración:** 19,0 s
+- **Id:** `cierre` · **tipo:** Cierre · **inicio:** 9:25 · **duración:** 19,0 s
 - **Objetivo de aprendizaje:** Recordar lo esencial y saber dónde seguir.
 - **Imagen:** composición tipográfica, sin captura
 - **Animación:** Los puntos del resumen entran uno a uno; luego los manuales y el vídeo siguiente.

@@ -24,7 +24,9 @@ Lo mínimo que un entorno real debe fijar:
 * `WASICHAI_JWT_SECRET`, de al menos 32 bytes y secreto;
 * `WASICHAI_SEED_DEV=false`;
 * `SRTM_EMISION_DIR` en un volumen persistente y privado, o el almacén S3;
-* `SRTM_MUNICIPALIDAD_ESCUDO`, si la cabecera lleva escudo.
+* `SRTM_ARCHIVOS_DIR` (archivos de los campos `FILE` e `IMAGE`, como el escudo) en un volumen persistente que vean
+  todas las instancias, o su almacén S3 (<<ref-config-archivos>>);
+* `SRTM_MUNICIPALIDAD_ESCUDO` solo como respaldo, si alguna organización no sube su escudo.
 
 [[ref-config-precedencia]]
 === Orden de precedencia
@@ -169,8 +171,11 @@ instalación con varias municipalidades no imprime el nombre de otra.
 |`SRTM_MUNICIPALIDAD_ESCUDO` +
 (`srtm.municipalidad.escudo`)
 |vacío
-|Escudo de la cabecera: `classpath:…` o `file:…`, solo PNG o JPG. Se lee al arrancar: si no existe o no es PNG ni
-JPG, la aplicación no arranca y el error nombra el archivo. Vacío, la cabecera no lleva escudo.
+|Escudo de *respaldo* de la cabecera. El escudo es de cada organización: el campo `escudo` (IMAGE) de su registro
+`municipalidad`; este solo vale cuando el registro no tiene escudo. `classpath:…` o `file:…`, solo PNG o JPG. Se lee
+al arrancar: si no existe o no es PNG ni JPG, la aplicación no arranca y el error nombra el archivo. Vacío, sin
+respaldo. En una instalación con varias organizaciones conviene dejarlo vacío: si no, la que no subió el suyo imprime
+este.
 
 |`srtm.municipalidad.cache`
 |`1m`
@@ -217,7 +222,11 @@ dentro de ese tiempo.
 |===
 
 [[ref-config-catastro]]
-=== catastro-backend (brecha de recaudación)
+=== catastro-backend (brecha de recaudación y autoavalúo sugerido)
+
+Cada organización de {sigla} lee su propio catastro-backend, con su cuenta de servicio `srtm` (rol `SRTM_LECTOR`, la
+crea `model/crear_cuenta_srtm.py` de catastro-backend). {sigla} guarda un cliente y un token por organización; la
+brecha y el autoavalúo sugerido usan el de la organización del usuario.
 
 [cols="4,3,5",options="header"]
 |===
@@ -226,31 +235,59 @@ dentro de ese tiempo.
 |`SRTM_CATASTRO_ENABLED` +
 (`srtm.catastro.enabled`)
 |`false`
-|Enciende la lectura de valuaciones. Apagado, `POST /api/srtm/brecha/corridas` responde 409 «Catastro no
-configurado».
+|Enciende la lectura de valuaciones. Apagado, o sin ninguna organización con URL y cuenta,
+`POST /api/srtm/brecha/corridas` responde 409 «Catastro no configurado» y el autoavalúo sugerido 409
+`SIN_CATASTRO_CONFIGURADO`.
 
-|`SRTM_CATASTRO_URL`
-|`http://localhost:8091`
-|Raíz de catastro-backend.
+|`SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_URL` +
+(`srtm.catastro.organizaciones.<clave>.url`)
+|sin entradas
+|Raíz del catastro-backend de una organización. `<CLAVE>` es su slug, o una clave cualquiera con `_ORGANIZACION` igual
+a su id (o a un slug con guion o guion bajo, que una variable de entorno no puede llevar en la clave).
 
-|`SRTM_CATASTRO_CLIENT_ID`
+|`SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_CLIENT_ID`, `_CLIENT_SECRET`
 |vacío
-|`clientId` de la cuenta de servicio `srtm` de catastro-backend (rol `SRTM_LECTOR`, la crea su
-`model/crear_cuenta_srtm.py`).
+|`clientId` y `clientSecret` de su cuenta de servicio. El secreto, solo por entorno o por el gestor de secretos.
 
-|`SRTM_CATASTRO_CLIENT_SECRET`
-|vacío
-|Su `clientSecret`, que catastro-backend muestra una sola vez. Secreto.
+|`SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_TIMEOUT`
+|el de `SRTM_CATASTRO_TIMEOUT`
+|Plazo de cada petición a ese catastro.
+
+|`SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_ORGANIZACION`
+|la clave
+|Slug o id de la organización, cuando la clave no lo es.
+
+|`SRTM_CATASTRO_URL`, `_CLIENT_ID`, `_CLIENT_SECRET`
+|`http://localhost:8091` / vacío
+|La forma de una sola organización: una entrada más del mapa, para la organización de `SRTM_CATASTRO_ORGANIZACION`.
+Una entrada del mapa que nombra igual a la misma organización la reemplaza.
 
 |`SRTM_CATASTRO_TIMEOUT`
 |`60s`
-|Plazo de cada petición: catastro valoriza al vuelo una página de 500 predios.
+|Plazo por omisión de cada petición: catastro valoriza al vuelo una página de 500 predios.
 
 |`SRTM_CATASTRO_ORGANIZACION`
 |vacío
-|Slug o id de la organización de {sigla} cuyo catastro es. Vacía con el catastro encendido, ninguna corrida empieza
-(409); una corrida de otra organización también es 409.
+|Slug o id de la organización de esa entrada única. Vacía, esa cuenta no es de nadie y no se usa.
 |===
+
+Una entrada sin URL, `client-id` o `client-secret` se salta, con un aviso en el log al arrancar. Una organización sin
+catastro responde 409 `SIN_CATASTRO_CONFIGURADO`, y una nombrada dos veces (por su slug y por su id, o por dos
+entradas) 409 «Catastro configurado dos veces para esta organización»: nunca se cruza el padrón de una organización
+con el catastro de otra. Dos organizaciones, Perené por su slug e Ica por su id:
+
+[source,bash]
+----
+SRTM_CATASTRO_ENABLED=true
+SRTM_CATASTRO_ORGANIZACIONES_PERENE_URL=http://catastro-perene:8091
+SRTM_CATASTRO_ORGANIZACIONES_PERENE_CLIENT_ID=<clientId de la cuenta srtm del catastro de Perené>
+SRTM_CATASTRO_ORGANIZACIONES_PERENE_CLIENT_SECRET=<clientSecret>
+SRTM_CATASTRO_ORGANIZACIONES_ICA_ORGANIZACION=<id de la organización de Ica>
+SRTM_CATASTRO_ORGANIZACIONES_ICA_URL=http://catastro-ica:8091
+SRTM_CATASTRO_ORGANIZACIONES_ICA_CLIENT_ID=<clientId de la cuenta srtm del catastro de Ica>
+SRTM_CATASTRO_ORGANIZACIONES_ICA_CLIENT_SECRET=<clientSecret>
+SRTM_CATASTRO_ORGANIZACIONES_ICA_TIMEOUT=90s
+----
 
 [[ref-config-emision]]
 === Emisión masiva y trabajadores
@@ -344,6 +381,44 @@ srtm.emision.almacen=s3»). Al arrancar se comprueba con `HeadBucket`.
 almacén compatible que no los acepte. No afecta a las subidas en partes.
 |===
 
+[[ref-config-archivos]]
+=== Archivos de los campos FILE e IMAGE
+
+{sigla} instala `wasichai-spring-boot-starter-files` (wasichai 1.2.0) para los campos `FILE` e `IMAGE`; hoy, solo
+`municipalidad.escudo`. Al arrancar crea su tabla `stored_files` con su propio historial de Flyway
+(`flyway_history_files`). La base guarda la fila; los bytes van a un almacén.
+
+[cols="4,3,5",options="header"]
+|===
+|Variable (propiedad) |Por defecto |Para qué
+
+|`SRTM_ARCHIVOS_ALMACEN` +
+(`srtm.archivos.almacen`)
+|`local`
+|`local` (en el disco) o `s3` (en un bucket, sin volumen compartido).
+
+|`SRTM_ARCHIVOS_DIR` +
+(`wasichai.files.local.path`)
+|`./data/archivos`
+|Con `local`: la carpeta de los archivos. En producción, un volumen persistente que vean todas las instancias.
+
+|`SRTM_ARCHIVOS_S3_BUCKET`
+|vacío
+|Con `s3`: obligatorio; al arrancar se comprueba. Las credenciales son las de la cadena del SDK, como las del almacén
+de emisiones (<<ref-config-s3>>). El rol necesita `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` y
+`s3:ListBucket`. Puede ser el mismo bucket de las emisiones con otro prefijo.
+
+|`SRTM_ARCHIVOS_S3_REGION`, `_ENDPOINT`, `_PREFIJO`
+|vacío
+|Como los de las emisiones. Las claves son `<prefijo>/<organización>/<archivo>`.
+|===
+
+CAUTION: Nunca `wasichai.files.store=s3`: el almacén S3 del módulo usa el cliente asíncrono del SDK, que {sigla} deja
+fuera del build, y la aplicación no arrancaría. El S3 de {sigla} es `SRTM_ARCHIVOS_ALMACEN=s3`.
+
+El módulo borra cada hora (`wasichai.files.cleanup.*`) los archivos que ningún registro nombra hace más de 24 h: un
+escudo reemplazado, el de un registro borrado.
+
 [[ref-config-gis]]
 === GIS
 
@@ -417,7 +492,11 @@ WASICHAI_DB_PASSWORD=<clave del rol>
 WASICHAI_JWT_SECRET=<al menos 32 bytes aleatorios, p. ej. openssl rand -base64 48>
 WASICHAI_SEED_DEV=false
 
+# el escudo de cada municipalidad se sube a su registro; este es solo el respaldo
 SRTM_MUNICIPALIDAD_ESCUDO=file:/opt/srtm/escudo.png
+
+SRTM_ARCHIVOS_ALMACEN=local
+SRTM_ARCHIVOS_DIR=/var/lib/srtm/archivos
 
 SRTM_EMISION_ALMACEN=local
 SRTM_EMISION_DIR=/var/lib/srtm/emisiones

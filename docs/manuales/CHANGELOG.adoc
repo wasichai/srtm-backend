@@ -1,6 +1,23 @@
 = Historial de ediciones de los manuales
 :sigla: SRTM
 
+== Edición 1.1 (20 de octubre de 2026)
+
+Para {sigla} 0.9.0 (`main` al 20 de octubre de 2026), con lo que llegó a `main` después de la edición 1.0.
+
+* Registro tributario: la rectificatoria y la DJ de otro año desde la anterior (estado SUSTITUIDA, motivo
+  RECTIFICACION, se parte solo de una DJ vigente), la valuación del padrón de origen con su marca de modificada y el
+  autoavalúo sugerido por el catastro. En el portal, con aviso: sus pantallas están en desarrollo.
+* Municipalidad de Ica: campos de padrón externo en el modelo, `import_padron_ica.py` y el alta de una organización
+  nueva (`docs/develop/alta-organizacion.md`, `develop/pruebas/`).
+* Un catastro-backend por organización (`SRTM_CATASTRO_ORGANIZACIONES_*`) y la decisión D8 de la brecha (deducción del
+  5 % de la Amazonía).
+* El escudo de cada organización en su registro `municipalidad` y el almacén de archivos (`SRTM_ARCHIVOS_*`); la
+  cabecera y el mapa del portal por organización (`GET /api/srtm/municipalidad`).
+* `import_catalogos.py` pide `--distrito`, `--municipalidad-json` y `--obras-csv`; los comandos de `model/` corren bajo
+  `python3 -I`.
+* Modelo de datos: cuentas de campos al día con `model.json`, ciclo de la DJ con SUSTITUIDA.
+
 == Edición 1.0 (19 de octubre de 2026)
 
 Primera edición, para {sigla} 0.9.0 (srtm-backend) y srtm-ui 0.5.0, sobre wasichai 1.2.0.

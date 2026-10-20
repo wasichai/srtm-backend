@@ -320,7 +320,8 @@ por su api* (403) y una modificación o un borrado se rechaza (409). El servidor
 === Cabecera de los documentos (municipalidad)
 
 El PU, la HR, la HLA y las resoluciones llevan arriba los datos del registro *Municipalidad*: nombre, oficina, RUC,
-gerencia y dirección (<<fig-admin-municipalidad>>).
+gerencia, dirección y escudo (<<fig-admin-municipalidad>>). El portal también muestra el nombre, la oficina y el
+escudo de este registro en su cabecera y en el ingreso: cada organización ve los suyos.
 
 [[fig-admin-municipalidad]]
 .Registro Municipalidad
@@ -342,9 +343,13 @@ Resultado esperado:: Los documentos que se emitan desde ese momento llevan los d
 hasta un minuto en aparecer (el sistema guarda la cabecera en memoria ese tiempo).
 Casos especiales::
 * Debe haber un solo registro *Municipalidad*: si hay más, el sistema usa el más antiguo.
-* Los datos que trae la carga inicial (`model/data/municipalidad.json`) son provisionales: revíselos antes de emitir.
-* El escudo no se carga desde la consola: es un archivo PNG o JPG que configura el área de sistemas
-  (`SRTM_MUNICIPALIDAD_ESCUDO`). Sin él, los documentos salen sin escudo.
+* Los datos que trae la carga inicial (`model/data/<organización>/municipalidad.json`, por ejemplo
+  `model/data/perene/municipalidad.json`) son provisionales: revíselos antes de emitir.
+* El escudo es el campo *Escudo* del mismo registro: un PNG o JPG de hasta 1 MiB, propio de cada organización. La
+  consola de esta versión todavía no sube archivos: mientras tanto, el área de sistemas lo sube por la API
+  (`POST /api/objects/municipalidad/records/{id}/files/escudo`, ver el {m-sistema}), con una cuenta que pueda modificar
+  *Municipalidad*. Sin escudo en el registro, los documentos llevan el de respaldo del servidor
+  (`SRTM_MUNICIPALIDAD_ESCUDO`) o ninguno. Un escudo ilegible no rompe el documento: sale sin escudo.
 
 [[parametros]]
 === Parámetros tributarios
