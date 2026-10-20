@@ -175,6 +175,13 @@ cd ../srtm-ui && yarn dev          # http://localhost:5180
 
 Entra con `admin@wasichai.local` / `admin`. El front necesita que el modelo esté cargado (`model/apply.py`).
 
+## 8. Otra organización y el entorno de pruebas
+
+- [alta-organizacion.md](alta-organizacion.md): el alta de una municipalidad nueva junto a Perené, en srtm y en
+  catastro, hasta su brecha. Es el procedimiento que se siguió con Ica.
+- [develop/pruebas](../../develop/pruebas/README.md): una base, los dos Core y las dos UI en Docker, aparte de dev,
+  con un padrón y un catastro ficticios para ensayar.
+
 ## Problemas comunes
 
 | Síntoma | Causa probable |
