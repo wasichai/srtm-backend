@@ -15,6 +15,45 @@ from import_predios import TIPOS_UNIDAD_URBANA
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+# the organization the script asks for: Perené's, which ships with the repo
+ORGANIZACION = ["--distrito", "120302", "--municipalidad-json", os.path.join(HERE, "data", "perene", "municipalidad.json")]
+
+
+class RequiredOrganizationTests(unittest.TestCase):
+    """The organization is explicit: no default points to Perené's district or header."""
+
+    def _usage_error(self, argv):
+        err = io.StringIO()
+        with redirect_stderr(err), self.assertRaises(SystemExit) as raised:
+            ic._parse_args(argv)
+        self.assertEqual(raised.exception.code, 2)
+        return err.getvalue()
+
+    def test_fails_without_distrito(self):
+        message = self._usage_error(["--municipalidad-json", "m.json"])
+        self.assertIn("the following arguments are required: --distrito", message)
+
+    def test_fails_without_municipalidad_json(self):
+        message = self._usage_error(["--distrito", "120302"])
+        self.assertIn("the following arguments are required: --municipalidad-json", message)
+
+    def test_fails_without_either(self):
+        message = self._usage_error([])
+        self.assertIn("--municipalidad-json", message)
+        self.assertIn("--distrito", message)
+
+    def test_main_does_not_reach_core_without_them(self):
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            ic.main(["--dry-run"])
+
+    def test_with_them_the_arguments_are_read_as_given(self):
+        args = ic._parse_args(["--distrito", "110101", "--municipalidad-json", "ica.json"])
+        self.assertEqual((args.distrito, args.municipalidad_json), ("110101", "ica.json"))
+
+    def test_perene_ships_its_header_next_to_its_data(self):
+        self.assertTrue(os.path.isfile(os.path.join(HERE, "data", "perene", "municipalidad.json")))
+        self.assertFalse(os.path.exists(os.path.join(HERE, "data", "municipalidad.json")))
+
 
 class SplitTipoTests(unittest.TestCase):
     def test_via_types(self):
@@ -295,7 +334,7 @@ class LoadTests(unittest.TestCase):
 
     def test_the_municipalidad_only_when_the_organization_has_none(self):
         # one record per organization: the provisional one never doubles nor overwrites what the admin edited
-        provisional = ic.read_municipalidad(os.path.join(os.path.dirname(__file__), "data", "municipalidad.json"))
+        provisional = ic.read_municipalidad(os.path.join(HERE, "data", "perene", "municipalidad.json"))
         self.assertEqual(provisional[0]["nombre"], "MUNICIPALIDAD DISTRITAL DE PERENÉ")
         self.assertEqual(provisional[0]["ruc"], "20195238961")
         self.assertNotIn("_comentario", provisional[0])
@@ -401,7 +440,7 @@ class SyncUsosTests(unittest.TestCase):
                                "100100,RESIDENCIAL,SRTM\n100106,CASA HABITACIÓN,SRTM\n")
         out = io.StringIO()
         with redirect_stdout(out):
-            code = ic.main(["--usos-csv", path, "--core", self.core.base_url, "--dry-run"])
+            code = ic.main([*ORGANIZACION, "--usos-csv", path, "--core", self.core.base_url, "--dry-run"])
         self.assertEqual(code, 0)
         self.assertEqual({r[0] for r in self.core.requests if r[1] != "/api/auth/login"}, {"GET"})
         self.assertIn("uso_predio: 1 to create, 1 to update, 1 to delete, 1 skipped", out.getvalue())
@@ -416,7 +455,7 @@ class SyncUsosTests(unittest.TestCase):
                                "070401,CON CONSTRUCCIÓN DE TERCEROS,SRTM\n")
         err = io.StringIO()
         with redirect_stdout(io.StringIO()), redirect_stderr(err):
-            code = ic.main(["--usos-csv", path, "--core", self.core.base_url])
+            code = ic.main([*ORGANIZACION, "--usos-csv", path, "--core", self.core.base_url])
         self.assertEqual(code, 1)
         self.assertIn("error PUT /api/objects/uso_predio/records (#070401) -> 400", err.getvalue())
 
