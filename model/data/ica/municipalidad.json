@@ -1,0 +1,8 @@
+{
+  "_comentario": "Datos PROVISIONALES de la cabecera del PU y la HR de Ica (objeto municipalidad), para import_catalogos.py --distrito 110101 --municipalidad-json data/ica/municipalidad.json. Se crea solo si la organización no tiene ninguna; los reales se cambian en el admin. El RUC está POR CONFIRMAR con la municipalidad: no se inventa, y vacío no se carga (ruc es opcional).",
+  "nombre": "MUNICIPALIDAD PROVINCIAL DE ICA",
+  "oficina": null,
+  "ruc": null,
+  "gerencia": null,
+  "direccion": null
+}
