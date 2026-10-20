@@ -101,6 +101,21 @@ class HojaPuTest {
         assertEquals("120.00", nivel.area)
     }
 
+    // an external padrón (Ica) has no month of construction
+    @Test
+    fun `a nivel without its month shows its year alone`() {
+        val usos = listOf(uso("001", 11).copy(niveles = listOf(NIVEL.copy(mesConstruccion = null))))
+        assertEquals(
+            "2015",
+            hoja(usos = usos)
+                .usos
+                .single()
+                .niveles
+                .single()
+                .anioMes
+        )
+    }
+
     @Test
     fun `the pu renders the predio, the titular, a nivel and the autoavaluo, a section per uso`() {
         val pdf = PdfRenderer().render("pu", mapOf("pu" to hoja(usos = listOf(uso("001", 11), uso("002", 12)))))
