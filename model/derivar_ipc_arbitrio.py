@@ -34,7 +34,11 @@ import sys
 from datetime import date
 from decimal import ROUND_DOWN, ROUND_HALF_UP, ROUND_UP, Decimal, InvalidOperation
 
-import import_parametros
+# under python3 -I neither the cwd nor the script's directory is on sys.path: put back only the latter
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import import_parametros  # noqa: E402
 
 # mirrors srtm.arbitrios.Servicios.MODOS (Kotlin): ABAJO -> DOWN, MEDIO -> HALF_UP, ARRIBA -> UP
 MODOS = {"ABAJO": ROUND_DOWN, "MEDIO": ROUND_HALF_UP, "ARRIBA": ROUND_UP}

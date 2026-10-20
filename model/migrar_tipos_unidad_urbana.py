@@ -31,9 +31,13 @@ import sys
 from collections import Counter
 from dataclasses import dataclass
 
-from core_client import Client, CoreError
-from import_predios import TIPOS_UNIDAD_URBANA, LoadError, clean_text, load_enums, split_tipo
-from normalizar_padron import Update, put_all
+# under python3 -I neither the cwd nor the script's directory is on sys.path: put back only the latter
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from core_client import Client, CoreError  # noqa: E402
+from import_predios import TIPOS_UNIDAD_URBANA, LoadError, clean_text, load_enums, split_tipo  # noqa: E402
+from normalizar_padron import Update, put_all  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # object -> (its tipo de unidad urbana, its name, what a person finds it by)

@@ -24,7 +24,11 @@ import sys
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from core_client import Client, CoreError
+# under python3 -I neither the cwd nor the script's directory is on sys.path: put back only the latter
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from core_client import Client, CoreError  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OBJECT = "parametro_tributario"

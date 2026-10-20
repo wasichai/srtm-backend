@@ -27,8 +27,12 @@ import os
 import re
 import sys
 
-from core_client import Client, CoreError
-from import_predios import TIPOS_VIA, LoadError, clean_decimal, clean_text, parse_address, post_all, read_xlsx, split_tipo, split_zona
+# under python3 -I neither the cwd nor the script's directory is on sys.path: put back only the latter
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from core_client import Client, CoreError  # noqa: E402
+from import_predios import TIPOS_VIA, LoadError, clean_decimal, clean_text, parse_address, post_all, read_xlsx, split_tipo, split_zona  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 

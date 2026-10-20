@@ -35,7 +35,11 @@ import re
 import sys
 import urllib.parse
 
-from core_client import Client, CoreError
+# under python3 -I neither the cwd nor the script's directory is on sys.path: put back only the latter
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from core_client import Client, CoreError  # noqa: E402
 
 # Keyword list copied verbatim from
 # wasichai-core/src/main/kotlin/wasichai/core/platform/SqlIdentifier.kt (SQL_KEYWORDS).

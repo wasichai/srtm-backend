@@ -22,8 +22,12 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
-from core_client import Client, CoreError
-from import_predios import (
+# under python3 -I neither the cwd nor the script's directory is on sys.path: put back only the latter
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from core_client import Client, CoreError  # noqa: E402
+from import_predios import (  # noqa: E402
     PROGRESS_EVERY, TIPOS_UNIDAD_URBANA, TIPOS_VIA, LoadError, clean_text, find_tipo, parse_address, secuencia_uso,
     split_tipo, split_ubicacion,
 )

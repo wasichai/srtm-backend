@@ -54,7 +54,11 @@ import unicodedata
 from collections import Counter
 from decimal import Decimal, InvalidOperation
 
-import import_parametros
+# under python3 -I neither the cwd nor the script's directory is on sys.path: put back only the latter
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import import_parametros  # noqa: E402
 
 COLUMNAS = ("servicio", "zona", "uso_codigo", "uso", "ubicacion", "nivel_afluencia", "base", "tasa_mensual")
 # the Dimension names Servicios.dimensiones reads (same order as import_parametros.DIMENSIONES_VALIDAS), and the
