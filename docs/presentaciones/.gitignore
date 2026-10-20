@@ -1,0 +1,5 @@
+node_modules/
+# lo llena scripts/recursos.mjs
+public/
+# vídeos, miniaturas y fotogramas de control: se regeneran con npm run render
+salida/

@@ -1,0 +1,322 @@
+{
+  "administrador/auditoria-cambios.png": {
+    "ancho": 1160,
+    "alto": 420
+  },
+  "administrador/auditoria.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "administrador/consola-inicio.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "administrador/municipalidad.png": {
+    "ancho": 1200,
+    "alto": 340
+  },
+  "administrador/parametros.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "administrador/permisos-campo.png": {
+    "ancho": 1152,
+    "alto": 496
+  },
+  "administrador/permisos-matriz.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "administrador/portal-menu-sesion.png": {
+    "ancho": 540,
+    "alto": 300
+  },
+  "administrador/roles.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "administrador/usuario-editar.png": {
+    "ancho": 1160,
+    "alto": 320
+  },
+  "administrador/usuario-nuevo.png": {
+    "ancho": 1160,
+    "alto": 290
+  },
+  "administrador/usuarios.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "comun/busqueda-general.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "comun/fichas-abiertas.png": {
+    "ancho": 1440,
+    "alto": 200
+  },
+  "comun/ingreso-error.png": {
+    "ancho": 432,
+    "alto": 478
+  },
+  "comun/ingreso.png": {
+    "ancho": 432,
+    "alto": 442
+  },
+  "comun/inicio.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "comun/menu-sesion.png": {
+    "ancho": 540,
+    "alto": 260
+  },
+  "comun/menu-tema.png": {
+    "ancho": 540,
+    "alto": 300
+  },
+  "comun/pasos.png": {
+    "ancho": 1440,
+    "alto": 360
+  },
+  "comun/riel.png": {
+    "ancho": 720,
+    "alto": 520
+  },
+  "comun/salir-sin-guardar.png": {
+    "ancho": 480,
+    "alto": 221
+  },
+  "comun/sin-permiso.png": {
+    "ancho": 584,
+    "alto": 67
+  },
+  "comun/validacion.png": {
+    "ancho": 1336,
+    "alto": 600
+  },
+  "usuario/anuncios/cesar.png": {
+    "ancho": 512,
+    "alto": 530
+  },
+  "usuario/anuncios/ficha-cesado.png": {
+    "ancho": 1336,
+    "alto": 380
+  },
+  "usuario/anuncios/ficha.png": {
+    "ancho": 1440,
+    "alto": 1180
+  },
+  "usuario/anuncios/nuevo.png": {
+    "ancho": 1296,
+    "alto": 681
+  },
+  "usuario/anuncios/padron-estado-al.png": {
+    "ancho": 1296,
+    "alto": 436
+  },
+  "usuario/anuncios/padron.png": {
+    "ancho": 1440,
+    "alto": 850
+  },
+  "usuario/anuncios/retirar.png": {
+    "ancho": 512,
+    "alto": 510
+  },
+  "usuario/anuncios/tasas.png": {
+    "ancho": 1336,
+    "alto": 420
+  },
+  "usuario/arbitrios-emision/desglose.png": {
+    "ancho": 1058,
+    "alto": 357
+  },
+  "usuario/arbitrios-emision/determinacion-lanzar.png": {
+    "ancho": 1302,
+    "alto": 173
+  },
+  "usuario/arbitrios-emision/determinaciones.png": {
+    "ancho": 1336,
+    "alto": 480
+  },
+  "usuario/arbitrios-emision/determinar-predio.png": {
+    "ancho": 544,
+    "alto": 344
+  },
+  "usuario/arbitrios-emision/emision-formulario.png": {
+    "ancho": 1302,
+    "alto": 140
+  },
+  "usuario/arbitrios-emision/emisiones.png": {
+    "ancho": 1336,
+    "alto": 440
+  },
+  "usuario/arbitrios-emision/pdf-hla-1.png": {
+    "ancho": 827,
+    "alto": 1170
+  },
+  "usuario/arbitrios-emision/pdf-hla-2.png": {
+    "ancho": 827,
+    "alto": 1170
+  },
+  "usuario/arbitrios-emision/predio-arbitrios.png": {
+    "ancho": 1542,
+    "alto": 456
+  },
+  "usuario/arbitrios-emision/predio-faltan.png": {
+    "ancho": 1063,
+    "alto": 402
+  },
+  "usuario/arbitrios-emision/tasas-faltan.png": {
+    "ancho": 1336,
+    "alto": 560
+  },
+  "usuario/arbitrios-emision/tasas.png": {
+    "ancho": 1336,
+    "alto": 910
+  },
+  "usuario/consulta/arbitrios.png": {
+    "ancho": 1336,
+    "alto": 700
+  },
+  "usuario/consulta/brecha.png": {
+    "ancho": 1336,
+    "alto": 400
+  },
+  "usuario/consulta/contribuyente.png": {
+    "ancho": 1336,
+    "alto": 760
+  },
+  "usuario/fiscalizador/actos.png": {
+    "ancho": 1296,
+    "alto": 314
+  },
+  "usuario/fiscalizador/anulada.png": {
+    "ancho": 1336,
+    "alto": 420
+  },
+  "usuario/fiscalizador/cuis-aplicado.png": {
+    "ancho": 642,
+    "alto": 279
+  },
+  "usuario/fiscalizador/cuis-nueva-version.png": {
+    "ancho": 512,
+    "alto": 798
+  },
+  "usuario/fiscalizador/cuis.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "usuario/fiscalizador/descargo.png": {
+    "ancho": 512,
+    "alto": 569
+  },
+  "usuario/fiscalizador/desglose.png": {
+    "ancho": 642,
+    "alto": 497
+  },
+  "usuario/fiscalizador/expediente.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "usuario/fiscalizador/notificaciones.png": {
+    "ancho": 1800,
+    "alto": 680
+  },
+  "usuario/fiscalizador/notificar.png": {
+    "ancho": 512,
+    "alto": 703
+  },
+  "usuario/fiscalizador/nueva-acta-administrado.png": {
+    "ancho": 1304,
+    "alto": 484
+  },
+  "usuario/fiscalizador/nueva-acta-falta.png": {
+    "ancho": 920,
+    "alto": 63
+  },
+  "usuario/fiscalizador/nueva-acta.png": {
+    "ancho": 1304,
+    "alto": 379
+  },
+  "usuario/fiscalizador/subsanar.png": {
+    "ancho": 512,
+    "alto": 406
+  },
+  "usuario/registrador/agregar-condomino.png": {
+    "ancho": 768,
+    "alto": 394
+  },
+  "usuario/registrador/anular-declaracion.png": {
+    "ancho": 512,
+    "alto": 381
+  },
+  "usuario/registrador/buscar-predios-catastro.png": {
+    "ancho": 1152,
+    "alto": 920
+  },
+  "usuario/registrador/buscar-predios-tributario.png": {
+    "ancho": 1152,
+    "alto": 920
+  },
+  "usuario/registrador/dj-anulada.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "usuario/registrador/dj-caracteristicas.png": {
+    "ancho": 1021,
+    "alto": 419
+  },
+  "usuario/registrador/dj-condominos.png": {
+    "ancho": 1323,
+    "alto": 313
+  },
+  "usuario/registrador/documento-error.png": {
+    "ancho": 1029,
+    "alto": 169
+  },
+  "usuario/registrador/domicilio-descripcion.png": {
+    "ancho": 998,
+    "alto": 750
+  },
+  "usuario/registrador/domicilio-nuevo.png": {
+    "ancho": 1024,
+    "alto": 820
+  },
+  "usuario/registrador/editar-contribuyente.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "usuario/registrador/inscripcion-domicilios.png": {
+    "ancho": 1336,
+    "alto": 620
+  },
+  "usuario/registrador/lista-contribuyentes.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "usuario/registrador/nueva-dj-paso1.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "usuario/registrador/nueva-dj-paso2.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "usuario/registrador/nueva-dj-predio-con-titular.png": {
+    "ancho": 1336,
+    "alto": 640
+  },
+  "usuario/registrador/nuevo-contribuyente.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "usuario/registrador/nuevo-predio-desde-lote.png": {
+    "ancho": 1440,
+    "alto": 1000
+  },
+  "usuario/registrador/pdf-hr.png": {
+    "ancho": 827,
+    "alto": 1170
+  }
+}

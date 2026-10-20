@@ -1,0 +1,3925 @@
+{
+  "formato": {
+    "ancho": 1920,
+    "alto": 1080,
+    "fps": 30,
+    "codec": "h264",
+    "audio": null
+  },
+  "videos": [
+    {
+      "composicion": "S01-Introduccion",
+      "numero": "01",
+      "titulo": "Rentas municipales de un vistazo",
+      "audiencia": "Todo el personal de rentas, la gerencia y quien empieza a usar el sistema",
+      "objetivo": "Saber qué es el sistema, cómo se organiza, qué hace cada perfil y qué reglas cumple, antes de usarlo.",
+      "fotogramas": 7023,
+      "duracion": "3:54",
+      "salida": {
+        "video": "salida/videos/srtm-01-introduccion.mp4",
+        "miniatura": "salida/miniaturas/srtm-01-introduccion.jpg"
+      },
+      "storyboard": "storyboards/srtm-01-introduccion.md",
+      "escenas": [
+        {
+          "id": "portada",
+          "tipo": "portada",
+          "titulo": "Rentas municipales de un vistazo",
+          "objetivo": "Presentar el producto y a quién va dirigido el vídeo.",
+          "inicio": 0,
+          "fotogramas": 330,
+          "segundos": 11,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "presentacion-sistema",
+              "seccion": "Para qué sirve el sistema"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "que-es",
+          "tipo": "mensaje",
+          "titulo": "Un solo portal web reúne todo el trabajo de rentas de la municipalidad.",
+          "objetivo": "Entender que todo el trabajo de rentas está en un solo portal.",
+          "inicio": 312,
+          "fotogramas": 420,
+          "segundos": 14,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "presentacion-sistema",
+              "seccion": "Para qué sirve el sistema"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "base",
+          "tipo": "diagrama",
+          "titulo": "El registro tributario es la base de todo lo demás",
+          "objetivo": "Ver que los cálculos de todos los módulos dependen de lo que inscribe el registro tributario.",
+          "inicio": 714,
+          "fotogramas": 525,
+          "segundos": 17.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "presentacion-sistema",
+              "seccion": "Para qué sirve el sistema"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "pantalla-de-trabajo",
+          "tipo": "pantalla",
+          "titulo": "Todas las pantallas comparten el mismo marco",
+          "objetivo": "Reconocer las cuatro partes que comparten todas las pantallas del portal.",
+          "inicio": 1221,
+          "fotogramas": 1080,
+          "segundos": 36,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/interfaz.adoc",
+              "ancla": "partes-pantalla",
+              "seccion": "Partes de la pantalla"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/comun/inicio.png"
+          ]
+        },
+        {
+          "id": "modulos",
+          "tipo": "tarjetas",
+          "titulo": "Los trámites, agrupados por aquello sobre lo que se hacen",
+          "objetivo": "Saber qué trámites hay en cada módulo del riel.",
+          "inicio": 2283,
+          "fotogramas": 720,
+          "segundos": 24,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/interfaz.adoc",
+              "ancla": "riel-modulos",
+              "seccion": "El riel de módulos"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "perfiles",
+          "tipo": "tarjetas",
+          "titulo": "Un perfil por cada parte del trabajo",
+          "objetivo": "Identificar qué perfil hace cada parte del trabajo y qué manual le corresponde.",
+          "inicio": 2985,
+          "fotogramas": 780,
+          "segundos": 26,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "perfiles-sugeridos",
+              "seccion": "Perfiles sugeridos"
+            },
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "funciones",
+              "seccion": "Funciones del administrador"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "un-anio",
+          "tipo": "proceso",
+          "titulo": "Un año de rentas, paso a paso",
+          "objetivo": "Ver el orden del trabajo de un año tributario y quién interviene en cada paso.",
+          "inicio": 3747,
+          "fotogramas": 840,
+          "segundos": 28,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "flujo-anual",
+              "seccion": "El año de arbitrios, paso a paso"
+            },
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "anio-tributario",
+              "seccion": "Preparar un año tributario"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "reglas",
+          "tipo": "tarjetas",
+          "titulo": "Seis reglas que valen en todos los módulos",
+          "objetivo": "Conocer las reglas que el sistema aplica siempre, en cualquier módulo.",
+          "inicio": 4569,
+          "fotogramas": 990,
+          "segundos": 33,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/mensajes.adoc",
+              "ancla": "actos",
+              "seccion": "Actos con observación"
+            },
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "inmutable",
+              "seccion": "Una cuota no se edita ni se borra"
+            },
+            {
+              "archivo": "docs/manuales/comun/faq.adoc",
+              "ancla": "faq-comun",
+              "seccion": "Preguntas generales"
+            },
+            {
+              "archivo": "docs/manuales/comun/mensajes.adoc",
+              "ancla": "permisos-usuario",
+              "seccion": "Lo que su rol le permite"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "alcance",
+          "tipo": "comparacion",
+          "titulo": "Lo que hace y lo que queda fuera",
+          "objetivo": "Distinguir lo que el sistema hace de lo que queda fuera de él en esta versión.",
+          "inicio": 5541,
+          "fotogramas": 870,
+          "segundos": 29,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "despues",
+              "seccion": "Después de la resolución: cobranza y coactiva"
+            },
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "reniec",
+              "seccion": "Los nombres se escriben a mano"
+            },
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "brecha-situacion",
+              "seccion": "La brecha en esta instalación"
+            },
+            {
+              "archivo": "docs/manuales/comun/busqueda.adoc",
+              "ancla": "listas",
+              "seccion": "Listas, filtros y páginas"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "cierre",
+          "tipo": "cierre",
+          "titulo": "Rentas municipales, en pocas palabras",
+          "objetivo": "Recordar lo esencial y saber dónde seguir.",
+          "inicio": 6393,
+          "fotogramas": 630,
+          "segundos": 21,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/index.adoc",
+              "ancla": "_manuales_de_usuario",
+              "seccion": "Manuales de usuario"
+            }
+          ],
+          "capturas": []
+        }
+      ]
+    },
+    {
+      "composicion": "S02-PrimerosPasos",
+      "numero": "02",
+      "titulo": "Primeros pasos en el portal",
+      "audiencia": "Todos los usuarios del portal, de cualquier perfil",
+      "objetivo": "Ingresar, orientarse en la pantalla de trabajo, buscar y abrir fichas, completar formularios y entender los mensajes y permisos del portal.",
+      "fotogramas": 13215,
+      "duracion": "7:21",
+      "salida": {
+        "video": "salida/videos/srtm-02-primeros-pasos.mp4",
+        "miniatura": "salida/miniaturas/srtm-02-primeros-pasos.jpg"
+      },
+      "storyboard": "storyboards/srtm-02-primeros-pasos.md",
+      "escenas": [
+        {
+          "id": "portada",
+          "tipo": "portada",
+          "titulo": "Primeros pasos en el portal",
+          "objetivo": "Presentar el vídeo y a quién va dirigido.",
+          "inicio": 0,
+          "fotogramas": 360,
+          "segundos": 12,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/acceso.adoc",
+              "ancla": "acceso",
+              "seccion": "Acceso al sistema"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "parte-orientarse",
+          "tipo": "seccion",
+          "titulo": "Ingresar y orientarse",
+          "objetivo": "Anunciar la primera parte: la cuenta y la pantalla de trabajo.",
+          "inicio": 342,
+          "fotogramas": 195,
+          "segundos": 6.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/interfaz.adoc",
+              "ancla": "interfaz",
+              "seccion": "La pantalla de trabajo"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "ingresar",
+          "tipo": "pantalla",
+          "titulo": "Ingresar con su cuenta",
+          "objetivo": "Ingresar al portal con la cuenta que entrega el administrador y reconocer el error de credenciales.",
+          "inicio": 519,
+          "fotogramas": 870,
+          "segundos": 29,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/acceso.adoc",
+              "ancla": "proc-ingresar",
+              "seccion": "Ingresar al portal"
+            },
+            {
+              "archivo": "docs/manuales/comun/acceso.adoc",
+              "ancla": "requisitos-acceso",
+              "seccion": "Qué necesita"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/comun/ingreso.png",
+            "recursos/capturas/comun/ingreso-error.png"
+          ]
+        },
+        {
+          "id": "pantalla-de-trabajo",
+          "tipo": "pantalla",
+          "titulo": "Lo que tiene a mano en todas las pantallas",
+          "objetivo": "Ubicar la búsqueda, el menú de sesión, las fichas abiertas, el riel y la atención rápida.",
+          "inicio": 1371,
+          "fotogramas": 1215,
+          "segundos": 40.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/interfaz.adoc",
+              "ancla": "partes-pantalla",
+              "seccion": "Partes de la pantalla"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/comun/inicio.png"
+          ]
+        },
+        {
+          "id": "riel",
+          "tipo": "pantalla",
+          "titulo": "Cada módulo abre su panel de trámites",
+          "objetivo": "Abrir el panel de un módulo y elegir un trámite.",
+          "inicio": 2568,
+          "fotogramas": 630,
+          "segundos": 21,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/interfaz.adoc",
+              "ancla": "riel-modulos",
+              "seccion": "El riel de módulos"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/comun/riel.png"
+          ]
+        },
+        {
+          "id": "pasos",
+          "tipo": "pantalla",
+          "titulo": "Cada página dice qué es y qué hacer",
+          "objetivo": "Leer la banda de título, los botones de la página, la cinta de pasos y la barra de instrucciones.",
+          "inicio": 3180,
+          "fotogramas": 945,
+          "segundos": 31.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/interfaz.adoc",
+              "ancla": "banda-titulo",
+              "seccion": "Títulos, pasos e instrucciones"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/comun/pasos.png"
+          ]
+        },
+        {
+          "id": "parte-buscar",
+          "tipo": "seccion",
+          "titulo": "Buscar y abrir fichas",
+          "objetivo": "Anunciar la segunda parte: búsquedas, fichas y listas.",
+          "inicio": 4107,
+          "fotogramas": 180,
+          "segundos": 6,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/busqueda.adoc",
+              "ancla": "busquedas",
+              "seccion": "Búsquedas, listas y fichas"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "busqueda-general",
+          "tipo": "pantalla",
+          "titulo": "Contribuyentes y predios, en una sola búsqueda",
+          "objetivo": "Encontrar un contribuyente o un predio desde la barra y abrir su ficha.",
+          "inicio": 4269,
+          "fotogramas": 765,
+          "segundos": 25.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/busqueda.adoc",
+              "ancla": "proc-buscar-general",
+              "seccion": "Buscar un contribuyente o un predio desde la barra"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/comun/busqueda-general.png"
+          ]
+        },
+        {
+          "id": "consejos",
+          "tipo": "tarjetas",
+          "titulo": "Si no encuentra a quien sabe que existe",
+          "objetivo": "Buscar bien: por documento, por un solo apellido, con las tildes correctas.",
+          "inicio": 5016,
+          "fotogramas": 630,
+          "segundos": 21,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/faq.adoc",
+              "ancla": "faq-comun",
+              "seccion": "Preguntas generales"
+            },
+            {
+              "archivo": "docs/manuales/comun/busqueda.adoc",
+              "ancla": "proc-buscar-general",
+              "seccion": "Buscar un contribuyente o un predio desde la barra"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "fichas-abiertas",
+          "tipo": "pantalla",
+          "titulo": "Varias fichas abiertas a la vez",
+          "objetivo": "Trabajar con varias fichas abiertas y saber cuánto duran.",
+          "inicio": 5628,
+          "fotogramas": 840,
+          "segundos": 28,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/busqueda.adoc",
+              "ancla": "fichas-abiertas",
+              "seccion": "Fichas abiertas"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/comun/fichas-abiertas.png"
+          ]
+        },
+        {
+          "id": "listas",
+          "tipo": "tabla",
+          "titulo": "Todas las listas funcionan igual",
+          "objetivo": "Usar las listas del portal: páginas, filtros y apertura de fichas.",
+          "inicio": 6450,
+          "fotogramas": 690,
+          "segundos": 23,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/busqueda.adoc",
+              "ancla": "listas",
+              "seccion": "Listas, filtros y páginas"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "parte-formularios",
+          "tipo": "seccion",
+          "titulo": "Formularios y mensajes",
+          "objetivo": "Anunciar la tercera parte: formularios, mensajes, permisos y sesión.",
+          "inicio": 7122,
+          "fotogramas": 180,
+          "segundos": 6,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/mensajes.adoc",
+              "ancla": "formularios",
+              "seccion": "Formularios, mensajes y permisos"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "obligatorios",
+          "tipo": "pantalla",
+          "titulo": "El formulario se revisa antes de grabar",
+          "objetivo": "Reconocer los campos obligatorios y lo que el sistema marca al revisar el formulario.",
+          "inicio": 7284,
+          "fotogramas": 735,
+          "segundos": 24.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/mensajes.adoc",
+              "ancla": "campos",
+              "seccion": "Campos obligatorios y formatos"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/comun/validacion.png"
+          ]
+        },
+        {
+          "id": "mensajes",
+          "tipo": "tabla",
+          "titulo": "Qué significa cada mensaje",
+          "objetivo": "Entender los mensajes de formato y las reglas que revisa el servidor.",
+          "inicio": 8001,
+          "fotogramas": 780,
+          "segundos": 26,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/mensajes.adoc",
+              "ancla": "campos",
+              "seccion": "Campos obligatorios y formatos"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "salir-sin-guardar",
+          "tipo": "pantalla",
+          "titulo": "¿Salir sin guardar?",
+          "objetivo": "Decidir qué hacer con los cambios sin grabar y saber qué formularios no preguntan.",
+          "inicio": 8763,
+          "fotogramas": 930,
+          "segundos": 31,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/mensajes.adoc",
+              "ancla": "salir-sin-guardar",
+              "seccion": "Salir sin guardar"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/comun/salir-sin-guardar.png"
+          ]
+        },
+        {
+          "id": "actos",
+          "tipo": "tarjetas",
+          "titulo": "Lo que no se deshace lleva su motivo",
+          "objetivo": "Saber qué es una observación y que reintentar un acto no lo duplica.",
+          "inicio": 9675,
+          "fotogramas": 690,
+          "segundos": 23,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/mensajes.adoc",
+              "ancla": "actos",
+              "seccion": "Actos con observación"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "sin-permiso",
+          "tipo": "pantalla",
+          "titulo": "Un botón gris dice qué permiso falta",
+          "objetivo": "Leer la línea «Sin permiso» de un botón deshabilitado.",
+          "inicio": 10347,
+          "fotogramas": 570,
+          "segundos": 19,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/mensajes.adoc",
+              "ancla": "permisos-usuario",
+              "seccion": "Lo que su rol le permite"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/comun/sin-permiso.png"
+          ]
+        },
+        {
+          "id": "dos-maneras",
+          "tipo": "comparacion",
+          "titulo": "Dos maneras de decir «no»",
+          "objetivo": "Distinguir dónde el portal deshabilita el botón y dónde rechaza la operación al grabar.",
+          "inicio": 10899,
+          "fotogramas": 630,
+          "segundos": 21,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/mensajes.adoc",
+              "ancla": "permisos-usuario",
+              "seccion": "Lo que su rol le permite"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "sesion",
+          "tipo": "pantalla",
+          "titulo": "Cerrar la sesión y elegir el tema",
+          "objetivo": "Cerrar la sesión al dejar el equipo y elegir el tema del portal.",
+          "inicio": 11511,
+          "fotogramas": 780,
+          "segundos": 26,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/acceso.adoc",
+              "ancla": "proc-cerrar-sesion",
+              "seccion": "Cerrar la sesión"
+            },
+            {
+              "archivo": "docs/manuales/comun/interfaz.adoc",
+              "ancla": "temas",
+              "seccion": "Temas de color"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/comun/menu-sesion.png",
+            "recursos/capturas/comun/menu-tema.png"
+          ]
+        },
+        {
+          "id": "ocho-horas",
+          "tipo": "aviso",
+          "titulo": "La sesión dura ocho horas",
+          "objetivo": "Grabar a tiempo: la sesión vence a las ocho horas y lo no grabado se pierde.",
+          "inicio": 12273,
+          "fotogramas": 420,
+          "segundos": 14,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/acceso.adoc",
+              "ancla": "sesion",
+              "seccion": "Duración de la sesión"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "cierre",
+          "tipo": "cierre",
+          "titulo": "Para empezar a trabajar",
+          "objetivo": "Recordar lo esencial y elegir el vídeo del propio perfil.",
+          "inicio": 12675,
+          "fotogramas": 540,
+          "segundos": 18,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/comun/faq.adoc",
+              "ancla": "faq-comun",
+              "seccion": "Preguntas generales"
+            }
+          ],
+          "capturas": []
+        }
+      ]
+    },
+    {
+      "composicion": "S03-RegistroTributario",
+      "numero": "03",
+      "titulo": "Registro tributario",
+      "audiencia": "Personal de ventanilla y del registro tributario (perfil REGISTRADOR)",
+      "objetivo": "Inscribir contribuyentes, registrar predios, presentar, completar y anular declaraciones juradas y entregar sus documentos.",
+      "fotogramas": 14835,
+      "duracion": "8:15",
+      "salida": {
+        "video": "salida/videos/srtm-03-registro-tributario.mp4",
+        "miniatura": "salida/miniaturas/srtm-03-registro-tributario.jpg"
+      },
+      "storyboard": "storyboards/srtm-03-registro-tributario.md",
+      "escenas": [
+        {
+          "id": "portada",
+          "tipo": "portada",
+          "titulo": "Registro tributario",
+          "objetivo": "Presentar el vídeo y a quién va dirigido.",
+          "inicio": 0,
+          "fotogramas": 330,
+          "segundos": 11,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "presentacion-manual",
+              "seccion": "Para qué sirve este manual y a quién se dirige"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "tres-registros",
+          "tipo": "diagrama",
+          "titulo": "Tres registros describen un inmueble",
+          "objetivo": "Distinguir predio, lote de catastro y declaración jurada, y cómo se vinculan.",
+          "inicio": 312,
+          "fotogramas": 510,
+          "segundos": 17,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "predio-que-es",
+              "seccion": "Predio, lote de catastro y declaración"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "parte-contribuyentes",
+          "tipo": "seccion",
+          "titulo": "Contribuyentes",
+          "objetivo": "Abrir la parte de contribuyentes.",
+          "inicio": 804,
+          "fotogramas": 180,
+          "segundos": 6,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "contribuyentes",
+              "seccion": "Contribuyentes"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "documentos",
+          "tipo": "tarjetas",
+          "titulo": "Qué número acepta cada documento",
+          "objetivo": "Conocer qué número acepta cada tipo de documento.",
+          "inicio": 966,
+          "fotogramas": 630,
+          "segundos": 21,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "documento-reglas",
+              "seccion": "Qué número acepta cada tipo de documento"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "buscar-contribuyente",
+          "tipo": "pantalla",
+          "titulo": "Busque siempre antes de inscribir",
+          "objetivo": "Encontrar la ficha de un contribuyente antes de inscribirlo.",
+          "inicio": 1578,
+          "fotogramas": 705,
+          "segundos": 23.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "proc-buscar-contribuyente",
+              "seccion": "Buscar un contribuyente"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/registrador/lista-contribuyentes.png"
+          ]
+        },
+        {
+          "id": "inscribir",
+          "tipo": "pantalla",
+          "titulo": "Paso 1: los datos del contribuyente",
+          "objetivo": "Completar el paso 1 de la inscripción de un contribuyente.",
+          "inicio": 2265,
+          "fotogramas": 780,
+          "segundos": 26,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "proc-inscribir-contribuyente",
+              "seccion": "Inscribir un contribuyente"
+            },
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "reniec",
+              "seccion": "Los nombres se escriben a mano"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/registrador/nuevo-contribuyente.png"
+          ]
+        },
+        {
+          "id": "domicilio",
+          "tipo": "pantalla",
+          "titulo": "Primero, el domicilio fiscal",
+          "objetivo": "Registrar el domicilio fiscal, que abre los pasos siguientes.",
+          "inicio": 3027,
+          "fotogramas": 705,
+          "segundos": 23.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "proc-registrar-domicilio",
+              "seccion": "Registrar los domicilios"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/registrador/inscripcion-domicilios.png",
+            "recursos/capturas/usuario/registrador/domicilio-nuevo.png",
+            "recursos/capturas/usuario/registrador/domicilio-descripcion.png"
+          ]
+        },
+        {
+          "id": "errores-inscripcion",
+          "tipo": "aviso",
+          "titulo": "Lo que falla se marca en rojo",
+          "objetivo": "Reconocer los mensajes más frecuentes al inscribir y qué hacer.",
+          "inicio": 3714,
+          "fotogramas": 495,
+          "segundos": 16.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "proc-inscribir-contribuyente",
+              "seccion": "Inscribir un contribuyente"
+            },
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "errores",
+              "seccion": "Errores frecuentes"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/registrador/documento-error.png"
+          ]
+        },
+        {
+          "id": "ficha-contribuyente",
+          "tipo": "pantalla",
+          "titulo": "Todo lo del contribuyente, en una ficha",
+          "objetivo": "Orientarse en la ficha del contribuyente.",
+          "inicio": 4191,
+          "fotogramas": 510,
+          "segundos": 17,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "ficha-contribuyente",
+              "seccion": "La ficha del contribuyente"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/registrador/editar-contribuyente.png"
+          ]
+        },
+        {
+          "id": "parte-predios",
+          "tipo": "seccion",
+          "titulo": "Predios",
+          "objetivo": "Abrir la parte de predios.",
+          "inicio": 4683,
+          "fotogramas": 180,
+          "segundos": 6,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "predios",
+              "seccion": "Predios"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "buscar-predios",
+          "tipo": "pantalla",
+          "titulo": "En el padrón y en el catastro fiscal",
+          "objetivo": "Encontrar un predio del padrón o un lote del catastro con el diálogo Buscar predios.",
+          "inicio": 4845,
+          "fotogramas": 765,
+          "segundos": 25.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "buscar-predios",
+              "seccion": "El diálogo Buscar predios"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/registrador/buscar-predios-tributario.png",
+            "recursos/capturas/usuario/registrador/buscar-predios-catastro.png"
+          ]
+        },
+        {
+          "id": "predio-desde-lote",
+          "tipo": "pantalla",
+          "titulo": "Desde un lote del catastro",
+          "objetivo": "Registrar un predio con los datos que ya tiene su lote del catastro.",
+          "inicio": 5592,
+          "fotogramas": 615,
+          "segundos": 20.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "proc-predio-desde-lote",
+              "seccion": "Registrar un predio a partir de un lote del catastro"
+            },
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "proc-registrar-predio",
+              "seccion": "Registrar un predio"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/registrador/nuevo-predio-desde-lote.png"
+          ]
+        },
+        {
+          "id": "parte-declaraciones",
+          "tipo": "seccion",
+          "titulo": "Declaraciones juradas",
+          "objetivo": "Abrir la parte de declaraciones juradas.",
+          "inicio": 6189,
+          "fotogramas": 180,
+          "segundos": 6,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "declaraciones",
+              "seccion": "Declaraciones juradas"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "conceptos-dj",
+          "tipo": "tarjetas",
+          "titulo": "La declaración jurada en seis ideas",
+          "objetivo": "Conocer los conceptos de la declaración jurada antes de registrarla.",
+          "inicio": 6351,
+          "fotogramas": 720,
+          "segundos": 24,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "dj-conceptos",
+              "seccion": "Lo que hay que saber antes"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "presentar-dj",
+          "tipo": "pantalla",
+          "titulo": "Dos pasos y queda presentada",
+          "objetivo": "Presentar una declaración jurada en sus dos primeros pasos.",
+          "inicio": 7053,
+          "fotogramas": 990,
+          "segundos": 33,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "proc-nueva-declaracion",
+              "seccion": "Presentar una declaración jurada"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/registrador/nueva-dj-paso1.png",
+            "recursos/capturas/usuario/registrador/nueva-dj-paso2.png"
+          ]
+        },
+        {
+          "id": "predio-con-titular",
+          "tipo": "pantalla",
+          "titulo": "El predio ya tiene titular en el año",
+          "objetivo": "Saber qué hacer cuando el predio ya tiene titular en el año.",
+          "inicio": 8025,
+          "fotogramas": 585,
+          "segundos": 19.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "proc-nueva-declaracion",
+              "seccion": "Presentar una declaración jurada"
+            },
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "proc-cambio-titular",
+              "seccion": "Registrar un cambio de dueño"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/registrador/nueva-dj-predio-con-titular.png"
+          ]
+        },
+        {
+          "id": "caracteristicas",
+          "tipo": "pantalla",
+          "titulo": "Uso, áreas y valores",
+          "objetivo": "Distinguir lo que escribe el registrador de lo que calcula el sistema en Características.",
+          "inicio": 8592,
+          "fotogramas": 735,
+          "segundos": 24.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "caracteristicas",
+              "seccion": "Características: uso, áreas y valores"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/registrador/dj-caracteristicas.png"
+          ]
+        },
+        {
+          "id": "valor-afecto",
+          "tipo": "calculo",
+          "titulo": "Del autoavalúo al valor afecto",
+          "objetivo": "Entender de dónde sale el valor afecto, base del impuesto predial.",
+          "inicio": 9309,
+          "fotogramas": 645,
+          "segundos": 21.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "dj-conceptos",
+              "seccion": "Lo que hay que saber antes"
+            },
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "condominos",
+              "seccion": "Datos de los condóminos"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "condominos",
+          "tipo": "pantalla",
+          "titulo": "Varios titulares de un mismo predio",
+          "objetivo": "Agregar un condómino y respetar las reglas de los porcentajes.",
+          "inicio": 9936,
+          "fotogramas": 735,
+          "segundos": 24.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "condominos",
+              "seccion": "Datos de los condóminos"
+            },
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "proc-agregar-condomino",
+              "seccion": "Agregar un condómino"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/registrador/dj-condominos.png",
+            "recursos/capturas/usuario/registrador/agregar-condomino.png"
+          ]
+        },
+        {
+          "id": "anular",
+          "tipo": "pantalla",
+          "titulo": "La anulación es el descargo",
+          "objetivo": "Anular una declaración jurada (descargo) y reconocer el resultado.",
+          "inicio": 10653,
+          "fotogramas": 660,
+          "segundos": 22,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "proc-anular-declaracion",
+              "seccion": "Anular una declaración (descargo)"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/registrador/anular-declaracion.png",
+            "recursos/capturas/usuario/registrador/dj-anulada.png"
+          ]
+        },
+        {
+          "id": "cambio-dueno",
+          "tipo": "proceso",
+          "titulo": "Cuando un predio se vende",
+          "objetivo": "Registrar la venta, donación o herencia de un predio.",
+          "inicio": 11295,
+          "fotogramas": 660,
+          "segundos": 22,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "proc-cambio-titular",
+              "seccion": "Registrar un cambio de dueño"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "parte-documentos",
+          "tipo": "seccion",
+          "titulo": "Documentos",
+          "objetivo": "Abrir la parte de documentos.",
+          "inicio": 11937,
+          "fotogramas": 180,
+          "segundos": 6,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "documentos",
+              "seccion": "Documentos: PU, HR y HLA"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "que-documento",
+          "tipo": "tabla",
+          "titulo": "PU, HR y HLA desde las fichas",
+          "objetivo": "Saber qué documento entregar, dónde se emite y cuándo no sale.",
+          "inicio": 12099,
+          "fotogramas": 780,
+          "segundos": 26,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "documentos-que-son",
+              "seccion": "Qué documento entregar"
+            },
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "proc-ver-documento",
+              "seccion": "Ver, imprimir o descargar un documento"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "impuesto",
+          "tipo": "calculo",
+          "titulo": "QUISPE ROJAS ROSA ELENA, 2026",
+          "objetivo": "Entender cómo calcula el sistema el impuesto predial de la HR.",
+          "inicio": 12861,
+          "fotogramas": 870,
+          "segundos": 29,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "liquidacion",
+              "seccion": "Cómo se calcula el impuesto predial"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "hr",
+          "tipo": "pantalla",
+          "titulo": "La HR, sección por sección",
+          "objetivo": "Reconocer las cuatro secciones de la HR.",
+          "inicio": 13713,
+          "fotogramas": 480,
+          "segundos": 16,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "hr",
+              "seccion": "La HR"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/registrador/pdf-hr.png"
+          ]
+        },
+        {
+          "id": "cierre",
+          "tipo": "cierre",
+          "titulo": "El registro tributario, en resumen",
+          "objetivo": "Recordar las reglas esenciales del registro tributario.",
+          "inicio": 14175,
+          "fotogramas": 660,
+          "segundos": 22,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/registrador.adoc",
+              "ancla": "faq-registro",
+              "seccion": "Preguntas del registro tributario"
+            }
+          ],
+          "capturas": []
+        }
+      ]
+    },
+    {
+      "composicion": "S04-ArbitriosEmision",
+      "numero": "04",
+      "titulo": "Arbitrios y emisión",
+      "audiencia": "Personal del área de arbitrios y de emisión (perfil ARBITRIOS_EMISION)",
+      "objetivo": "Entender cómo se calcula y a quién se carga una cuota de arbitrios, determinar las cuotas de un predio o de todo el padrón, entregar la HLA y emitir los documentos del año.",
+      "fotogramas": 15216,
+      "duracion": "8:27",
+      "salida": {
+        "video": "salida/videos/srtm-04-arbitrios-emision.mp4",
+        "miniatura": "salida/miniaturas/srtm-04-arbitrios-emision.jpg"
+      },
+      "storyboard": "storyboards/srtm-04-arbitrios-emision.md",
+      "escenas": [
+        {
+          "id": "portada",
+          "tipo": "portada",
+          "titulo": "Arbitrios y emisión",
+          "objetivo": "Presentar el vídeo y a quién va dirigido.",
+          "inicio": 0,
+          "fotogramas": 390,
+          "segundos": 13,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "presentacion-manual",
+              "seccion": "Para qué sirve este manual y a quién se dirige"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "parte-calculo",
+          "tipo": "seccion",
+          "titulo": "Cómo se calcula",
+          "objetivo": "Anunciar la parte sobre el cálculo de las cuotas.",
+          "inicio": 372,
+          "fotogramas": 195,
+          "segundos": 6.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "arbitrios",
+              "seccion": "Los arbitrios"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "que-son",
+          "tipo": "mensaje",
+          "titulo": "Una cuota por predio, por servicio y por mes.",
+          "objetivo": "Entender que los arbitrios son cuotas mensuales que fija la ordenanza del año.",
+          "inicio": 549,
+          "fotogramas": 435,
+          "segundos": 14.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "arbitrios-que-son",
+              "seccion": "Qué son los arbitrios"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "calculo",
+          "tipo": "calculo",
+          "titulo": "El predio 01-01-0002, un mes de 2026",
+          "objetivo": "Seguir el cálculo de las cuotas de un mes de un predio de la demostración.",
+          "inicio": 966,
+          "fotogramas": 990,
+          "segundos": 33,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "calculo",
+              "seccion": "Cómo se calcula una cuota"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "titular-mes",
+          "tipo": "proceso",
+          "titulo": "Cada mes, el titular del día 1",
+          "objetivo": "Saber a nombre de quién queda cada cuota de un predio.",
+          "inicio": 1938,
+          "fotogramas": 675,
+          "segundos": 22.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "titular-mes",
+              "seccion": "De quién es cada cuota: el titular de cada mes"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "pu-por-uso",
+          "tipo": "comparacion",
+          "titulo": "Un PU por predio o un PU por uso",
+          "objetivo": "Distinguir las dos formas de cobrar un predio con varios usos.",
+          "inicio": 2595,
+          "fotogramas": 750,
+          "segundos": 25,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "pu-por-uso",
+              "seccion": "Un PU por predio o un PU por uso"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "parte-determinar",
+          "tipo": "seccion",
+          "titulo": "Determinar",
+          "objetivo": "Anunciar la parte sobre la determinación de un predio o de un contribuyente.",
+          "inicio": 3327,
+          "fotogramas": 180,
+          "segundos": 6,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "determinar",
+              "seccion": "Determinar los arbitrios de un predio o de un contribuyente"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "flujo-anual",
+          "tipo": "proceso",
+          "titulo": "El año de arbitrios, paso a paso",
+          "objetivo": "Conocer el orden de trabajo de un año de arbitrios y quién hace cada paso.",
+          "inicio": 3489,
+          "fotogramas": 795,
+          "segundos": 26.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "flujo-anual",
+              "seccion": "El año de arbitrios, paso a paso"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "tasas",
+          "tipo": "pantalla",
+          "titulo": "Revise la ordenanza antes de determinar",
+          "objetivo": "Comprobar en Tasas del año qué ordenanza rige y que al año no le falta nada.",
+          "inicio": 4266,
+          "fotogramas": 945,
+          "segundos": 31.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "proc-tasas",
+              "seccion": "Revisar la ordenanza y las tasas de un año"
+            },
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "tasas-tablas",
+              "seccion": "Cómo leer las tablas"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/arbitrios-emision/tasas.png",
+            "recursos/capturas/usuario/arbitrios-emision/tasas-faltan.png"
+          ]
+        },
+        {
+          "id": "predio-arbitrios",
+          "tipo": "pantalla",
+          "titulo": "Las cuotas de un predio, mes a mes",
+          "objetivo": "Leer la pestaña Arbitrios de un predio: situación, cuotas por mes y la cuenta de cada monto.",
+          "inicio": 5193,
+          "fotogramas": 855,
+          "segundos": 28.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "pestana-arbitrios",
+              "seccion": "La pestaña Arbitrios de las fichas"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/arbitrios-emision/predio-arbitrios.png",
+            "recursos/capturas/usuario/arbitrios-emision/desglose.png"
+          ]
+        },
+        {
+          "id": "determinar",
+          "tipo": "pantalla",
+          "titulo": "Cada determinación lleva su observación",
+          "objetivo": "Determinar los arbitrios de un predio con su observación, y saber qué cambia en un contribuyente.",
+          "inicio": 6030,
+          "fotogramas": 1035,
+          "segundos": 34.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "proc-determinar-predio-pasos",
+              "seccion": "Determinar los arbitrios de un predio"
+            },
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "proc-determinar-contribuyente",
+              "seccion": "Determinar los arbitrios de un contribuyente"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/arbitrios-emision/determinar-predio.png"
+          ]
+        },
+        {
+          "id": "no-se-puede",
+          "tipo": "aviso",
+          "titulo": "Un predio se determina entero o no se determina",
+          "objetivo": "Reconocer qué impide determinar un predio y a quién pedir que lo corrija.",
+          "inicio": 7047,
+          "fotogramas": 690,
+          "segundos": 23,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "no-se-puede",
+              "seccion": "Cuando no se puede determinar"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/arbitrios-emision/predio-faltan.png"
+          ]
+        },
+        {
+          "id": "anular-cuota",
+          "tipo": "aviso",
+          "titulo": "Una cuota no se edita: se anula",
+          "objetivo": "Saber que una cuota no se corrige editándola y cómo se pide su anulación en esta versión.",
+          "inicio": 7719,
+          "fotogramas": 690,
+          "segundos": 23,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "anular-cuota-como",
+              "seccion": "La anulación de una cuota en esta versión"
+            },
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "inmutable",
+              "seccion": "Una cuota no se edita ni se borra"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "parte-masiva",
+          "tipo": "seccion",
+          "titulo": "Determinación masiva y HLA",
+          "objetivo": "Anunciar la parte sobre la determinación masiva y la HLA.",
+          "inicio": 8391,
+          "fotogramas": 210,
+          "segundos": 7,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "determinacion-masiva",
+              "seccion": "Determinación masiva"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "masiva",
+          "tipo": "pantalla",
+          "titulo": "Todo el padrón de un año, en segundo plano",
+          "objetivo": "Lanzar la determinación masiva de un año y seguirla hasta que termine.",
+          "inicio": 8583,
+          "fotogramas": 1095,
+          "segundos": 36.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "proc-determinacion-masiva-pasos",
+              "seccion": "Lanzar la determinación masiva"
+            },
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "estados-determinacion",
+              "seccion": "Los estados y las columnas de la lista"
+            },
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "predios-sin-determinar",
+              "seccion": "Predios sin determinar"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/arbitrios-emision/determinacion-lanzar.png",
+            "recursos/capturas/usuario/arbitrios-emision/determinaciones.png"
+          ]
+        },
+        {
+          "id": "precaucion-masiva",
+          "tipo": "aviso",
+          "titulo": "Revise la ordenanza primero",
+          "objetivo": "Revisar la ordenanza antes de una determinación masiva, porque sus cuotas no se editan.",
+          "inicio": 9660,
+          "fotogramas": 450,
+          "segundos": 15,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "proc-determinacion-masiva",
+              "seccion": "Lanzar la determinación masiva de un año"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "hla",
+          "tipo": "pantalla",
+          "titulo": "La hoja de liquidación de arbitrios",
+          "objetivo": "Reconocer las partes de la HLA que se entrega al contribuyente.",
+          "inicio": 10092,
+          "fotogramas": 1050,
+          "segundos": 35,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "proc-ver-hla",
+              "seccion": "Ver, imprimir o descargar la HLA de un contribuyente"
+            },
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "hla-contenido",
+              "seccion": "Qué contiene la HLA"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/arbitrios-emision/pdf-hla-1.png",
+            "recursos/capturas/usuario/arbitrios-emision/pdf-hla-2.png"
+          ]
+        },
+        {
+          "id": "parte-emision",
+          "tipo": "seccion",
+          "titulo": "Emisión masiva",
+          "objetivo": "Anunciar la parte sobre la emisión masiva.",
+          "inicio": 11124,
+          "fotogramas": 225,
+          "segundos": 7.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "emision-masiva",
+              "seccion": "Emisión masiva"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "que-produce",
+          "tipo": "tarjetas",
+          "titulo": "Los documentos del año, de cada contribuyente",
+          "objetivo": "Saber qué documentos, de quiénes y en qué formato genera una emisión masiva.",
+          "inicio": 11331,
+          "fotogramas": 645,
+          "segundos": 21.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "emision-que-produce",
+              "seccion": "Qué produce"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "estados-emision",
+          "tipo": "diagrama",
+          "titulo": "De Pendiente a Terminada",
+          "objetivo": "Seguir los estados de una emisión masiva y saber qué hacer si falla.",
+          "inicio": 11958,
+          "fotogramas": 735,
+          "segundos": 24.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "estados-emision",
+              "seccion": "Los estados de una emisión"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "emitir",
+          "tipo": "pantalla",
+          "titulo": "Elija año, formato y documentos",
+          "objetivo": "Lanzar una emisión masiva eligiendo formato y documentos, y descargar su archivo.",
+          "inicio": 12675,
+          "fotogramas": 1035,
+          "segundos": 34.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "proc-emision-masiva-pasos",
+              "seccion": "Lanzar la emisión masiva de un año"
+            },
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "proc-descargar-emision",
+              "seccion": "Descargar el archivo"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/arbitrios-emision/emision-formulario.png",
+            "recursos/capturas/usuario/arbitrios-emision/emisiones.png"
+          ]
+        },
+        {
+          "id": "despues",
+          "tipo": "tarjetas",
+          "titulo": "Errores, archivos depurados y bajas",
+          "objetivo": "Saber qué pasa con los errores y los archivos de las emisiones.",
+          "inicio": 13692,
+          "fotogramas": 540,
+          "segundos": 18,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "emision-errores",
+              "seccion": "Contribuyentes con error"
+            },
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "archivo-depurado",
+              "seccion": "Archivo depurado"
+            },
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "proc-eliminar-emision",
+              "seccion": "Eliminar una emisión"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "datos-personales",
+          "tipo": "aviso",
+          "titulo": "El archivo tiene datos de todo el padrón",
+          "objetivo": "Proteger el archivo de la emisión, que tiene datos de todo el padrón.",
+          "inicio": 14214,
+          "fotogramas": 360,
+          "segundos": 12,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "proc-descargar-emision",
+              "seccion": "Descargar el archivo"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "cierre",
+          "tipo": "cierre",
+          "titulo": "Arbitrios y emisión, en pocas palabras",
+          "objetivo": "Recordar lo esencial del trabajo de arbitrios y emisión y saber dónde seguir.",
+          "inicio": 14556,
+          "fotogramas": 660,
+          "segundos": 22,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/arbitrios-emision.adoc",
+              "ancla": "faq-arbitrios",
+              "seccion": "Preguntas de arbitrios y emisión"
+            }
+          ],
+          "capturas": []
+        }
+      ]
+    },
+    {
+      "composicion": "S05-Infracciones",
+      "numero": "05",
+      "titulo": "Infracciones administrativas",
+      "audiencia": "Personal de fiscalización (perfil FISCALIZADOR)",
+      "objetivo": "Llevar en el sistema el procedimiento sancionador: CUIS, notificaciones previas, actas, descargos, resoluciones y su notificación, sabiendo cómo se calculan la multa y los plazos.",
+      "fotogramas": 17154,
+      "duracion": "9:32",
+      "salida": {
+        "video": "salida/videos/srtm-05-infracciones.mp4",
+        "miniatura": "salida/miniaturas/srtm-05-infracciones.jpg"
+      },
+      "storyboard": "storyboards/srtm-05-infracciones.md",
+      "escenas": [
+        {
+          "id": "portada",
+          "tipo": "portada",
+          "titulo": "Del acta a la resolución exigible",
+          "objetivo": "Presentar el vídeo y a quién va dirigido.",
+          "inicio": 0,
+          "fotogramas": 330,
+          "segundos": 11,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "presentacion-manual",
+              "seccion": "Para qué sirve este manual y a quién se dirige"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "ciclo",
+          "tipo": "diagrama",
+          "titulo": "El ciclo de un acta",
+          "objetivo": "Ver las piezas de un expediente y en qué orden se registran.",
+          "inicio": 312,
+          "fotogramas": 1200,
+          "segundos": 40,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "ciclo-acta",
+              "seccion": "El ciclo de un acta en el sistema"
+            },
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "procedimiento-piezas",
+              "seccion": "Las piezas del expediente"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "fases",
+          "tipo": "tabla",
+          "titulo": "Fase del procedimiento y estado de la deuda",
+          "objetivo": "Distinguir la fase del procedimiento del estado de la deuda.",
+          "inicio": 1494,
+          "fotogramas": 930,
+          "segundos": 31,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "fases",
+              "seccion": "Fase del procedimiento y estado de la deuda"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "plazos",
+          "tipo": "tarjetas",
+          "titulo": "Tres plazos que el sistema cuenta solo",
+          "objetivo": "Saber cómo cuenta el sistema cada plazo del procedimiento.",
+          "inicio": 2406,
+          "fotogramas": 765,
+          "segundos": 25.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "plazos",
+              "seccion": "Cómo cuenta los días el sistema"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "seccion-cuis",
+          "tipo": "seccion",
+          "titulo": "CUIS y notificaciones",
+          "objetivo": "Anunciar la parte del CUIS y las notificaciones previas.",
+          "inicio": 3153,
+          "fotogramas": 180,
+          "segundos": 6,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "cuis",
+              "seccion": "El cuadro único de infracciones y sanciones (CUIS)"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "cuis",
+          "tipo": "pantalla",
+          "titulo": "El CUIS se consulta a una fecha",
+          "objetivo": "Consultar el CUIS vigente a una fecha y leer la multa de cada código.",
+          "inicio": 3315,
+          "fotogramas": 1005,
+          "segundos": 33.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "proc-consultar-cuis-pasos",
+              "seccion": "Consultar el CUIS"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/fiscalizador/cuis.png"
+          ]
+        },
+        {
+          "id": "multa",
+          "tipo": "calculo",
+          "titulo": "La multa es un porcentaje de la UIT",
+          "objetivo": "Calcular la multa de un código con la UIT del día de la infracción.",
+          "inicio": 4302,
+          "fotogramas": 825,
+          "segundos": 27.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "cuis-multa",
+              "seccion": "Cómo se calcula la multa de un código"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "versiones",
+          "tipo": "tarjetas",
+          "titulo": "Cada código tiene versiones con vigencia",
+          "objetivo": "Entender que el CUIS se versiona y qué versión usa cada acta.",
+          "inicio": 5109,
+          "fotogramas": 645,
+          "segundos": 21.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "cuis-versiones",
+              "seccion": "Versiones y vigencia"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "nueva-version",
+          "tipo": "pantalla",
+          "titulo": "Registrar una versión nueva de un código",
+          "objetivo": "Registrar el cambio que una ordenanza hace en un código.",
+          "inicio": 5736,
+          "fotogramas": 750,
+          "segundos": 25,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "proc-version-cuis-pasos",
+              "seccion": "Registrar una versión nueva de un código del CUIS"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/fiscalizador/cuis-nueva-version.png"
+          ]
+        },
+        {
+          "id": "notificaciones",
+          "tipo": "pantalla",
+          "titulo": "Notificaciones previas y su subsanación",
+          "objetivo": "Leer la lista de notificaciones previas y registrar su subsanación.",
+          "inicio": 6468,
+          "fotogramas": 1155,
+          "segundos": 38.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "proc-consultar-notificaciones",
+              "seccion": "Consultar las notificaciones previas"
+            },
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "proc-subsanar-pasos",
+              "seccion": "Registrar la subsanación de una notificación previa"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/fiscalizador/notificaciones.png",
+            "recursos/capturas/usuario/fiscalizador/subsanar.png"
+          ]
+        },
+        {
+          "id": "seccion-actas",
+          "tipo": "seccion",
+          "titulo": "Actas y expedientes",
+          "objetivo": "Anunciar la parte de las actas y los expedientes.",
+          "inicio": 7605,
+          "fotogramas": 180,
+          "segundos": 6,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "actas",
+              "seccion": "Actas de constatación"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "acta-infraccion",
+          "tipo": "pantalla",
+          "titulo": "Registrar un acta: la infracción",
+          "objetivo": "Registrar los datos de la infracción en un acta nueva.",
+          "inicio": 7767,
+          "fotogramas": 870,
+          "segundos": 29,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "proc-registrar-acta-pasos",
+              "seccion": "Registrar un acta de constatación"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/fiscalizador/nueva-acta.png"
+          ]
+        },
+        {
+          "id": "acta-administrado",
+          "tipo": "pantalla",
+          "titulo": "Registrar un acta: el administrado",
+          "objetivo": "Elegir al obligado, al contribuyente o predio y la notificación previa, y registrar el acta.",
+          "inicio": 8619,
+          "fotogramas": 960,
+          "segundos": 32,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "proc-registrar-acta-pasos",
+              "seccion": "Registrar un acta de constatación"
+            },
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "acta-que-es",
+              "seccion": "Lo que hay que saber antes"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/fiscalizador/nueva-acta-administrado.png",
+            "recursos/capturas/usuario/fiscalizador/nueva-acta-falta.png"
+          ]
+        },
+        {
+          "id": "multa-congelada",
+          "tipo": "pantalla",
+          "titulo": "La multa se calcula una vez y queda congelada",
+          "objetivo": "Leer el desglose de la multa del acta y saber que ya no cambia.",
+          "inicio": 9561,
+          "fotogramas": 1035,
+          "segundos": 34.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "multa-congelada",
+              "seccion": "La multa: se calcula una vez y queda congelada"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/fiscalizador/desglose.png",
+            "recursos/capturas/usuario/fiscalizador/cuis-aplicado.png"
+          ]
+        },
+        {
+          "id": "expediente",
+          "tipo": "pantalla",
+          "titulo": "La ficha del expediente",
+          "objetivo": "Reconocer las partes de la ficha del expediente y sus acciones.",
+          "inicio": 10578,
+          "fotogramas": 960,
+          "segundos": 32,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "ficha-expediente",
+              "seccion": "La ficha del expediente"
+            },
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "acciones",
+              "seccion": "Qué acciones quedan"
+            },
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "actos-expediente",
+              "seccion": "Actos del expediente"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/fiscalizador/expediente.png",
+            "recursos/capturas/usuario/fiscalizador/actos.png"
+          ]
+        },
+        {
+          "id": "descargo",
+          "tipo": "pantalla",
+          "titulo": "Registrar un descargo",
+          "objetivo": "Registrar el descargo o recurso del administrado y saber qué pasa con el plazo.",
+          "inicio": 11520,
+          "fotogramas": 900,
+          "segundos": 30,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "proc-descargo-pasos",
+              "seccion": "Registrar un descargo"
+            },
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "proc-descargo",
+              "seccion": "Registrar un descargo o un recurso"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/fiscalizador/descargo.png"
+          ]
+        },
+        {
+          "id": "ris-rgr",
+          "tipo": "comparacion",
+          "titulo": "Dos tipos de resolución",
+          "objetivo": "Distinguir la resolución de sanción de la resolución de recurso.",
+          "inicio": 12402,
+          "fotogramas": 630,
+          "segundos": 21,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "resoluciones-tipos",
+              "seccion": "Los dos tipos de resolución"
+            },
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "pdf-resolucion",
+              "seccion": "Ver e imprimir la resolución"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "efecto",
+          "tipo": "tabla",
+          "titulo": "El efecto sobre la multa",
+          "objetivo": "Saber qué hace cada efecto sobre la multa de una RGR.",
+          "inicio": 13014,
+          "fotogramas": 735,
+          "segundos": 24.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "fallo",
+              "seccion": "El sentido del fallo y su efecto sobre la multa"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "notificar",
+          "tipo": "pantalla",
+          "titulo": "Registrar la diligencia de notificación",
+          "objetivo": "Registrar cada intento de notificar una resolución.",
+          "inicio": 13731,
+          "fotogramas": 795,
+          "segundos": 26.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "proc-notificar-pasos",
+              "seccion": "Registrar la notificación de una resolución"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/fiscalizador/notificar.png"
+          ]
+        },
+        {
+          "id": "exigible",
+          "tipo": "calculo",
+          "titulo": "Desde cuándo es exigible: un ejemplo",
+          "objetivo": "Calcular desde cuándo es exigible una resolución notificada.",
+          "inicio": 14508,
+          "fotogramas": 660,
+          "segundos": 22,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "exigible",
+              "seccion": "Desde cuándo es exigible"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "anular",
+          "tipo": "pantalla",
+          "titulo": "Anular un acta no tiene vuelta atrás",
+          "objetivo": "Reconocer un acta anulada y saber que la anulación no se deshace.",
+          "inicio": 15150,
+          "fotogramas": 750,
+          "segundos": 25,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "proc-anular-pasos",
+              "seccion": "Anular un acta"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/fiscalizador/anulada.png"
+          ]
+        },
+        {
+          "id": "no-hace",
+          "tipo": "aviso",
+          "titulo": "Lo que el sistema no hace",
+          "objetivo": "Saber qué no buscar en la pantalla porque el sistema no lo hace.",
+          "inicio": 15882,
+          "fotogramas": 660,
+          "segundos": 22,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "no-implementado",
+              "seccion": "Lo que el sistema no hace"
+            },
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "despues",
+              "seccion": "Después de la resolución: cobranza y coactiva"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "cierre",
+          "tipo": "cierre",
+          "titulo": "El procedimiento, en pocas palabras",
+          "objetivo": "Recordar lo esencial del procedimiento y dónde seguir.",
+          "inicio": 16524,
+          "fotogramas": 630,
+          "segundos": 21,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/fiscalizador.adoc",
+              "ancla": "procedimiento",
+              "seccion": "El procedimiento sancionador en el sistema"
+            }
+          ],
+          "capturas": []
+        }
+      ]
+    },
+    {
+      "composicion": "S06-Anuncios",
+      "numero": "06",
+      "titulo": "Anuncios y propaganda",
+      "audiencia": "Personal que autoriza anuncios (perfil ANUNCIOS)",
+      "objetivo": "Registrar, renovar, cesar y retirar anuncios, leer su estado a una fecha y saber cuánto devenga cada acto.",
+      "fotogramas": 8982,
+      "duracion": "4:59",
+      "salida": {
+        "video": "salida/videos/srtm-06-anuncios.mp4",
+        "miniatura": "salida/miniaturas/srtm-06-anuncios.jpg"
+      },
+      "storyboard": "storyboards/srtm-06-anuncios.md",
+      "escenas": [
+        {
+          "id": "portada",
+          "tipo": "portada",
+          "titulo": "Anuncios y propaganda",
+          "objetivo": "Presentar el vídeo y a quién va dirigido.",
+          "inicio": 0,
+          "fotogramas": 330,
+          "segundos": 11,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "presentacion-manual",
+              "seccion": "Para qué sirve este manual y a quién se dirige"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "conceptos",
+          "tipo": "tarjetas",
+          "titulo": "Lo que hay que saber antes",
+          "objetivo": "Conocer los datos que definen un anuncio en el sistema.",
+          "inicio": 312,
+          "fotogramas": 900,
+          "segundos": 30,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "anuncio-conceptos",
+              "seccion": "Lo que hay que saber antes"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "estados",
+          "tipo": "tabla",
+          "titulo": "El estado se deduce, a una fecha",
+          "objetivo": "Saber cómo deduce el sistema el estado de un anuncio y qué admite cada estado.",
+          "inicio": 1194,
+          "fotogramas": 780,
+          "segundos": 26,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "estados",
+              "seccion": "Cómo se decide el estado"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "padron",
+          "tipo": "pantalla",
+          "titulo": "El padrón, hoy o a una fecha pasada",
+          "objetivo": "Consultar el padrón de anuncios con su estado, hoy o a una fecha pasada.",
+          "inicio": 1956,
+          "fotogramas": 975,
+          "segundos": 32.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "proc-padron-pasos",
+              "seccion": "Consultar el padrón de anuncios"
+            },
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "padron-a-fecha",
+              "seccion": "El padrón a una fecha pasada"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/anuncios/padron.png",
+            "recursos/capturas/usuario/anuncios/padron-estado-al.png"
+          ]
+        },
+        {
+          "id": "nuevo",
+          "tipo": "pantalla",
+          "titulo": "Registrar un anuncio con su autorización",
+          "objetivo": "Registrar un anuncio con su autorización y ver cuánto devenga.",
+          "inicio": 2913,
+          "fotogramas": 975,
+          "segundos": 32.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "proc-nuevo-pasos",
+              "seccion": "Registrar un anuncio"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/anuncios/nuevo.png"
+          ]
+        },
+        {
+          "id": "reintento",
+          "tipo": "aviso",
+          "titulo": "Si no hubo respuesta, vuelva a pulsar",
+          "objetivo": "Saber qué hacer si se corta la comunicación al registrar un anuncio.",
+          "inicio": 3870,
+          "fotogramas": 675,
+          "segundos": 22.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "reintento",
+              "seccion": "Si no hubo respuesta: el reintento seguro"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "ficha",
+          "tipo": "pantalla",
+          "titulo": "Un anuncio renovado",
+          "objetivo": "Leer la ficha de un anuncio: vigencia, devengado, actos y movimientos.",
+          "inicio": 4527,
+          "fotogramas": 840,
+          "segundos": 28,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "ficha-partes",
+              "seccion": "Partes de la ficha"
+            },
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "movimientos",
+              "seccion": "Movimientos"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/anuncios/ficha.png"
+          ]
+        },
+        {
+          "id": "renovar",
+          "tipo": "tarjetas",
+          "titulo": "Un ejercicio por renovación, una sola vez",
+          "objetivo": "Saber qué ejercicio devenga una renovación y cuándo se rechaza.",
+          "inicio": 5349,
+          "fotogramas": 810,
+          "segundos": 27,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "renovacion-reglas",
+              "seccion": "Qué ejercicio renueva y cuánto devenga"
+            },
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "proc-renovar-pasos",
+              "seccion": "Renovar un anuncio"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "cesar-retirar",
+          "tipo": "pantalla",
+          "titulo": "Primero el cese, después el retiro",
+          "objetivo": "Cesar un anuncio y, después, registrar su retiro.",
+          "inicio": 6141,
+          "fotogramas": 975,
+          "segundos": 32.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "proc-cesar-pasos",
+              "seccion": "Cesar un anuncio"
+            },
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "proc-retirar",
+              "seccion": "Retirar un anuncio"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/anuncios/cesar.png",
+            "recursos/capturas/usuario/anuncios/ficha-cesado.png",
+            "recursos/capturas/usuario/anuncios/retirar.png"
+          ]
+        },
+        {
+          "id": "tasas",
+          "tipo": "pantalla",
+          "titulo": "Las tasas de un año",
+          "objetivo": "Consultar la tasa de cada clase en un año.",
+          "inicio": 7098,
+          "fotogramas": 555,
+          "segundos": 18.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "tasas-consultar",
+              "seccion": "Consultar las tasas de un año"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/anuncios/tasas.png"
+          ]
+        },
+        {
+          "id": "como-aplica",
+          "tipo": "tarjetas",
+          "titulo": "Cómo se aplica la tasa",
+          "objetivo": "Saber cómo se aplica la tasa y qué significa lo devengado.",
+          "inicio": 7635,
+          "fotogramas": 735,
+          "segundos": 24.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "tasa-como-aplica",
+              "seccion": "Cómo se aplica la tasa"
+            },
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "devengado",
+              "seccion": "Lo devengado no es una deuda"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "cierre",
+          "tipo": "cierre",
+          "titulo": "Los anuncios, en pocas palabras",
+          "objetivo": "Recordar lo esencial y dónde seguir.",
+          "inicio": 8352,
+          "fotogramas": 630,
+          "segundos": 21,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/anuncios.adoc",
+              "ancla": "anuncio-sistema",
+              "seccion": "El anuncio en el sistema"
+            }
+          ],
+          "capturas": []
+        }
+      ]
+    },
+    {
+      "composicion": "S07-Consulta",
+      "numero": "07",
+      "titulo": "Consulta y brecha de recaudación",
+      "audiencia": "Orientación al contribuyente, supervisión, auditoría interna y gerencia (perfil CONSULTA)",
+      "objetivo": "Leer todo el sistema sin cambiar nada, reconocer lo que el perfil no puede hacer y entender qué mide la brecha de recaudación y su situación en esta instalación.",
+      "fotogramas": 7509,
+      "duracion": "4:10",
+      "salida": {
+        "video": "salida/videos/srtm-07-consulta.mp4",
+        "miniatura": "salida/miniaturas/srtm-07-consulta.jpg"
+      },
+      "storyboard": "storyboards/srtm-07-consulta.md",
+      "escenas": [
+        {
+          "id": "portada",
+          "tipo": "portada",
+          "titulo": "Consulta y brecha de recaudación",
+          "objetivo": "Presentar el vídeo y a quién va dirigido.",
+          "inicio": 0,
+          "fotogramas": 360,
+          "segundos": 12,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "presentacion-manual",
+              "seccion": "Para qué sirve este manual y a quién se dirige"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "parte-consultar",
+          "tipo": "seccion",
+          "titulo": "Consultar sin cambiar nada",
+          "objetivo": "Anunciar la primera parte: lo que el perfil consulta y lo que no puede hacer.",
+          "inicio": 342,
+          "fotogramas": 195,
+          "segundos": 6.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "padron",
+              "seccion": "Consultar el padrón"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "que-consulta",
+          "tipo": "tarjetas",
+          "titulo": "Lo ve todo, tal como está",
+          "objetivo": "Saber qué puede consultar el perfil y que no registra nada.",
+          "inicio": 519,
+          "fotogramas": 690,
+          "segundos": 23,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "presentacion-manual",
+              "seccion": "Para qué sirve este manual y a quién se dirige"
+            },
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "sin-escritura",
+              "seccion": "Lo que su perfil no puede hacer"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "dos-maneras",
+          "tipo": "comparacion",
+          "titulo": "Dos maneras de mostrarlo",
+          "objetivo": "Reconocer cómo muestra el portal lo que el perfil no puede hacer, y no usar los botones para probar.",
+          "inicio": 1191,
+          "fotogramas": 720,
+          "segundos": 24,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "sin-escritura",
+              "seccion": "Lo que su perfil no puede hacer"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "contribuyente",
+          "tipo": "pantalla",
+          "titulo": "La ficha de un contribuyente",
+          "objetivo": "Abrir la ficha de un contribuyente y recorrer su año, sus documentos y sus pestañas.",
+          "inicio": 1893,
+          "fotogramas": 975,
+          "segundos": 32.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "proc-consultar-contribuyente",
+              "seccion": "Consultar un contribuyente"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/consulta/contribuyente.png"
+          ]
+        },
+        {
+          "id": "arbitrios",
+          "tipo": "pantalla",
+          "titulo": "Las cuotas, de solo consulta",
+          "objetivo": "Leer las cuotas de arbitrios de una ficha y reconocer el acto que el perfil no puede hacer.",
+          "inicio": 2850,
+          "fotogramas": 600,
+          "segundos": 20,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "arbitrios-ficha",
+              "seccion": "Los arbitrios de un contribuyente o de un predio"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/consulta/arbitrios.png"
+          ]
+        },
+        {
+          "id": "documentos",
+          "tipo": "tabla",
+          "titulo": "Todo lo que el sistema emite",
+          "objetivo": "Saber qué documentos puede ver, imprimir y descargar, y dónde están.",
+          "inicio": 3432,
+          "fotogramas": 900,
+          "segundos": 30,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "documentos",
+              "seccion": "Documentos"
+            },
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "proc-descargar-emision",
+              "seccion": "Descargar una emisión masiva"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "parte-brecha",
+          "tipo": "seccion",
+          "titulo": "La brecha de recaudación",
+          "objetivo": "Anunciar la parte dedicada a la brecha de recaudación.",
+          "inicio": 4314,
+          "fotogramas": 210,
+          "segundos": 7,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "brecha",
+              "seccion": "Brecha de recaudación"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "brecha-que-es",
+          "tipo": "mensaje",
+          "titulo": "Compara, predio por predio, lo declarado con lo que valoriza el catastro.",
+          "objetivo": "Entender qué compara la brecha y que no cambia nada del padrón.",
+          "inicio": 4506,
+          "fotogramas": 450,
+          "segundos": 15,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "brecha-que-es",
+              "seccion": "Para qué sirve"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "cruce",
+          "tipo": "diagrama",
+          "titulo": "Cómo se empareja el catastro con el padrón",
+          "objetivo": "Saber cómo se empareja cada predio del catastro con su predio del padrón.",
+          "inicio": 4938,
+          "fotogramas": 630,
+          "segundos": 21,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "brecha-cruce",
+              "seccion": "Cómo se compara el padrón con el catastro"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "categorias",
+          "tipo": "tabla",
+          "titulo": "Dónde queda cada predio",
+          "objetivo": "Leer las categorías en que queda cada predio.",
+          "inicio": 5550,
+          "fotogramas": 720,
+          "segundos": 24,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "brecha-cruce",
+              "seccion": "Cómo se compara el padrón con el catastro"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "en-esta-instalacion",
+          "tipo": "pantalla",
+          "titulo": "Aún no se ha calculado",
+          "objetivo": "Saber que en esta instalación la brecha nunca se calculó y que no es un error.",
+          "inicio": 6252,
+          "fotogramas": 705,
+          "segundos": 23.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "brecha-situacion",
+              "seccion": "La brecha en esta instalación"
+            },
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "brecha-pagina",
+              "seccion": "La página Brecha de recaudación"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/usuario/consulta/brecha.png"
+          ]
+        },
+        {
+          "id": "cierre",
+          "tipo": "cierre",
+          "titulo": "Consultar sin cambiar nada",
+          "objetivo": "Recordar lo esencial del perfil de consulta y de la brecha.",
+          "inicio": 6939,
+          "fotogramas": 570,
+          "segundos": 19,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/usuario/consulta.adoc",
+              "ancla": "presentacion-manual",
+              "seccion": "Para qué sirve este manual y a quién se dirige"
+            }
+          ],
+          "capturas": []
+        }
+      ]
+    },
+    {
+      "composicion": "S08-Administrador",
+      "numero": "08",
+      "titulo": "Administración del sistema",
+      "audiencia": "Administradores del sistema (rol ADMIN) y quien coordina con el área de sistemas",
+      "objetivo": "Dar acceso con roles acotados, mantener los datos maestros, seguir la auditoría y coordinar con el área de sistemas el año tributario, los respaldos y las operaciones críticas.",
+      "fotogramas": 17427,
+      "duracion": "9:41",
+      "salida": {
+        "video": "salida/videos/srtm-08-administrador.mp4",
+        "miniatura": "salida/miniaturas/srtm-08-administrador.jpg"
+      },
+      "storyboard": "storyboards/srtm-08-administrador.md",
+      "escenas": [
+        {
+          "id": "portada",
+          "tipo": "portada",
+          "titulo": "Administrar Rentas municipales",
+          "objetivo": "Presentar el vídeo y a quién va dirigido.",
+          "inicio": 0,
+          "fotogramas": 360,
+          "segundos": 12,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "funciones",
+              "seccion": "Funciones del administrador"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "funcional-tecnica",
+          "tipo": "comparacion",
+          "titulo": "Lo que se hace en la consola y lo que no",
+          "objetivo": "Distinguir lo que se hace en la consola de lo que exige acceso al servidor o a la base de datos.",
+          "inicio": 342,
+          "fotogramas": 660,
+          "segundos": 22,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "funcional-tecnica",
+              "seccion": "Administración funcional y administración técnica"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "cuenta-admin",
+          "tipo": "aviso",
+          "titulo": "La cuenta ADMIN se salta todos los permisos",
+          "objetivo": "Usar la cuenta ADMIN solo para administrar.",
+          "inicio": 984,
+          "fotogramas": 480,
+          "segundos": 16,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "funcional-tecnica",
+              "seccion": "Administración funcional y administración técnica"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "consola",
+          "tipo": "pantalla",
+          "titulo": "Se abre desde el portal, en la misma sesión",
+          "objetivo": "Entrar a la consola y reconocer su menú, y saber qué secciones no conviene tocar.",
+          "inicio": 1446,
+          "fotogramas": 825,
+          "segundos": 27.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "entrar-consola",
+              "seccion": "Entrar a la consola"
+            },
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "secciones-plataforma",
+              "seccion": "Secciones de la plataforma que Rentas municipales no usa"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/administrador/portal-menu-sesion.png",
+            "recursos/capturas/administrador/consola-inicio.png"
+          ]
+        },
+        {
+          "id": "seccion-usuarios",
+          "tipo": "seccion",
+          "titulo": "Usuarios",
+          "objetivo": "Situar la parte del vídeo sobre las cuentas.",
+          "inicio": 2253,
+          "fotogramas": 180,
+          "segundos": 6,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "usuarios",
+              "seccion": "Usuarios"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "crear-cuenta",
+          "tipo": "pantalla",
+          "titulo": "Crear una cuenta",
+          "objetivo": "Crear una cuenta con su rol.",
+          "inicio": 2415,
+          "fotogramas": 840,
+          "segundos": 28,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "proc-crear-usuario",
+              "seccion": "Crear una cuenta"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/administrador/usuarios.png",
+            "recursos/capturas/administrador/usuario-nuevo.png"
+          ]
+        },
+        {
+          "id": "editar-cuenta",
+          "tipo": "pantalla",
+          "titulo": "Cambiar contraseña, estado o roles",
+          "objetivo": "Asignar una contraseña nueva, desactivar una cuenta o cambiar sus roles.",
+          "inicio": 3237,
+          "fotogramas": 765,
+          "segundos": 25.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "proc-cambiar-clave",
+              "seccion": "Cambiar la contraseña, el nombre o los roles de una cuenta"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/administrador/usuario-editar.png"
+          ]
+        },
+        {
+          "id": "desactivar-eliminar",
+          "tipo": "comparacion",
+          "titulo": "Desactivar o eliminar una cuenta",
+          "objetivo": "Elegir entre desactivar y eliminar una cuenta.",
+          "inicio": 3984,
+          "fotogramas": 660,
+          "segundos": 22,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "desactivar-usuario",
+              "seccion": "Desactivar o eliminar una cuenta"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "sesion-abierta",
+          "tipo": "aviso",
+          "titulo": "La baja no corta una sesión abierta",
+          "objetivo": "Saber que una baja no corta la sesión ya abierta y qué hacer si es urgente.",
+          "inicio": 4626,
+          "fotogramas": 705,
+          "segundos": 23.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "desactivar-usuario",
+              "seccion": "Desactivar o eliminar una cuenta"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "seccion-roles",
+          "tipo": "seccion",
+          "titulo": "Roles y permisos",
+          "objetivo": "Situar la parte del vídeo sobre roles y permisos.",
+          "inicio": 5313,
+          "fotogramas": 195,
+          "segundos": 6.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "roles-y-permisos",
+              "seccion": "Roles y permisos"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "modelo-permisos",
+          "tipo": "diagrama",
+          "titulo": "Una cuenta, sus roles y sus permisos",
+          "objetivo": "Entender cómo se combinan cuentas, roles y permisos.",
+          "inicio": 5490,
+          "fotogramas": 870,
+          "segundos": 29,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "modelo-permisos",
+              "seccion": "Cómo funcionan los permisos"
+            },
+            {
+              "archivo": "docs/manuales/referencia/permisos.adoc",
+              "ancla": "ref-permisos-modelo",
+              "seccion": "Cómo se decide un permiso"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "crear-rol",
+          "tipo": "pantalla",
+          "titulo": "Crear un rol",
+          "objetivo": "Crear un rol nuevo.",
+          "inicio": 6342,
+          "fotogramas": 765,
+          "segundos": 25.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "proc-crear-rol",
+              "seccion": "Crear un rol"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/administrador/roles.png"
+          ]
+        },
+        {
+          "id": "matriz",
+          "tipo": "pantalla",
+          "titulo": "La matriz de permisos de un rol",
+          "objetivo": "Asignar los permisos de un rol, por objeto y por campo.",
+          "inicio": 7089,
+          "fotogramas": 825,
+          "segundos": 27.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "proc-permisos-rol",
+              "seccion": "Asignar los permisos de un rol"
+            },
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "permisos-campo",
+              "seccion": "Permisos de campo"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/administrador/permisos-matriz.png",
+            "recursos/capturas/administrador/permisos-campo.png"
+          ]
+        },
+        {
+          "id": "perfiles",
+          "tipo": "tabla",
+          "titulo": "Cinco perfiles de partida",
+          "objetivo": "Conocer los perfiles de partida y la lectura de la brecha que necesita todo rol.",
+          "inicio": 7896,
+          "fotogramas": 960,
+          "segundos": 32,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "perfiles-sugeridos",
+              "seccion": "Perfiles sugeridos"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "seccion-datos",
+          "tipo": "seccion",
+          "titulo": "Datos maestros",
+          "objetivo": "Situar la parte del vídeo sobre los datos maestros.",
+          "inicio": 8838,
+          "fotogramas": 180,
+          "segundos": 6,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "datos-maestros",
+              "seccion": "Datos maestros y parámetros"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "cabecera",
+          "tipo": "pantalla",
+          "titulo": "La cabecera de los documentos",
+          "objetivo": "Corregir la cabecera de los documentos y saber qué no se hace en la consola.",
+          "inicio": 9000,
+          "fotogramas": 840,
+          "segundos": 28,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "proc-municipalidad",
+              "seccion": "Corregir la cabecera de los documentos"
+            },
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "municipalidad",
+              "seccion": "Cabecera de los documentos (municipalidad)"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/administrador/municipalidad.png"
+          ]
+        },
+        {
+          "id": "parametros",
+          "tipo": "pantalla",
+          "titulo": "Las cifras de los cálculos",
+          "objetivo": "Leer una fila de los parámetros tributarios.",
+          "inicio": 9822,
+          "fotogramas": 810,
+          "segundos": 27,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "parametros",
+              "seccion": "Parámetros tributarios"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/administrador/parametros.png"
+          ]
+        },
+        {
+          "id": "parametro-usado",
+          "tipo": "aviso",
+          "titulo": "No edite un parámetro ya usado",
+          "objetivo": "No alterar un parámetro con el que ya se calculó.",
+          "inicio": 10614,
+          "fotogramas": 540,
+          "segundos": 18,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "parametros",
+              "seccion": "Parámetros tributarios"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "correcciones",
+          "tipo": "tabla",
+          "titulo": "Lo que solo se agrega, se corrige con otro acto",
+          "objetivo": "Saber cómo se corrige lo que solo se agrega.",
+          "inicio": 11136,
+          "fotogramas": 690,
+          "segundos": 23,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "correcciones",
+              "seccion": "Registros que no se corrigen"
+            },
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "registros-consola",
+              "seccion": "Ver y editar registros desde la consola"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "auditoria",
+          "tipo": "pantalla",
+          "titulo": "Quién cambió qué, y cuándo",
+          "objetivo": "Consultar quién cambió qué y cuándo.",
+          "inicio": 11808,
+          "fotogramas": 810,
+          "segundos": 27,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "auditoria",
+              "seccion": "Auditoría"
+            }
+          ],
+          "capturas": [
+            "recursos/capturas/administrador/auditoria.png",
+            "recursos/capturas/administrador/auditoria-cambios.png"
+          ]
+        },
+        {
+          "id": "seccion-operacion",
+          "tipo": "seccion",
+          "titulo": "Operación",
+          "objetivo": "Situar la parte del vídeo sobre la operación.",
+          "inicio": 12600,
+          "fotogramas": 180,
+          "segundos": 6,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "procesos-masivos",
+              "seccion": "Procesos masivos"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "procesos-masivos",
+          "tipo": "tarjetas",
+          "titulo": "Lo que conviene saber al vigilarlos",
+          "objetivo": "Vigilar la determinación y la emisión masivas.",
+          "inicio": 12762,
+          "fotogramas": 810,
+          "segundos": 27,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "procesos-masivos",
+              "seccion": "Procesos masivos"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "anio-tributario",
+          "tipo": "tabla",
+          "titulo": "Preparar un año tributario",
+          "objetivo": "Preparar el año tributario con cada área responsable.",
+          "inicio": 13554,
+          "fotogramas": 960,
+          "segundos": 32,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "anio-tributario",
+              "seccion": "Preparar un año tributario"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "respaldos",
+          "tipo": "tarjetas",
+          "titulo": "Un respaldo completo tiene dos partes",
+          "objetivo": "Coordinar con sistemas los respaldos y sus precauciones.",
+          "inicio": 14496,
+          "fotogramas": 780,
+          "segundos": 26,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "respaldo",
+              "seccion": "Respaldos y restauración"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "monitoreo",
+          "tipo": "tabla",
+          "titulo": "Síntomas frecuentes y qué hacer",
+          "objetivo": "Saber qué hacer ante las incidencias más comunes.",
+          "inicio": 15258,
+          "fotogramas": 750,
+          "segundos": 25,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "monitoreo",
+              "seccion": "Monitoreo e incidencias"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "operaciones-criticas",
+          "tipo": "tabla",
+          "titulo": "Antes de una operación crítica",
+          "objetivo": "Comprobar lo necesario antes de cada operación crítica.",
+          "inicio": 15990,
+          "fotogramas": 885,
+          "segundos": 29.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "checklist",
+              "seccion": "Lista de comprobación de operaciones críticas"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "cierre",
+          "tipo": "cierre",
+          "titulo": "Administrar, en pocas palabras",
+          "objetivo": "Recordar lo esencial y saber dónde seguir.",
+          "inicio": 16857,
+          "fotogramas": 570,
+          "segundos": 19,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/administrador/manual-administrador.adoc",
+              "ancla": "funciones",
+              "seccion": "Funciones del administrador"
+            }
+          ],
+          "capturas": []
+        }
+      ]
+    },
+    {
+      "composicion": "S09-Arquitectura",
+      "numero": "09",
+      "titulo": "Arquitectura técnica",
+      "audiencia": "Ingenieros de software, arquitectos y DevOps",
+      "objetivo": "Entender cómo está construido srtm-backend sobre wasichai, cómo recorre una petición, cómo se guarda el modelo y qué garantías aplica el código.",
+      "fotogramas": 13518,
+      "duracion": "7:31",
+      "salida": {
+        "video": "salida/videos/srtm-09-arquitectura.mp4",
+        "miniatura": "salida/miniaturas/srtm-09-arquitectura.jpg"
+      },
+      "storyboard": "storyboards/srtm-09-arquitectura.md",
+      "escenas": [
+        {
+          "id": "portada",
+          "tipo": "portada",
+          "titulo": "Arquitectura técnica",
+          "objetivo": "Presentar el vídeo y su audiencia.",
+          "inicio": 0,
+          "fotogramas": 330,
+          "segundos": 11,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "intro-audiencia",
+              "seccion": "A quién está dirigido"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "contexto",
+          "tipo": "diagrama",
+          "titulo": "Un backend, un portal y una base",
+          "objetivo": "Situar srtm-backend entre sus usuarios, el portal, la base, el almacén y los servicios externos.",
+          "inicio": 312,
+          "fotogramas": 1080,
+          "segundos": 36,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "arq-contexto",
+              "seccion": "Contexto"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "versiones",
+          "tipo": "tabla",
+          "titulo": "La pila y sus versiones",
+          "objetivo": "Conocer las versiones de la pila y dónde se fija cada una.",
+          "inicio": 1374,
+          "fotogramas": 750,
+          "segundos": 25,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "req-versiones",
+              "seccion": "Versiones"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "intro-version",
+              "seccion": "Versión que se describe"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "componentes",
+          "tipo": "diagrama",
+          "titulo": "Los paquetes de srtm y la plataforma",
+          "objetivo": "Ver los paquetes de srtm-backend, en qué dirección se usan y sobre qué starters de wasichai corren.",
+          "inicio": 2106,
+          "fotogramas": 1020,
+          "segundos": 34,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "arq-componentes",
+              "seccion": "Componentes"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "arq-modulos",
+              "seccion": "Módulos de SRTM y responsabilidades"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "wasichai",
+          "tipo": "comparacion",
+          "titulo": "Lo que da la plataforma y lo que agrega SRTM",
+          "objetivo": "Distinguir lo que da la plataforma wasichai de lo que SRTM agrega por su cuenta.",
+          "inicio": 3108,
+          "fotogramas": 780,
+          "segundos": 26,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "arq-wasichai",
+              "seccion": "La plataforma wasichai"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "peticion",
+          "tipo": "secuencia",
+          "titulo": "De la petición a la fila y su auditoría",
+          "objetivo": "Seguir una petición desde el filtro JWT hasta la auditoría y la respuesta de error.",
+          "inicio": 3870,
+          "fotogramas": 2055,
+          "segundos": 68.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "arq-peticion",
+              "seccion": "Recorrido de una petición"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "metadata",
+          "tipo": "proceso",
+          "titulo": "El modelo se carga por REST, no con SQL",
+          "objetivo": "Entender que el modelo es metadata cargada por REST y qué consecuencias tiene.",
+          "inicio": 5907,
+          "fotogramas": 810,
+          "segundos": 27,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "arq-metadata",
+              "seccion": "Modelo de metadata cargado por REST"
+            },
+            {
+              "archivo": "docs/manuales/referencia/modelo-datos.adoc",
+              "ancla": "ref-modelo-almacenamiento",
+              "seccion": "Dónde se guarda"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "padron",
+          "tipo": "diagrama",
+          "titulo": "El padrón: contribuyente, predio y DJ",
+          "objetivo": "Reconocer los objetos del padrón y sus relaciones principales.",
+          "inicio": 6699,
+          "fotogramas": 735,
+          "segundos": 24.5,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/referencia/modelo-datos.adoc",
+              "ancla": "ref-modelo-diagramas",
+              "seccion": "Diagramas entidad-relación"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "decisiones",
+          "tipo": "tabla",
+          "titulo": "Garantías que no dependen del portal",
+          "objetivo": "Conocer las garantías que el código aplica siempre, y dónde están.",
+          "inicio": 7416,
+          "fotogramas": 1050,
+          "segundos": 35,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "arq-decisiones",
+              "seccion": "Decisiones verificables en el código"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "emision",
+          "tipo": "diagrama",
+          "titulo": "Lotes repartidos entre instancias",
+          "objetivo": "Entender cómo se reparte la emisión masiva en lotes entre instancias y cómo termina.",
+          "inicio": 8448,
+          "fotogramas": 1170,
+          "segundos": 39,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "comp-emision-masiva",
+              "seccion": "Emisión masiva"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "async-estados",
+              "seccion": "Estados y fallos"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "trabajadores",
+          "tipo": "calculo",
+          "titulo": "Cuántos trabajadores corre una instancia",
+          "objetivo": "Saber cuántos trabajadores corre cada instancia y qué los limita.",
+          "inicio": 9600,
+          "fotogramas": 810,
+          "segundos": 27,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "comp-trabajadores",
+              "seccion": "Trabajadores"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "desp-servidor",
+              "seccion": "Desplegar en un servidor"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "almacen",
+          "tipo": "comparacion",
+          "titulo": "Disco local o bucket S3",
+          "objetivo": "Elegir entre el almacén local y S3 según cuántas instancias haya.",
+          "inicio": 10392,
+          "fotogramas": 750,
+          "segundos": 25,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "comp-almacen",
+              "seccion": "Almacén de archivos"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "seguridad",
+          "tipo": "tarjetas",
+          "titulo": "Autenticación, permisos y auditoría",
+          "objetivo": "Conocer las piezas de seguridad y lo que hay que cambiar fuera de desarrollo.",
+          "inicio": 11124,
+          "fotogramas": 1020,
+          "segundos": 34,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "seg-autenticacion",
+              "seccion": "Autenticación"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "seg-seed",
+              "seccion": "Semilla de desarrollo"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "seg-autorizacion",
+              "seccion": "Autorización"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "seg-guardia",
+              "seccion": "Guardia de escritura"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "seg-auditoria",
+              "seccion": "Auditoría"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "seg-pendiente",
+              "seccion": "Endurecimiento disponible y apagado"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "pruebas",
+          "tipo": "tabla",
+          "titulo": "Cuatro suites, todas en el CI",
+          "objetivo": "Saber qué pruebas hay, qué cubren y cómo se corren.",
+          "inicio": 12126,
+          "fotogramas": 780,
+          "segundos": 26,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "pruebas",
+              "seccion": "Pruebas"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "pruebas-ci",
+              "seccion": "Integración continua"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "cierre",
+          "tipo": "cierre",
+          "titulo": "La arquitectura, en pocas palabras",
+          "objetivo": "Recordar lo esencial de la arquitectura y saber dónde seguir.",
+          "inicio": 12888,
+          "fotogramas": 630,
+          "segundos": 21,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "arquitectura",
+              "seccion": "Arquitectura"
+            }
+          ],
+          "capturas": []
+        }
+      ]
+    },
+    {
+      "composicion": "S10-Operacion",
+      "numero": "10",
+      "titulo": "Instalación, operación y recuperación",
+      "audiencia": "DevOps y administradores de bases de datos",
+      "objetivo": "Levantar un entorno, cargar el modelo y los datos, publicar y actualizar versiones, vigilar el servicio y respaldar y restaurar sin perder datos.",
+      "fotogramas": 16392,
+      "duracion": "9:06",
+      "salida": {
+        "video": "salida/videos/srtm-10-operacion.mp4",
+        "miniatura": "salida/miniaturas/srtm-10-operacion.jpg"
+      },
+      "storyboard": "storyboards/srtm-10-operacion.md",
+      "escenas": [
+        {
+          "id": "portada",
+          "tipo": "portada",
+          "titulo": "Instalación, operación y recuperación",
+          "objetivo": "Presentar el vídeo y su audiencia.",
+          "inicio": 0,
+          "fotogramas": 330,
+          "segundos": 11,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "intro-audiencia",
+              "seccion": "A quién está dirigido"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "entorno-local",
+          "tipo": "codigo",
+          "titulo": "Base y backend en la máquina local",
+          "objetivo": "Levantar la base y el backend en desarrollo y comprobar que responden.",
+          "inicio": 312,
+          "fotogramas": 840,
+          "segundos": 28,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "proc-variables-desarrollo",
+              "seccion": "Preparar las variables de entorno"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "proc-base-local",
+              "seccion": "Levantar la base de datos local"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "proc-arrancar-backend",
+              "seccion": "Arrancar el backend"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "down-v",
+          "tipo": "aviso",
+          "titulo": "docker compose down -v borra los datos",
+          "objetivo": "No borrar por error el volumen de la base local.",
+          "inicio": 1134,
+          "fotogramas": 480,
+          "segundos": 16,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "proc-base-local",
+              "seccion": "Levantar la base de datos local"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "modelo-inicial",
+          "tipo": "codigo",
+          "titulo": "Sin el modelo, el portal no tiene objetos",
+          "objetivo": "Cargar el modelo y los datos mínimos para que el portal funcione.",
+          "inicio": 1596,
+          "fotogramas": 900,
+          "segundos": 30,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "proc-modelo-inicial",
+              "seccion": "Cargar el modelo y los datos mínimos"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "orden-carga",
+          "tipo": "proceso",
+          "titulo": "Siete pasos, en este orden",
+          "objetivo": "Cargar una base nueva en el orden en que cada paso depende del anterior.",
+          "inicio": 2478,
+          "fotogramas": 660,
+          "segundos": 22,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "carga-orden",
+              "seccion": "Orden de carga"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "carga-importadores",
+              "seccion": "Importadores"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "apply-modos",
+          "tipo": "tabla",
+          "titulo": "Cinco modos, uno destructivo",
+          "objetivo": "Elegir el modo de apply.py según lo que se quiere ver o cambiar.",
+          "inicio": 3120,
+          "fotogramas": 780,
+          "segundos": 26,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "carga-apply",
+              "seccion": "apply.py: el modelo"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "base-compartida",
+          "tipo": "proceso",
+          "titulo": "Un cambio del modelo, sin sorpresas",
+          "objetivo": "Llevar un cambio del modelo a una base compartida sin sorpresas.",
+          "inicio": 3882,
+          "fotogramas": 660,
+          "segundos": 22,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "proc-apply-compartida",
+              "seccion": "Aplicar un cambio del modelo en una base compartida"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "datos-personales",
+          "tipo": "aviso",
+          "titulo": "DNI, nombres y domicilios nunca van al repositorio",
+          "objetivo": "Proteger los archivos que traen datos personales.",
+          "inicio": 4524,
+          "fotogramas": 630,
+          "segundos": 21,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "carga-datos-personales",
+              "seccion": "Datos personales"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "seg-datos-personales",
+              "seccion": "Datos personales"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "releases",
+          "tipo": "proceso",
+          "titulo": "De un commit al jar publicado",
+          "objetivo": "Entender cómo se publica una versión y qué se publica.",
+          "inicio": 5136,
+          "fotogramas": 750,
+          "segundos": 25,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "desp-versiones",
+              "seccion": "Versiones y releases"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "desp-artefactos",
+              "seccion": "Qué se publica"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "actualizar",
+          "tipo": "proceso",
+          "titulo": "Respaldo primero, todas las instancias juntas",
+          "objetivo": "Pasar a una versión nueva sin perder datos ni dejar trabajos a medias.",
+          "inicio": 5868,
+          "fotogramas": 750,
+          "segundos": 25,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "proc-actualizar",
+              "seccion": "Actualizar el backend"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "salud",
+          "tipo": "tabla",
+          "titulo": "Rutas de salud, sin token",
+          "objetivo": "Saber qué rutas de salud hay y qué comprueban.",
+          "inicio": 6600,
+          "fotogramas": 660,
+          "segundos": 22,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "op-salud",
+              "seccion": "Salud"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "logs",
+          "tipo": "tabla",
+          "titulo": "Las líneas que conviene vigilar",
+          "objetivo": "Reconocer en el log las líneas que piden una acción.",
+          "inicio": 7242,
+          "fotogramas": 1080,
+          "segundos": 36,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "op-logs",
+              "seccion": "Registros (logs)"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "que-respaldar",
+          "tipo": "tabla",
+          "titulo": "Cuatro cosas que respaldar",
+          "objetivo": "Saber qué partes forman un respaldo completo.",
+          "inicio": 8304,
+          "fotogramas": 900,
+          "segundos": 30,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "resp-que",
+              "seccion": "Qué hay que respaldar"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "respaldar",
+          "tipo": "codigo",
+          "titulo": "Un volcado completo, y su prueba",
+          "objetivo": "Tomar un volcado completo y comprobar que se puede leer.",
+          "inicio": 9186,
+          "fotogramas": 750,
+          "segundos": 25,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "proc-respaldo-base",
+              "seccion": "Respaldar la base"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "proc-respaldo-almacen",
+              "seccion": "Respaldar el almacén de emisiones"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "restaurar",
+          "tipo": "codigo",
+          "titulo": "Siempre en una base nueva y vacía",
+          "objetivo": "Restaurar en una base nueva sin tocar la original.",
+          "inicio": 9918,
+          "fotogramas": 750,
+          "segundos": 25,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "proc-restaurar",
+              "seccion": "Restaurar la base en una base nueva"
+            },
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "resp-restaurar",
+              "seccion": "Restaurar"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "verificar",
+          "tipo": "proceso",
+          "titulo": "Siete comprobaciones antes de usarla",
+          "objetivo": "Comprobar que la base restaurada está completa antes de usarla.",
+          "inicio": 10650,
+          "fotogramas": 750,
+          "segundos": 25,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "proc-verificar-restauracion",
+              "seccion": "Verificar una restauración"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "desastres",
+          "tipo": "tabla",
+          "titulo": "Qué se pierde y cómo se recupera",
+          "objetivo": "Saber qué se pierde y cómo se recupera en cada situación.",
+          "inicio": 11382,
+          "fotogramas": 1020,
+          "segundos": 34,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "resp-desastres",
+              "seccion": "Recuperación ante desastres"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "demo",
+          "tipo": "diagrama",
+          "titulo": "La base de demostración, de punta a punta",
+          "objetivo": "Usar la base de demostración para ensayar el respaldo y la restauración sin datos reales.",
+          "inicio": 12384,
+          "fotogramas": 660,
+          "segundos": 22,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "resp-demo",
+              "seccion": "Ensayo con la base de demostración"
+            },
+            {
+              "archivo": "docs/manuales/demo/README.adoc",
+              "ancla": "_restaurar_y_verificar",
+              "seccion": "Restaurar y verificar"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "checklist",
+          "tipo": "tabla",
+          "titulo": "Lista de verificación",
+          "objetivo": "Recorrer las comprobaciones posteriores a un despliegue.",
+          "inicio": 13026,
+          "fotogramas": 1110,
+          "segundos": 37,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "op-checklist",
+              "seccion": "Lista de verificación posterior al despliegue"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "diagnostico",
+          "tipo": "tabla",
+          "titulo": "Síntomas frecuentes",
+          "objetivo": "Resolver los problemas más frecuentes por su síntoma.",
+          "inicio": 14118,
+          "fotogramas": 930,
+          "segundos": 31,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "diagnostico",
+              "seccion": "Diagnóstico de problemas frecuentes"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "pendientes",
+          "tipo": "tabla",
+          "titulo": "Lo que todavía falta",
+          "objetivo": "Conocer las limitaciones conocidas antes de operar en producción.",
+          "inicio": 15030,
+          "fotogramas": 780,
+          "segundos": 26,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "pendientes",
+              "seccion": "Pendientes y limitaciones conocidas"
+            }
+          ],
+          "capturas": []
+        },
+        {
+          "id": "cierre",
+          "tipo": "cierre",
+          "titulo": "La operación, en pocas palabras",
+          "objetivo": "Recordar lo esencial de la operación y saber dónde seguir.",
+          "inicio": 15792,
+          "fotogramas": 600,
+          "segundos": 20,
+          "fuentes": [
+            {
+              "archivo": "docs/manuales/sistema/manual-sistema.adoc",
+              "ancla": "operacion",
+              "seccion": "Operación"
+            }
+          ],
+          "capturas": []
+        }
+      ]
+    }
+  ]
+}
