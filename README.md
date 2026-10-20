@@ -17,7 +17,7 @@ prediales, catastro fiscal) que se carga por REST, e importadores del padrón de
 
 - JDK 25 y Docker (para PostGIS y para los tests de integración con Testcontainers).
 - Python 3.11+ para `model/`.
-- Las librerías de wasichai (`wasichai:wasichai-bom:1.2.0` y los starters). Se resuelven desde:
+- Las librerías de wasichai (`wasichai:wasichai-bom:1.3.0` y los starters). Se resuelven desde:
   1. **GitHub Packages** (`https://maven.pkg.github.com/wasichai/wasichai`). Pide un token aunque sea para leer
      (`read:packages` basta). En `~/.gradle/gradle.properties`:
      ```properties
@@ -2200,7 +2200,7 @@ ninguna municipalidad en el frontend (wasichai/srtm-ui#112):
 
 ### Archivos (wasichai-files)
 
-srtm instala `wasichai-spring-boot-starter-files` (del BOM de wasichai, 1.2.0) para los campos `FILE` e `IMAGE`; hoy,
+srtm instala `wasichai-spring-boot-starter-files` (del BOM de wasichai, 1.3.0) para los campos `FILE` e `IMAGE`; hoy,
 solo `municipalidad.escudo`. Detalle del módulo: `docs/modules/files.md` de wasichai.
 
 - **Al arrancar** crea su tabla `stored_files` (y las columnas `custom_fields.file_max_bytes` y `file_content_types`,
@@ -2434,6 +2434,10 @@ La versión con lotes cambia el modelo, los estados y dónde viven los archivos.
 `custom_fields` y no tiene vuelta atrás: igual que arriba, primero `pg_dump`
 ([wasichai 1.2: qué cambia para srtm](#wasichai-12-qué-cambia-para-srtm)).
 
+**La versión con wasichai 1.3** tampoco cambia el modelo. wasichai-files aplica su V2, que agrega una columna nullable
+a `stored_files` y no tiene vuelta atrás: primero `pg_dump`
+([wasichai 1.3: qué cambia para srtm](#wasichai-13-qué-cambia-para-srtm)).
+
 **La versión con la HLA** (arbitrios) agrega `emision_masiva.documentos`, que los trabajadores leen al tomar cada
 lote. Igual que arriba: `python3 apply.py` antes de arrancar el backend nuevo. Sin ese campo el backend no ve las
 tablas de la emisión de la organización y su POST falla. Los jobs anteriores, sin `documentos`, son de HR y PU.
@@ -2595,6 +2599,18 @@ servicios de core cuyos constructores cambiaron, no implementa `RecordStore` y n
   Las máquinas de lotes escriben `updated_at = now()` por SQL. Dos escrituras suyas en una transacción comparten ETag,
   lo que no importa, porque nadie usa `If-Match` sobre lotes ni trabajos.
 - **`apply.py`** reserva además `count` y `after`, los nombres del paginado por cursor de core.
+
+## wasichai 1.3: qué cambia para srtm
+
+srtm pasa de wasichai 1.2.0 a 1.3.0. El código de srtm no cambia: `FileStore`, que implementa `ArchivosS3`, sigue
+igual, y `Cabecera` abre el escudo con `FileService.open` como el usuario, igual que antes.
+
+- **Migración al arrancar, sin vuelta atrás.** wasichai-files aplica su V2: `stored_files.platform_run`, nullable, sin
+  mover datos, y un CHECK que ninguna fila existente viola. Volver a 1.2.0 pide restaurar la base, así que antes un
+  `pg_dump`.
+- **Lo nuevo que srtm no usa:** `FileService.stage` y `open` dentro de `RecordService.asPlatform` (ADR-068): la
+  plataforma sube y adjunta archivos sin usuario.
+- **Corrección:** la foto de una tabla relacionada en un documento (wasichai-documents) acepta celdas vacías.
 
 ## wasichai 1.2: qué cambia para srtm
 

@@ -71,7 +71,7 @@
   > Kotlin | 2.4.21 | build.gradle.kts
   > Spring Boot | 4.1.1 | plugin org.springframework.boot
   > Gradle | 9.8.1 | gradle-wrapper.properties: use ./gradlew
-  > wasichai | 1.2.0 | val wasichaiVersion en build.gradle.kts
+  > wasichai | 1.3.0 | val wasichaiVersion en build.gradle.kts
   > PostgreSQL + PostGIS | 18 + 3.6 | imagen postgis/postgis:18-3.6
   > Python | 3.11 o superior | model/: solo biblioteca estándar
   > Node | 26 o superior | srtm-ui y herramientas del repositorio
