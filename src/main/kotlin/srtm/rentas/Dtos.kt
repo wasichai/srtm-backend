@@ -455,14 +455,19 @@ data class ContribuyenteFicha(
     val totales: Totales
 )
 
-// valuacion_origen: the predio's block of ValuacionOrigen ({"predio": {...}}), for a predio read without a declaración
+// valuacion_origen: the predio's block of ValuacionOrigen, for a predio read without a declaración
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class PredioFicha(
     val predio: Predio,
     val anio: Int,
     val titulares: Int,
     val totales: Totales,
-    val valuacionOrigen: Map<String, Map<String, Any>> = emptyMap()
+    val valuacionOrigen: ValuacionOrigenPredio
+)
+
+// {"predio": {...}}: PADRON_EXTERNO_PREDIO with a value, as in ValuacionOrigen
+data class ValuacionOrigenPredio(
+    val predio: Map<String, Any>
 )
 
 // GET /declaraciones/{id}/valuacion-origen: what an external padrón (Ica) brought to the declaración, its predio and its

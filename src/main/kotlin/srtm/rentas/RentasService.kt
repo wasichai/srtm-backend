@@ -61,12 +61,14 @@ class RentasService(
     ): PredioFicha {
         val year = anio ?: anioActual()
         val declaraciones = declaracionesPor("predio", id, year).filter(::vigente)
+        // one read: the dto and what the external padrón brought, which the dto does not carry
+        val registro = registros.get(PREDIO, Map::class.java, id)
         return PredioFicha(
-            predio = predio(id),
+            predio = Records.read(Predio::class.java, id.toString(), registro.entries.associate { it.key.toString() to it.value }),
             anio = year,
             titulares = declaraciones.mapNotNull { it.contribuyente }.distinct().size,
             totales = totalesDePredio(declaraciones),
-            valuacionOrigen = mapOf("predio" to conValor(registros.get(PREDIO, Map::class.java, id), PADRON_EXTERNO_PREDIO))
+            valuacionOrigen = ValuacionOrigenPredio(conValor(registro, PADRON_EXTERNO_PREDIO))
         )
     }
 

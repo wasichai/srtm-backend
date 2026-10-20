@@ -1631,8 +1631,9 @@ GET /api/srtm/declaraciones/{id}/valuacion-origen
   `PADRON_EXTERNO_NIVEL` y `PADRON_EXTERNO_PREDIO` (`Condominio.kt`).
 - Devuelve solo los campos con valor (`conValor`: ni null ni texto en blanco). Un bloque sin valores es `{}` y un nivel
   sin valores no aparece en `niveles`: una DJ de Perené responde `{"predio": {}, "declaracion": {}, "niveles": {}}`.
-- Los mismos controles que `GET /api/srtm/declaraciones/{id}`: los de `RecordService` sobre cada registro leído (404
-  si la DJ no existe, 403 si el rol no puede leerla; un campo que el rol no puede leer no aparece).
+- Los controles son los de `RecordService` sobre cada registro que lee, la DJ, su predio y sus niveles, como en
+  `GET /api/srtm/declaraciones/{id}` (que lee la DJ, su predio y su contribuyente): 404 si la DJ no existe y 403 si el
+  rol no puede leerla. Core no devuelve los campos que el rol no puede leer, así que tampoco aparecen aquí.
 - No cambia el impuesto, que sigue saliendo de `valor_autoavaluo`.
 - La ficha del predio (`GET /api/srtm/predios/{id}`) trae el mismo bloque en `valuacion_origen.predio`, para el predio
   sin DJ.
