@@ -522,7 +522,9 @@
         {"name": "valor_construccion", "label": "Valor de la construcción", "type": "DECIMAL",
           "description": "Heredado de un padrón externo (Ica): la suma de sus niveles, como la trae el padrón."},
         {"name": "valor_otras_instalaciones", "label": "Valor de otras instalaciones", "type": "DECIMAL",
-          "description": "Heredado de un padrón externo (Ica): obras complementarias e instalaciones fijas, como las trae el padrón."}
+          "description": "Heredado de un padrón externo (Ica): obras complementarias e instalaciones fijas, como las trae el padrón."},
+        {"name": "origen_modificado", "label": "Origen modificado", "type": "BOOLEAN",
+          "description": "La DJ cambió después de importar su valuación de origen: el portal la marca al guardar la DJ o sus niveles, obras o frentes. Vacío cuenta como false."}
       ]
     },
     {

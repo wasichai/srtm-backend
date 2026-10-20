@@ -1764,7 +1764,8 @@ GET /api/srtm/declaraciones/{id}/valuacion-origen
 {
   "predio":      { "codigo_via": "V0123", "codigo_unidad_urbana": "U045", "codigo_hu_armonizacion": "HU-01", "codigo_via_armonizacion": "VA-02" },
   "declaracion": { "arancel": 35.50, "valor_terreno": 7100, "valor_construccion": 48250.75, "valor_otras_instalaciones": 1200 },
-  "niveles":     { "<id del nivel>": { "clasificacion": "…", "valor_unitario": 402.08, "incremento": 0, "porcentaje_depreciacion": 12, "valor_total": 48250.75 } }
+  "niveles":     { "<id del nivel>": { "clasificacion": "…", "valor_unitario": 402.08, "incremento": 0, "porcentaje_depreciacion": 12, "valor_total": 48250.75 } },
+  "modificada":  false
 }
 ```
 
@@ -1776,6 +1777,11 @@ GET /api/srtm/declaraciones/{id}/valuacion-origen
   `GET /api/srtm/declaraciones/{id}` (que lee la DJ, su predio y su contribuyente): 404 si la DJ no existe y 403 si el
   rol no puede leerla. Core no devuelve los campos que el rol no puede leer, así que tampoco aparecen aquí.
 - No cambia el impuesto, que sigue saliendo de `valor_autoavaluo`.
+- `modificada` (#148) dice si la DJ cambió después de importar su valuación: el portal pone
+  `declaracion_predial.origen_modificado` en `true` cuando guarda la DJ o agrega, cambia o quita uno de sus niveles,
+  obras o frentes, si la DJ o alguno de sus niveles tiene valuación de origen. No toca el motivo. El campo nace vacío
+  (el importador no lo escribe), que cuenta como `false`, y los DTO no lo traen. La copia de un condómino lo hereda de
+  su origen, junto con la valuación.
 - La ficha del predio (`GET /api/srtm/predios/{id}`) trae el mismo bloque en `valuacion_origen.predio`, para el predio
   sin DJ.
 
