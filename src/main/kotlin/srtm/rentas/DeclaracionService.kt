@@ -135,8 +135,7 @@ class DeclaracionService(
         a: UUID,
         campos: List<String>
     ) {
-        val origen = registros.get(objeto, Map::class.java, de)
-        val valores = campos.associateWith { origen[it] }.filterValues { it != null }
+        val valores = conValor(registros.get(objeto, Map::class.java, de), campos)
         if (valores.isNotEmpty()) registros.replace(objeto, Map::class.java, a, valores)
     }
 
