@@ -91,7 +91,7 @@ class BrechaService(
         val catastro = catastroDe(usuario)
         val creada =
             transaccion.executeAndAwait {
-                candados.bloquear(Candado.BRECHA, "${usuario.organizationId}|$anio")
+                candados.bloquear(Candado.BRECHA, Candados.clave(usuario.organizationId, "$anio"))
                 val ahora = ahora()
                 for (activa in activas(anio)) {
                     if (viva(activa, ahora)) throw ConflictException("Ya hay una corrida de la brecha de $anio en curso: espere a que termine")

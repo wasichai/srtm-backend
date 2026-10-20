@@ -56,7 +56,9 @@ data class Impuestos(
     val porContribuyente: Map<String, ImpuestoDelContribuyente>,
     val porPredio: Map<String, ImpuestoDelPredio>,
     // condóminos without a % whose share conPorcentaje filled, on the predios the catastro valued
-    val sinPorcentaje: Int = 0
+    val sinPorcentaje: Int = 0,
+    // declarations whose deducción of 5 % recalcular recomputed over the catastro's value, on the predios it valued
+    val deduccionProporcional: Int = 0
 )
 
 // the arbitrios' difference of a predio, or why there is none
@@ -72,13 +74,18 @@ sealed interface DeltaArbitrios {
 
 // the brecha de recaudación: the padrón (the DJ) against the catastro's valuations of the year. pure: the service reads
 // and writes. srtm's own rules are reused, not copied: the predio's declared autoavalúo is totalesDePredio's, each
-// titular's valor afecto is condominio's (its % and deducción kept), the impuesto is ImpuestoPredial.liquidar's and the
+// titular's valor afecto is condominio's (its % and deducción kept, the Amazonía's 5 % recomputed), the impuesto is ImpuestoPredial.liquidar's and the
 // arbitrios Arbitrios.determinar's
 object Brecha {
     // D10: COINCIDE while |Δ autoavalúo| <= 5 % of the declared one
     val TOLERANCIA = BigDecimal("0.05")
 
     private val CIEN = BigDecimal(100)
+
+    // the Amazonía's deducción (Ley 27037): 5 % of the valor condominio. it is recognized in the DJ (a deducción that
+    // is 5 % of its declared valor condominio, to the centimo), not by a parameter of the year
+    val DEDUCCION_PROPORCIONAL = BigDecimal("0.05")
+    private val TOLERANCIA_DEDUCCION = BigDecimal("0.01")
 
     // what the arbitrios' hypothetical cuotas carry (never written)
     private const val OBSERVACION = "Brecha de recaudación"
@@ -199,12 +206,32 @@ object Brecha {
     // a predio's declarations recomputed by the same rule on both sides: condominio (each titular's %, filled by
     // conPorcentaje, and its deducción) over the declared autoavalúo, and over the catastro's split among the secuencias
     // (D12). the stored valor_afecto is never compared with a recomputed one: only the autoavalúo moves the difference.
-    // in the order they came
+    // a deducción that is 5 % of the recomputed declared valor condominio (± 0.01) is the Amazonía's: on the catastro's
+    // side it is 5 % of the catastro's valor condominio; any other (a pensionista's) stays fixed. in the order they came
     data class Recalculo(
         val declarado: List<Declaracion>,
         val catastro: List<Declaracion>,
-        val sinPorcentaje: Int
+        val sinPorcentaje: Int,
+        val deduccionProporcional: Int = 0
     )
+
+    // 5 % of a valor condominio, to the centimo (half up)
+    private fun cincoPorCiento(valorCondominio: BigDecimal) = valorCondominio.multiply(DEDUCCION_PROPORCIONAL).setScale(2, RoundingMode.HALF_UP)
+
+    // whether a declaración as recomputed on the declared side deducts the Amazonía's 5 %
+    private fun esProporcional(d: Declaracion): Boolean {
+        val deduccion = d.deduccion?.takeIf { it.signum() > 0 } ?: return false
+        val valorCondominio = d.valorCondominio ?: return false
+        return (deduccion - cincoPorCiento(valorCondominio)).abs() <= TOLERANCIA_DEDUCCION
+    }
+
+    // the catastro's side of a declaración that deducts the 5 %: its deducción over its new valor condominio, and its
+    // valor afecto as condominio computes it
+    private fun conDeduccionProporcional(d: Declaracion): Declaracion {
+        val valorCondominio = d.valorCondominio ?: return d
+        val deduccion = cincoPorCiento(valorCondominio)
+        return d.copy(deduccion = deduccion, valorAfecto = valorCondominio.subtract(deduccion).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP))
+    }
 
     fun recalcular(
         declaraciones: List<Declaracion>,
@@ -214,13 +241,25 @@ object Brecha {
         val declarado = IdentityHashMap<Declaracion, Declaracion>()
         val catastro = IdentityHashMap<Declaracion, Declaracion>()
         var sinPorcentaje = 0
+        var deduccionProporcional = 0
         secuencias.zip(repartir(autoavaluo, pesos(secuencias))).forEach { (secuencia, parte) ->
             val (completa, llenados) = conPorcentaje(secuencia)
             sinPorcentaje += llenados
-            secuencia.zip(condominio(completa)).forEach { (antes, despues) -> declarado[antes] = despues }
-            secuencia.zip(condominio(completa.map { it.copy(valorAutoavaluo = parte) })).forEach { (antes, despues) -> catastro[antes] = despues }
+            val declaradas = condominio(completa)
+            val conParte = condominio(completa.map { it.copy(valorAutoavaluo = parte) })
+            secuencia.indices.forEach { i ->
+                declarado[secuencia[i]] = declaradas[i]
+                val proporcional = esProporcional(declaradas[i])
+                if (proporcional) deduccionProporcional++
+                catastro[secuencia[i]] = if (proporcional) conDeduccionProporcional(conParte[i]) else conParte[i]
+            }
         }
-        return Recalculo(declaraciones.map { declarado.getValue(it) }, declaraciones.map { catastro.getValue(it) }, sinPorcentaje)
+        return Recalculo(
+            declaraciones.map { declarado.getValue(it) },
+            declaraciones.map { catastro.getValue(it) },
+            sinPorcentaje,
+            deduccionProporcional
+        )
     }
 
     // the catastro side of recalcular
@@ -246,10 +285,12 @@ object Brecha {
     ): Impuestos {
         val mueve = IdentityHashMap<Declaracion, BigDecimal>()
         var sinPorcentaje = 0
+        var deduccionProporcional = 0
         vigentes.groupBy { it.predio }.forEach { (predio, suyas) ->
             val valor = predio?.let(catastro::get) ?: return@forEach
             val r = recalcular(suyas, valor)
             sinPorcentaje += r.sinPorcentaje
+            deduccionProporcional += r.deduccionProporcional
             suyas.indices.forEach { i -> mueve[suyas[i]] = afecto(r.catastro[i]) - afecto(r.declarado[i]) }
         }
         val porContribuyente = linkedMapOf<String, ImpuestoDelContribuyente>()
@@ -291,7 +332,8 @@ object Brecha {
         return Impuestos(
             porContribuyente,
             declarados.keys.associateWith { ImpuestoDelPredio(declarados.getValue(it), deltas.getValue(it)) },
-            sinPorcentaje
+            sinPorcentaje,
+            deduccionProporcional
         )
     }
 
@@ -415,6 +457,9 @@ object Brecha {
         if (arbitrios != null && Arbitrios.conTope(arbitrios)) avisos += "Δ arbitrios sin tope: el año tiene TOPE_ARBITRIO"
         if (impuestos.sinPorcentaje > 0) {
             avisos += "${impuestos.sinPorcentaje} declaraciones de condóminos sin % de condominio: se repartió en partes iguales lo que dejan los demás"
+        }
+        if (impuestos.deduccionProporcional > 0) {
+            avisos += "${impuestos.deduccionProporcional} declaraciones con la deducción del 5 % (Amazonía, Ley 27037): se recalculó sobre el valor catastral"
         }
         val inafectaciones = padron.inafectaciones.filter { it.predio != null }.groupBy { it.predio!! }
         val sinDelta = linkedMapOf<String, Int>()

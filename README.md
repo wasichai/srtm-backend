@@ -148,13 +148,20 @@ obras complementarias desde objetos catálogo:
 
 ```bash
 cd model
-python3 import_catalogos.py                                                           # ubigeo, categorías, partidas de obras, usos y municipalidad
-python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run  # lee Core y dice qué haría
-python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"            # ubigeo + vías + unidades urbanas
+python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json --obras-csv data/obras_complementarias.csv   # ubigeo, categorías, partidas de obras, usos y municipalidad
+python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json --obras-csv data/obras_complementarias.csv \
+  --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run                                         # lee Core y dice qué haría
+python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json --obras-csv data/obras_complementarias.csv \
+  --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"                                                   # ubigeo + vías + unidades urbanas
 ```
 
+`--distrito` (el ubigeo del distrito de las vías y unidades urbanas del padrón), `--municipalidad-json` (la cabecera
+provisional de la organización) y `--obras-csv` (las partidas de obras complementarias de su región) son
+**obligatorios**: ningún script elige una organización por defecto. Los de Perené son `120302`,
+`model/data/perene/municipalidad.json` y `model/data/obras_complementarias.csv` (el anexo de selva).
+
 - **`municipalidad`:** la cabecera del PU y la HR ([Cabecera de los documentos](#cabecera-de-los-documentos)). Se
-  crea desde `model/data/municipalidad.json` solo si la organización no tiene ninguna; nunca pisa la editada en el
+  crea desde el archivo de `--municipalidad-json` (`model/data/perene/municipalidad.json` para Perené) solo si la organización no tiene ninguna; nunca pisa la editada en el
   admin. Los datos que trae son **provisionales**. El escudo no viene en el archivo: se sube aparte.
 - **`ubigeo`:** los 1 893 distritos del INEI, de `model/data/ubigeo.csv`. El archivo es un recorte de
   [ubigeo-peru-aumentado](https://github.com/jmcastagnetto/ubigeo-peru-aumentado): código INEI, departamento,
@@ -238,7 +245,7 @@ python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"      
     2. Poner en los enums `sub_clase_uso` y `uso` de `model.json` los nombres del catálogo (`python3 -m unittest` dice
        cuáles faltan o sobran).
     3. `python3 apply.py` agrega las opciones nuevas.
-    4. `python3 import_catalogos.py --dry-run`: revisar lo que va a cambiar. Después, sin `--dry-run`.
+    4. `python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json --obras-csv data/obras_complementarias.csv --dry-run`: revisar lo que va a cambiar. Después, sin `--dry-run`.
     5. Si cambió el nombre de una clase que las DJ usan, agregarla a `CLASES_RENOMBRADAS` de `migrar_usos_padron.py` y
        migrar (ver [Migrar los usos del padrón](#migrar-los-usos-del-padrón)).
     6. `python3 apply.py` otra vez quita las opciones que ya nadie usa.
@@ -843,13 +850,18 @@ secuencia de uso, una vez).
   declarado de cada una; si todas declaran 0, según su área construida; si tampoco, en partes iguales (D12), al
   céntimo y la última con el residuo;
 - las DJ de ese predio se recalculan **dos veces con la misma regla**, `condominio` (el % de cada condómino y su
-  `deduccion`; D8: ninguna deducción nueva): con el autoavalúo declarado y con la parte del catastro. Lo que el
+  `deduccion`): con el autoavalúo declarado y con la parte del catastro. Lo que el
   catastro mueve es la diferencia entre los dos valores afectos recalculados, nunca entre el afecto guardado y uno
   recalculado: en el padrón importado el afecto es el del Excel y el % está redondeado, y compararlos daría una brecha
   aunque los autoavalúos sean iguales. Un predio que el catastro no valorizó es el mismo en los dos lados;
 - **% de condominio vacío** (el importador lo deja vacío cuando el Excel no trae condominio o el autoavalúo es 0): un
   titular solo de la secuencia tiene el 100 %; entre varios, los que no tienen % se reparten en partes iguales lo que
   dejan los demás (nunca menos de 0). La corrida cuenta en `mensaje` cuántas DJ se completaron así;
+- **deducción del 5 %** (Amazonía, Ley 27037; D8): se reconoce en la DJ, no por un parámetro. Si la `deduccion` de
+  una DJ es mayor que 0 y es el 5 % de su valor de condominio declarado (recalculado, al céntimo, ±S/ 0,01), en el
+  lado catastral se recalcula: el 5 % del valor de condominio catastral (al céntimo, redondeo comercial), y el afecto
+  es ese valor menos esa deducción. Las demás deducciones (pensionista, etc.) quedan fijas en los dos lados. La
+  corrida cuenta en `mensaje` cuántas DJ se recalcularon así;
 - `Δ impuesto = liquidar(afecto guardado + lo que mueve el catastro) − liquidar(afecto guardado)`: el lado declarado
   es exactamente la liquidación de `/liquidacion` (el `impuestoAnual`, con sus tramos y el mínimo);
 - ese Δ se reparte entre sus predios en proporción a lo que movió cada uno: con su signo cuando todos se mueven en el
@@ -917,11 +929,12 @@ El JSON va en camelCase, como `/liquidacion`. `lote_geom` de `brecha_predio` es 
 guarda el lote del predio del padrón o, para un omiso, el del catastro; así `/lotes` lo lee de las filas y la capa gis
 (`/api/gis/objects/brecha_predio/features`) también puede servirlo.
 
-**Decisiones** (confirmadas por la municipalidad el 2026-10-19, salvo D8):
+**Decisiones** (confirmadas por la municipalidad el 2026-10-19; D8 decidida el 2026-10-20):
 - D5: una celda «.....» del cuadro de valores no es cero: el predio queda SIN_VALOR con su motivo.
 - D7: llave de cruce código municipal → CPU → sector, manzana y lote.
-- D8: la deducción Amazonía no se aplica (Perené no la tiene hoy); solo la `deduccion` que ya trae cada DJ. Abierta
-  para cuando se cargue una municipalidad de la Amazonía.
+- D8: la deducción del 5 % (Amazonía, Ley 27037) se reconoce en la DJ (su `deduccion` es el 5 % de su valor de
+  condominio declarado, ±S/ 0,01) y se recalcula sobre el valor de condominio catastral; las demás deducciones quedan
+  fijas.
 - D10: COINCIDE con |Δ autoavalúo| ≤ 5 %.
 - D11: solo 2026 (el año lo decide catastro; srtm acepta cualquiera con sus parámetros).
 - D12: reparto entre secuencias por autoavalúo declarado, si no por área construida, si no en partes iguales.
@@ -1738,6 +1751,30 @@ DTO del portal no conocen estos campos: los escribe el importador por la API de 
 portal no los borra porque se fusiona con lo guardado (`Registros.replace`). Un condómino agregado desde una
 declaración copia también su valuación y la de sus niveles (`PADRON_EXTERNO_DECLARACION` y `PADRON_EXTERNO_NIVEL`).
 
+### Valuación del padrón de origen
+
+Como los DTO no los traen, el portal los lee aparte, en solo lectura (#132):
+
+```
+GET /api/srtm/declaraciones/{id}/valuacion-origen
+{
+  "predio":      { "codigo_via": "V0123", "codigo_unidad_urbana": "U045", "codigo_hu_armonizacion": "HU-01", "codigo_via_armonizacion": "VA-02" },
+  "declaracion": { "arancel": 35.50, "valor_terreno": 7100, "valor_construccion": 48250.75, "valor_otras_instalaciones": 1200 },
+  "niveles":     { "<id del nivel>": { "clasificacion": "…", "valor_unitario": 402.08, "incremento": 0, "porcentaje_depreciacion": 12, "valor_total": 48250.75 } }
+}
+```
+
+- Lee los registros guardados de la DJ, su predio y sus niveles con las listas `PADRON_EXTERNO_DECLARACION`,
+  `PADRON_EXTERNO_NIVEL` y `PADRON_EXTERNO_PREDIO` (`Condominio.kt`).
+- Devuelve solo los campos con valor (`conValor`: ni null ni texto en blanco). Un bloque sin valores es `{}` y un nivel
+  sin valores no aparece en `niveles`: una DJ de Perené responde `{"predio": {}, "declaracion": {}, "niveles": {}}`.
+- Los controles son los de `RecordService` sobre cada registro que lee, la DJ, su predio y sus niveles, como en
+  `GET /api/srtm/declaraciones/{id}` (que lee la DJ, su predio y su contribuyente): 404 si la DJ no existe y 403 si el
+  rol no puede leerla. Core no devuelve los campos que el rol no puede leer, así que tampoco aparecen aquí.
+- No cambia el impuesto, que sigue saliendo de `valor_autoavaluo`.
+- La ficha del predio (`GET /api/srtm/predios/{id}`) trae el mismo bloque en `valuacion_origen.predio`, para el predio
+  sin DJ.
+
 **`contribuyente`**: una persona natural, persona jurídica o sucesión. `numero_documento` es único.
 
 | Campo | Origen en el Excel |
@@ -1826,11 +1863,12 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET, POST | `/api/srtm/contribuyentes/{id}/{lista}` | las listas del contribuyente: `domicilios`, `relacionados`, `medios-contacto`, `sustentos` |
 | PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |
 | GET, POST | `/api/srtm/predios?q&page&size` | búsqueda y alta |
-| GET, PUT, DELETE | `/api/srtm/predios/{id}?anio` | la ficha: datos, nº de titulares y totales del año; la edición; y la baja (409 si tiene declaraciones o cuotas de arbitrio) |
+| GET, PUT, DELETE | `/api/srtm/predios/{id}?anio` | la ficha: datos, nº de titulares y totales del año, y `valuacion_origen.predio` (los códigos del padrón externo con valor, [abajo](#valuación-del-padrón-de-origen)); la edición; y la baja (409 si tiene declaraciones o cuotas de arbitrio) |
 | GET | `/api/srtm/predios/{id}/declaraciones?anio` | sus declaraciones, cada una con su contribuyente |
 | POST | `/api/srtm/declaraciones` | alta corta, desde la ficha del predio (`contribuyente` y `predio` son ids) |
 | POST | `/api/srtm/contribuyentes/{id}/declaraciones-juradas` | presenta una DJ: `{declaracion, predio_id}` sobre un predio del padrón, o `{declaracion, predio}` registrando uno |
 | GET, PUT, DELETE | `/api/srtm/declaraciones/{id}` | la DJ con su predio y su contribuyente; la edición; y la baja (409 si alguna de sus listas tiene filas) |
+| GET | `/api/srtm/declaraciones/{id}/valuacion-origen` | solo lectura: lo que trajo un padrón externo (Ica) a la DJ, su predio y sus niveles, solo los campos con valor ([abajo](#valuación-del-padrón-de-origen)) |
 | POST | `/api/srtm/declaraciones/{id}/anular` | el descargo: `{motivo_anulacion}` la deja ANULADA |
 | POST | `/api/srtm/declaraciones/{id}/condominos` | "Datos de los condóminos": `{contribuyente, porcentaje_condominio}` agrega otro titular del mismo predio, año y secuencia |
 | GET, POST | `/api/srtm/declaraciones/{id}/{lista}` | las listas de la DJ: `transferentes`, `niveles`, `obras`, `frentes` |
@@ -2062,7 +2100,7 @@ emisión (hora de Lima); la gerencia; la dirección; una línea punteada, y el t
     `parametro_tributario`.
   - Se guarda `srtm.municipalidad.cache` (1 min) por organización: un cambio en el admin aparece en el PDF dentro de
     ese tiempo.
-  - Los datos de `model/data/municipalidad.json` son **provisionales**: el RUC sale del padrón, y la oficina y la
+  - Los datos de `model/data/perene/municipalidad.json` son **provisionales**: el RUC sale del padrón, y la oficina y la
     gerencia son genéricas. Se corrigen en el admin.
 - **El escudo** es de cada organización: el campo `escudo` (tipo `IMAGE`, de
   [wasichai-files](#archivos-wasichai-files)) del mismo registro `municipalidad`. Así cada municipalidad de una

@@ -41,6 +41,8 @@ class RentasService(
         id: UUID,
         anio: Int?
     ): List<DeclaracionDetalle> {
+        // 404 for a contribuyente that does not exist or is another organization's, as the caller reads it
+        contribuyentes.get(id)
         val declaraciones = declaracionesPor("contribuyente", id, anio)
         val predios = registros.byIds(PREDIO, Predio::class.java, declaraciones.mapNotNull { it.predio })
         return declaraciones.map { DeclaracionDetalle(it, predio = predios[it.predio]) }
@@ -61,11 +63,14 @@ class RentasService(
     ): PredioFicha {
         val year = anio ?: anioActual()
         val declaraciones = declaracionesPor("predio", id, year).filter(::vigente)
+        // one read: the dto and what the external padrón brought, which the dto does not carry
+        val registro = registros.get(PREDIO, Map::class.java, id)
         return PredioFicha(
-            predio = predio(id),
+            predio = Records.read(Predio::class.java, id.toString(), registro.entries.associate { it.key.toString() to it.value }),
             anio = year,
             titulares = declaraciones.mapNotNull { it.contribuyente }.distinct().size,
-            totales = totalesDePredio(declaraciones)
+            totales = totalesDePredio(declaraciones),
+            valuacionOrigen = ValuacionOrigenPredio(conValor(registro, PADRON_EXTERNO_PREDIO))
         )
     }
 
@@ -74,6 +79,8 @@ class RentasService(
         id: UUID,
         anio: Int?
     ): List<DeclaracionDetalle> {
+        // 404 for a predio that does not exist or is another organization's, as the caller reads it
+        predio(id)
         val declaraciones = declaracionesPor("predio", id, anio)
         val titulares = registros.byIds(CONTRIBUYENTE, Contribuyente::class.java, declaraciones.mapNotNull { it.contribuyente })
         return declaraciones.map { DeclaracionDetalle(it, contribuyente = titulares[it.contribuyente]) }

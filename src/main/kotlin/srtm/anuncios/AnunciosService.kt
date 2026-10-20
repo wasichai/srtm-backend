@@ -185,7 +185,7 @@ class AnunciosService(
 
         return try {
             transaccion.executeAndAwait {
-                candados.bloquear(Candado.SERIE, "AN|$anio")
+                candados.bloquearEnOrganizacion(Candado.SERIE, "AN|$anio")
                 // two first requests with the same key, ordered by the lock: the second answers the first
                 clave?.let { yaRegistrado(it) }?.let { return@executeAndAwait it }
                 val correlativo = ultimoCorrelativo(anio) + 1

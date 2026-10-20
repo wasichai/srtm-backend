@@ -192,7 +192,7 @@ class ResolucionesService(
         return try {
             transaccion.executeAndAwait {
                 candados.bloquear(Candado.ACTA, acta.id)
-                candados.bloquear(Candado.RESOLUCION, "$tipo|${fecha.year}")
+                candados.bloquearEnOrganizacion(Candado.RESOLUCION, "$tipo|${fecha.year}")
                 // read again under the locks: a RIS, a resolución of the descargo or an anulación that got there first
                 Resoluciones.validar(acta.id, tipo, descargo, datos.sentido, datos.efecto, hechos(acta))
                 val resolucion = numerada(borrador, ultimoCorrelativo(tipo, fecha.year) + 1)

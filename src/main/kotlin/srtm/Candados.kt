@@ -5,6 +5,8 @@ import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.stereotype.Component
 import org.springframework.transaction.NoTransactionException
 import org.springframework.transaction.reactive.TransactionSynchronizationManager
+import wasichai.core.identity.CurrentUser
+import java.util.UUID
 
 // srtm's kinds of lock, each with its fixed number: postgres' two-integer form, pg_advisory_xact_lock(<clase>,
 // hashtext(<clave>)), keeps their key spaces apart. the numbers carry "SR" (0x5352) in their high 16 bits, so they are
@@ -13,7 +15,7 @@ import org.springframework.transaction.reactive.TransactionSynchronizationManage
 enum class Candado(
     val clase: Int
 ) {
-    // the correlativo of a numbered serie in a year: AN-AAAA-NNNNNN
+    // the correlativo of a numbered serie in a year: AN-AAAA-NNNNNN (organización|AN|anio, see bloquearEnOrganizacion)
     SERIE(0x5352_0001),
 
     // the versions of one CUIS code: closing the one in force and adding the next are one step (familia|codigo)
@@ -25,7 +27,7 @@ enum class Candado(
     // an acta: the acts that end it (its anulación, a resolución that leaves it without effect) do not cross (its id)
     ACTA(0x5352_0004),
 
-    // the correlativo of a resolución's serie in a year: RIS-AAAA-NNNNNN and RGR-AAAA-NNNNNN (tipo|anio)
+    // the correlativo of a resolución's serie in a year: RIS-AAAA-NNNNNN and RGR-AAAA-NNNNNN (organización|tipo|anio, see bloquearEnOrganizacion)
     RESOLUCION(0x5352_0005),
 
     // a resolución's notificaciones: each intento is the count so far + 1 (the resolución's id)
@@ -42,8 +44,16 @@ enum class Candado(
 // fall on the same lock, which only orders a bit more than needed
 @Component
 class Candados(
-    private val db: DatabaseClient
+    private val db: DatabaseClient,
+    private val currentUser: CurrentUser
 ) {
+    // the lock of what is ordered inside the caller's organization: its id leads the key, so two organizations do not
+    // wait on each other (their series are their own)
+    suspend fun bloquearEnOrganizacion(
+        candado: Candado,
+        clave: String
+    ) = bloquear(candado, Companion.clave(currentUser.require().organizationId, clave))
+
     suspend fun bloquear(
         candado: Candado,
         clave: String
@@ -65,4 +75,11 @@ class Candados(
         } catch (_: NoTransactionException) {
             false
         }
+
+    companion object {
+        fun clave(
+            organizacion: UUID,
+            clave: String
+        ): String = "$organizacion|$clave"
+    }
 }
