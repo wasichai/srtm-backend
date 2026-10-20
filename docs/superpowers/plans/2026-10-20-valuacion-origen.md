@@ -12,11 +12,11 @@ con valor. Los DTO de escritura no cambian. `PredioFicha` gana el mismo bloque `
 **Stack:** Kotlin/Spring sobre wasichai; pruebas unitarias (JUnit) y de integración (`SrtmApiTest`) contra un
 PG18+PostGIS local.
 
-**Spec:** wasichai/srtm-backend#132 (épica #126), sobre la rama de #128.
+**Spec:** wasichai/srtm-backend#132 (épica #126).
 
 ## Restricciones globales
 
-- Rama `feat/valuacion-origen` sobre `feat/campos-padron-externo` (PR #128); el PR va contra esa rama.
+- Rama `feat/valuacion-origen` sobre `main` (#128 ya mezclado); el PR va contra `main`.
 - Respuesta: `{"predio": {...}, "declaracion": {...}, "niveles": {"<id>": {...}}}`; un bloque sin valores es `{}` y un
   nivel sin valores no aparece.
 - `PADRON_EXTERNO_PREDIO = codigo_via, codigo_unidad_urbana, codigo_hu_armonizacion, codigo_via_armonizacion`.
