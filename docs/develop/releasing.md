@@ -6,7 +6,8 @@ Igual que wasichai: [release-please](https://github.com/googleapis/release-pleas
 
 1. Se mergean commits convencionales (`feat:`, `fix:`, ...) a `main`.
 2. `release-please.yml` corre en cada push a `main` y abre (o actualiza) un PR de release que sube `version=` en
-   `gradle.properties` y escribe `CHANGELOG.md`.
+   `gradle.properties`, `docs/manuales/atributos.adoc` y `docs/presentaciones/src/generado/edicion.json`
+   (la portada de las presentaciones, que `npm run verificar` compara con los atributos) y escribe `CHANGELOG.md`.
 3. Al mergear ese PR, release-please crea el tag `vX.Y.Z` y el GitHub Release.
 4. El release dispara `release.yml`: compila `./gradlew bootJar` con la versión del tag y adjunta
    `srtm-backend-X.Y.Z.jar` y su `.sha256` al release.

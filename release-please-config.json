@@ -8,7 +8,15 @@
             "changelog-path": "CHANGELOG.md",
             "bump-minor-pre-major": true,
             "release-as": "1.0.0",
-            "extra-files": ["gradle.properties", "docs/manuales/atributos.adoc"]
+            "extra-files": [
+                "gradle.properties",
+                "docs/manuales/atributos.adoc",
+                {
+                    "type": "json",
+                    "path": "docs/presentaciones/src/generado/edicion.json",
+                    "jsonpath": "$.version"
+                }
+            ]
         }
     }
 }
