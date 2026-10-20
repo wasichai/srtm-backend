@@ -14,6 +14,7 @@ import org.springframework.http.MediaType
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.util.UriComponentsBuilder
+import reactor.core.publisher.Mono
 import tools.jackson.databind.DeserializationFeature
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
@@ -88,13 +89,16 @@ data class CuentaCatastro(
     override fun toString() = "CuentaCatastro(organizacion=$organizacion, url=$url, clientId=$clientId, timeout=$timeout)"
 }
 
-// catastro-backend's valuations of a year, every page of them
+// catastro-backend's valuations of a year, every page of them, and its engine on insumos that are not in it
 interface Catastro {
     // porPagina runs after each page is read: the corrida beats its latido there
     suspend fun valuaciones(
         anio: Int,
         porPagina: suspend () -> Unit = {}
     ): Valuaciones
+
+    // a declaración's autoavalúo sugerido (#149): nothing is stored on either side
+    suspend fun valuar(insumos: InsumosValuacion): ValuacionDeInsumos
 }
 
 // catastro could not answer: the corrida fails with this message (never the secret nor a token)
@@ -157,7 +161,8 @@ fun dosCatastros(claves: Collection<String>) =
 // expiresAt}, kept until a minute before it expires (and dropped on a 401), then GET {url}/api/catastro/valuaciones
 // ?anio&page&size=500 page after page until total is read (or a page comes short). an item's lote is its code, and
 // loteGeom its geometry (GeoJSON in EPSG:4326, or null). a service account that may not read any of catastro's four
-// objects gets a 403 for the whole request: the corrida fails with it
+// objects gets a 403 for the whole request: the corrida fails with it. valuar: POST {url}/api/catastro/valuacion with
+// the insumos, as the same account
 class ClienteCatastro(
     private val cuenta: CuentaCatastro,
     private val ahora: () -> Instant = Instant::now
@@ -206,7 +211,25 @@ class ClienteCatastro(
         return Valuaciones(anio, version, items)
     }
 
-    // one page as its service account; a 401 means the cached token is no longer good: once more with a new one
+    override suspend fun valuar(insumos: InsumosValuacion): ValuacionDeInsumos {
+        val uri = cuenta.url.trimEnd('/') + "/api/catastro/valuacion"
+        val cuerpo = DECIMALES.writeValueAsString(insumos)
+        val respuesta =
+            autorizado("la valuación de los insumos de ${insumos.anio}") { token ->
+                client
+                    .post()
+                    .uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer $token")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .bodyValue(cuerpo)
+                    .retrieve()
+                    .bodyToMono(String::class.java)
+            }
+        return valuacion(DECIMALES.readTree(respuesta.orEmpty()))
+    }
+
+    // one page as its service account
     private suspend fun pagina(
         anio: Int,
         page: Int
@@ -220,19 +243,28 @@ class ClienteCatastro(
                 .queryParam("size", TAMANIO_PAGINA)
                 .build()
                 .toUri()
+        val body =
+            autorizado("las valuaciones de $anio (página $page)") { token ->
+                client
+                    .get()
+                    .uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer $token")
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(String::class.java)
+            }
+        return DECIMALES.readTree(body.orEmpty())
+    }
+
+    // a request as the service account; a 401 means the cached token is no longer good: once more with a new one.
+    // que names it in the error
+    private suspend fun autorizado(
+        que: String,
+        pedido: (String) -> Mono<String>
+    ): String? {
         repeat(2) { intento ->
             try {
-                val body =
-                    client
-                        .get()
-                        .uri(uri)
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer ${token()}")
-                        .accept(MediaType.APPLICATION_JSON)
-                        .retrieve()
-                        .bodyToMono(String::class.java)
-                        .timeout(timeout)
-                        .awaitSingleOrNull()
-                return DECIMALES.readTree(body.orEmpty())
+                return pedido(token()).timeout(timeout).awaitSingleOrNull()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: CatastroException) {
@@ -241,10 +273,10 @@ class ClienteCatastro(
                 if (e.statusCode == HttpStatus.UNAUTHORIZED && intento == 0) {
                     candado.withLock { token = null }
                 } else {
-                    throw CatastroException("catastro-backend respondió ${e.statusCode.value()} a las valuaciones de $anio (página $page)")
+                    throw CatastroException("catastro-backend respondió ${e.statusCode.value()} a $que")
                 }
             } catch (e: Exception) {
-                throw CatastroException("catastro-backend no respondió las valuaciones de $anio (página $page): ${e.javaClass.simpleName}")
+                throw CatastroException("catastro-backend no respondió $que: ${e.javaClass.simpleName}")
             }
         }
         throw CatastroException("catastro-backend rechazó el token de la cuenta de servicio")
@@ -320,6 +352,60 @@ class ClienteCatastro(
                 loteGeom = geometria
             )
         }
+
+        // POST /valuacion's answer (catastro-backend#17): every key is there, null when not valued
+        fun valuacion(n: JsonNode): ValuacionDeInsumos {
+            val detalle = n.path("detalle").takeIf { it.isObject }
+            return ValuacionDeInsumos(
+                anio = n.path("anio").entero(),
+                version = n.path("version").texto(),
+                region = n.path("region").texto(),
+                codigoMunicipal = n.path("codigoMunicipal").texto(),
+                arancelM2 = n.path("arancelM2").decimal(),
+                origenArancel = n.path("origenArancel").texto(),
+                terreno = n.path("terreno").decimal(),
+                construccion = n.path("construccion").decimal(),
+                obras = n.path("obras").decimal(),
+                autoavaluo = n.path("autoavaluo").decimal(),
+                motivo = n.path("motivo").texto(),
+                llave = n.path("llave").texto(),
+                detalle =
+                    detalle?.let { d ->
+                        DetalleValuacion(
+                            pisos = d.path("pisos").values().map(::detallePiso),
+                            obras = d.path("obras").values().map(::detalleObra)
+                        )
+                    }
+            )
+        }
+
+        private fun detallePiso(p: JsonNode) =
+            DetallePisoValuacion(
+                piso = p.path("piso").texto(),
+                seccion = p.path("seccion").entero(),
+                areaConstruida = p.path("areaConstruida").decimal(),
+                valorUnitario = p.path("valorUnitario").decimal(),
+                incremento = p.path("incremento").decimal(),
+                tablaDepreciacion = p.path("tablaDepreciacion").texto(),
+                antiguedad = p.path("antiguedad").entero(),
+                porcentajeDepreciacion = p.path("porcentajeDepreciacion").decimal(),
+                valorUnitarioDepreciado = p.path("valorUnitarioDepreciado").decimal(),
+                valor = p.path("valor").decimal()
+            )
+
+        private fun detalleObra(o: JsonNode) =
+            DetalleObraValuacion(
+                codigoVu = o.path("codigoVu").texto(),
+                cantidad = o.path("cantidad").decimal(),
+                valorUnitario = o.path("valorUnitario").decimal(),
+                factorOficializacion = o.path("factorOficializacion").decimal(),
+                tablaDepreciacion = o.path("tablaDepreciacion").texto(),
+                antiguedad = o.path("antiguedad").entero(),
+                porcentajeDepreciacion = o.path("porcentajeDepreciacion").decimal(),
+                valor = o.path("valor").decimal()
+            )
+
+        private fun JsonNode.entero(): Int? = takeIf { it.isIntegralNumber && it.canConvertToInt() }?.intValue()
 
         private fun JsonNode.texto(): String? =
             takeIf { it.isValueNode && !it.isNull }
