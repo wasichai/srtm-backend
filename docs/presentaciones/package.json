@@ -1,0 +1,43 @@
+{
+  "name": "srtm-presentaciones",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Presentaciones en vídeo de los manuales de Rentas municipales (SRTM), hechas con Remotion. No forma parte del build del backend.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "recursos": "node scripts/recursos.ts",
+    "predev": "npm run recursos",
+    "dev": "remotion studio src/index.ts",
+    "verificar": "node scripts/verificar.ts",
+    "lint": "eslint src scripts && tsc",
+    "storyboards": "node scripts/storyboards.ts",
+    "capturas": "node scripts/capturas.ts",
+    "prerender": "npm run recursos && npm run verificar",
+    "render": "node scripts/renderizar.ts",
+    "miniaturas": "node scripts/renderizar.ts --solo-miniaturas",
+    "comprobar-videos": "node scripts/comprobar-videos.ts",
+    "fotogramas": "node scripts/fotogramas.ts"
+  },
+  "dependencies": {
+    "@remotion/bundler": "4.0.522",
+    "@remotion/cli": "4.0.522",
+    "@remotion/fonts": "4.0.522",
+    "@remotion/renderer": "4.0.522",
+    "@remotion/transitions": "4.0.522",
+    "lucide-react": "1.48.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.522"
+  },
+  "devDependencies": {
+    "@remotion/eslint-config-flat": "4.0.522",
+    "@types/node": "24.9.2",
+    "@types/react": "19.2.7",
+    "eslint": "9.19.0",
+    "typescript": "5.9.3"
+  }
+}

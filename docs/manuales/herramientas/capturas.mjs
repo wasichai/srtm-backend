@@ -30,6 +30,9 @@ const entorno = { ...(await leerEnv(path.join(raiz, 'demo', 'demo.env'))), ...pr
 const UI = entorno.SRTM_DEMO_UI ?? 'http://localhost:5183'
 const CORE = entorno.WASICHAI_CORE ?? 'http://localhost:8098'
 const CLAVE_DEMO = entorno.SRTM_DEMO_PASSWORD ?? 'Demo-2026'
+// las presentaciones (docs/presentaciones) toman las mismas capturas a otra escala y en su propia carpeta
+const ESCALA = Number(entorno.SRTM_CAPTURAS_ESCALA ?? config.escala ?? 1)
+const DESTINO = path.resolve(aqui, entorno.SRTM_CAPTURAS_DESTINO ?? path.join(raiz, 'recursos', 'capturas'))
 // nunca contra la base de desarrollo: la demo vive en :8098 (demo/demo.env.example)
 if (!/:(8098|8099)\b/.test(CORE) && !entorno.SRTM_DEMO_PERMITIR_OTRO_CORE) {
   console.error(`capturas: ${CORE} no es el Core de la demo (:8098). SRTM_DEMO_PERMITIR_OTRO_CORE=1 para forzarlo`)
@@ -218,10 +221,10 @@ async function capturarPdf(c, refs) {
   try {
     const pdf = path.join(temporal, 'documento.pdf')
     await writeFile(pdf, Buffer.from(await r.arrayBuffer()))
-    const destino = path.join(raiz, 'recursos', 'capturas', c.archivo)
+    const destino = path.join(DESTINO, c.archivo)
     await mkdir(path.dirname(destino), { recursive: true })
     const pagina = String(c.pagina ?? 1)
-    execFileSync('pdftoppm', ['-r', String(c.resolucion ?? 110), '-f', pagina, '-l', pagina, '-png', '-singlefile', pdf, destino.replace(/\.png$/, '')])
+    execFileSync('pdftoppm', ['-r', String(Math.round((c.resolucion ?? 110) * ESCALA)), '-f', pagina, '-l', pagina, '-png', '-singlefile', pdf, destino.replace(/\.png$/, '')])
   } finally {
     await rm(temporal, { recursive: true, force: true })
   }
@@ -254,7 +257,7 @@ async function main() {
       // la vista de siempre: la de una captura (c.vista) se fija en su página, no en el contexto del perfil
       contexto = await navegador.newContext({
         viewport: vista,
-        deviceScaleFactor: config.escala ?? 1,
+        deviceScaleFactor: ESCALA,
         locale: 'es-PE',
         timezoneId: 'America/Lima',
         reducedMotion: 'reduce',
@@ -277,7 +280,7 @@ async function main() {
         if (Array.isArray(p) && p[0] === 'ir') await preparar(page)
       }
       await preparar(page)
-      const destino = path.join(raiz, 'recursos', 'capturas', c.archivo)
+      const destino = path.join(DESTINO, c.archivo)
       await mkdir(path.dirname(destino), { recursive: true })
       if (c.area) {
         // un rectángulo fijo de la vista: lo que abarca varias piezas (el riel y su panel, un menú y su botón)
