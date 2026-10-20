@@ -1298,6 +1298,10 @@ hojas: `padron` (una fila por predio y contribuyente) y `construcciones` (una fi
 `import_padron_ica.py`, que necesita los campos de padrón externo de #124 en el modelo. Cada paso va primero con
 `--dry-run`, y la carga real espera el OK.
 
+El alta completa de la organización, en srtm y en catastro, hasta la brecha (con lo que se hizo en dev el
+2026-10-20), está en [docs/develop/alta-organizacion.md](docs/develop/alta-organizacion.md). Para ensayarla sin tocar
+dev está el entorno de [develop/pruebas](develop/pruebas/README.md).
+
 1. **Organización:** crear Ica en Core (`POST /api/organizations`, como superadministrador) con su usuario
    administrador. Los pasos siguientes usan su cuenta: `--email` y `--password`, o `WASICHAI_EMAIL` y
    `WASICHAI_PASSWORD`.

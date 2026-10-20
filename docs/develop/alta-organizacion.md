@@ -1,0 +1,180 @@
+# Alta de una organización: la Municipalidad de Ica
+
+Cómo se da de alta una municipalidad nueva junto a Perené, en srtm-backend y en catastro-backend, hasta poder correr
+su brecha de recaudación. Es el procedimiento que se siguió con Ica (épica #126) el 2026-10-20: primero se ensayó en
+el [entorno de pruebas](../../develop/pruebas/README.md) y después se hizo en dev. El padrón, sus columnas y el
+importador están en el [README, «Cargar la Municipalidad de Ica»](../../README.md#cargar-la-municipalidad-de-ica).
+
+**Regla:** cada paso que escribe va primero con `--dry-run` o `--diff`. La corrida real necesita el OK de quien
+administra dev.
+
+## 0. Antes de empezar
+
+- **Código:** srtm-backend en main, con #128 (campos de padrón externo), #130 (un catastro por organización), #131
+  (importador de Ica), #137 (valuación de origen) y #141 (municipalidad por organización). catastro-backend en main,
+  con #12 (región por organización y tablas de Costa) y #14 (clasificación por construcción y `valuacion-v2`).
+- **Bases de dev:** se llega a ellas por túnel.
+
+  ```bash
+  ssh -fN -o ExitOnForwardFailure=yes -i ~/.ssh/github_actions_deploy_stg \
+    -L 5433:localhost:5433 -L 5434:localhost:5434 github@<vps>
+  ```
+
+- **Core:** si no escuchan en 8090 y 8091, se exporta `WASICHAI_CORE=http://localhost:<puerto>` antes de cada bloque.
+  Todos los scripts lo leen.
+- **`python3 -I`:** todos los comandos de `model/` corren aislados (#139). Hace falta sobre todo en los que leen
+  archivos de afuera, como el xlsx del padrón o los csv de catastro.
+
+## 1. catastro: las organizaciones que ya existen, antes del jar nuevo
+
+Desde #12, catastro-backend valora según la región de la organización y no tiene región por omisión. Antes de
+cambiar el jar, cada organización que ya existe necesita su región. Si no, srtm recibe 404, 403 o 409. Para Perené,
+como `admin@wasichai.local`:
+
+```bash
+cd catastro-backend/model
+python3 -I apply.py --diff                        # objeto configuracion_catastro y campos de construccion
+python3 -I apply_roles.py --dry-run               # SRTM_LECTOR también lee configuracion_catastro
+python3 -I configurar_region.py --region SELVA --dry-run
+```
+
+Con el OK se corren sin `--diff` ni `--dry-run`, y después se reinicia el Core de catastro con el jar de main.
+
+## 2. srtm: las organizaciones que ya existen
+
+```bash
+cd srtm-backend/model
+python3 -I apply.py --diff     # en Perené: los 15 campos de #124, mes_construccion opcional y municipalidad.escudo
+```
+
+## 3. La organización nueva
+
+En los dos Core, como superadministrador:
+
+```bash
+curl -X POST "$CORE/api/organizations" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name": "Municipalidad Provincial de Ica", "slug": "ica", "adminEmail": "<correo>", "adminPassword": "<clave>"}'
+```
+
+- **Correo único:** el login es por correo, así que el administrador no puede repetir el de otra organización.
+- **Ids distintos:** cada Core le da su propio id. El que cuenta para srtm es el de **srtm**.
+- **Dónde guardar la credencial:** en `develop/.env`, que no se versiona.
+
+  ```bash
+  ICA_ADMIN_EMAIL=<correo>
+  ICA_ADMIN_PASSWORD=<clave>
+  ICA_ORG_ID_SRTM=<id en srtm>
+  ICA_ORG_ID_CATASTRO=<id en catastro>
+  ```
+
+## 4. srtm como administrador de la organización
+
+```bash
+cd srtm-backend/model
+export WASICHAI_EMAIL=$ICA_ADMIN_EMAIL WASICHAI_PASSWORD=$ICA_ADMIN_PASSWORD
+python3 -I apply.py --diff                        # el modelo completo: 122 escrituras
+python3 -I import_catalogos.py --distrito 110101 --municipalidad-json data/ica/municipalidad.json \
+  --obras-csv data/ica/obras_complementarias_costa.csv --dry-run
+python3 -I import_parametros.py --dry-run         # UIT, tramos, mínimo: sin ellos la brecha queda FALLIDA
+python3 -I import_padron_ica.py --excel <PADRON_CONSTRUCCION.xlsx> --dry-run
+```
+
+Hay dos fallas esperadas antes de aplicar el modelo: `import_catalogos.py` y `import_parametros.py` responden 404
+(`object ubigeo does not exist`). Por eso `apply.py` va primero de verdad, y después se repiten los dry-run.
+
+**Escudo:** la imagen se sube al registro `municipalidad` de la organización (#138), en multipart con la parte `file`:
+`POST /api/objects/municipalidad/records/<id>/files/escudo`. `GET /api/srtm/municipalidad` lo devuelve (#141).
+
+## 5. catastro como administrador de la organización
+
+```bash
+cd catastro-backend/model
+export WASICHAI_EMAIL=$ICA_ADMIN_EMAIL WASICHAI_PASSWORD=$ICA_ADMIN_PASSWORD
+python3 -I apply.py --diff && python3 -I apply_roles.py --dry-run
+python3 -I configurar_region.py --region COSTA --dry-run
+python3 -I crear_cuenta_srtm.py --clave ica --dry-run
+```
+
+`crear_cuenta_srtm.py` muestra el secreto **una sola vez**. Su salida se redirige a un archivo con `chmod 600`, no a
+una terminal compartida.
+
+## 6. srtm: el catastro de la organización
+
+En el `.env` del Core de srtm:
+
+```bash
+SRTM_CATASTRO_ORGANIZACIONES_ICA_URL=http://localhost:8091
+SRTM_CATASTRO_ORGANIZACIONES_ICA_CLIENT_ID=<clientId>
+SRTM_CATASTRO_ORGANIZACIONES_ICA_CLIENT_SECRET=<clientSecret>
+```
+
+- **La clave:** si es el slug de srtm y solo tiene letras y números, ya nombra a la organización.
+- **Slug con guion o id:** van en `_ORGANIZACION` (el id de srtm), bajo una clave cualquiera.
+- **Perené:** sus variables de una sola organización (`SRTM_CATASTRO_URL`, …) siguen valiendo.
+
+Se reinicia el Core, y el log tiene que decir `srtm.catastro: catastro de 00000000-…-0001, ica`.
+
+## 7. Levantamiento y brecha
+
+La brecha necesita el catastro de la organización: fichas, pisos y aranceles cargados con `import_fichas.py` e
+`import_aranceles.py`. El de Ica está pendiente (catastro-backend#10). Sin catastro, la corrida falla con «El catastro
+no devolvió valuaciones».
+
+En **dev no se carga un catastro sintético**, porque chocaría con el levantamiento real: `codigo_municipal` es único. Para
+probar sirve el [entorno de pruebas](../../develop/pruebas/README.md).
+
+```bash
+curl -X POST "$SRTM/api/srtm/brecha/corridas" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"anio":2026}'
+curl "$SRTM/api/srtm/brecha/corridas/<id>" -H "Authorization: Bearer $TOKEN"     # hasta TERMINADA o FALLIDA
+curl "$SRTM/api/srtm/brecha/2026/panel" -H "Authorization: Bearer $TOKEN"
+```
+
+Sin ordenanza ni servicios de arbitrios del año, la corrida termina con «Δ arbitrios no calculado», como se espera.
+
+## Registro de Ica (2026-10-20)
+
+**Dev:**
+- **Perené:** catastro quedó con región SELVA, con 4 escrituras de modelo y el rol. En srtm se aplicaron 16 escrituras
+  de modelo y después `municipalidad.escudo`.
+- **Ica en srtm:**
+  - modelo completo;
+  - 2 323 registros de catálogos: 1 893 ubigeos, 57 categorías de valor, 96 obras de Costa, 276 usos y la
+    municipalidad;
+  - 13 parámetros;
+  - padrón `PADRON_CONSTRUCCION.xlsx` (un extracto de unas 7 800 de 32 000 filas): **21 315 registros**, que son 588
+    vías, 161 unidades urbanas, 1 458 contribuyentes, 7 521 predios, 7 829 DJ y 3 758 niveles, con 4 filas rechazadas.
+    La segunda corrida crea 0.
+- **Ica en catastro:** modelo, rol, región COSTA y cuenta de servicio. Todavía no tiene levantamiento.
+
+**Entorno de pruebas `srtm-ica` (Docker del VPS):**
+- **Organización `ica-prueba`:** padrón y catastro ficticios (600 predios). La brecha dio exactamente lo sembrado:
+
+  | Categoría | Predios |
+  |---|---|
+  | COINCIDE | 536 (Δ 0,00) |
+  | SUBVALUADO | 26 |
+  | SOBREVALUADO | 12 |
+  | OMISO | 8 |
+  | SIN_CATASTRO | 17 |
+  | SIN_VALOR | 9 |
+
+- **Organización `ica`:** el padrón real, con autorización expresa, más un catastro **sintético, solo de prueba**,
+  derivado del mismo padrón:
+
+  | Categoría | Predios |
+  |---|---|
+  | COINCIDE | 6 715 |
+  | SUBVALUADO | 395 |
+  | SOBREVALUADO | 171 |
+  | SIN_CATASTRO | 226 |
+  | OMISO | 150 |
+  | SIN_VALOR | 14 |
+
+- **Motor:** el de Costa reproduce exacto el valor de 3 688 de los 3 755 niveles del padrón.
+
+**Pendiente** (en la épica #126):
+- el levantamiento real (catastro-backend#10);
+- el padrón completo;
+- las tablas de códigos por confirmar con la municipalidad;
+- el porcentaje de condominio;
+- el RUC.

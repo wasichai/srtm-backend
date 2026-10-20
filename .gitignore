@@ -41,3 +41,12 @@ node_modules/
 
 # srtm.emision.dir: the emisiones masivas' files carry every contribuyente's data
 /data/
+
+# develop/pruebas: claves y contextos de build que arma preparar.sh (jar y dist)
+develop/pruebas/*.env
+!develop/pruebas/*.example.env
+develop/pruebas/core-srtm/
+develop/pruebas/core-catastro/
+develop/pruebas/ui-srtm/
+develop/pruebas/ui-catastro/
+develop/pruebas/ficticio/

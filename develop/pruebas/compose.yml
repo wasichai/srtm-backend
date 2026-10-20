@@ -1,0 +1,54 @@
+# entorno de pruebas aparte: una base con srtm y catastro, los dos Core y las dos ui (develop/pruebas/README.md).
+# nunca usa la base de dev: es otro proyecto de compose con su propio volumen. todo publica en loopback, así que con
+# un DOCKER_HOST remoto se entra por túnel ssh
+name: ${PRUEBAS_PROYECTO:-srtm-pruebas}
+
+x-core-health: &core-health
+  interval: 10s
+  timeout: 5s
+  retries: 60
+  start_period: 30s
+
+services:
+  pg:
+    build: ./pg
+    env_file: [pg.env]
+    environment: { POSTGRES_USER: postgres }
+    ports: ['127.0.0.1:${PRUEBAS_PG_PORT:-5448}:5432']
+    volumes: [pg-data:/var/lib/postgresql]
+    healthcheck: { test: ['CMD-SHELL', 'pg_isready -U postgres'], interval: 5s, retries: 30 }
+    restart: unless-stopped
+
+  srtm-core:
+    build: ./core-srtm
+    depends_on: { pg: { condition: service_healthy } }
+    env_file: [srtm.env]
+    ports: ['127.0.0.1:${PRUEBAS_SRTM_PORT:-8190}:8090']
+    # archivos (escudo) y emisiones: fuera del contenedor, para que sobrevivan a un rebuild
+    volumes: [srtm-data:/app/data]
+    healthcheck: { <<: *core-health, test: ['CMD-SHELL', "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8090'"] }
+    restart: unless-stopped
+
+  catastro-core:
+    build: ./core-catastro
+    depends_on: { pg: { condition: service_healthy } }
+    env_file: [catastro.env]
+    ports: ['127.0.0.1:${PRUEBAS_CATASTRO_PORT:-8191}:8091']
+    healthcheck: { <<: *core-health, test: ['CMD-SHELL', "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8091'"] }
+    restart: unless-stopped
+
+  srtm-ui:
+    build: ./ui-srtm
+    depends_on: [srtm-core]
+    ports: ['127.0.0.1:${PRUEBAS_SRTM_UI_PORT:-5190}:80']
+    restart: unless-stopped
+
+  catastro-ui:
+    build: ./ui-catastro
+    depends_on: [catastro-core]
+    ports: ['127.0.0.1:${PRUEBAS_CATASTRO_UI_PORT:-5191}:80']
+    restart: unless-stopped
+
+volumes:
+  pg-data:
+  srtm-data:
