@@ -107,6 +107,8 @@ export type Foco = {
   readonly encuadre?: Region
   /** Cambia la imagen del visor desde este foco. */
   readonly captura?: Captura
+  /** La sección que cita el pie mientras dura este foco, si no es la primera fuente de la escena. */
+  readonly fuente?: Fuente
 }
 
 export type Pantalla = Base & {

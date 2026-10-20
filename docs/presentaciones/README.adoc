@@ -1,0 +1,181 @@
+= Presentaciones en vídeo de los manuales
+:toc: left
+:icons: font
+:experimental:
+
+Presentaciones audiovisuales de Rentas municipales (SRTM), hechas con https://www.remotion.dev[Remotion] a
+partir de los manuales de `docs/manuales`. Los manuales son la fuente de verdad: cada escena nombra la sección de la
+que sale, y `npm run verificar` comprueba que esa sección exista. Los vídeos (`salida/`) se generan y no se versionan,
+como el HTML y el PDF de los manuales.
+
+== Las presentaciones
+
+[cols="1,4,4",options="header"]
+|===
+|Nº |Presentación |Para quién
+|01 |Rentas municipales de un vistazo |Todo el personal, la gerencia y quien empieza
+|02 |Primeros pasos en el portal |Todos los usuarios, de cualquier perfil
+|03 |Registro tributario |Ventanilla y registro tributario (REGISTRADOR)
+|04 |Arbitrios y emisión |Área de arbitrios y emisión (ARBITRIOS_EMISION)
+|05 |Infracciones administrativas |Fiscalización (FISCALIZADOR)
+|06 |Anuncios y propaganda |Quien autoriza anuncios (ANUNCIOS)
+|07 |Consulta y brecha de recaudación |Orientación, supervisión, auditoría y gerencia (CONSULTA)
+|08 |Administración del sistema |Administradores (ADMIN)
+|09 |Arquitectura técnica |Ingenieros de software, arquitectos y DevOps
+|10 |Instalación, operación y recuperación |DevOps y administradores de bases de datos
+|===
+
+El orden es el recomendado: 01 y 02 para todos; luego el vídeo del propio perfil. La duración exacta de cada vídeo y
+de cada escena, su objetivo y su fuente están en `storyboards/README.md` y en el storyboard de cada vídeo.
+
+Formato:: 1920 × 1080, 16:9, 30 fps, MP4 con H.264 (`crf` 18, `yuv420p`, BT.709), sin audio.
+Salida:: `salida/videos/srtm-NN-<nombre>.mp4` y su miniatura `salida/miniaturas/srtm-NN-<nombre>.jpg`.
+
+== Qué hay aquí
+
+[cols="1,3",options="header"]
+|===
+|Ruta |Contenido
+|`src/videos/NN-*.ts` |*El contenido*: cada vídeo es una lista de escenas tipadas (`src/tipos.ts`), con su objetivo, su
+texto, sus capturas y sus fuentes. Es lo que se edita para cambiar una presentación.
+|`src/escenas/` |Cómo se dibuja cada tipo de escena: portada, sección, mensaje, tarjetas, pantalla (una captura
+recorrida foco por foco), diagrama, proceso, comparación, tabla, cálculo, comandos, aviso, secuencia y cierre.
+|`src/componentes/` |Las piezas comunes: el marco (cabecera, pie con la fuente, barra de avance), el visor de capturas
+con su cámara, los iconos, el movimiento y el paso entre escenas.
+|`src/tema/` |Los tokens de color, tipografía, márgenes y sombras, y la carga de las fuentes.
+|`src/tiempo.ts` |Todas las duraciones, en fotogramas.
+|`src/generado/` |Índices que escribe `npm run recursos`: el tamaño de cada captura y el título de cada sección de los
+manuales. Se versionan; `npm run verificar` comprueba que estén al día.
+|`recursos/capturas/` |Las capturas reales del portal a 2×: las mismas de los manuales (mismo nombre, mismos pasos), con
+el doble de píxeles para que los acercamientos se lean. Las toma `npm run capturas`.
+|`storyboards/` |El storyboard de cada vídeo, el índice escena → fuente (`README.md`) y el manifiesto
+(`manifiesto.json`). Los escribe `npm run storyboards`; no se editan a mano.
+|`scripts/` |Preparación de recursos, verificación, storyboards, capturas, render, fotogramas de control y comprobación
+de los MP4.
+|`public/` |Lo llena `npm run recursos` (fuentes y marca de los manuales, capturas). No se versiona.
+|`salida/` |Vídeos, miniaturas, fotogramas de control e informe del render. No se versiona.
+|===
+
+== Requisitos
+
+* Node 22.18 o superior (los scripts son TypeScript que Node ejecuta directamente). Probado con Node 26.7.
+* La primera vez, Remotion descarga su Chrome Headless Shell (hace falta Internet una vez). El render no usa la ffmpeg
+  del sistema: Remotion trae la suya (`npx remotion ffmpeg`, `npx remotion ffprobe`).
+* Solo para `npm run capturas`: la base de demostración de los manuales arriba (`docs/manuales/demo/README.adoc`) y su
+  Playwright (`docs/manuales/herramientas`).
+
+Versiones fijadas en `package.json`: Remotion 4.0.522 (`remotion`, `@remotion/cli`, `@remotion/bundler`,
+`@remotion/renderer`, `@remotion/transitions`, `@remotion/fonts`), React 19.2.3, `lucide-react` 1.48.0 (la de srtm-ui),
+TypeScript 5.9.3.
+
+== Comandos
+
+Desde `docs/presentaciones`:
+
+[source,bash]
+----
+npm ci                         # instalar (package-lock.json)
+npm run dev                    # Remotion Studio: ver y recorrer las composiciones (prepara public/ antes)
+npm run verificar              # pruebas de consistencia, sin renderizar (ver abajo)
+npm run lint                   # eslint y tsc
+npm run render                 # todos los vídeos y sus miniaturas → salida/
+npm run render -- 03           # uno: por número, por id (S03-RegistroTributario) o por archivo
+npm run miniaturas             # solo las miniaturas
+npm run comprobar-videos       # comprueba los MP4 y extrae un fotograma por escena → salida/control/
+npm run fotogramas -- 03       # fotogramas de control sin renderizar el vídeo → salida/fotogramas/
+npm run storyboards            # vuelve a escribir storyboards/ desde src/videos
+npm run capturas               # vuelve a tomar las capturas a 2× (necesita la demo arriba)
+npm run recursos               # prepara public/ y src/generado (lo hacen solos dev y render)
+----
+
+`npm run render` corre antes `recursos` y `verificar`: un vídeo con una fuente rota, una región fuera de su captura o un
+texto que no da tiempo a leer no se renderiza. Un render de todo tarda del orden de una hora en un equipo de 10
+núcleos (`salida/informe-render.json` guarda el tiempo de cada uno).
+
+Una sola imagen, para revisar una escena: `npx remotion still S03-RegistroTributario salida/f.png --frame=1200`.
+
+=== Qué comprueba `npm run verificar`
+
+* Que `src/generado` y `storyboards/` estén al día con los manuales, las capturas y los datos.
+* Que cada escena tenga objetivo y al menos una fuente, y que cada fuente sea un ancla `[[…]]` (o un encabezado) que
+  existe en ese archivo de `docs/manuales`.
+* Que cada captura exista y cada región o encuadre caiga dentro de su imagen.
+* Que cada arista de un diagrama una nodos que existen, y cada nodo quepa en su lienzo.
+* Que cada texto quede en pantalla el tiempo de leerlo: unos 3 palabras por segundo en un texto corrido (la velocidad
+  que se pide a un subtítulo) y 3,6 en tarjetas y tablas, más un margen; en una pantalla, foco por foco.
+* Ids únicos y válidos, duraciones razonables.
+
+`npm run comprobar-videos` comprueba además, en cada MP4: H.264, 1920 × 1080, 30 fps, `yuv420p`, el número exacto de
+fotogramas, que no haya audio y que exista la miniatura.
+
+== Modificar una presentación
+
+. Edite `src/videos/NN-*.ts`. Cada escena es un objeto con `tipo`; los campos de cada tipo están en `src/tipos.ts`.
+  Cite la sección del manual en `fuentes` (`{ doc: 'usuario/registrador', ancla: 'proc-inscribir-contribuyente' }`).
+. Si la escena muestra una captura, use la ruta de `docs/manuales/recursos/capturas` (`usuario/registrador/…png`). Las
+  regiones van en píxeles CSS de la captura (la vista de 1440 × 1000 de los manuales): se miden sobre la captura del
+  manual. Si es una captura que las presentaciones todavía no usan, `npm run capturas` la toma a 2×.
+. `npm run verificar` hasta que no haya fallas; `npm run fotogramas -- NN` y revise las imágenes de
+  `salida/fotogramas/`, o abra `npm run dev`.
+. `npm run storyboards`, y `npm run render -- NN`.
+
+Para un vídeo nuevo: un archivo en `src/videos/` y su línea en `src/videos/index.ts`; la composición se registra sola.
+
+Cuando cambian los manuales:: un título de sección que cambia cambia también la cita al pie (sale del `.adoc`); un ancla
+que desaparece hace fallar `npm run verificar`. Si cambian las pantallas, `npm run capturas` y revisar las regiones con
+`npm run fotogramas`.
+
+== Diseño
+
+Identidad:: La de los manuales, que es la del tema «Portal tributario» de srtm-ui: azul `#0D5FA8` de la barra del
+portal, filete celeste `#9CC3E6` de la portada, fondo blanco, y la familia Source de Adobe: Source Sans 3 en títulos,
+Source Serif 4 en el texto, Source Code Pro en el código. Los avisos usan los cuatro niveles y colores de los manuales
+(nota, consejo, precaución, advertencia). Los tokens están en `src/tema/tokens.ts`.
+Capturas:: Siempre reales, de la base de demostración (datos ficticios). El recuadro naranja `#E8740C` es el mismo con
+que los manuales marcan un control; el visor atenúa lo demás y numera el foco igual que el panel de pasos.
+Movimiento:: Pocas curvas, siempre las mismas (`src/componentes/animacion.ts`); todo depende del fotograma, nada del
+reloj ni del azar. Entre escenas, un fundido corto a blanco: dos títulos nunca se superponen.
+Ritmo:: Sin narración, el texto manda: cada escena dura lo que tarda en leerse (lo comprueba `npm run verificar`).
+
+== Narración y subtítulos
+
+Las presentaciones *no tienen voz*: están hechas para entenderse solo con lo que muestran. No hay en este entorno una
+herramienta de síntesis de voz con una licencia que permita difundir el resultado: las voces del sistema de macOS
+(`say`) solo se pueden usar para contenido personal y no comercial. Por la misma razón no hay subtítulos: no hay audio
+que subtitular, y todo lo importante está escrito en pantalla.
+
+Para añadir narración más adelante:
+
+. Escriba el texto de cada escena en su campo `guion` (ya existe en el tipo de las escenas).
+. Genere un audio por escena con la herramienta elegida y guárdelo en `recursos/audio/<archivo>/<escena>.mp3`.
+. Ajuste la duración de la escena a la de su audio (el audio manda) y añada un `<Audio>` de Remotion en
+  `src/Presentacion.tsx`, dentro de la secuencia de la escena.
+. Genere los subtítulos (SRT o VTT) con los tiempos reales de cada audio, y quite `muted` de `scripts/renderizar.ts`
+  (el MP4 llevará AAC).
+
+== Recursos y licencias
+
+[cols="2,2,3",options="header"]
+|===
+|Recurso |Origen |Licencia
+|Source Sans 3, Source Serif 4, Source Code Pro |`docs/manuales/estilos/fuentes` |SIL Open Font License 1.1 (sus
+`LICENSE-*.md` están junto a las fuentes)
+|Marca editorial (monograma) |`docs/manuales/recursos/marca` |De los manuales; no es el escudo de la municipalidad
+|Capturas |`recursos/capturas`, tomadas de la base de demostración |Datos ficticios; mismas pantallas que los manuales
+|Iconos |`lucide-react` 1.48.0 |ISC
+|Remotion 4.0.522 |npm |Licencia de Remotion: gratuita para personas, organizaciones sin fines de lucro y empresas de
+hasta 3 empleados; una empresa con fines de lucro mayor necesita la «Company License» (ver
+`node_modules/remotion/LICENSE.md`). Quien renderice los vídeos debe revisar en cuál cae.
+|React 19.2.3 |npm |MIT
+|===
+
+Las presentaciones no usan música, imágenes de terceros ni fuentes descargadas de Internet.
+
+== Limitaciones
+
+* Sin narración ni subtítulos (ver arriba).
+* La brecha de recaudación no se puede mostrar con datos: en la base de demostración el catastro no está conectado (así
+  lo dicen los manuales); el vídeo 07 muestra la pantalla vacía y explica cómo se lee.
+* Las capturas reflejan la demostración del 20 de octubre de 2026 (su «hoy»): tomarlas otro día cambia las fechas que
+  dependen del día (fases, vencimientos) hasta que se actualice la demo.
+* Los vídeos no se renderizan en la integración continua (tardarían demasiado): el CI corre `lint` y `verificar`.

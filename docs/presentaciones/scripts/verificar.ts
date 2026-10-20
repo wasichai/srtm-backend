@@ -1,5 +1,5 @@
 // Pruebas de consistencia de las presentaciones, sin renderizar nada:
-//   - los índices de src/generado están al día con los manuales y las capturas;
+//   - los índices de src/generado y los storyboards están al día con los manuales, las capturas y los datos;
 //   - cada escena cita al menos una fuente, y cada fuente es un ancla que existe en los manuales;
 //   - cada captura existe, y cada región o encuadre cae dentro de su imagen;
 //   - cada arista de un diagrama une nodos que existen y cada nodo cabe en su lienzo;
@@ -86,6 +86,11 @@ const verificarVideo = (v: Video, anclas: Record<string, string>, capturas: Reco
       if (!existsSync(path.join(MANUALES, `${f.doc}.adoc`))) falla(donde, `no existe docs/manuales/${f.doc}.adoc`)
       else if (!anclas[`${f.doc}#${f.ancla}`]) falla(donde, `${f.doc}.adoc no tiene el ancla [[${f.ancla}]]`)
     }
+    if (e.tipo === 'pantalla') {
+      for (const f of e.focos.flatMap((x) => (x.fuente ? [x.fuente] : []))) {
+        if (!anclas[`${f.doc}#${f.ancla}`]) falla(donde, `${f.doc}.adoc no tiene el ancla [[${f.ancla}]]`)
+      }
+    }
     if ('titulo' in e && e.tipo !== 'portada' && e.titulo.length > 62) avisos.push(`${donde}: título largo (${e.titulo.length} caracteres)`)
 
     const segundos = segundosEscena(e)
@@ -152,6 +157,11 @@ const main = (): void => {
     execFileSync(process.execPath, [path.join(RAIZ, 'scripts', 'recursos.ts'), '--comprobar'], { stdio: 'inherit' })
   } catch {
     fallas.push('src/generado no está al día: npm run recursos')
+  }
+  try {
+    execFileSync(process.execPath, [path.join(RAIZ, 'scripts', 'storyboards.ts'), '--comprobar'], { stdio: 'inherit' })
+  } catch {
+    fallas.push('storyboards/ no está al día: npm run storyboards')
   }
   const anclas = indiceAnclas()
   const capturas = indiceCapturas()

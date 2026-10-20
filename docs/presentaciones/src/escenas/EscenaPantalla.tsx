@@ -44,7 +44,7 @@ export const EscenaPantalla: React.FC<{ escena: Pantalla; duracion: number }> = 
   })
 
   return (
-    <Marco antetitulo={escena.antetitulo} titulo={escena.titulo} fuente={escena.fuentes[0]}>
+    <Marco antetitulo={escena.antetitulo} titulo={escena.titulo} fuente={escena.focos[activo]?.fuente ?? escena.fuentes[0]}>
       <div style={{ display: 'flex', gap: 46, height: VISOR.alto }}>
         <div style={{ ...entrar(frame, 6, 24, 22) }}>
           <Visor

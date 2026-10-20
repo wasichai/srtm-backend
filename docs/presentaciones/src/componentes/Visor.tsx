@@ -17,8 +17,9 @@ export const tamanoCaptura = (archivo: Captura): { ancho: number; alto: number }
   return t
 }
 
-/** La escala más alta a la que se muestra una captura: se tomaron a 2×, así que hasta 2 se ven nítidas. */
-const ESCALA_MAXIMA = 1.9
+/** La escala más alta a la que se muestra una captura: se tomaron a 2× (hasta 2 se ven nítidas), pero más allá de
+ * 1,6 un botón chico ocupa el visor y se pierde dónde está. */
+const ESCALA_MAXIMA = 1.6
 /** Margen alrededor de una región cuando la cámara se acerca a ella, en píxeles CSS de la captura. */
 const AIRE = 56
 const MOVIMIENTO = 28

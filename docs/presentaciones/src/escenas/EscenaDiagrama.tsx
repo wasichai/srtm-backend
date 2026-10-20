@@ -193,6 +193,7 @@ export const EscenaDiagrama: React.FC<{ escena: Diagrama; duracion: number }> = 
   return (
     <Marco antetitulo={escena.antetitulo} titulo={escena.titulo} entrada={escena.entrada} fuente={escena.fuentes[0]}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start' }}>
+        <div style={{ flex: 1, alignSelf: 'stretch', display: 'flex', alignItems: 'center', justifyContent: 'center', paddingBottom: conPasos ? 24 : 0 }}>
         <div style={{ width: escena.lienzo.ancho * escala, height: escena.lienzo.alto * escala, position: 'relative' }}>
           <div
             style={{
@@ -274,7 +275,8 @@ export const EscenaDiagrama: React.FC<{ escena: Diagrama; duracion: number }> = 
             })}
           </div>
         </div>
-        {conPasos && actual > 0 ? (
+        </div>
+        {conPasos ? (
           <div
             style={{
               marginTop: 'auto',
@@ -287,20 +289,25 @@ export const EscenaDiagrama: React.FC<{ escena: Diagrama; duracion: number }> = 
               backgroundColor: COLOR.marcaSuave,
               borderLeft: `6px solid ${COLOR.foco}`,
               borderRadius: RADIO.medio,
+              opacity: actual > 0 ? 1 : 0,
             }}
           >
             <div style={{ fontFamily: TITULOS, fontWeight: 700, fontSize: 22, letterSpacing: '0.1em', color: COLOR.marcaFuerte, whiteSpace: 'nowrap' }}>
-              {actual} / {escena.pasos?.length}
+              {Math.max(1, actual)} / {escena.pasos?.length}
             </div>
             <div
               key={actual}
               style={{ fontFamily: TEXTO, fontSize: TIPO.cuerpo, lineHeight: 1.38, color: COLOR.tinta, ...entrar(frame, inicios[actual], 8, 14) }}
             >
-              {escena.pasos?.[actual - 1].texto}
+              {escena.pasos?.[Math.max(0, actual - 1)].texto}
             </div>
           </div>
         ) : null}
-        {escena.nota && !conPasos ? <div style={{ alignSelf: 'stretch', marginTop: 'auto' }}><Nota texto={escena.nota} inicio={Math.round(duracion * 0.4)} /></div> : null}
+        {escena.nota && !conPasos ? (
+          <div style={{ alignSelf: 'stretch' }}>
+            <Nota texto={escena.nota} inicio={Math.round(duracion * 0.4)} />
+          </div>
+        ) : null}
       </div>
     </Marco>
   )

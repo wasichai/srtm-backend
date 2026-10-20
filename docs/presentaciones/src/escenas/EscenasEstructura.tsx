@@ -260,8 +260,12 @@ export const EscenaComparacion: React.FC<{ escena: Comparacion; duracion: number
                   const inicio = 24 + k++ * paso
                   return (
                     <div key={p} style={{ display: 'flex', gap: 16, ...entrar(frame, inicio, 10, 14) }}>
-                      <div style={{ flex: '0 0 auto', marginTop: 3 }}>
-                        <Icono nombre={c.tono === 'peligro' ? 'mal' : c.tono === 'exito' ? 'bien' : 'alerta'} tam={28} color={color} grosor={2} />
+                      <div style={{ flex: '0 0 auto', marginTop: 3, width: 28, display: 'flex', justifyContent: 'center' }}>
+                        {c.tono === 'peligro' || c.tono === 'exito' || c.tono === 'aviso' ? (
+                          <Icono nombre={c.tono === 'peligro' ? 'mal' : c.tono === 'exito' ? 'bien' : 'alerta'} tam={28} color={color} grosor={2} />
+                        ) : (
+                          <span style={{ width: 11, height: 11, borderRadius: 6, backgroundColor: color, marginTop: 12 }} />
+                        )}
                       </div>
                       <div style={{ fontFamily: TEXTO, fontSize: 27, lineHeight: 1.4, color: COLOR.tinta }}>{p}</div>
                     </div>
