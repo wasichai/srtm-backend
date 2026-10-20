@@ -854,13 +854,15 @@
       "name": "municipalidad",
       "label": "Municipalidad",
       "pluralLabel": "Municipalidad",
-      "description": "Los datos de la cabecera del PU y la HR: uno por organización, editable en el admin. El escudo es un archivo (srtm.municipalidad.escudo): core no tiene campos de imagen.",
+      "description": "Los datos de la cabecera del PU y la HR, con su escudo: uno por organización, editable en el admin. Sin escudo en el registro vale el de srtm.municipalidad.escudo, si el despliegue lo configura.",
       "fields": [
         {"name": "nombre", "label": "Nombre", "type": "TEXT", "required": true, "description": "MUNICIPALIDAD DISTRITAL DE …, como se imprime."},
         {"name": "oficina", "label": "Oficina", "type": "TEXT", "description": "La línea bajo el nombre."},
         {"name": "ruc", "label": "RUC", "type": "TEXT"},
         {"name": "gerencia", "label": "Gerencia", "type": "TEXT"},
-        {"name": "direccion", "label": "Dirección", "type": "TEXT"}
+        {"name": "direccion", "label": "Dirección", "type": "TEXT"},
+        {"name": "escudo", "label": "Escudo", "type": "IMAGE", "contentTypes": ["image/png", "image/jpeg"], "maxBytes": 1048576,
+          "description": "PNG o JPG de hasta 1 MiB, a la izquierda de la cabecera. Va dentro de cada PU y HR."}
       ]
     },
     {

@@ -24,7 +24,8 @@ would send ("would PUT /api/objects/... {...}"), then "diff: nothing pending"
 or how many are: the evidence asked for before applying to a shared Core.
 
 GEOMETRY fields (the lotes' polygons, the domicilio's point) are wasichai-gis's:
-srtm installs it, on PostGIS. Adapted from wasichai's
+srtm installs it, on PostGIS. FILE and IMAGE fields (the municipalidad's escudo)
+are wasichai-files': their maxBytes and contentTypes go with the field's create. Adapted from wasichai's
 examples/gis-sample/perene/apply.py. Stdlib only. See README.md.
 """
 import argparse
@@ -80,11 +81,18 @@ MAX_OBJECT_NAME = 39
 MAX_FIELD_NAME = 49
 MAX_RELATIONSHIP_NAME = 35
 
-# core's scalar types, plus GEOMETRY from wasichai-gis (srtm installs it: the lotes and the domicilio's point)
+# core's scalar types, plus GEOMETRY from wasichai-gis (srtm installs it: the lotes and the domicilio's point) and FILE
+# and IMAGE from wasichai-files (the municipalidad's escudo)
 FIELD_TYPES = frozenset({
     "TEXT", "LONG_TEXT", "INTEGER", "DECIMAL", "BOOLEAN", "DATE", "DATETIME",
-    "ENUM", "EMAIL", "URL", "UUID", "GEOMETRY",
+    "ENUM", "EMAIL", "URL", "UUID", "GEOMETRY", "FILE", "IMAGE",
 })
+
+# wasichai-files' types: a field's settings (maxBytes, contentTypes) go with its create and are fixed afterwards
+FILE_TYPES = frozenset({"FILE", "IMAGE"})
+
+# mirror wasichai-files' FileFieldType: type/subtype or type/*, no parameters
+MEDIA_TYPE = re.compile(r"^[a-z0-9][a-z0-9!#$&^_.+-]{0,62}/([a-z0-9][a-z0-9!#$&^_.+-]{0,62}|\*)$")
 
 # an object's rules model.json declares and apply keeps in sync after the relationships: composite indexes
 # (ADR-036) and append-only (ADR-040). left out of an object, they are none
@@ -96,8 +104,9 @@ RULES_OFF = {"indexes": [], "appendOnly": False}
 # the rules: an admin's description, plural or disabled object survives
 OBJECT_KEYS = ("label", "pluralLabel", "description", "enabled")
 
-# what Core does not index (FieldSets.requireIndexable): long text, and a geometry (wasichai-gis refuses to sort by one)
-UNINDEXABLE_TYPES = frozenset({"LONG_TEXT", "GEOMETRY"})
+# what Core does not index (FieldSets.requireIndexable): long text, a geometry (wasichai-gis refuses to sort by one) and
+# a file (wasichai-files neither filters nor sorts by one)
+UNINDEXABLE_TYPES = frozenset({"LONG_TEXT", "GEOMETRY", "FILE", "IMAGE"})
 
 # mirror wasichai-gis's GeometryFieldType: a geometry names its shape; srid 1..999999 (default 4326), 2d or 3d
 GEOMETRY_TYPES = frozenset({"POINT", "LINESTRING", "POLYGON", "MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON"})
@@ -149,6 +158,29 @@ def _check_rules(obj, field_types, relation_fields):
         if index in seen:
             errors.append(f"{label}: {shown} is repeated")
         seen.append(index)
+    return errors
+
+
+def _check_file(field, ftype, label):
+    """Mirror wasichai-files' FileFieldType: a file is never unique and has no default; maxBytes a positive whole
+    number (its ceiling, wasichai.files.max-bytes, is the deployment's: Core checks it), contentTypes a list of media
+    types. Only a file field has them."""
+    settings = [k for k in ("maxBytes", "contentTypes") if k in field]
+    if ftype not in FILE_TYPES:
+        return [f"{label}: maxBytes and contentTypes are only for FILE and IMAGE"] if settings else []
+    errors = []
+    if field.get("unique"):
+        errors.append(f"{label}: a file field cannot be unique")
+    if field.get("defaultValue") is not None:
+        errors.append(f"{label}: a file field cannot have a default")
+    if "maxBytes" in field:
+        max_bytes = field["maxBytes"]
+        if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes <= 0:
+            errors.append(f"{label}: maxBytes must be a positive whole number of bytes")
+    if "contentTypes" in field:
+        types = field["contentTypes"]
+        if not isinstance(types, list) or not types or not all(isinstance(t, str) and MEDIA_TYPE.fullmatch(t) for t in types):
+            errors.append(f"{label}: contentTypes must be a list of media types such as image/png")
     return errors
 
 
@@ -224,6 +256,8 @@ def validate(model):
                     errors.append(f"{flabel}: dimension must be 2 or 3")
                 if field.get("unique") or field.get("required"):
                     errors.append(f"{flabel}: a geometry can be neither unique nor required here")
+
+            errors.extend(_check_file(field, ftype, flabel))
 
             if ftype == "ENUM":
                 enum_name = field.get("enum")
@@ -301,6 +335,11 @@ def field_payload(model, f):
         field["geometryType"] = f["geometryType"].upper()
         field["srid"] = f.get("srid", 4326)
         field["dimension"] = f.get("dimension", 2)
+    if f["type"] in FILE_TYPES:
+        # left out, wasichai-files' defaults: any type for FILE, png, jpeg and webp for IMAGE; its ceiling
+        for key in ("contentTypes", "maxBytes"):
+            if key in f:
+                field[key] = f[key]
     return field
 
 

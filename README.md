@@ -155,7 +155,7 @@ python3 import_catalogos.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"      
 
 - **`municipalidad`:** la cabecera del PU y la HR ([Cabecera de los documentos](#cabecera-de-los-documentos)). Se
   crea desde `model/data/municipalidad.json` solo si la organización no tiene ninguna; nunca pisa la editada en el
-  admin. Los datos que trae son **provisionales**.
+  admin. Los datos que trae son **provisionales**. El escudo no viene en el archivo: se sube aparte.
 - **`ubigeo`:** los 1 893 distritos del INEI, de `model/data/ubigeo.csv`. El archivo es un recorte de
   [ubigeo-peru-aumentado](https://github.com/jmcastagnetto/ubigeo-peru-aumentado): código INEI, departamento,
   provincia y distrito.
@@ -2064,11 +2064,50 @@ emisión (hora de Lima); la gerencia; la dirección; una línea punteada, y el t
     ese tiempo.
   - Los datos de `model/data/municipalidad.json` son **provisionales**: el RUC sale del padrón, y la oficina y la
     gerencia son genéricas. Se corrigen en el admin.
-- **El escudo** es un archivo: core no tiene campos de imagen.
-  - `srtm.municipalidad.escudo` (`SRTM_MUNICIPALIDAD_ESCUDO`) admite `classpath:…` o `file:…`, solo PNG o JPG.
-  - Se lee una vez al arrancar y va dentro del PDF. Si no es PNG ni JPG, o si no existe, la app no arranca y el error
-    nombra el archivo.
-  - Vacío, la cabecera no lleva escudo.
+- **El escudo** es de cada organización: el campo `escudo` (tipo `IMAGE`, de
+  [wasichai-files](#archivos-wasichai-files)) del mismo registro `municipalidad`. Así cada municipalidad de una
+  instalación imprime el suyo.
+  - PNG o JPG de hasta 1 MiB (`contentTypes` y `maxBytes` del campo en `model.json`): otro tipo es un 400 al subirlo.
+    Va dentro de cada PU y HR, también de la emisión masiva, cuyos trabajadores lo leen como el usuario que la creó.
+  - Se sube con `POST /api/objects/municipalidad/records/{id}/files/escudo` (multipart, parte `file`), con permiso de
+    actualizar `municipalidad`. El admin de wasichai-ui (0.5.0) todavía no sube archivos (wasichai-files no tiene
+    paquete de frontend); mientras tanto, por la API:
+
+    ```bash
+    curl -X POST -H "Authorization: Bearer $TOKEN" -F "file=@escudo.png" \
+      "$WASICHAI_CORE/api/objects/municipalidad/records/<id>/files/escudo"
+    ```
+
+  - Se lee como el usuario que emite (necesita leer `municipalidad`) y entra en la misma caché por organización: un
+    escudo nuevo aparece dentro de `srtm.municipalidad.cache`.
+  - Un escudo del registro que no se puede leer (el almacén ya no lo tiene) o que no es un PNG o JPG legible no rompe
+    el documento: se imprime sin escudo y el log lo avisa (WARN).
+  - **Respaldo del despliegue:** si el registro no tiene escudo (o no hay registro), vale `srtm.municipalidad.escudo`
+    (`SRTM_MUNICIPALIDAD_ESCUDO`), `classpath:…` o `file:…`, solo PNG o JPG. Se lee una vez al arrancar: si no es PNG ni
+    JPG, o si no existe, la app no arranca y el error nombra el archivo. Vacío (el valor por defecto), sin escudo. En
+    una instalación con varias organizaciones conviene dejarlo vacío: si no, la que no subió el suyo imprime este.
+
+### Archivos (wasichai-files)
+
+srtm instala `wasichai-spring-boot-starter-files` (del BOM de wasichai, 1.2.0) para los campos `FILE` e `IMAGE`; hoy,
+solo `municipalidad.escudo`. Detalle del módulo: `docs/modules/files.md` de wasichai.
+
+- **Al arrancar** crea su tabla `stored_files` (y las columnas `custom_fields.file_max_bytes` y `file_content_types`,
+  y la función `stored_file_descriptor`), con su propio historial de Flyway (`flyway_history_files`), después de gis.
+  La metadata la sigue cargando `apply.py`: el campo se crea como cualquier otro.
+- **Los bytes** van a un almacén; la base solo guarda la fila y el registro, el id del archivo.
+  - `srtm.archivos.almacen=local` (`SRTM_ARCHIVOS_ALMACEN`, por defecto): en el disco, bajo
+    `wasichai.files.local.path` (`SRTM_ARCHIVOS_DIR`, por defecto `./data/archivos`, fuera del repo). En producción, un
+    volumen persistente que vean todas las instancias.
+  - `srtm.archivos.almacen=s3`: en un bucket (`ArchivosS3`), sin volumen. `srtm.archivos.s3.bucket`
+    (`SRTM_ARCHIVOS_S3_BUCKET`, obligatoria), `region`, `endpoint` y `prefijo` (`SRTM_ARCHIVOS_S3_*`) se leen como los
+    de [Almacén S3 (K8s)](#emisión-masiva) de la emisión, con las mismas credenciales (la cadena del SDK); al arrancar se
+    comprueba el bucket. Las claves son `<prefijo>/<organización>/<archivo>`. El rol necesita `s3:PutObject`,
+    `s3:GetObject`, `s3:DeleteObject` y `s3:ListBucket`. Puede ser el mismo bucket de las emisiones con otro prefijo.
+  - Nunca `wasichai.files.store=s3`: el almacén S3 del módulo usa el cliente asíncrono del SDK, cuyo netty srtm deja
+    fuera del build; sin él la app no arrancaría.
+- **Limpieza:** el módulo borra cada hora (`wasichai.files.cleanup.*`) los archivos que ningún registro nombra hace más
+  de 24 h: un escudo reemplazado, el de un registro borrado.
 
 ## Emisión masiva
 

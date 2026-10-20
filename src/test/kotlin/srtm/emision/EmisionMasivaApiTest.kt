@@ -18,12 +18,15 @@ import org.springframework.http.MediaType
 import org.springframework.test.annotation.DirtiesContext
 import org.springframework.test.context.TestPropertySource
 import srtm.impuesto.ParametroTributario
+import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipInputStream
+import javax.imageio.ImageIO
 
 // /api/srtm/emisiones (wasichai/srtm-backend#41, #53, #54): the masiva of a year, cut in lotes of 2 that this
 // context's 2 workers generate and one of them assembles. the HR and the PUs are the real ones, behind a thin double
@@ -235,6 +238,33 @@ class EmisionMasivaApiTest : ConEscenarioApiTest() {
 
         puerta!!.complete(Unit)
         assertEquals("TERMINADA", esperar(primera)["estado"].asString())
+    }
+
+    // the workers generate as the masiva's creator (IdentidadEmision): its organization's record and escudo, read
+    // through wasichai-files as that user
+    @Test
+    fun `the masiva prints the escudo of the organization's municipalidad record`() {
+        val anio = anio()
+        val propio = token
+        token = otraOrganizacion()
+        try {
+            parametros()
+            val e = escenario(anio)
+            val png = ByteArrayOutputStream().also { ImageIO.write(BufferedImage(5, 2, BufferedImage.TYPE_INT_RGB), "png", it) }.toByteArray()
+            subirEscudo(municipalidad(mapOf("nombre" to "MUNICIPALIDAD CON ESCUDO")), png)
+
+            val terminada = esperar(emitir(anio, "PDF"))
+
+            assertEquals("TERMINADA", terminada["estado"].asString(), terminada.toString())
+            assertEquals(0, terminada["errores"].size(), terminada.toString())
+            val pdf = descargar(terminada["id"].asString()).cuerpo
+            assertTrue("MUNICIPALIDAD CON ESCUDO" in texto(pdf), texto(pdf))
+            assertEquals(listOf("5x2"), tamanosDeImagenes(pdf))
+            // the same documents as the endpoints emit them one by one, which print it too
+            esLaConcatenacion(pdf, documentos(e, anio))
+        } finally {
+            token = propio
+        }
     }
 
     @Test

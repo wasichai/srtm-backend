@@ -4,6 +4,7 @@ import org.apache.pdfbox.Loader
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.pdmodel.PDPage
 import org.apache.pdfbox.pdmodel.common.PDRectangle
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject
 import org.apache.pdfbox.text.PDFTextStripper
 import java.io.ByteArrayOutputStream
 
@@ -37,6 +38,16 @@ fun imagenes(pdf: ByteArray): Int =
     Loader.loadPDF(pdf).use { doc ->
         val recursos = doc.getPage(0).resources
         recursos.xObjectNames.count { recursos.isImageXObject(it) }
+    }
+
+// the size (width x height, in pixels) of each image the first page draws: which escudo it is
+fun tamanosDeImagenes(pdf: ByteArray): List<String> =
+    Loader.loadPDF(pdf).use { doc ->
+        val recursos = doc.getPage(0).resources
+        recursos.xObjectNames.filter { recursos.isImageXObject(it) }.map { n ->
+            val imagen = recursos.getXObject(n) as PDImageXObject
+            "${imagen.width}x${imagen.height}"
+        }
     }
 
 // a pdf of `n` blank A4 pages
