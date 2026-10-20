@@ -3,6 +3,7 @@ package srtm
 import org.springframework.stereotype.Component
 import wasichai.core.common.Actions
 import wasichai.core.common.ForbiddenException
+import wasichai.core.common.NotFoundException
 import wasichai.core.identity.CurrentUser
 import wasichai.core.metadata.MetadataService
 
@@ -23,6 +24,19 @@ class Permisos(
         objeto: String,
         acto: String
     ) = exigir(Actions.READ, "lectura", objeto, acto)
+
+    // whether the caller may read `objeto`: for what srtm reads of it outside RecordService (an aggregate in sql), which
+    // only who could read its records gets. an object the organization lacks is no
+    suspend fun puedeLeer(objeto: String): Boolean {
+        val usuario = currentUser.require()
+        val definicion =
+            try {
+                metadata.definitionOf(objeto)
+            } catch (_: NotFoundException) {
+                return false
+            }
+        return currentUser.hasPermission(usuario, Actions.READ, definicion.obj.id)
+    }
 
     private suspend fun exigir(
         accion: String,
