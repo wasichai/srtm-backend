@@ -125,6 +125,22 @@ Cuando cambian los manuales:: un título de sección que cambia cambia también 
 que desaparece hace fallar `npm run verificar`. Si cambian las pantallas, `npm run capturas` y revisar las regiones con
 `npm run fotogramas`.
 
+== Integración continua
+
+Las presentaciones van en el mismo workflow que los manuales (`.github/workflows/manuales.yml`), porque comparten el
+sitio de GitHub Pages:
+
+En cada PR que toca `docs/manuales` o `docs/presentaciones`:: `npm run lint` y `npm run verificar`; luego un trabajo por
+vídeo (la acción `.github/actions/presentaciones`: `npm run render -- NN` y `npm run comprobar-videos -- NN`). El
+artefacto `presentaciones` reúne los MP4, las miniaturas y los fotogramas sacados de cada MP4 (`control/`), para revisar
+el PR sin descargar nada más.
+En `main`:: lo mismo, y el sitio de Pages lleva los manuales en la raíz y las presentaciones en `presentaciones/`, con
+una página que las lista (`scripts/sitio.ts`).
+En cada release (`.github/workflows/release.yml`):: un trabajo por vídeo adjunta
+`srtm-presentacion-NN-<nombre>-<versión>.mp4` y su `.sha256`.
+
+Las capturas no se toman en el CI: necesitan la demo. Se versionan en `recursos/capturas`.
+
 == Diseño
 
 Identidad:: La de los manuales, que es la del tema «Portal tributario» de srtm-ui: azul `#0D5FA8` de la barra del
@@ -178,4 +194,3 @@ Las presentaciones no usan música, imágenes de terceros ni fuentes descargadas
   lo dicen los manuales); el vídeo 07 muestra la pantalla vacía y explica cómo se lee.
 * Las capturas reflejan la demostración del 20 de octubre de 2026 (su «hoy»): tomarlas otro día cambia las fechas que
   dependen del día (fases, vencimientos) hasta que se actualice la demo.
-* Los vídeos no se renderizan en la integración continua (tardarían demasiado): el CI corre `lint` y `verificar`.

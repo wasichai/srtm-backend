@@ -1,19 +1,26 @@
 name: Manuals
 
+# the manuals (docs/manuales, HTML + PDF) and their video presentations (docs/presentaciones, MP4): built on every
+# pr as artifacts, and published together on github pages from main: the manuals at the root, the videos under
+# presentaciones/. one site per repository, so one workflow deploys it
 on:
   push:
     branches: [main]
     paths:
       - 'docs/manuales/**'
+      - 'docs/presentaciones/**'
       # validar.py checks the manuals' version against gradle.properties
       - gradle.properties
       - '.github/actions/manuales/**'
+      - '.github/actions/presentaciones/**'
       - .github/workflows/manuales.yml
   pull_request:
     paths:
       - 'docs/manuales/**'
+      - 'docs/presentaciones/**'
       - gradle.properties
       - '.github/actions/manuales/**'
+      - '.github/actions/presentaciones/**'
       - .github/workflows/manuales.yml
   # republishes the site from main without a change
   workflow_dispatch:
@@ -40,17 +47,103 @@ jobs:
           name: manuales
           path: docs/manuales/salida/
           if-no-files-found: error
-      # the whole salida/: the library page links the pdfs as ../pdf/
-      - name: Upload the pages site
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+
+  # lint and the consistency checks (sources, captures, regions, reading times, storyboards), and the list of videos
+  # for the render matrix
+  presentations-check:
+    name: Presentations (lint + verify)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: docs/presentaciones
+    outputs:
+      videos: ${{ steps.list.outputs.videos }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          path: docs/manuales/salida/
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: docs/presentaciones/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run verificar
+      - id: list
+        run: node --input-type=module -e "const { VIDEOS } = await import('./src/videos/index.ts'); console.log('videos=' + JSON.stringify(VIDEOS.map((v) => v.numero)))" >> "$GITHUB_OUTPUT"
+
+  # one job per video: a full render of every video in one job would take hours
+  presentations:
+    name: Presentation ${{ matrix.video }}
+    needs: presentations-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        video: ${{ fromJSON(needs.presentations-check.outputs.videos) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/presentaciones
+        with:
+          videos: ${{ matrix.video }}
+      # the mp4, its thumbnail and the frames taken out of the mp4 (control/), to review a pr without the whole video
+      - name: Upload the presentation
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: presentacion-${{ matrix.video }}
+          path: |
+            docs/presentaciones/salida/videos/
+            docs/presentaciones/salida/miniaturas/
+            docs/presentaciones/salida/control/
+          if-no-files-found: error
+
+  # the ten presentation artifacts as one, the way a reviewer downloads them
+  presentations-all:
+    name: Presentations (all)
+    needs: presentations
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/upload-artifact/merge@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: presentaciones
+          pattern: presentacion-*
+          delete-merged: true
+
+  # the pages site: the manuals' salida/ (the library page links the pdfs as ../pdf/) and presentaciones/ beside it
+  site:
+    name: Pages site
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: [build, presentations-all]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: manuales
+          path: sitio
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: presentaciones
+          path: sitio/presentaciones
+      # the page of the videos; the frames of control/ are for review, not for the site
+      - name: Presentations page
+        run: |
+          rm -rf sitio/presentaciones/control
+          node docs/presentaciones/scripts/sitio.ts sitio/presentaciones
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: sitio/
 
   pages:
     name: GitHub Pages
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: build
+    needs: site
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # needs settings > pages > source: github actions

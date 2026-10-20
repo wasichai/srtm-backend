@@ -10,6 +10,7 @@ import { Icono, type NombreIcono } from '../componentes/iconos.tsx'
 import { Recorte } from '../componentes/Recorte.tsx'
 import { useEscena } from '../componentes/contexto.tsx'
 import { NOMBRE_DOC } from '../manuales.ts'
+import edicion from '../generado/edicion.json' with { type: 'json' }
 
 const ALTO_BANDA = 600
 
@@ -102,7 +103,7 @@ export const EscenaPortada: React.FC<{ escena: Portada }> = ({ escena }) => {
               <div key={m}>{m}</div>
             ))}
             <div style={{ fontFamily: TITULOS, fontSize: 22, color: COLOR.tintaClara, marginTop: 8 }}>
-              Edición 1.0 · 19 de octubre de 2026 · Rentas municipales 0.9.0
+              Edición {edicion.edicion} · {edicion.fecha} · Rentas municipales {edicion.version}
             </div>
           </div>
         </div>

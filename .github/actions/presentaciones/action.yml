@@ -1,0 +1,36 @@
+name: Presentations
+description: Renders presentations of docs/presentaciones (MP4 + thumbnail) into docs/presentaciones/salida and checks each MP4
+
+inputs:
+  videos:
+    description: Presentations to render, by number (03) or composition id, space separated; empty renders all
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: '26'
+        cache: npm
+        cache-dependency-path: docs/presentaciones/package-lock.json
+    - name: Install
+      shell: bash
+      working-directory: docs/presentaciones
+      run: npm ci --no-audit --no-fund
+    # the captures are versioned (they need the demo and a browser): the render only draws the scenes. remotion
+    # downloads its chrome headless shell and brings its own ffmpeg; prerender runs recursos and verificar first
+    - name: Render
+      shell: bash
+      working-directory: docs/presentaciones
+      env:
+        VIDEOS: ${{ inputs.videos }}
+      run: npm run render -- $VIDEOS
+    # codec, size, fps, exact frame count, no audio, thumbnail; and one frame per scene out of each mp4 (salida/control)
+    - name: Check the videos
+      shell: bash
+      working-directory: docs/presentaciones
+      env:
+        VIDEOS: ${{ inputs.videos }}
+      run: npm run comprobar-videos -- $VIDEOS

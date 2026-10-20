@@ -5,6 +5,7 @@
 // y escribe los índices que el código importa:
 //   src/generado/capturas.json   tamaño en píxeles CSS de cada captura
 //   src/generado/anclas.json     título de cada sección [[ancla]] de los manuales, para citar la fuente
+//   src/generado/edicion.json    versión del producto y edición de los manuales (atributos.adoc), para la portada
 // Se corre solo antes de npm run dev y de npm run render. node scripts/recursos.ts --comprobar no escribe nada: falla
 // si los índices versionados no coinciden con lo que escribiría (npm run verificar lo usa).
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -101,9 +102,16 @@ export const indiceAnclas = (): Record<string, string> => {
 
 const json = (v: unknown): string => `${JSON.stringify(v, null, 2)}\n`
 
+/** La versión y la edición que lleva la portada: las de los manuales, que release-please sube con cada versión. */
+export const edicion = (): { version: string; edicion: string; fecha: string } => {
+  const a = atributos()
+  return { version: a['version-producto'], edicion: a['edicion'], fecha: a['fecha-edicion'] }
+}
+
 export const indices = (): Record<string, string> => ({
   'capturas.json': json(indiceCapturas()),
   'anclas.json': json(indiceAnclas()),
+  'edicion.json': json(edicion()),
 })
 
 const main = (): void => {

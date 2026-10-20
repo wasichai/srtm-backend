@@ -5,7 +5,7 @@ on:
     types: [published]
 
 # packages: the wasichai libraries come from github packages (settings.gradle.kts reads GITHUB_ACTOR / GITHUB_TOKEN)
-# contents: write: attaches the jar and the manuals to the release
+# contents: write: attaches the jar, the manuals and the presentations to the release
 permissions:
   contents: write
   packages: read
@@ -59,3 +59,48 @@ jobs:
           zip -qr "adjuntos/srtm-manuales-$version-html.zip" index.html html pdf
           (cd adjuntos && sha256sum -- * > "srtm-manuales-$version.sha256")
           gh release upload "$GITHUB_REF_NAME" adjuntos/* --clobber
+
+  # the list of videos for the matrix (one job per video: all of them in one job would take hours)
+  presentations-list:
+    name: Presentations (list)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      videos: ${{ steps.list.outputs.videos }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '26'
+      - id: list
+        working-directory: docs/presentaciones
+        run: node --input-type=module -e "const { VIDEOS } = await import('./src/videos/index.ts'); console.log('videos=' + JSON.stringify(VIDEOS.map((v) => v.numero)))" >> "$GITHUB_OUTPUT"
+
+  presentations:
+    name: Presentation ${{ matrix.video }}
+    needs: presentations-list
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        video: ${{ fromJSON(needs.presentations-list.outputs.videos) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/presentaciones
+        with:
+          videos: ${{ matrix.video }}
+      # srtm-03-registro-tributario.mp4 → srtm-presentacion-03-registro-tributario-<version>.mp4, with its sha256
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: docs/presentaciones/salida/videos
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for mp4 in srtm-*.mp4; do
+            nombre="$(basename "$mp4" .mp4)"
+            adjunto="srtm-presentacion-${nombre#srtm-}-$version.mp4"
+            mv "$mp4" "$adjunto"
+            sha256sum "$adjunto" > "$adjunto.sha256"
+            gh release upload "$GITHUB_REF_NAME" "$adjunto" "$adjunto.sha256" --clobber
+          done
