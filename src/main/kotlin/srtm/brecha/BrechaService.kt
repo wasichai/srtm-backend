@@ -57,19 +57,18 @@ import kotlin.coroutines.cancellation.CancellationException
 // in procesados, until the corrida is TERMINADA (or FALLIDA, with mensaje). ~4 000 predios are a minute or two of one
 // worker: the masiva's lotes (several instances, leases per lote) would buy nothing here. one active corrida per
 // organization and year, under Candado.BRECHA; one whose latido is older than LEASE (its instance died) no longer
-// counts as active and is failed when the next one starts, or when it is read (lista, get). catastro-backend is the
-// catastro of one organization (srtm.catastro.organizacion): another's corrida is refused
+// counts as active and is failed when the next one starts, or when it is read (lista, get). each organization reads
+// its own catastro-backend (srtm.catastro.organizaciones, Catastros): one without it is refused
 @Service
 class BrechaService(
     private val registros: Registros,
     private val metadata: MetadataService,
     private val currentUser: CurrentUser,
     private val candados: Candados,
-    private val catastro: Catastro,
+    private val catastros: Catastros,
     private val arbitrios: ArbitriosService,
     private val parametrosTributarios: ParametrosTributarios,
     private val db: DatabaseClient,
-    private val propiedades: CatastroProperties,
     private val organizaciones: OrganizationRepository,
     transacciones: ReactiveTransactionManager
 ) {
@@ -77,7 +76,8 @@ class BrechaService(
     private val transaccion = TransactionalOperator.create(transacciones)
 
     // 202: the corrida PENDIENTE. before anything exists: 403 without the permissions its run uses, 400 for the year,
-    // 409 when catastro is not configured (or not for the caller's organization) or a corrida of the year is running
+    // 409 when catastro is not configured (or not for the caller's organization) or a corrida of the year is running.
+    // the corrida reads the catastro chosen here
     suspend fun lanzar(pedido: PedidoCorrida): Corrida {
         val llamante =
             ReactiveSecurityContextHolder.getContext().awaitFirstOrNull()?.authentication
@@ -87,8 +87,8 @@ class BrechaService(
         if (anio !in ArbitriosService.ANIOS) {
             throw ValidationException("El año no es válido", "anio", "de ${ArbitriosService.ANIOS.first} a ${ArbitriosService.ANIOS.last}")
         }
-        if (!catastro.configurado) throw ConflictException(NO_CONFIGURADO)
-        exigirOrganizacion(usuario)
+        if (!catastros.configurado) throw ConflictException(NO_CONFIGURADO)
+        val catastro = catastroDe(usuario)
         val creada =
             transaccion.executeAndAwait {
                 candados.bloquear(Candado.BRECHA, Candados.clave(usuario.organizationId, "$anio"))
@@ -111,7 +111,7 @@ class BrechaService(
                 )
             }
         val id = UUID.fromString(creada.id)
-        scope.launch(ReactiveSecurityContextHolder.withAuthentication(llamante).asCoroutineContext()) { correr(id, anio) }
+        scope.launch(ReactiveSecurityContextHolder.withAuthentication(llamante).asCoroutineContext()) { correr(id, anio, catastro) }
         return corridaDe(creada)
     }
 
@@ -159,18 +159,12 @@ class BrechaService(
         "terminado" to ahora.toString()
     )
 
-    // catastro-backend's url and account are install-wide: the catastro of one organization. a corrida of another would
-    // measure its padrón against someone else's catastro, so it is refused; with no organization set, every corrida is
-    // refused until one is (never a silent tie to whoever asks first)
-    private suspend fun exigirOrganizacion(usuario: AuthenticatedUser) {
-        val configurada = propiedades.organizacion.trim()
-        val slug =
-            if (configurada.isEmpty() || runCatching { UUID.fromString(configurada) }.isSuccess) {
-                null
-            } else {
-                organizaciones.findById(usuario.organizationId)?.slug
-            }
-        otraOrganizacion(configurada, usuario.organizationId, slug)?.let { throw ConflictException(it) }
+    // the catastro of the caller's organization: a corrida reads its own, never another's (it would measure its padrón
+    // against someone else's catastro). an organization without one is refused; its slug is read only when some key is
+    // a slug
+    private suspend fun catastroDe(usuario: AuthenticatedUser): Catastro {
+        val slug = if (catastros.necesitaSlug) organizaciones.findById(usuario.organizationId)?.slug else null
+        return catastros.de(usuario.organizationId, slug) ?: throw ConflictException(SIN_CATASTRO_CONFIGURADO)
     }
 
     // the corrida a query reads: the one given (404 unless it is of the year), else the latest TERMINADA of the year
@@ -219,7 +213,8 @@ class BrechaService(
     // it: an abandoned run never overwrites a newer one). what goes wrong leaves it FALLIDA with why
     private suspend fun correr(
         id: UUID,
-        anio: Int
+        anio: Int,
+        catastro: Catastro
     ) {
         try {
             actualizar(id, mapOf("estado" to EN_CURSO, "latido" to ahora().toString()))

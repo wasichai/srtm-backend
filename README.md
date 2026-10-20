@@ -55,8 +55,9 @@ ese puerto queda en el loopback del servidor: llega por un túnel, `ssh -N -L 54
 | `SRTM_PIDE_RENIEC_DNI_USUARIO` / `_RUC_USUARIO` / `_PASSWORD` | vacías | credenciales del convenio con la PIDE; nunca en el repositorio |
 | `SRTM_PIDE_RENIEC_URL` / `_TIMEOUT` | `https://ws2.pide.gob.pe/Rest/RENIEC/Consultar` / `5s` | servicio REST "Consultar" y cuánto se espera |
 | `SRTM_CATASTRO_ENABLED` | `false` | valuaciones de catastro-backend para la brecha (ver [Brecha de recaudación](#brecha-de-recaudación)) |
-| `SRTM_CATASTRO_URL` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_TIMEOUT` | `http://localhost:8091` / vacías / `60s` | catastro-backend y su cuenta de servicio `srtm`; el secreto nunca en el repositorio |
-| `SRTM_CATASTRO_ORGANIZACION` | vacía | slug o id de la organización de srtm cuyo catastro es; vacía, ninguna corrida de la brecha empieza |
+| `SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_URL` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_TIMEOUT` | sin entradas / `60s` | el catastro-backend de una organización y su cuenta de servicio `srtm`; `<CLAVE>` es su slug, o cualquiera con `_ORGANIZACION` = su id. El secreto nunca en el repositorio |
+| `SRTM_CATASTRO_URL` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_TIMEOUT` | `http://localhost:8091` / vacías / `60s` | la forma de una sola organización: una entrada más del mapa |
+| `SRTM_CATASTRO_ORGANIZACION` | vacía | slug o id de la organización de esa entrada única; vacía, esa cuenta no se usa |
 
 ### Pasar una base existente a PostGIS
 
@@ -777,18 +778,41 @@ y `Arbitrios.determinar`.
 **Configuración.** srtm lee `GET {url}/api/catastro/valuaciones?anio&page&size=500` (todas las páginas) como la
 cuenta de servicio `srtm` de catastro-backend (rol `SRTM_LECTOR`, la crea su `model/crear_cuenta_srtm.py`). El token
 sale de `POST {url}/api/auth/token {clientId, clientSecret}` y se guarda hasta un minuto antes de `expiresAt` (o
-hasta un 401). Variables: `SRTM_CATASTRO_ENABLED`, `SRTM_CATASTRO_URL`, `SRTM_CATASTRO_CLIENT_ID`,
-`SRTM_CATASTRO_CLIENT_SECRET`, `SRTM_CATASTRO_TIMEOUT` (por petición) y `SRTM_CATASTRO_ORGANIZACION`. Apagado, o sin
-url o cuenta, una corrida no empieza: **409** «Catastro no configurado». Si la cuenta no puede leer alguno de los
+hasta un 401). Apagado (`SRTM_CATASTRO_ENABLED`), o sin ninguna organización con url y cuenta, una corrida no
+empieza: **409** «Catastro no configurado». Si la cuenta no puede leer alguno de los
 cuatro objetos del catastro, catastro responde 403 a todo y la corrida queda FALLIDA con ese estado. Si catastro no
 devuelve ningún ítem del año y el padrón tiene predios, la corrida queda FALLIDA («El catastro no devolvió valuaciones
 de 2026…») en vez de dar todo el padrón por SIN_CATASTRO. Los importes se leen como decimales, nunca como `double`.
 
-**Una organización.** La configuración es de la instalación, no de cada organización: `srtm.catastro.organizacion`
-(`SRTM_CATASTRO_ORGANIZACION`, el slug o el id de la organización de srtm) dice de cuál es ese catastro. Una corrida de
-otra organización responde **409** «Catastro no configurado para esta organización»; sin ella, con el catastro
-encendido, ninguna corrida empieza (**409** «Catastro sin organización: fije srtm.catastro.organizacion…»): nunca se
-cruza en silencio el padrón de una organización con el catastro de otra.
+**Un catastro por organización.** Cada organización de srtm lee su propio catastro-backend: el mapa
+`srtm.catastro.organizaciones.<slug-o-id>` con `url`, `client-id`, `client-secret` y, opcional, `timeout` (si no, el
+de `srtm.catastro.timeout`). srtm guarda un cliente y un token por organización, y una corrida usa el de la
+organización que la lanza. La clave casa como antes: si es un id (UUID), con el id de la organización; si no, con su
+slug, sin distinguir mayúsculas. Por variables de entorno (relaxed binding de Spring) cada propiedad es
+`SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_<PROPIEDAD>`; la clave llega en minúsculas y no puede llevar guiones ni guiones
+bajos (`_SAN_RAMON_URL` sería la clave `san`), así que un id o un slug con guion o guion bajo va en `organizacion`, bajo
+una clave cualquiera. Dos organizaciones, Perené por su slug e Ica por su id:
+
+```bash
+SRTM_CATASTRO_ENABLED=true
+SRTM_CATASTRO_ORGANIZACIONES_PERENE_URL=http://catastro-perene:8091
+SRTM_CATASTRO_ORGANIZACIONES_PERENE_CLIENT_ID=<clientId de la cuenta srtm del catastro de Perené>
+SRTM_CATASTRO_ORGANIZACIONES_PERENE_CLIENT_SECRET=<clientSecret>
+SRTM_CATASTRO_ORGANIZACIONES_ICA_ORGANIZACION=<id de la organización de srtm de Ica>
+SRTM_CATASTRO_ORGANIZACIONES_ICA_URL=http://catastro-ica:8091
+SRTM_CATASTRO_ORGANIZACIONES_ICA_CLIENT_ID=<clientId de la cuenta srtm del catastro de Ica>
+SRTM_CATASTRO_ORGANIZACIONES_ICA_CLIENT_SECRET=<clientSecret>
+SRTM_CATASTRO_ORGANIZACIONES_ICA_TIMEOUT=90s
+```
+
+La forma de antes, de una sola organización (`SRTM_CATASTRO_URL`, `_CLIENT_ID`, `_CLIENT_SECRET`, `_TIMEOUT` y
+`SRTM_CATASTRO_ORGANIZACION` con su slug o su id), sigue valiendo: es una entrada más del mapa, y una entrada del mapa
+que nombra igual a la misma organización (las dos por su slug o las dos por su id) la reemplaza. Sin
+`SRTM_CATASTRO_ORGANIZACION` esa cuenta no es de nadie y no se usa. Una entrada sin url, client-id o client-secret se
+salta (con un aviso en el log al arrancar). Una organización sin catastro responde **409** `SIN_CATASTRO_CONFIGURADO`
+(«Catastro no configurado para esta organización: fije srtm.catastro.organizaciones.<slug o id>…»), y una nombrada dos
+veces (por su slug y por su id, o por dos entradas del mapa) **409** «Catastro configurado dos veces para esta
+organización», con las claves que la nombran: nunca se cruza el padrón de una organización con el catastro de otra.
 
 **Cruce** (D7). Cada ítem del catastro busca su predio: por código municipal (`predio.codigo`), si no por código CPU
 (`codigo_cpu`), si no por sector, manzana y lote (`sector_catastral`, `manzana_catastral`, `lote`), sin distinguir
@@ -877,7 +901,7 @@ lectura ve el panel con 403. Lanzar una corrida queda para quien tenga creación
 
 | Método | Ruta | Responde |
 |---|---|---|
-| POST | `/api/srtm/brecha/corridas` `{anio}` | 202 con la corrida; 400 año inválido; 403; 409 catastro no configurado o corrida en curso. |
+| POST | `/api/srtm/brecha/corridas` `{anio}` | 202 con la corrida; 400 año inválido; 403; 409 catastro no configurado (para la organización) o corrida en curso. |
 | GET | `/api/srtm/brecha/corridas?anio` | Las corridas, la más reciente primero. |
 | GET | `/api/srtm/brecha/corridas/{id}` | Una corrida, con su avance (`totalPredios`, `procesados`). |
 | GET | `/api/srtm/brecha/{anio}/panel?corrida` | KPIs, por categoría y por sector de la última corrida TERMINADA del año (o de `corrida`); 404 si no hay. |
@@ -1254,6 +1278,130 @@ Cada predio llega con su ubicación separada como la pide el formulario del SRTM
 `model/reports/nombres_dudosos.csv` lista los nombres cuya separación en apellidos y nombres conviene revisar a mano
 (con coma, con ` Y `, `SN`, menos de 3 palabras o sin nombres). `nombre_completo` siempre guarda el texto original.
 
+## Cargar la Municipalidad de Ica
+
+Ica es una organización aparte en el mismo Core (épica #126). Su padrón llega en `PADRON_CONSTRUCCION.xlsx`, con dos
+hojas: `padron` (una fila por predio y contribuyente) y `construcciones` (una fila por sección de nivel). Lo carga
+`import_padron_ica.py`, que necesita los campos de padrón externo de #124 en el modelo. Cada paso va primero con
+`--dry-run`, y la carga real espera el OK.
+
+1. **Organización:** crear Ica en Core (`POST /api/organizations`, como superadministrador) con su usuario
+   administrador. Los pasos siguientes usan su cuenta: `--email` y `--password`, o `WASICHAI_EMAIL` y
+   `WASICHAI_PASSWORD`.
+
+   ```bash
+   curl -X POST "$WASICHAI_CORE/api/organizations" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"name": "Municipalidad Provincial de Ica", "slug": "ica", "adminEmail": "<correo>", "adminPassword": "<clave>"}'
+   ```
+
+   El login es por correo, así que el administrador de Ica necesita un correo distinto al de las otras organizaciones.
+   Para la brecha se crea la misma organización en catastro-backend (región COSTA) y se configura su entrada
+   `SRTM_CATASTRO_ORGANIZACIONES_ICA_*` (#123).
+2. **Modelo y catálogos:**
+
+   ```bash
+   cd model
+   python3 apply.py --diff && python3 apply.py
+   python3 import_catalogos.py --distrito 110101 --municipalidad-json data/ica/municipalidad.json --obras-csv data/ica/obras_complementarias_costa.csv --dry-run
+   python3 import_catalogos.py --distrito 110101 --municipalidad-json data/ica/municipalidad.json --obras-csv data/ica/obras_complementarias_costa.csv
+   python3 import_parametros.py --dry-run && python3 import_parametros.py
+   ```
+
+   - `import_catalogos.py` va sin `--excel`: las vías y las unidades urbanas de Ica, con su código, las carga
+     `import_padron_ica.py`.
+   - `data/ica/municipalidad.json` trae solo el nombre. El RUC está por confirmar y no se inventa: vacío no se carga, y
+     se completa en el admin.
+   - Las partidas de obras complementarias de Ica son las de la **costa** (Anexo III.2, verificado contra el PDF):
+     `data/ica/obras_complementarias_costa.csv`, las mismas filas que `obras-complementarias-costa-2026.csv` de
+     catastro-backend y las mismas llaves que las de selva. Las descripciones de las letras (`categoria_valor`) son las
+     mismas en las tres regiones.
+3. **Padrón:**
+
+   ```bash
+   python3 -I import_padron_ica.py --excel /ruta/PADRON_CONSTRUCCION.xlsx --dry-run    # lee y transforma, no llama a Core
+   python3 -I import_padron_ica.py --excel /ruta/PADRON_CONSTRUCCION.xlsx --limit 50  # los primeros 50 predios
+   python3 -I import_padron_ica.py --excel /ruta/PADRON_CONSTRUCCION.xlsx             # carga completa
+   ```
+
+   - **Opciones:** `--anio` (default 2026), `--limit N` (los primeros N predios, cada uno con todos sus titulares y sus
+     niveles), `--workers`, `--report` (default `model/reports/padron_ica.csv`), `--codigos`, `--model`, `--core`,
+     `--email` y `--password`.
+   - **`-I`:** el xlsx es un archivo de afuera, así que Python no carga nada del directorio actual. El script agrega
+     solo su propio directorio.
+   - **Salida:** `0` ok; `1` Core rechazó algo (se muestra la fila); `2` el modelo no tiene un campo que el importador
+     llena (falta #124), y no se envía nada.
+   - **Si Core rechaza algo,** la carga se detiene en ese registro. Lo ya creado queda: se corrige o se quita la fila y
+     se vuelve a correr, y la nueva corrida omite lo que ya está.
+
+**Qué crea, en orden.** Lo que Core ya tiene se omite, así que una segunda corrida no crea nada.
+
+1. **Catálogos `via` y `unidad_urbana`:** llevan `codigo`, `tipo`, `nombre` y ubigeo 110101. La llave incluye el
+   código, porque Ica da el mismo nombre a varios códigos de vía.
+2. **`contribuyente`:** la llave es `codigo` (`codigo_contribuyente`).
+   - Un RUC que empieza con 20 es JURIDICA, con `razon_social`.
+   - Es SUCESION (con `tipo_contribuyente` SUCESION INDIVISA) el contribuyente cuyo nombre empieza con SUC., SUC o
+     SUCESION, o que tiene alguna DJ con condición 2 o 6.
+   - El resto es NATURAL, con los apellidos y nombres del xlsx.
+   - No se crea domicilio.
+   - Un número de documento que ya tiene otro código se carga sin número, porque `numero_documento` es único. Lo
+     conserva el código menor.
+3. **`predio`:** la llave es `codigo`.
+   - Valores fijos: ubigeo 110101, región COSTA y departamento, provincia y distrito ICA.
+   - La dirección es la del xlsx. Si viene vacía, se arma con sus partes.
+   - Se cargan también `codigo_via`, `codigo_unidad_urbana` y las dos llaves de armonización GIS.
+4. **`declaracion_predial`:** la llave es predio + contribuyente + año + secuencia `001`.
+   - `valor_autoavaluo` es `valor_predio`.
+   - **Condominio:** como en `Condominio.kt`. Con varios titulares, cada uno es CONDOMINO con 100/n %: los céntimos que
+     faltan van de a uno a los primeros, así que la suma da 100. Un titular solo conserva su condición si es PROPIETARIO
+     UNICO, SOCIEDAD CONYUGAL o POSEEDOR; si no, queda PROPIETARIO UNICO con 100 %.
+   - `valor_condominio` es el % del autoavalúo, `deduccion` es 0 y `valor_afecto` es igual a `valor_condominio`.
+   - La fecha de adquisición 1900-01-01 es un relleno y se carga vacía.
+   - Se cargan `arancel`, `valor_terreno`, `valor_construccion` y `valor_otras_instalaciones`.
+5. **`nivel_construccion`:** se cuelga de la DJ de su par (predio, contribuyente).
+   - El nivel 0 es SOTANO.
+   - Las siete letras se cargan como vienen.
+   - Se cargan la clasificación, el valor unitario, el incremento, la depreciación (la del padrón, tal cual) y el valor
+     total.
+     `valor_unitario_depreciado` no se carga, porque no cuadra con nada.
+   - No tiene llave natural: se comparan DJ, nivel, año y área, contando las secciones repetidas.
+
+**Tablas de códigos.** Están en `model/data/ica/codigos.json`: vía, documento, condición, uso, tipo de predio,
+material, estado, clasificación y nivel. Ninguna está confirmada (`"confirmado": false`). Cada una dice de dónde sale
+su lectura (`evidencia`) y cuáles códigos son una decisión propia (`dudosos`).
+
+- Material, estado de conservación y clasificación se dedujeron con la depreciación del RNT (tablas 01–04,
+  `model/data/depreciacion-rnt-2016.csv`, copia de la de catastro-backend) y la antigüedad 2026 − año. Así explican 3 742
+  de 3 755 niveles. La clasificación 1–4 es la tabla 01–04, en el orden del enum `clasificacion` de la DJ.
+- Un código que la tabla no tiene va al reporte (`codigo_sin_mapeo`). Si el campo es obligatorio en el modelo, la fila
+  se rechaza; un tipo de vía desconocido se carga como OTROS.
+- Un número o una fecha que no se pueden leer no detienen la carga. El número rechaza su fila al reporte. La fecha se
+  carga vacía.
+
+**Reporte** (`--report`, un CSV con `categoria, hoja, fila, codigo_predio, codigo_contribuyente, detalle`). Lleva solo
+códigos, sin nombres ni documentos, pero no se versiona.
+
+| Categoría | Qué es |
+| --- | --- |
+| `rechazada` | La fila no se carga: no encaja en el modelo (por ejemplo, la letra J), es un nivel sin DJ, o cuelga de algo rechazado |
+| `condominio_100_n` | Varios titulares con el mismo valor y sin %: se carga 100/n |
+| `condominio_valores_distintos` | Varios titulares con valores distintos: también 100/n, pero hay que revisarlo |
+| `titulares_en_conflicto` | Un PROPIETARIO ÚNICO comparte el predio con otros titulares (posible transferencia no cerrada) |
+| `condomino_solo` | Un condómino (5 o 9) sin otros titulares en el padrón: se carga PROPIETARIO UNICO con 100 % |
+| `codigo_sin_mapeo` | Un código que `codigos.json` no tiene, una fila por columna y valor |
+| `documento_rellenado`, `documento_sin_numero`, `documento_repetido` | DNI con ceros agregados, tipo sin número, número que ya tiene otro código |
+| `documento_en_core` | En la carga: Core ya tiene ese número con otro código, y el contribuyente se envía sin número |
+| `fecha_relleno` | `fecha_adquisicion` 1900-01-01, cargada vacía |
+| `fecha_invalida` | `fecha_adquisicion` que no se lee como fecha, cargada vacía |
+| `direccion_compuesta` | Predio sin dirección, armada con sus partes |
+| `valor_predio_no_cuadra` | `valor_predio` distinto de terreno + construcción + otras instalaciones |
+| `niveles_vs_padron` | La suma de los niveles de un par no da su `valor_area_construida` o su `area_construida` |
+| `depreciacion_vs_rnt` | La columna `depreciacion` difiere del % del RNT para su antigüedad (casi siempre un tramo atrás). Se carga la del padrón |
+| `formula_nivel` | `valor_total_nivel` distinto de redondear a 2 decimales (valor unitario + incremento) × (1 − % del RNT) y multiplicar por el área, por más de S/ 0,05. Sin celda del RNT, se usa la columna del padrón |
+
+Con el extracto de 2026-10 (7 829 filas del padrón y 3 762 de construcciones), el `--dry-run` da 588 vías, 161
+unidades urbanas, 1 458 contribuyentes, 7 521 predios, 7 829 declaraciones y 3 758 niveles, con 4 filas rechazadas. El
+extracto es parte de un padrón de unas 32 000 filas: hasta tener el completo, la brecha de Ica infla los OMISOS.
+
 ## Normalizar el padrón importado
 
 Un padrón importado antes de que `import_predios.py` separara los tipos se normaliza en Core, sin volver a importar:
@@ -1574,6 +1722,21 @@ En la fase 2 ganaron campos:
 
 Ninguno es obligatorio en Core, porque los registros importados del padrón no los tienen. El portal los exige al
 guardar.
+
+Para los padrones externos (Ica, #124) ganaron campos opcionales, al final de cada objeto:
+- **`predio`:** `codigo_via`, `codigo_unidad_urbana`, `codigo_hu_armonizacion` y `codigo_via_armonizacion` (TEXT),
+  los códigos del catastro de origen y del Formato Padrón Municipal Armonización.
+- **`declaracion_predial`:** `arancel`, `valor_terreno`, `valor_construccion` y `valor_otras_instalaciones` (DECIMAL),
+  la valuación como la trae el padrón. El impuesto se sigue liquidando sobre `valor_autoavaluo`.
+- **`nivel_construccion`:** `clasificacion` (el mismo enum de la declaración), `valor_unitario`, `incremento`,
+  `porcentaje_depreciacion` y `valor_total` (DECIMAL).
+- **`via` y `unidad_urbana`:** `codigo` (TEXT, no único: los del padrón de Perené no lo tienen).
+
+Además, `nivel_construccion.mes_construccion` dejó de ser obligatorio, porque Ica no lo trae: ni Core ni la API del
+portal lo exigen (el formulario del nivel en srtm-ui lo sigue pidiendo), y la PU imprime solo el año cuando falta. Los
+DTO del portal no conocen estos campos: los escribe el importador por la API de registros de Core, y un guardado del
+portal no los borra porque se fusiona con lo guardado (`Registros.replace`). Un condómino agregado desde una
+declaración copia también su valuación y la de sus niveles (`PADRON_EXTERNO_DECLARACION` y `PADRON_EXTERNO_NIVEL`).
 
 **`contribuyente`**: una persona natural, persona jurídica o sucesión. `numero_documento` es único.
 
