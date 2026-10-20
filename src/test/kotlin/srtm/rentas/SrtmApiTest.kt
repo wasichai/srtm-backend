@@ -289,7 +289,8 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                 "GET" -> client.get().uri(path)
                 "DELETE" -> client.delete().uri(path)
                 "PUT" -> client.put().uri(path).bodyValue(body!!)
-                else -> client.post().uri(path).bodyValue(body!!)
+                // a POST without a body: one whose body is optional
+                else -> client.post().uri(path).let { post -> body?.let { post.bodyValue(it) } ?: post }
             }
         val result =
             spec

@@ -1,6 +1,7 @@
 package srtm.arbitrios
 
 import srtm.rentas.Declaracion
+import srtm.rentas.SUSTITUIDA
 import srtm.rentas.UsoPredio
 import srtm.rentas.secuenciaUso
 import srtm.rentas.vigente
@@ -13,6 +14,7 @@ import java.time.LocalDate
 //   no day);
 // - end: 31 december, or its fecha_anulacion when it was annulled (descargo; one annulled without its date counts on
 //   no day).
+// a sustituida counts on no day: its rectificatoria replaces the whole year.
 // an imported one without dates covers the year. so a sale on 20 may: the seller (annulled on the 20th) january to
 // may, the buyer (acquired on the 20th) june to december
 fun cubre(
@@ -20,7 +22,7 @@ fun cubre(
     dia: LocalDate
 ): Boolean {
     val anio = d.anio ?: return false
-    if (dia.year != anio) return false
+    if (dia.year != anio || d.estado == SUSTITUIDA) return false
     val adquisicion = d.fechaAdquisicion
     if (adquisicion != null && adquisicion.year > anio) return false
     val inicio = adquisicion?.takeIf { it.year == anio }?.plusDays(1) ?: LocalDate.of(anio, 1, 1)

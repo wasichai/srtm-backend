@@ -651,6 +651,7 @@
   "usuario/registrador#proc-anular-declaracion-pasos": "Anular una declaración jurada",
   "usuario/registrador#fig-anular-declaracion": "El diálogo de anulación",
   "usuario/registrador#fig-dj-anulada": "Una declaración anulada: solo lectura",
+  "usuario/registrador#rectificar-declaracion": "Rectificar una declaración o declarar otro año desde la anterior",
   "usuario/registrador#proc-cambio-titular": "Registrar un cambio de dueño",
   "usuario/registrador#catastro": "Catastro fiscal",
   "usuario/registrador#catastro-que-es": "Los lotes del catastro",

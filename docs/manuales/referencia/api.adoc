@@ -249,17 +249,25 @@ Base: `/api/srtm`. Controlador `RentasController`.
 |201.
 
 |`POST /contribuyentes/{id}/declaraciones-juradas`
-|Presenta una DJ: `{declaracion, predio_id}` sobre un predio existente o `{declaracion, predio}` registrándolo.
-|201; 400 por campo.
+|Presenta una DJ: `{declaracion, predio_id}` sobre un predio existente o `{declaracion, predio}` registrándolo. Con
+`desde` (el id de una DJ de otro año del mismo predio y contribuyente), la copia con sus listas al año del cuerpo.
+|201; 400 por campo; 400 si `desde` es del mismo año.
 
 |`GET`, `PUT`, `DELETE /declaraciones/{id}`
 |La DJ con su predio y su contribuyente; edición; baja.
-|200; 204; DELETE 409 si alguna lista tiene filas; PUT 400 si está ANULADA.
+|200; 204; DELETE 409 si alguna lista tiene filas o es parte de una rectificación; PUT 400 si está ANULADA o
+SUSTITUIDA, o si cambia el año de una DJ con valuación de un padrón externo.
 
 |`POST /declaraciones/{id}/anular` +
 `{motivo_anulacion}`
 |Descargo: la deja ANULADA, de solo lectura.
 |200; 400 sin motivo.
+
+|`POST /declaraciones/{id}/rectificar` +
+`{medio_presentacion, fecha_presentacion}`
+|Rectificatoria: una DJ nueva, numerada, con motivo RECTIFICACION y lo que declara esta (con sus listas, sin la
+valuación del padrón externo); esta queda SUSTITUIDA, de solo lectura. Devuelve la ficha de la nueva.
+|201; 400 si está ANULADA o SUSTITUIDA.
 
 |`POST /declaraciones/{id}/condominos` +
 `{contribuyente, porcentaje_condominio}`

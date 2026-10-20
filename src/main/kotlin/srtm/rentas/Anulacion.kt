@@ -11,12 +11,16 @@ const val VIGENTE = "VIGENTE"
 const val ANULADA = "ANULADA"
 const val DESCARGO = "DESCARGO"
 
-// the imported ones have no estado: they are vigentes
-fun vigente(d: Declaracion) = d.estado != ANULADA
+// the imported ones have no estado: they are vigentes. a sustituida is its rectificatoria's history (Rectificacion.kt)
+fun vigente(d: Declaracion) = d.estado != ANULADA && d.estado != SUSTITUIDA
 
-// no reactivation: an annulled declaración is read-only
+// no reactivation: an annulled or sustituida declaración is read-only
 fun modificable(d: Declaracion) {
-    if (!vigente(d)) throw ValidationException("La declaración está anulada", "estado", "anulada: no se puede modificar")
+    when (d.estado) {
+        ANULADA -> throw ValidationException("La declaración está anulada", "estado", "anulada: no se puede modificar")
+        SUSTITUIDA ->
+            throw ValidationException("La declaración fue sustituida por una rectificatoria", "estado", "sustituida: se modifica su rectificatoria")
+    }
 }
 
 // the srtm's descargo: its motivo, why and when

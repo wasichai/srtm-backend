@@ -18,6 +18,7 @@ class AnulacionTest {
         assertTrue(vigente(Declaracion()))
         assertTrue(vigente(Declaracion(estado = VIGENTE)))
         assertFalse(vigente(Declaracion(estado = ANULADA)))
+        assertFalse(vigente(Declaracion(estado = SUSTITUIDA)))
     }
 
     @Test

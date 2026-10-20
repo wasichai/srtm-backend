@@ -141,10 +141,21 @@ class ShippedModelTests(unittest.TestCase):
         declaracion = next(o for o in self.model["objects"] if o["name"] == "declaracion_predial")
         fields = {f["name"]: f for f in declaracion["fields"]}
         self.assertEqual(fields["estado"]["enum"], "estado_declaracion")
-        self.assertEqual(self.model["enums"]["estado_declaracion"], ["VIGENTE", "ANULADA"])
+        self.assertEqual(self.model["enums"]["estado_declaracion"], ["VIGENTE", "ANULADA", "SUSTITUIDA"])
         self.assertEqual(fields["fecha_anulacion"]["type"], "DATE")
         self.assertIn("DESCARGO", self.model["enums"]["motivo_declaracion"])
         self.assertFalse(any(fields[f].get("required") for f in ("estado", "motivo_anulacion", "fecha_anulacion")))
+
+    def test_declaracion_rectificatoria_fields_are_optional(self):
+        # #147: a rectificatoria names the declaración it replaces, which keeps the day it was replaced on
+        declaracion = next(o for o in self.model["objects"] if o["name"] == "declaracion_predial")
+        fields = {f["name"]: f for f in declaracion["fields"]}
+        self.assertEqual(fields["sustituye"]["type"], "UUID")
+        self.assertEqual(fields["fecha_sustitucion"]["type"], "DATE")
+        self.assertIn("RECTIFICACION", self.model["enums"]["motivo_declaracion"])
+        self.assertFalse(any(fields[f].get("required") for f in ("sustituye", "fecha_sustitucion")))
+        # at the end: apply.py adds them after the rest on a Core that has it
+        self.assertEqual([f["name"] for f in declaracion["fields"]][-2:], ["sustituye", "fecha_sustitucion"])
 
     def test_the_padron_externo_fields_are_optional(self):
         # #124: what the padrón of Ica brings and the predial model had no place for. at the end of each object (the
@@ -160,9 +171,12 @@ class ShippedModelTests(unittest.TestCase):
             "via": [("codigo", "TEXT")],
             "unidad_urbana": [("codigo", "TEXT")],
         }
+        # what came after them, at the end too: the rectificatoria's (#147)
+        despues = {"declaracion_predial": {"sustituye", "fecha_sustitucion"}}
         for objeto, campos in nuevos.items():
             with self.subTest(objeto=objeto):
-                ultimos = list(self.campos(objeto).values())[-len(campos):]
+                antes = [f for f in self.campos(objeto).values() if f["name"] not in despues.get(objeto, set())]
+                ultimos = antes[-len(campos):]
                 self.assertEqual([(f["name"], f["type"]) for f in ultimos], campos)
                 self.assertFalse(any(f.get("required") or f.get("unique") for f in ultimos))
                 self.assertTrue(all(f.get("label") and f.get("description") for f in ultimos))

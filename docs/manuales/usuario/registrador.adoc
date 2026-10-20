@@ -779,8 +779,10 @@ Titular y condominio:: Las declaraciones vigentes de un mismo predio, año y sec
 solo, es PROPIETARIO ÚNICO (o SOCIEDAD CONYUGAL o POSEEDOR, si así lo declaró) al 100 %. Si hay dos o más, cada uno es
 CONDÓMINO con el % que declara (<<condominos>>). Esto lo decide el sistema.
 Número de declaración:: Correlativo, lo asigna el sistema al presentarla.
-Motivo:: INSCRIPCION al presentarla; ACTUALIZACION en cuanto se corrige; DESCARGO si se anula.
-Estado:: *Vigente* o *Anulada*. Una anulada se conserva, pero no cuenta en nada (<<proc-anular-declaracion>>).
+Motivo:: INSCRIPCION al presentarla; ACTUALIZACION en cuanto se corrige; DESCARGO si se anula; RECTIFICACION si
+sustituye a otra (<<rectificar-declaracion>>).
+Estado:: *Vigente*, *Anulada* o *Sustituida*. Una anulada o sustituida se conserva, pero no cuenta en nada
+(<<proc-anular-declaracion>>, <<rectificar-declaracion>>).
 Valores:: El *Autoavalúo* es el valor del predio (o del uso) declarado. El sistema calcula el *Valor de condominio*
 (el autoavalúo por el % de propiedad) y el *Valor afecto* (el valor de condominio menos la *Deducción*, nunca menos de
 cero). El impuesto predial se calcula con el valor afecto (<<liquidacion>>).
@@ -1136,6 +1138,30 @@ equivocó, presente una declaración nueva con los mismos datos.
 [[fig-dj-anulada]]
 .Una declaración anulada: solo lectura
 image::{capturas}/usuario/registrador/dj-anulada.png[Ficha de la declaración 5 con el estado Anulada, el aviso rojo Declaración anulada con el motivo y los datos en modo de solo lectura, con motivo DESCARGO]
+
+[[rectificar-declaracion]]
+=== Rectificar una declaración o declarar otro año desde la anterior
+
+Rectificar una declaración es presentar otra que la sustituye. La *rectificatoria* es una declaración nueva, con número
+propio y motivo RECTIFICACION: lleva lo que declaraba la anterior (datos del predio, del titular, autoavalúo,
+transferentes, niveles, obras y otros frentes) para corregirlo. La anterior queda *Sustituida*, con la fecha de
+sustitución: se conserva en el historial, es de solo lectura y no cuenta en los totales, el impuesto predial, el PU, la
+HR ni los arbitrios. En un condominio, la rectificatoria toma el lugar de la anterior con el mismo % de propiedad.
+
+La declaración de otro año también puede partir de la de un año anterior del mismo predio y titular: se copia con sus
+listas y su autoavalúo como punto de partida, y nace con motivo INSCRIPCION. Para el mismo año, corresponde rectificar.
+
+La valuación que trajo un padrón externo (por ejemplo, el de Ica) se queda en la declaración importada: ni la
+rectificatoria ni la del otro año la copian. Por eso, una declaración con esa valuación no puede cambiar de año: declare
+el año nuevo desde ella.
+
+.La rectificatoria en esta versión
+[IMPORTANT]
+====
+El portal *todavía no tiene los botones* para rectificar una declaración ni para declarar otro año desde la anterior.
+El sistema ya los registra, pero solo a través de su interfaz de programación. Mientras el portal no los incorpore,
+pídalo al área de sistemas con el número de la declaración.
+====
 
 [[proc-cambio-titular]]
 === Registrar un cambio de dueño

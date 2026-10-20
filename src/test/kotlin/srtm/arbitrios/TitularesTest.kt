@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import srtm.rentas.ANULADA
 import srtm.rentas.Declaracion
+import srtm.rentas.SUSTITUIDA
 import srtm.rentas.UsoPredio
 import java.math.BigDecimal
 import java.time.LocalDate
@@ -113,6 +114,15 @@ class TitularesTest {
         assertTrue(cubre(descargo, LocalDate.of(2026, 5, 1)))
         assertFalse(cubre(descargo, LocalDate.of(2026, 6, 1)))
         assertFalse(cubre(dj("2", "c-501").copy(estado = ANULADA), LocalDate.of(2026, 1, 1)))
+    }
+
+    @Test
+    fun `a sustituida declaration covers no day - its rectificatoria covers the year`() {
+        // #147: the rectificatoria replaces the whole year, whatever date the sustituida was replaced on
+        val sustituida = dj("1", "c-501").copy(estado = SUSTITUIDA, fechaSustitucion = LocalDate.of(2026, 10, 20))
+        assertFalse(cubre(sustituida, LocalDate.of(2026, 1, 1)))
+        assertFalse(cubre(sustituida.copy(fechaAnulacion = LocalDate.of(2026, 12, 31)), LocalDate.of(2026, 6, 1)))
+        assertTrue(cubre(dj("2", "c-501").copy(sustituye = "1"), LocalDate.of(2026, 1, 1)))
     }
 
     @Test

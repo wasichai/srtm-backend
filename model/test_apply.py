@@ -441,7 +441,7 @@ class SyncTests(ApplyCliTestCase):
                  if r[0] == "POST" and r[1] == "/api/metadata/objects/contribuyente/fields"]
         self.assertEqual(added, self.NEW_FIELDS)
         motivo = next(r[3] for r in self.core.requests if r[0] == "POST" and r[3] and r[3].get("name") == "motivo")
-        self.assertEqual(motivo["enumOptions"], ["INSCRIPCION", "ACTUALIZACION", "DESCARGO"])
+        self.assertEqual(motivo["enumOptions"], ["INSCRIPCION", "ACTUALIZACION", "DESCARGO", "RECTIFICACION"])
         self.assertFalse(motivo["required"])
         option_puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "enumOptions" in (r[3] or {})]
         self.assertEqual(option_puts, [(

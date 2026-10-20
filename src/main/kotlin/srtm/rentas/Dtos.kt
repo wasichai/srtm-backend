@@ -138,10 +138,14 @@ data class Declaracion(
     val subClaseUso: String? = null,
     val areaComunTerreno: BigDecimal? = null,
     val otrosDatos: String? = null,
-    // VIGENTE or ANULADA (none, in the imported ones, is VIGENTE): the backend's, set by anular
+    // VIGENTE, ANULADA or SUSTITUIDA (none, in the imported ones, is VIGENTE): the backend's, set by anular and
+    // rectificar
     val estado: String? = null,
     val motivoAnulacion: String? = null,
-    val fechaAnulacion: LocalDate? = null
+    val fechaAnulacion: LocalDate? = null,
+    // a rectificatoria's: the id of the declaración it replaces. the sustituida's: when
+    val sustituye: String? = null,
+    val fechaSustitucion: LocalDate? = null
 )
 
 // the contribuyente's children. contribuyente is the parent's id: the path sets it, a body never moves one
@@ -339,12 +343,21 @@ data class DeclaracionJurada(
     val actualizado: java.time.Instant? = null
 )
 
-// presenting one: an existing predio (predio_id) or a new one (predio, its code generated when blank)
+// presenting one: an existing predio (predio_id) or a new one (predio, its code generated when blank). desde: the id
+// of another year's declaración of the same predio to start from (its copy, with this one's year and medios)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class NuevaDeclaracion(
     val declaracion: Declaracion = Declaracion(),
     val predio: Predio? = null,
-    val predioId: String? = null
+    val predioId: String? = null,
+    val desde: String? = null
+)
+
+// rectifying a declaración: how and when the rectificatoria is presented (the srtm's defaults when absent)
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class Rectificacion(
+    val medioPresentacion: String? = null,
+    val fechaPresentacion: LocalDate? = null
 )
 
 // annulling a declaración (a descargo): why

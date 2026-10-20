@@ -50,12 +50,14 @@ class DeclaracionService(
     }
 
     // a new declaration of a contribuyente, on an existing predio or on one it registers. numbered by the backend,
-    // with the srtm's defaults. a predio registered here is removed again if the declaration is refused
+    // with the srtm's defaults. a predio registered here is removed again if the declaration is refused. desde:
+    // another year's declaración to start from (declararDesde)
     suspend fun presentar(
         contribuyente: UUID,
         body: NuevaDeclaracion
     ): DeclaracionJurada {
         contribuyentes.get(contribuyente)
+        body.desde?.let { return declararDesde(contribuyente, body, it) }
         val existente = body.predioId?.let { registros.get(PREDIO, Predio::class.java, UUID.fromString(it)) }
         val predio = existente ?: registrarPredio(body.predio ?: throw ValidationException("Falta el predio", "predio_id", "elige un predio o registra uno"))
         val predioId = UUID.fromString(predio.id)
@@ -68,6 +70,32 @@ class DeclaracionService(
         }
     }
 
+    // another year's declaración of the same contribuyente and predio as the starting point: its copy (characteristics,
+    // lists, autoavalúo, titular's data), with the body's year and medios, an inscripción
+    private suspend fun declararDesde(
+        contribuyente: UUID,
+        body: NuevaDeclaracion,
+        desde: String
+    ): DeclaracionJurada {
+        val id = runCatching { UUID.fromString(desde) }.getOrNull() ?: throw ValidationException("Declaración de partida inválida", "desde", "no es un id")
+        val origen = registros.get(DECLARACION, Declaracion::class.java, id)
+        val d = body.declaracion
+        val anio = d.anio ?: (d.fechaPresentacion ?: LocalDate.now()).year
+        // a predio registered with the body is another one
+        desdeOtroAnio(origen, contribuyente.toString(), if (body.predio != null) null else body.predioId ?: origen.predio, anio)
+        val creada =
+            copiar(origen) {
+                it.copy(
+                    anio = anio,
+                    motivo = "INSCRIPCION",
+                    medioDeterminacion = d.medioDeterminacion ?: it.medioDeterminacion,
+                    medioPresentacion = d.medioPresentacion,
+                    fechaPresentacion = d.fechaPresentacion
+                )
+            }
+        return ficha(UUID.fromString(creada.id))
+    }
+
     // a declaration from a form that already names both sides (the predio's ficha): numbered like any other
     suspend fun crear(body: Declaracion): Declaracion {
         val contribuyente = body.contribuyente ?: throw ValidationException("Falta el contribuyente", "contribuyente", "es obligatorio")
@@ -76,7 +104,8 @@ class DeclaracionService(
     }
 
     // a declaración that moves to another predio, year or secuencia joins that condominio and leaves its own. only a
-    // vigente one changes, and its estado is anular's
+    // vigente one changes, and its estado is anular's and its sustitución rectificar's. a rectificatoria stays in
+    // its place, and one with an external padrón's valuation in its year
     suspend fun actualizar(
         id: UUID,
         body: Declaracion
@@ -90,8 +119,12 @@ class DeclaracionService(
                 motivo = motivoAlEditar(stored.motivo),
                 estado = stored.estado,
                 motivoAnulacion = stored.motivoAnulacion,
-                fechaAnulacion = stored.fechaAnulacion
+                fechaAnulacion = stored.fechaAnulacion,
+                sustituye = stored.sustituye,
+                fechaSustitucion = stored.fechaSustitucion
             )
+        enSuLugar(stored, next)
+        if (next.anio != stored.anio) conservaAnio(id)
         val seUne = grupoDe(next) != grupoDe(stored)
         val otros = titulares(next).filter { it.id != id.toString() }
         val grupo = condominioCon(next, otros, seUne)
@@ -100,6 +133,41 @@ class DeclaracionService(
         if (seUne) recalcular(stored)
         marcarOrigenModificado(id)
         return saved
+    }
+
+    // the external padrón's valuation is of its year: that year's declaración keeps it, another year is declared
+    // from it (declararDesde) without it
+    private suspend fun conservaAnio(id: UUID) {
+        val origen = valuacionOrigen(id)
+        if (origen.declaracion.isEmpty() && origen.niveles.isEmpty()) return
+        throw ValidationException("La declaración trae la valuación de un padrón externo", "anio", "no cambia de año: declara el año nuevo desde esta DJ")
+    }
+
+    // the rectificatoria: a new declaración, numbered, with what `id` declares and its lists, in its place in the
+    // condominio. `id` stays SUSTITUIDA, read-only, once the copy has it all: until then it is the year's. the
+    // rectificatoria's ficha, as presentar's
+    suspend fun rectificar(
+        id: UUID,
+        body: Rectificacion
+    ): DeclaracionJurada {
+        val origen = registros.get(DECLARACION, Declaracion::class.java, id)
+        val reemplazada = sustituida(origen, LocalDate.now())
+        val creada =
+            copiar(origen) {
+                it.copy(
+                    motivo = RECTIFICACION,
+                    medioPresentacion = body.medioPresentacion,
+                    fechaPresentacion = body.fechaPresentacion,
+                    sustituye = id.toString()
+                )
+            }
+        try {
+            registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(reemplazada))
+        } catch (e: Exception) {
+            deshacer(creada)
+            throw e
+        }
+        return ficha(UUID.fromString(creada.id))
     }
 
     // the srtm's descargo: the declaración stays, read-only, out of its condominio (the rest is recomputed) and out of
@@ -117,6 +185,7 @@ class DeclaracionService(
     // only while none of its lists has a row: one with content is annulled instead. the condóminos left are recomputed
     suspend fun borrarDeclaracion(id: UUID) {
         val stored = registros.get(DECLARACION, Declaracion::class.java, id)
+        bajaDeRectificacion(stored)?.let { throw ConflictException(it) }
         bajaDeDeclaracion(LISTAS.filter { listas.contar(it, PARENT, id) > 0 })?.let { throw ConflictException(it) }
         registros.delete(DECLARACION, id)
         recalcular(stored)
@@ -145,6 +214,40 @@ class DeclaracionService(
         obras(id).forEach { nuevaObra(nuevaId, it.copy(id = null, declaracion = null)) }
         frentes(id).forEach { nuevoFrente(nuevaId, it.copy(id = null, declaracion = null)) }
         return creada
+    }
+
+    // a declaración copied with its lists, the same contribuyente's on the same predio: copiaDe with `cambios` over it,
+    // numbered as a new one. its transferentes keep their code. the external padrón's valuation stays in origen (the
+    // condómino's copy takes it: copiarPadronExterno). one that fails halfway is removed with what it got
+    private suspend fun copiar(
+        origen: Declaracion,
+        cambios: (Declaracion) -> Declaracion
+    ): Declaracion {
+        val copia = cambios(copiaDe(origen))
+        val creada = registrar(nueva(copia, UUID.fromString(origen.contribuyente), UUID.fromString(origen.predio)).copy(sustituye = copia.sustituye))
+        val id = UUID.fromString(origen.id)
+        val nuevaId = UUID.fromString(creada.id)
+        try {
+            transferentes(id).forEach { listas.agregar(TRANSFERENTE, Transferente::class.java, PARENT, nuevaId, it.copy(id = null, declaracion = null)) }
+            // nuevo*, not agregar*: a copy is no edit, and it has no valuation de origen to mark
+            niveles(id).forEach { nuevoNivel(nuevaId, it.copy(id = null, declaracion = null)) }
+            obras(id).forEach { nuevaObra(nuevaId, it.copy(id = null, declaracion = null)) }
+            frentes(id).forEach { nuevoFrente(nuevaId, it.copy(id = null, declaracion = null)) }
+        } catch (e: Exception) {
+            deshacer(creada)
+            throw e
+        }
+        return creada
+    }
+
+    // a copy that failed: its lists, itself, and what its condominio derived from it
+    private suspend fun deshacer(creada: Declaracion) {
+        val id = UUID.fromString(creada.id)
+        for (lista in LISTAS) {
+            listas.listar(lista, Map::class.java, PARENT, id).forEach { listas.borrar(lista, UUID.fromString(it["id"].toString())) }
+        }
+        registros.delete(DECLARACION, id)
+        recalcular(creada)
     }
 
     // what an external padrón (Ica) brings and the dtos do not know: copied from the stored record, when it has any,
@@ -343,21 +446,26 @@ class DeclaracionService(
             fechaPresentacion = presentacion,
             estado = VIGENTE,
             motivoAnulacion = null,
-            fechaAnulacion = null
+            fechaAnulacion = null,
+            sustituye = null,
+            fechaSustitucion = null
         )
     }
 
-    // a new titular joins its predio's condominio: checked and derived before it is stored, the others after
+    // a new titular joins its predio's condominio: checked and derived before it is stored, the others after. a
+    // rectificatoria takes the place of the one it replaces (vigente until rectificar marks it): that one is not
+    // counted, and the others keep their % as in an edit
     private suspend fun registrar(declaracion: Declaracion): Declaracion {
-        val otros = titulares(declaracion)
-        val grupo = condominioCon(declaracion, otros, seUne = true)
+        val otros = titulares(declaracion).filter { it.id != declaracion.sustituye }
+        val grupo = condominioCon(declaracion, otros, seUne = declaracion.sustituye == null)
         val creada = numerar(grupo.first())
         guardarDerivados(grupo.drop(1), otros)
         return creada
     }
 
     // the declaraciones of a condominio: same predio, year and secuencia de uso. the secuencia is compared here, not in
-    // the query: one stored as "1" before model/normalizar_padron.py ran is the same as "001". an annulled one is out
+    // the query: one stored as "1" before model/normalizar_padron.py ran is the same as "001". an annulled or
+    // sustituida one is out
     private suspend fun titulares(d: Declaracion): List<Declaracion> {
         val (predio, anio, secuencia) = grupoDe(d)
         if (predio == null || anio == null || secuencia == null) return emptyList()

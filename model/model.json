@@ -272,7 +272,7 @@
     "estado_construccion": ["TERMINADO", "EN CONSTRUCCION", "TERRENO SIN CONSTRUIR", "EN RUINAS"],
     "tipo_contribuyente": ["PERSONA NATURAL", "PERSONA JURIDICA", "SOCIEDAD CONYUGAL", "SUCESION INDIVISA", "SOCIEDAD IRREGULAR",
       "OTROS PATRIMONIOS AUTONOMOS"],
-    "motivo_declaracion": ["INSCRIPCION", "ACTUALIZACION", "DESCARGO"],
+    "motivo_declaracion": ["INSCRIPCION", "ACTUALIZACION", "DESCARGO", "RECTIFICACION"],
     "medio_determinacion": ["DECLARACION JURADA", "FISCALIZACION", "DE OFICIO"],
     "medio_presentacion": ["FISICO", "VIRTUAL"],
     "modificacion_oficio": ["FISCALIZACION", "CRUCE DE INFORMACION", "RESOLUCION"],
@@ -333,7 +333,7 @@
       "PISTA O PAVIMENTO DE CONCRETO", "TRAMPA DE CONCRETO PARA GRASA"],
     "unidad_medida": ["M2", "M3", "ML", "UND", "PZA"],
     "lado": ["PAR", "IMPAR"],
-    "estado_declaracion": ["VIGENTE", "ANULADA"],
+    "estado_declaracion": ["VIGENTE", "ANULADA", "SUSTITUIDA"],
     "formato_emision": ["PDF", "ZIP"],
     "estado_emision": ["PENDIENTE", "EN_PROCESO", "ENSAMBLANDO", "TERMINADA", "FALLIDA"],
     "estado_lote": ["PENDIENTE", "EN_PROCESO", "TERMINADO", "FALLIDO"],
@@ -512,7 +512,7 @@
         {"name": "area_comun_terreno", "label": "Área común del terreno", "type": "DECIMAL"},
         {"name": "otros_datos", "label": "Otros datos", "type": "LONG_TEXT"},
         {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_declaracion",
-          "description": "VIGENTE o ANULADA (descargo). Vacío en las importadas: cuentan como VIGENTE. Una anulada no suma en totales ni en el condominio."},
+          "description": "VIGENTE, ANULADA (descargo) o SUSTITUIDA (por su rectificatoria). Vacío en las importadas: cuentan como VIGENTE. Una anulada o sustituida no suma en totales ni en el condominio."},
         {"name": "motivo_anulacion", "label": "Motivo de la anulación", "type": "LONG_TEXT"},
         {"name": "fecha_anulacion", "label": "Fecha de anulación", "type": "DATE"},
         {"name": "arancel", "label": "Arancel (S/ por m²)", "type": "DECIMAL",
@@ -524,7 +524,11 @@
         {"name": "valor_otras_instalaciones", "label": "Valor de otras instalaciones", "type": "DECIMAL",
           "description": "Heredado de un padrón externo (Ica): obras complementarias e instalaciones fijas, como las trae el padrón."},
         {"name": "origen_modificado", "label": "Origen modificado", "type": "BOOLEAN",
-          "description": "La DJ cambió después de importar su valuación de origen: el portal la marca al guardar la DJ o sus niveles, obras o frentes. Vacío cuenta como false."}
+          "description": "La DJ cambió después de importar su valuación de origen: el portal la marca al guardar la DJ o sus niveles, obras o frentes. Vacío cuenta como false."},
+        {"name": "sustituye", "label": "Sustituye a", "type": "UUID",
+          "description": "En una rectificatoria: el id de la declaración que sustituye, que queda SUSTITUIDA. Un id y no una relación: el modelo no admite que una declaración apunte a otra."},
+        {"name": "fecha_sustitucion", "label": "Fecha de sustitución", "type": "DATE",
+          "description": "En una declaración SUSTITUIDA: el día en que se presentó su rectificatoria."}
       ]
     },
     {
