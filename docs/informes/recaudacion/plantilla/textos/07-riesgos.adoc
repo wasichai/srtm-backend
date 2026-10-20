@@ -1,0 +1,16 @@
+// Riesgos y oportunidades: criterios de impacto, evidencia y prioridad fijados ANTES de clasificar, y una tabla con
+// el tipo de cada riesgo (financiero, operativo, de calidad de datos). Ninguna anomalía se presenta como
+// irregularidad: se señala y se propone la revisión.
+[[riesgos]]
+== Riesgos y oportunidades
+
+[[tabla-riesgos]]
+.Riesgos que comprometen los ingresos municipales
+[cols="1,5,2,2,2,2",options="header"]
+|===
+|N.° |Riesgo y evidencia |Tipo |Impacto |Evidencia |Prioridad
+|R1 | | | | |
+|===
+
+[[oportunidades]]
+=== Oportunidades

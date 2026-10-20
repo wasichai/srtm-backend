@@ -1,0 +1,26 @@
+// Evolución: la serie anual por grupo, el mes a mes y los ingresos propios. Qué cambió, cuánto y qué evidencia lo
+// explica. Una causa solo se afirma si una fuente la respalda; si no, va como hipótesis, con el dato que la
+// confirmaría.
+[[evolucion]]
+== Evolución de la recaudación
+
+[[evo-anual]]
+=== Por año
+
+[[graf-composicion]]
+.Recaudado anual por grupo de ingreso, con {anio} al corte (millones de soles)
+image::composicion-anual.svg[Barras apiladas por año con ingresos propios, transferencias y financiamiento,width=100%,opts=inline]
+
+[[evo-meses]]
+=== Mes a mes en {anio}
+
+[[evo-propios]]
+=== Los ingresos propios
+
+[[graf-mensual-propios]]
+.Ingresos propios por mes, {anio-previo} y {anio} (miles de soles)
+image::mensual-propios.svg[Barras mensuales de los ingresos propios de los dos años,width=100%,opts=inline]
+
+[[graf-acumulado]]
+.Ingresos propios acumulados y PIM de ingresos propios de {anio} (miles de soles)
+image::acumulado-propios.svg[Líneas del acumulado mensual de los ingresos propios y línea del PIM,width=100%,opts=inline]

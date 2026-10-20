@@ -1,0 +1,104 @@
+{
+  "_comentario": "Parámetros de una edición del informe. La fecha de corte, el año y los meses comparables se cambian aquí, no en los scripts ni en los textos. Las URL son las del Portal de Datos Abiertos del MEF (dataset presupuesto-y-ejecucion-de-ingreso).",
+  "municipalidad": {
+    "nombre": "Municipalidad Distrital de Perené",
+    "sec_ejec": "301047",
+    "ubigeo": "120302",
+    "provincia": "Chanchamayo",
+    "departamento": "Junín"
+  },
+  "anio": 2026,
+  "anio_comparable": 2025,
+  "anios_historicos": [
+    2023,
+    2024
+  ],
+  "meses_completos": 9,
+  "fecha_corte": "2026-10-18",
+  "fecha_corte_texto": "18 de octubre de 2026",
+  "version_documento": "1.0",
+  "fecha_elaboracion_texto": "20 de octubre de 2026",
+  "fuentes_mef": [
+    {
+      "nombre": "ingreso-2026",
+      "url": "https://fs.datosabiertos.mef.gob.pe/datastorefiles/2026-Ingreso-Diario.zip",
+      "columna_ejecutora": "SEC_EJEC",
+      "formato": "mensual"
+    },
+    {
+      "nombre": "ingreso-2025",
+      "url": "https://fs.datosabiertos.mef.gob.pe/datastorefiles/2025-Ingreso-Diario.zip",
+      "columna_ejecutora": "SEC_EJEC",
+      "formato": "mensual"
+    },
+    {
+      "nombre": "comparativo-2012-2025",
+      "url": "https://fs.datosabiertos.mef.gob.pe/datastorefiles/comparativo_ingresos_2012_2025.zip",
+      "columna_ejecutora": "EJECUTORA",
+      "formato": "anual"
+    }
+  ],
+  "consulta_amigable": {
+    "departamento": "12: JUNIN",
+    "provincia": "1203",
+    "fila": "120302-301047"
+  },
+  "proyeccion": {
+    "_comentario": "Años con serie mensual que no se usan para proyectar, y por qué.",
+    "excluir": {
+      "2023": "incluye un ingreso no recurrente (ejecución de garantías) cuyo mes no se puede identificar"
+    }
+  },
+  "padron": {
+    "archivo": "~/Documents/srtm/data/DATOS DE CONTRIBUYENTES.xlsx",
+    "hoja": "DAT CONT",
+    "parametros_predial": "model/data/parametros-predial.csv"
+  },
+  "vencimientos_predial": {
+    "_comentario": "Fechas de las cuatro cuotas del predial del año, de la ordenanza de la municipalidad; sin ellas, las del art. 15 del TUO de la Ley de Tributación Municipal.",
+    "fechas": [
+      "2026-05-29",
+      "2026-05-29",
+      "2026-08-31",
+      "2026-11-30"
+    ],
+    "norma": "Ordenanza Municipal N.° 012-2025/MDP (28-11-2025), ratificada por el Acuerdo de Concejo N.° 203-2025-MPCH",
+    "url": "https://www.gob.pe/institucion/muniperene/normas-legales/7633065-012-2025-mdp"
+  },
+  "normas_municipales": [
+    {
+      "norma": "Ordenanza Municipal N.° 012-2025/MDP",
+      "fecha": "2025-11-28",
+      "dispone": "Vencimientos del predial y de los arbitrios 2026, derecho de emisión y descuento por pronto pago de arbitrios. Ratificada por el Acuerdo de Concejo N.° 203-2025-MPCH.",
+      "url": "https://www.gob.pe/institucion/muniperene/normas-legales/7633065-012-2025-mdp"
+    },
+    {
+      "norma": "Ordenanza Municipal N.° 010-2025/MDP",
+      "fecha": "2025-09-29",
+      "dispone": "Régimen de los arbitrios 2026, con periodicidad mensual y subsidios por servicio. Ratificada por el Acuerdo de Concejo N.° 202-2025-MPCH.",
+      "url": "https://www.gob.pe/institucion/muniperene/normas-legales/7244635-010-2025-mdp"
+    },
+    {
+      "norma": "Ordenanza Municipal N.° 014-2025/MDP",
+      "fecha": "2025-12-30",
+      "dispone": "Deducción del autoavalúo para el predial y la alcabala 2026 (Ley N.° 27037, Amazonía).",
+      "url": "https://www.gob.pe/institucion/muniperene/normas-legales/7633398-014-2025-mdp"
+    },
+    {
+      "norma": "Ordenanza Municipal N.° 003-2026-MDP",
+      "fecha": "2026-02-27",
+      "dispone": "Amnistía tributaria y no tributaria 2026, con cortes al 29 de mayo, 31 de agosto y 30 de noviembre: condona intereses moratorios del predial y los arbitrios y las multas tributarias, y descuenta arbitrios, si se paga el predial del año.",
+      "url": "https://www.gob.pe/institucion/muniperene/normas-legales/7884853-003-2026-mdp"
+    }
+  ],
+  "estructura_organica": {
+    "_comentario": "De dónde salen los nombres de textos/unidades.adoc.",
+    "rof": "Ordenanza Municipal N.° 015-2024/MDP (20-08-2024), vigente desde el 1 de enero de 2025",
+    "rof_url": "https://www.gob.pe/institucion/muniperene/normas-legales/5955087-015-2024-mdp",
+    "en_uso": "Resolución de Alcaldía N.° 007-2026-MDP/A y demás normas de 2026, que usan los nombres del ROF de 2019 (OM N.° 03-2019/MDP)",
+    "en_uso_url": "https://www.gob.pe/institucion/muniperene/normas-legales/8046311-007-2026-mdp-a"
+  },
+  "publicacion": {
+    "s3": "s3://sgtm-dev/informes/recaudacion-perene"
+  }
+}

@@ -1,0 +1,66 @@
+// Informe ejecutivo del estado de la recaudación municipal. «make nueva-edicion» copia esta plantilla a la carpeta de
+// la edición (fuera del repositorio); allí se escriben los textos (textos/*.adoc), que citan las cifras como
+// atributos de generado/cifras.adoc. Ninguna cifra se teclea.
+include::generado/cifras.adoc[]
+// los nombres de las unidades de la municipalidad (su ROF): los responsables del plan de acción
+include::textos/unidades.adoc[]
+= Informe Ejecutivo del Estado de la Recaudación Municipal: {municipalidad} · {periodo}
+:author: Para el alcalde y las gerencias vinculadas a los ingresos municipales
+:revnumber: {version}
+:revdate: elaborada el {elaboracion} · fecha de corte: {corte}
+:doctype: article
+:lang: es
+:title-page:
+:toc: left
+:toclevels: 2
+:toc-title: Contenido
+:sectnums:
+:sectnumlevels: 2
+:sectanchors:
+:xrefstyle: short
+:figure-caption: Gráfico
+:table-caption: Tabla
+:appendix-caption: Anexo
+:section-refsig: sección
+:appendix-refsig: anexo
+:chapter-signifier:
+:icons: font
+:hyphens!:
+:imagesdir: generado/graficos
+:docinfo!:
+:nofooter:
+:experimental:
+:version-label: Versión
+:important-caption: Importante
+:note-caption: Nota
+:tip-caption: Sugerencia
+:caution-caption: Atención
+:warning-caption: Advertencia
+
+include::textos/00-alcance.adoc[]
+
+include::textos/01-resumen.adoc[]
+
+include::textos/02-indicadores.adoc[]
+
+include::textos/03-evolucion.adoc[]
+
+include::textos/04-fuentes.adoc[]
+
+include::textos/05-predial.adoc[]
+
+include::textos/06-areas.adoc[]
+
+include::textos/07-riesgos.adoc[]
+
+include::textos/08-proyeccion.adoc[]
+
+include::textos/09-plan.adoc[]
+
+include::textos/10-decisiones.adoc[]
+
+include::textos/11-conclusiones.adoc[]
+
+include::textos/anexo-metodologico.adoc[]
+
+include::textos/anexo-tablas.adoc[]

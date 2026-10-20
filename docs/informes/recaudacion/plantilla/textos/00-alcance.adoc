@@ -1,0 +1,13 @@
+// Recuadro de alcance: lo primero que se lee. Qué mide el informe, que el año está abierto, las fuentes y lo que no
+// pudo medirse (por ejemplo, la deuda si no se tuvo la cuenta corriente). Sin cifras: solo fechas y períodos.
+[IMPORTANT]
+.Alcance y fecha de corte
+====
+* *Qué mide:* lo que la {municipalidad} registró como recaudado en el sistema del MEF (SIAF) del {periodo}, frente a
+  su previsión presupuestal y al mismo período de {anio-previo}, y el impuesto predial frente a la emisión del padrón
+  {anio}.
+* *Resultados parciales:* las comparaciones con {anio-previo} usan solo meses completos ({periodo-ytd}).
+* *Fuentes:* datos públicos del MEF, conciliados con la Consulta Amigable, y el padrón de contribuyentes {anio},
+  usado solo en totales.
+* *Lo que no puede medirse:* completar con lo que esta edición no tuvo (cuenta corriente, metas aprobadas…).
+====

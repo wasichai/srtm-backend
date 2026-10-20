@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="595.28" height="841.89" viewBox="0 0 595.28 841.89">
+  <!-- portada del informe: una banda de la paleta institucional y un filete; sin escudo ni logotipo -->
+  <rect x="0" y="0" width="595.28" height="841.89" fill="#FFFFFF"/>
+  <rect x="0" y="0" width="595.28" height="330" fill="#0D3F70"/>
+  <rect x="0" y="330" width="595.28" height="6" fill="#3A78AF"/>
+  <rect x="56.7" y="96" width="44" height="3" fill="#9CC3E6"/>
+  <rect x="56.7" y="770" width="481.9" height="0.8" fill="#BFCAD6"/>
+</svg>

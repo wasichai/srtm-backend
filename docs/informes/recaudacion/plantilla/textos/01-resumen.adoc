@@ -1,0 +1,28 @@
+// Resumen ejecutivo: una o dos páginas. Abre con las conclusiones, no con el método. Cada afirmación lleva su cifra
+// (siempre un atributo de generado/cifras.adoc) y se distingue lo comprobado, la interpretación y la recomendación.
+[[resumen]]
+== Resumen ejecutivo
+
+// Un párrafo [.lead] con la situación general: cuánto se recaudó al corte y de dónde viene el cambio.
+
+[[res-situacion]]
+=== La situación, en cifras
+
+// Viñetas con: recaudado al corte y avance del PIM ({rec-corte}, {avance-pim}); comparación sin financiamiento
+// ({var-sin-fin}); peso y variación de transferencias e ingresos propios ({part-transf-ytd}, {var-propios});
+// predial del año y su cobro aparente ({var-predial}, {cobro-predial-exigible}); lo que no se pudo medir.
+
+[[res-riesgos]]
+=== Riesgos principales
+
+// Los riesgos de prioridad alta de <<riesgos>>, en una línea cada uno, con su código (R1…).
+
+[[res-decisiones]]
+=== Decisiones que requiere la alta dirección
+
+// Una línea por decisión de <<decisiones>>, con su referencia.
+
+[[res-acciones]]
+=== Acciones prioritarias
+
+// Las tres a cinco acciones de prioridad alta de <<plan>>: acción, responsable sugerido ({u-rentas}…) y horizonte.

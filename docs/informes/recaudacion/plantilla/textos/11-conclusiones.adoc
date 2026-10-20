@@ -1,0 +1,15 @@
+// Conclusiones: derivadas de lo presentado, sin datos nuevos, y los indicadores que la dirección debe revisar cada mes.
+[[conclusiones]]
+== Conclusiones
+
+[[conc-tablero]]
+=== Indicadores para revisar cada mes
+
+[cols="4,4,2",options="header"]
+|===
+|Indicador |Fuente |Valor al corte
+|Ingresos propios acumulados frente al mismo período del año anterior |SIAF (MEF) |{var-propios}
+|Predial del año recaudado sobre lo exigible |SIAF y padrón |{cobro-predial-exigible}
+|Regularización recaudada frente al mismo período del año anterior |SIAF (MEF) |{var-reg}
+|Avance del PIM de ingresos propios |SIAF (MEF) |{avance-propios}
+|===

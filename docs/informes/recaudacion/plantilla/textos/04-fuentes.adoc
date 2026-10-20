@@ -1,0 +1,23 @@
+// Fuentes y conceptos: el peso y la variación de cada fuente y de cada concepto propio, y las partidas previstas que
+// no recaudan. Distinguir tributos, tasas, derechos y transferencias según el clasificador, no por el nombre.
+[[fuentes]]
+== Fuentes y conceptos de ingreso
+
+[[fue-rubros]]
+=== Por fuente de financiamiento
+
+include::../generado/tablas/rubros.adoc[]
+
+[[fue-conceptos]]
+=== Los ingresos propios por concepto
+
+[[graf-conceptos]]
+.Ingresos propios por concepto, {periodo-ytd} de {anio-previo} y {anio} (miles de soles)
+image::conceptos.svg[Barras horizontales por concepto de ingreso propio en los dos años,width=100%,opts=inline]
+
+include::../generado/tablas/conceptos.adoc[]
+
+[[fue-prevision]]
+=== Previsión sin recaudación
+
+include::../generado/tablas/sin-recaudo.adoc[]

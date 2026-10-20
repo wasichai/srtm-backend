@@ -1,0 +1,15 @@
+// Unidades responsables: a cada proceso de ingreso, la unidad que por su función debería seguirlo ({u-rentas}…, de
+// textos/unidades.adoc) y el dato que falta para medirlo. No se compara el desempeño de unidades sin datos que lo
+// atribuyan, ni se asignan competencias que el ROF no da.
+[[areas]]
+== Unidades responsables
+
+[[tabla-areas]]
+.Procesos de ingreso, unidad que los sigue y dato que falta
+[cols="3,4,4,4",options="header"]
+|===
+|Proceso |Unidad (responsabilidad funcional) |Indicador para seguirlo |Dato que falta
+|Emisión y cobranza ordinaria |{u-rentas} |Predial del año recaudado sobre lo exigible |
+|Cobranza coactiva |{u-coactiva} |Regularización recaudada |
+|Previsión de ingresos |{u-presupuesto} |Diferencia entre previsión y recaudado |
+|===

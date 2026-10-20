@@ -1,0 +1,28 @@
+// Impuesto predial: la emisión del padrón, lo cobrado frente a lo emitido y a lo exigible al corte, la concentración
+// del impuesto y lo que no se puede medir de la deuda. El cobro es «aparente» (dos fuentes): decirlo.
+[[predial]]
+== Impuesto predial: emisión, cobro y deuda
+
+[[pre-emision]]
+=== Lo emitido en {anio}
+
+[[pre-cobro]]
+=== Cuánto se ha cobrado
+
+[[graf-predial]]
+.Impuesto predial del año {anio}: emitido, exigible al corte y recaudado (miles de soles)
+image::predial.svg[Barras del impuesto emitido, del exigible al corte y del recaudado,width=100%,opts=inline]
+
+[[pre-concentracion]]
+=== Dónde está el impuesto
+
+[[graf-concentracion]]
+.Concentración del impuesto predial emitido en {anio}
+image::concentracion.svg[Barras con la parte del impuesto de los contribuyentes de mayor impuesto,width=100%,opts=inline]
+
+include::../generado/tablas/rangos-predial.adoc[]
+
+[[pre-deuda]]
+=== La deuda
+
+// Lo que se pudo medir de la deuda y lo que no, y qué dato falta.

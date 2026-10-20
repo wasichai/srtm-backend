@@ -1,0 +1,35 @@
+/* Informe ejecutivo en HTML: la hoja de los manuales (fuentes, paleta, modo oscuro) y lo propio del informe. */
+@import url("manuales.css");
+
+/* tablas de cifras: anchas y con números tabulares, para que las columnas se lean alineadas */
+#content table.tableblock { width: 100%; font-variant-numeric: tabular-nums; }
+#content table.tableblock td, #content table.tableblock th { white-space: normal; }
+#content table.tableblock tfoot td { font-weight: 600; background: var(--cabeza-tabla); }
+.nota-tabla, .nota-tabla p { font-family: var(--titulos); font-size: 0.82rem; color: var(--tinta-tenue); margin-top: -0.4rem; }
+
+/* los gráficos son SVG incrustados con fondo blanco propio: se leen igual en modo oscuro */
+/* el SVG trae su ancho de dibujo (width="680"): el bloque no se ajusta a él, el SVG se ajusta al bloque */
+.imageblock .content { display: block; max-width: 100%; }
+.imageblock svg { display: block; width: 100%; max-width: 680px; height: auto; margin: 0 auto; border-radius: 4px; }
+
+/* recuadros del resumen y de las decisiones */
+.sidebarblock { border-left: 3px solid var(--marca-filete); }
+
+/* tablas anchas en pantallas angostas: se desplazan dentro de su bloque, no la página */
+@media (max-width: 720px) {
+  #content .tableblock-wrap, #content table.tableblock { display: block; overflow-x: auto; }
+}
+
+@media print {
+  .imageblock, table.tableblock { break-inside: avoid; }
+}
+
+/* sin la marca de los manuales: el informe es de la municipalidad, no del sistema */
+#header > h1 { background-image: none; padding-top: 3.2rem; }
+#toc.toc2::before { content: "Informe ejecutivo de recaudación"; background: none; padding-left: 0.4rem; }
+
+/* en pantallas angostas el body es una columna flexible y #content, centrado con márgenes automáticos, tomaría el
+   ancho de su contenido (hasta 46rem): se fija al de la pantalla, y lo ancho se desplaza dentro de su bloque */
+@media (max-width: 1100px) {
+  body.toc2 #header, body.toc2 #content, body.toc2 #toc { width: 100%; box-sizing: border-box; min-width: 0; }
+}

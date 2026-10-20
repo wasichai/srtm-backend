@@ -1,0 +1,17 @@
+// Las unidades de la municipalidad que el informe nombra como responsables. Se toman de su Reglamento de
+// Organización y Funciones (ROF) vigente; si no se pudo verificar, se dejan los nombres funcionales y se dice así en
+// :unidades-fuente:. Ninguna competencia se atribuye por el nombre: el plan sugiere, no asigna.
+:u-alcaldia: Alcaldía
+:u-concejo: Concejo Municipal
+:u-gm: Gerencia Municipal
+:u-rentas: unidad de administración tributaria (rentas)
+:u-recaudacion: unidad de recaudación y control tributario
+:u-coactiva: Ejecutoría Coactiva
+:u-tesoreria: Tesorería
+:u-presupuesto: unidad de planeamiento y presupuesto
+:u-administracion: unidad de administración y finanzas
+:u-ti: unidad de tecnologías de la información
+:u-catastro: unidad de catastro
+:u-urbano: unidad de desarrollo urbano
+:u-fiscalizacion: unidad de fiscalización
+:unidades-fuente: nombres funcionales; no se verificó el ROF vigente
