@@ -16,7 +16,11 @@ from import_predios import TIPOS_UNIDAD_URBANA
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # the organization the script asks for: Perené's, which ships with the repo
-ORGANIZACION = ["--distrito", "120302", "--municipalidad-json", os.path.join(HERE, "data", "perene", "municipalidad.json")]
+ORGANIZACION = [
+    "--distrito", "120302",
+    "--municipalidad-json", os.path.join(HERE, "data", "perene", "municipalidad.json"),
+    "--obras-csv", os.path.join(HERE, "data", "obras_complementarias.csv"),
+]
 
 
 class RequiredOrganizationTests(unittest.TestCase):
@@ -30,25 +34,30 @@ class RequiredOrganizationTests(unittest.TestCase):
         return err.getvalue()
 
     def test_fails_without_distrito(self):
-        message = self._usage_error(["--municipalidad-json", "m.json"])
+        message = self._usage_error(["--municipalidad-json", "m.json", "--obras-csv", "o.csv"])
         self.assertIn("the following arguments are required: --distrito", message)
 
     def test_fails_without_municipalidad_json(self):
-        message = self._usage_error(["--distrito", "120302"])
+        message = self._usage_error(["--distrito", "120302", "--obras-csv", "o.csv"])
         self.assertIn("the following arguments are required: --municipalidad-json", message)
+
+    def test_fails_without_obras_csv(self):
+        message = self._usage_error(["--distrito", "120302", "--municipalidad-json", "m.json"])
+        self.assertIn("the following arguments are required: --obras-csv", message)
 
     def test_fails_without_either(self):
         message = self._usage_error([])
         self.assertIn("--municipalidad-json", message)
         self.assertIn("--distrito", message)
+        self.assertIn("--obras-csv", message)
 
     def test_main_does_not_reach_core_without_them(self):
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             ic.main(["--dry-run"])
 
     def test_with_them_the_arguments_are_read_as_given(self):
-        args = ic._parse_args(["--distrito", "110101", "--municipalidad-json", "ica.json"])
-        self.assertEqual((args.distrito, args.municipalidad_json), ("110101", "ica.json"))
+        args = ic._parse_args(["--distrito", "110101", "--municipalidad-json", "ica.json", "--obras-csv", "costa.csv"])
+        self.assertEqual((args.distrito, args.municipalidad_json, args.obras_csv), ("110101", "ica.json", "costa.csv"))
 
     def test_perene_ships_its_header_next_to_its_data(self):
         self.assertTrue(os.path.isfile(os.path.join(HERE, "data", "perene", "municipalidad.json")))

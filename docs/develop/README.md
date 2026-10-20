@@ -95,7 +95,7 @@ Con el servidor corriendo y `develop/.env` cargado:
 cd model
 python3 apply.py                                   # 21 objetos + 10 relaciones; idempotente
 python3 import_parametros.py                       # UIT, tramos y mínimo del predial; idempotente
-python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json   # catálogos y la municipalidad (cabecera del PU y la HR); idempotente
+python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json --obras-csv data/obras_complementarias.csv   # catálogos y la municipalidad (cabecera del PU y la HR); idempotente
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --limit 200
 python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"

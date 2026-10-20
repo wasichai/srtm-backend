@@ -13,9 +13,10 @@ the names in its own ENUMs). The other catalogs are only created. The municipali
 data/perene/municipalidad.json, the provisional header) is created only when the organization has none: the real
 one is edited in the admin.
 
---distrito (the ubigeo of the padrón's vías) and --municipalidad-json are required: nothing defaults to an organization.
+--distrito (the ubigeo of the padrón's vías), --municipalidad-json and --obras-csv (the annex of its region) are required: nothing defaults to an organization.
 
 Run: python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json
+         --obras-csv data/obras_complementarias.csv
          [--excel "CODIGO DE PREDIOS AL 2026.xlsx"] [--dry-run]
 Exit: 0 ok, 1 Core refused something.
 """
@@ -217,7 +218,7 @@ def _parse_args(argv):
     p = argparse.ArgumentParser(description="Load srtm's catalogs (ubigeo, categorías, obras, usos del predio, vías, unidades urbanas) into wasichai Core.")
     p.add_argument("--ubigeo-csv", default=os.path.join(HERE, "data", "ubigeo.csv"))
     p.add_argument("--categorias-csv", default=os.path.join(HERE, "data", "categorias_valor.csv"))
-    p.add_argument("--obras-csv", default=os.path.join(HERE, "data", "obras_complementarias.csv"))
+    p.add_argument("--obras-csv", required=True, help="the partidas of obras complementarias of the region, e.g. data/obras_complementarias.csv (selva)")
     p.add_argument("--usos-csv", default=os.path.join(HERE, "data", "usos_predio.csv"))
     p.add_argument("--municipalidad-json", required=True, help="the organization's provisional header, e.g. data/perene/municipalidad.json")
     p.add_argument("--excel", default=None, help="padrón Excel; without it only ubigeo is loaded")

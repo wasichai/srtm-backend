@@ -148,16 +148,17 @@ obras complementarias desde objetos catálogo:
 
 ```bash
 cd model
-python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json   # ubigeo, categorías, partidas de obras, usos y municipalidad
-python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json \
+python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json --obras-csv data/obras_complementarias.csv   # ubigeo, categorías, partidas de obras, usos y municipalidad
+python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json --obras-csv data/obras_complementarias.csv \
   --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx" --dry-run                                         # lee Core y dice qué haría
-python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json \
+python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json --obras-csv data/obras_complementarias.csv \
   --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"                                                   # ubigeo + vías + unidades urbanas
 ```
 
-`--distrito` (el ubigeo del distrito de las vías y unidades urbanas del padrón) y `--municipalidad-json` (la cabecera
-provisional de la organización) son **obligatorios**: ningún script elige una organización por defecto. Los de Perené
-son `120302` y `model/data/perene/municipalidad.json`.
+`--distrito` (el ubigeo del distrito de las vías y unidades urbanas del padrón), `--municipalidad-json` (la cabecera
+provisional de la organización) y `--obras-csv` (las partidas de obras complementarias de su región) son
+**obligatorios**: ningún script elige una organización por defecto. Los de Perené son `120302`,
+`model/data/perene/municipalidad.json` y `model/data/obras_complementarias.csv` (el anexo de selva).
 
 - **`municipalidad`:** la cabecera del PU y la HR ([Cabecera de los documentos](#cabecera-de-los-documentos)). Se
   crea desde el archivo de `--municipalidad-json` (`model/data/perene/municipalidad.json` para Perené) solo si la organización no tiene ninguna; nunca pisa la editada en el
@@ -244,7 +245,7 @@ son `120302` y `model/data/perene/municipalidad.json`.
     2. Poner en los enums `sub_clase_uso` y `uso` de `model.json` los nombres del catálogo (`python3 -m unittest` dice
        cuáles faltan o sobran).
     3. `python3 apply.py` agrega las opciones nuevas.
-    4. `python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json --dry-run`: revisar lo que va a cambiar. Después, sin `--dry-run`.
+    4. `python3 import_catalogos.py --distrito 120302 --municipalidad-json data/perene/municipalidad.json --obras-csv data/obras_complementarias.csv --dry-run`: revisar lo que va a cambiar. Después, sin `--dry-run`.
     5. Si cambió el nombre de una clase que las DJ usan, agregarla a `CLASES_RENOMBRADAS` de `migrar_usos_padron.py` y
        migrar (ver [Migrar los usos del padrón](#migrar-los-usos-del-padrón)).
     6. `python3 apply.py` otra vez quita las opciones que ya nadie usa.
