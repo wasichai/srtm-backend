@@ -2068,7 +2068,7 @@ emisión (hora de Lima); la gerencia; la dirección; una línea punteada, y el t
     `parametro_tributario`.
   - Se guarda `srtm.municipalidad.cache` (1 min) por organización: un cambio en el admin aparece en el PDF dentro de
     ese tiempo.
-  - Los datos de `model/data/municipalidad.json` son **provisionales**: el RUC sale del padrón, y la oficina y la
+  - Los datos de `model/data/perene/municipalidad.json` son **provisionales**: el RUC sale del padrón, y la oficina y la
     gerencia son genéricas. Se corrigen en el admin.
 - **El escudo** es un archivo: core no tiene campos de imagen.
   - `srtm.municipalidad.escudo` (`SRTM_MUNICIPALIDAD_ESCUDO`) admite `classpath:…` o `file:…`, solo PNG o JPG.
