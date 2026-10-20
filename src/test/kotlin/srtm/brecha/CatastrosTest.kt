@@ -28,6 +28,8 @@ class CatastrosTest {
             anio: Int,
             porPagina: suspend () -> Unit
         ): Valuaciones = Valuaciones(anio, nombre, emptyList())
+
+        override suspend fun valuar(insumos: InsumosValuacion): ValuacionDeInsumos = throw UnsupportedOperationException(nombre)
     }
 
     @Test

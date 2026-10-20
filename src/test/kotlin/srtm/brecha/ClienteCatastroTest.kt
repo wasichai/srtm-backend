@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.net.InetSocketAddress
 import java.time.Instant
@@ -42,6 +43,16 @@ class ClienteCatastroTest {
             // 3 items in pages of 2 (the stub ignores size=500 to make paging visible)
             val items = listOf(ITEM_VALORADO, ITEM_SIN_VALOR, ITEM_GRANDE).drop(page * 2).take(2)
             responder(ex, 200, """{"anio":2026,"version":"valuacion-v1","page":$page,"size":2,"total":3,"items":[${items.joinToString(",")}]}""")
+        }
+        server.createContext("/api/catastro/valuacion") { ex ->
+            val auth = ex.requestHeaders.getFirst("Authorization")
+            pedidos += "${ex.requestMethod} valuacion ${ex.requestBody.readAllBytes().decodeToString()} $auth"
+            if (rechazarUnaVez) {
+                rechazarUnaVez = false
+                responder(ex, 401, "{}")
+                return@createContext
+            }
+            responder(ex, 200, VALUADA)
         }
         server.start()
     }
@@ -118,7 +129,117 @@ class ClienteCatastroTest {
         assertTrue(!e.message!!.contains("secreto"))
     }
 
+    private val insumos =
+        InsumosValuacion(
+            anio = 2026,
+            areaTerreno = BigDecimal("200"),
+            arancelM2 = BigDecimal("45.50"),
+            uso = "010101",
+            esEdificio = false,
+            construcciones =
+                listOf(
+                    ConstruccionValuacion("1", BigDecimal("100"), 2016, "CONCRETO", "BUENO", "C", "D", "E")
+                ),
+            obras = listOf(ObraValuacion("MUROS PERIMETRICOS O CERCOS|1", BigDecimal("30"), 2016, "CONCRETO", "BUENO")),
+            codigoMunicipal = "01-01-0006"
+        )
+
+    @Test
+    fun `insumos are posted as catastro's body, numbers as numbers, and its answer read as decimals`() {
+        val v = runBlocking { cliente().valuar(insumos) }
+
+        val pedido = pedidos.last()
+        assertTrue(pedido.startsWith("POST valuacion "), pedido)
+        assertTrue(pedido.endsWith(" Bearer t1"), pedido)
+        val cuerpo = JsonMapper.builder().build().readTree(pedido.removePrefix("POST valuacion ").removeSuffix(" Bearer t1"))
+        assertEquals(
+            setOf("anio", "areaTerreno", "arancelM2", "uso", "esEdificio", "construcciones", "obras", "codigoMunicipal"),
+            cuerpo.propertyNames().toSet()
+        )
+        assertTrue(cuerpo["arancelM2"].isNumber, cuerpo.toString())
+        assertEquals(45.5, cuerpo["arancelM2"].asDouble())
+        assertEquals(false, cuerpo["esEdificio"].asBoolean())
+        assertEquals(
+            setOf(
+                "piso",
+                "areaConstruida",
+                "anioConstruccion",
+                "material",
+                "estado",
+                "muros",
+                "techos",
+                "puertas",
+                "techoIncluido",
+                "clasificacion",
+                "seccion"
+            ),
+            cuerpo["construcciones"][0].propertyNames().toSet()
+        )
+        assertEquals("C", cuerpo["construcciones"][0]["muros"].asString())
+        assertEquals(setOf("codigoVu", "cantidad", "anioConstruccion", "material", "estado"), cuerpo["obras"][0].propertyNames().toSet())
+
+        assertEquals("SELVA", v.region)
+        assertEquals("CUERPO", v.origenArancel)
+        assertEquals(BigDecimal("96752.21"), v.autoavaluo)
+        assertEquals(BigDecimal("9100.00"), v.terreno)
+        val piso = v.detalle!!.pisos.single()
+        assertEquals("1", piso.piso)
+        assertNull(piso.seccion)
+        assertEquals(BigDecimal("787.816"), piso.valorUnitarioDepreciado)
+        assertEquals(10, piso.antiguedad)
+        assertEquals("01", piso.tablaDepreciacion)
+        val obra = v.detalle!!.obras.single()
+        assertEquals(BigDecimal("0.68"), obra.factorOficializacion)
+        assertEquals(BigDecimal("8870.61"), obra.valor)
+    }
+
+    @Test
+    fun `not valued, the motivo and its llave and no detalle`() {
+        server.removeContext("/api/catastro/valuacion")
+        server.createContext("/api/catastro/valuacion") { ex -> responder(ex, 200, SIN_VALOR) }
+
+        val v = runBlocking { cliente().valuar(insumos) }
+
+        assertNull(v.autoavaluo)
+        assertNull(v.detalle)
+        assertNull(v.origenArancel)
+        assertEquals("ARANCEL_FALTANTE", v.llave)
+        assertEquals("Sin arancel", v.motivo)
+    }
+
+    @Test
+    fun `a 401 to the valuacion renews the token once`() {
+        val c = cliente()
+        runBlocking { c.valuar(insumos) }
+        rechazarUnaVez = true
+        val v = runBlocking { c.valuar(insumos) }
+        assertEquals(BigDecimal("96752.21"), v.autoavaluo)
+        assertEquals(2, tokens)
+    }
+
+    @Test
+    fun `a refused valuacion fails with catastro's status`() {
+        server.removeContext("/api/catastro/valuacion")
+        server.createContext("/api/catastro/valuacion") { ex -> responder(ex, 422, "{}") }
+        val e = assertThrows(CatastroException::class.java) { runBlocking { cliente().valuar(insumos) } }
+        assertTrue(e.message!!.contains("422"), e.message)
+    }
+
     private companion object {
+        // catastro-backend#17's example
+        val VALUADA =
+            """{"anio":2026,"version":"valuacion-v2","region":"SELVA","codigoMunicipal":"01-01-0006","arancelM2":45.5,
+            "origenArancel":"CUERPO","terreno":9100.00,"construccion":78781.6,"obras":8870.61,"autoavaluo":96752.21,
+            "motivo":null,"llave":null,"detalle":{"pisos":[{"piso":"1","seccion":null,"areaConstruida":100,
+            "valorUnitario":829.28,"incremento":0.0,"tablaDepreciacion":"01","antiguedad":10,"porcentajeDepreciacion":5,
+            "valorUnitarioDepreciado":787.816,"valor":78781.6}],"obras":[{"codigoVu":"MUROS PERIMETRICOS O CERCOS|1",
+            "cantidad":30,"valorUnitario":457.72,"factorOficializacion":0.68,"tablaDepreciacion":"01","antiguedad":10,
+            "porcentajeDepreciacion":5,"valor":8870.61}]}}"""
+        val SIN_VALOR =
+            """{"anio":2026,"version":"valuacion-v2","region":"SELVA","codigoMunicipal":"01-01-0006","arancelM2":null,
+            "origenArancel":null,"terreno":null,"construccion":null,"obras":null,"autoavaluo":null,"motivo":"Sin arancel",
+            "llave":"ARANCEL_FALTANTE","detalle":null}"""
+
         // the example of task-5-report.md
         val ITEM_VALORADO =
             """{"codigoMunicipal":"PM-1","codigoCpu":"CPU-1","sector":"S01","manzana":"M01","lote":"L01","uso":"010101",

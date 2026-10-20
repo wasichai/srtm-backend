@@ -54,7 +54,7 @@ ese puerto queda en el loopback del servidor: llega por un túnel, `ssh -N -L 54
 | `SRTM_PIDE_RENIEC_ENABLED` | `false` | consulta de DNI a RENIEC por la PIDE (ver [PIDE RENIEC](#pide-reniec)) |
 | `SRTM_PIDE_RENIEC_DNI_USUARIO` / `_RUC_USUARIO` / `_PASSWORD` | vacías | credenciales del convenio con la PIDE; nunca en el repositorio |
 | `SRTM_PIDE_RENIEC_URL` / `_TIMEOUT` | `https://ws2.pide.gob.pe/Rest/RENIEC/Consultar` / `5s` | servicio REST "Consultar" y cuánto se espera |
-| `SRTM_CATASTRO_ENABLED` | `false` | valuaciones de catastro-backend para la brecha (ver [Brecha de recaudación](#brecha-de-recaudación)) |
+| `SRTM_CATASTRO_ENABLED` | `false` | valuaciones de catastro-backend para la brecha (ver [Brecha de recaudación](#brecha-de-recaudación)) y el [autoavalúo sugerido](#autoavalúo-sugerido) |
 | `SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_URL` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_TIMEOUT` | sin entradas / `60s` | el catastro-backend de una organización y su cuenta de servicio `srtm`; `<CLAVE>` es su slug, o cualquiera con `_ORGANIZACION` = su id. El secreto nunca en el repositorio |
 | `SRTM_CATASTRO_URL` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_TIMEOUT` | `http://localhost:8091` / vacías / `60s` | la forma de una sola organización: una entrada más del mapa |
 | `SRTM_CATASTRO_ORGANIZACION` | vacía | slug o id de la organización de esa entrada única; vacía, esa cuenta no se usa |
@@ -1785,6 +1785,41 @@ GET /api/srtm/declaraciones/{id}/valuacion-origen
 - La ficha del predio (`GET /api/srtm/predios/{id}`) trae el mismo bloque en `valuacion_origen.predio`, para el predio
   sin DJ.
 
+### Autoavalúo sugerido
+
+`GET /api/srtm/declaraciones/{id}/autoavaluo-sugerido` (#149) arma los insumos del motor de valuación con la DJ, su
+predio, sus niveles y sus obras activos (`AutoavaluoSugerido.kt`), y los manda a `POST /api/catastro/valuacion` del
+catastro-backend de la organización, con la misma cuenta de servicio que la brecha (`ClienteCatastro.valuar`). Devuelve
+la respuesta del catastro en snake_case y no guarda nada: `valor_autoavaluo` lo sigue escribiendo el usuario.
+
+```
+{ "anio": 2026, "version": "valuacion-v2", "region": "SELVA", "codigo_municipal": "01-01-0006", "arancel_m2": 45.5,
+  "origen_arancel": "CUERPO", "terreno": 9100.0, "construccion": 78781.6, "obras": 8870.61, "autoavaluo": 96752.21,
+  "motivo": null, "llave": null,
+  "detalle": { "pisos": [ { "piso": "1", "seccion": null, "area_construida": 100, "valor_unitario": 829.28, "incremento": 0.0,
+                            "tabla_depreciacion": "01", "antiguedad": 10, "porcentaje_depreciacion": 5,
+                            "valor_unitario_depreciado": 787.816, "valor": 78781.6 } ],
+               "obras": [ { "codigo_vu": "MUROS PERIMETRICOS O CERCOS|1", "cantidad": 30, "valor_unitario": 457.72,
+                            "factor_oficializacion": 0.68, "tabla_depreciacion": "01", "antiguedad": 10,
+                            "porcentaje_depreciacion": 5, "valor": 8870.61 } ] } }
+```
+
+- **Arancel:** el `arancel` del padrón externo guardado en la DJ (`origen_arancel` = `CUERPO`). Sin él, el catastro
+  toma el de su ficha por `codigo_municipal`, que es el `codigo` del predio, la misma llave de la brecha (`FICHA`).
+- **Uso:** la DJ guarda los nombres de clase, sub clase y uso; se manda el `codigo` de `uso_predio` que les corresponde.
+  Si no hay uno solo, va `null` y el catastro responde su motivo.
+- **Niveles:** `piso` es el número (`1`), `S1` un sótano, `M1` un mezanine y `AZ` la azotea. `estado_conservacion`,
+  `muros_columnas`, `techos` y `puertas_ventanas` van como `estado`, `muros`, `techos` y `puertas`. La `clasificacion`
+  es la del nivel o, si no tiene, la de la DJ (las dos vienen del padrón externo). El área común no se valúa.
+- **Obras:** `codigoVu` = `tipo_obra|n`, donde `n` es el número con que empieza la `categoria` (`3. MURO DE …`).
+  Sin número, va `null` y el catastro nombra la obra que no valúa. `cantidad` es el total metrado (cantidad × metrado),
+  en la unidad de la partida.
+- **Edificio** (el 5 % desde el 5.° piso): si el predio tiene `edificacion` o hay un nivel PISO por encima del primero.
+- Sin valor, `terreno`, `construccion`, `obras`, `autoavaluo` y `detalle` son `null`, y `motivo` y `llave` dicen por
+  qué (`ARANCEL_FALTANTE`, `PARAMETRO_FALTANTE:PORCENTAJE_ACTUALIZACION:2027`…).
+- 404 si la DJ no existe o es de otra organización, 409 `SIN_CATASTRO_CONFIGURADO` si la organización no tiene catastro
+  y 502 si el catastro no responde o rechaza el pedido.
+
 **`contribuyente`**: una persona natural, persona jurídica o sucesión. `numero_documento` es único.
 
 | Campo | Origen en el Excel |
@@ -1880,6 +1915,7 @@ Se descarta `orden2`, que es solo el número de fila.
 | POST | `/api/srtm/contribuyentes/{id}/declaraciones-juradas` | presenta una DJ: `{declaracion, predio_id}` sobre un predio del padrón, o `{declaracion, predio}` registrando uno |
 | GET, PUT, DELETE | `/api/srtm/declaraciones/{id}` | la DJ con su predio y su contribuyente; la edición; y la baja (409 si alguna de sus listas tiene filas) |
 | GET | `/api/srtm/declaraciones/{id}/valuacion-origen` | solo lectura: lo que trajo un padrón externo (Ica) a la DJ, su predio y sus niveles, solo los campos con valor ([abajo](#valuación-del-padrón-de-origen)) |
+| GET | `/api/srtm/declaraciones/{id}/autoavaluo-sugerido` | solo lectura: la DJ valuada por el motor del catastro-backend de la organización, con su detalle; no guarda nada ([abajo](#autoavalúo-sugerido)) |
 | POST | `/api/srtm/declaraciones/{id}/anular` | el descargo: `{motivo_anulacion}` la deja ANULADA |
 | POST | `/api/srtm/declaraciones/{id}/condominos` | "Datos de los condóminos": `{contribuyente, porcentaje_condominio}` agrega otro titular del mismo predio, año y secuencia |
 | GET, POST | `/api/srtm/declaraciones/{id}/{lista}` | las listas de la DJ: `transferentes`, `niveles`, `obras`, `frentes` |
