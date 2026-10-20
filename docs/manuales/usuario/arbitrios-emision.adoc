@@ -45,8 +45,8 @@ tiene su cuenta (<<permisos-usuario>>). Con el perfil {p-arbitrios}, usted puede
 * consultar, sin modificar, los contribuyentes, los predios, las declaraciones juradas y el catastro fiscal.
 
 El perfil {p-arbitrios} no corrige el padrón (lo hace el registro tributario, {m-registrador}), no carga la
-ordenanza ni sus tasas (lo hace el administrador, {m-admin}) y no ve la brecha de recaudación: su página dice *Sin
-permiso para ver la brecha: pide lectura sobre las corridas de brecha.* ({m-consulta}).
+ordenanza ni sus tasas (lo hace el administrador, {m-admin}) y no calcula la brecha de recaudación: puede consultarla,
+como todos los perfiles ({m-consulta}).
 
 [[presentacion-alcance]]
 === Qué cubre y qué no

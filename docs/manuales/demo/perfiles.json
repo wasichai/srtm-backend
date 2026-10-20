@@ -151,6 +151,12 @@
         ],
         "movimiento_anuncio": [
           "READ"
+        ],
+        "brecha_corrida": [
+          "READ"
+        ],
+        "brecha_predio": [
+          "READ"
         ]
       }
     },
@@ -251,6 +257,12 @@
         ],
         "uso_predio": [
           "READ"
+        ],
+        "brecha_corrida": [
+          "READ"
+        ],
+        "brecha_predio": [
+          "READ"
         ]
       }
     },
@@ -322,6 +334,12 @@
         ],
         "ubigeo": [
           "READ"
+        ],
+        "brecha_corrida": [
+          "READ"
+        ],
+        "brecha_predio": [
+          "READ"
         ]
       }
     },
@@ -365,6 +383,12 @@
           "READ"
         ],
         "ubigeo": [
+          "READ"
+        ],
+        "brecha_corrida": [
+          "READ"
+        ],
+        "brecha_predio": [
           "READ"
         ]
       }

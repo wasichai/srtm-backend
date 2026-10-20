@@ -1158,10 +1158,16 @@ también al consultarla.
 vacío, o faltan la UIT, los tramos o el mínimo del año: la corrida queda FALLIDA con el motivo en `mensaje`.
 |===
 
-NOTE: Las decisiones del cruce y del cálculo son valores por defecto *por confirmar* con la municipalidad: D5 (una
-celda «.....» del cuadro de valores no es cero, el predio queda SIN_VALOR), D7 (orden de las llaves de cruce), D8 (no
-se aplica la deducción Amazonía), D10 (COINCIDE dentro de ±5 %), D11 (solo 2026), D12 (reparto entre secuencias). Las
-demás (D1-D4, D6, D9) son de catastro-backend.
+NOTE: Las decisiones del cruce y del cálculo las confirmó la municipalidad el 19 de octubre de 2026, salvo D8: D5
+(una celda «.....» del cuadro de valores no es cero: el predio queda SIN_VALOR), D7 (llave de cruce: código municipal,
+CPU, sector-manzana-lote), D10 (COINCIDE con |Δ autoavalúo| ≤ 5 %), D11 (el año lo decide catastro) y D12 (reparto
+entre secuencias por autoavalúo declarado, si no por área construida, si no en partes iguales). D8 (la deducción
+Amazonía no se aplica) sigue abierta para una municipalidad de la Amazonía. Las demás (D1-D4, D6, D9) son de
+catastro-backend.
+
+La brecha la consulta cualquier usuario de la municipalidad: por decisión del 19 de octubre de 2026, *todo rol* lleva
+lectura sobre `brecha_corrida` y `brecha_predio` (wasichai no tiene un permiso para «cualquier usuario autenticado»,
+así que un rol nuevo sin esa lectura ve el panel con 403). Lanzar una corrida pide creación y edición.
 
 include::../referencia/api.adoc[]
 
@@ -2251,7 +2257,7 @@ cambio en {sigla} o páginas más livianas en catastro-backend.
 |El contrato de `PideReniec` sale de ejemplos publicados y nunca se probó contra la PIDE real. Apagado.
 
 |Brecha de recaudación
-|Las decisiones D5, D7, D8, D10, D11 y D12 son valores por defecto por confirmar. Requiere catastro-backend y su
+|D8 (deducción Amazonía) sigue abierta; las demás decisiones están confirmadas. Requiere catastro-backend y su
 cuenta de servicio; apagada por defecto.
 
 |Tasas de arbitrios de Perené

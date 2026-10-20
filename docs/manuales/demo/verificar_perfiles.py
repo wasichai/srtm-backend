@@ -114,10 +114,10 @@ def lecturas(i):
              f"/api/srtm/contribuyentes/{i['c34']}/anuncios", f"/api/srtm/predios/{i['p1']}/anuncios"]  # fmt: skip
     brecha = [f"/api/srtm/brecha/corridas?anio={ANIO}"]
     return {
-        "REGISTRADOR": padron + catalogos + catastro + documentos + arbitrios + ficha,
-        "ARBITRIOS_EMISION": padron + [r for r in catalogos if "/vias" not in r and "/unidades-urbanas" not in r] + documentos + arbitrios + masivas,
-        "FISCALIZADOR": padron[:12] + infracciones + ["/api/srtm/ubigeos"],
-        "ANUNCIOS": padron[:12] + anuncios + ["/api/srtm/ubigeos"],
+        "REGISTRADOR": padron + catalogos + catastro + documentos + arbitrios + ficha + brecha,
+        "ARBITRIOS_EMISION": padron + [r for r in catalogos if "/vias" not in r and "/unidades-urbanas" not in r] + documentos + arbitrios + masivas + brecha,
+        "FISCALIZADOR": padron[:12] + infracciones + ["/api/srtm/ubigeos"] + brecha,
+        "ANUNCIOS": padron[:12] + anuncios + ["/api/srtm/ubigeos"] + brecha,
         "CONSULTA": padron + catalogos + catastro + documentos + arbitrios + masivas + infracciones + anuncios + ficha + brecha,
     }
 

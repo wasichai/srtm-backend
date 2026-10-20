@@ -197,7 +197,8 @@ notificación, panel.
 |Nada: `READ` sobre los 42 objetos.
 |===
 
-Ninguno de los cuatro perfiles operativos lee `brecha_corrida` ni `brecha_predio`: la brecha la consultan
-`{p-consulta}` y `{p-admin}`, y solo un rol con los permisos de la tabla de arriba puede lanzar una corrida. La
+Los cinco perfiles leen `brecha_corrida` y `brecha_predio`: la municipalidad decidió el 19 de octubre de 2026 que
+cualquier usuario consulte la brecha, y wasichai no tiene un permiso para «cualquier usuario autenticado», así que va en
+cada rol. Solo un rol con los permisos de la tabla de arriba puede lanzar una corrida. La
 configuración de la ordenanza de arbitrios (ordenanza, servicios, inafectaciones, zonas) y los parámetros
 tributarios se cargan con los importadores: ningún perfil sugerido los escribe.

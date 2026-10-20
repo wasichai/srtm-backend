@@ -161,9 +161,10 @@ cada test.
 
 |`SRTM_MUNICIPALIDAD_NOMBRE` +
 (`srtm.municipalidad.nombre`)
-|`MUNICIPALIDAD DISTRITAL DE PERENÉ`
+|vacío
 |Nombre de respaldo de la cabecera del PU, la HR, la HLA y las resoluciones, mientras la organización no tenga
-registro `municipalidad`.
+registro `municipalidad`. Vacío, el respaldo es el nombre de la organización en Core (y, si no tiene, su slug): una
+instalación con varias municipalidades no imprime el nombre de otra.
 
 |`SRTM_MUNICIPALIDAD_ESCUDO` +
 (`srtm.municipalidad.escudo`)

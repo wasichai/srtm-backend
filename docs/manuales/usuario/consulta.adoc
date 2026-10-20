@@ -588,8 +588,8 @@ catastro no está conectado (<<brecha-situacion>>). |Nada que hacer desde su per
 |El área de sistemas debe configurarla.
 |Ya hay una corrida de la brecha de 2026 en curso: espere a que termine |Otra corrida del mismo año está corriendo.
 |Espere a que termine.
-|Sin permiso para ver la brecha: pide lectura sobre las corridas de brecha. |Su rol no lee la brecha (no es el caso del
-perfil {p-consulta}). |Pídalo al administrador.
+|Sin permiso para ver la brecha: pide lectura sobre las corridas de brecha. |Su rol no lee la brecha. Todos los perfiles
+sugeridos la leen; un rol creado después puede no tenerla. |Pídalo al administrador.
 |Archivo depurado |El archivo de esa emisión se borró para conservar solo las últimas. |Pida una emisión nueva.
 |El predio … no tiene declaración jurada vigente en … |No hay PU de ese año. |Cambie el año en la ficha.
 |El contribuyente … no tiene cuotas de arbitrios a su nombre en … |No hay HLA de ese año. |Revise la pestaña

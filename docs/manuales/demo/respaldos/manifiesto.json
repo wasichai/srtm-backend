@@ -1,5 +1,5 @@
 {
-  "generado": "2026-10-19T23:54:23+00:00",
+  "generado": "2026-10-20T00:27:13+00:00",
   "base": "srtm_demo",
   "versiones": {
     "srtm_backend": "0.9.0",
@@ -59,20 +59,20 @@
   ],
   "archivos": {
     "srtm_demo.dump": {
-      "bytes": 1260111,
-      "sha256": "910621a4a1e37aa03e744dfbfd8ed4e2aba91ddd86e44de8fb8f7a0f08fc8c13"
+      "bytes": 1261427,
+      "sha256": "b862898abf44237c31e9875bb99f399383b3e5c06ceb07d1fe27e7caacc90f05"
     },
     "srtm_demo.sql": {
-      "bytes": 8638542,
-      "sha256": "b0f9363b72142eccc460131b53e9bbdd3018d2c3beb8f8137cdffc62c3c45c5b"
+      "bytes": 8650000,
+      "sha256": "0cccc7d64b08fca8e37290c96ddb43e1c19ca82e925b72ffaf5298c882ea9715"
     },
     "datos.sql": {
-      "bytes": 12374092,
-      "sha256": "8104b6b6f6e9fd62c3dd94fd9a5e1740bef277963bcb7a680a1abbf4f41f09a5"
+      "bytes": 12387270,
+      "sha256": "3bb92f191834f8572d63dd65b4cd145c95fb743c40c6e0599e831bd732217781"
     },
     "emisiones.tar.gz": {
       "bytes": 4041478,
-      "sha256": "e5e172d8e8079ea04d0fa30689b7e75be88415f9ccfb3afe3166a74c93b0124e"
+      "sha256": "9f42af940affe4ccfbfd39fb6e994568511c51267f29dc716dfde358f3f139de"
     }
   },
   "restricciones_sin_validar": [
@@ -142,7 +142,7 @@
     "app_data.uso_predio__00000000": 276,
     "app_data.via__00000000": 7,
     "app_data.zona_arbitrio_ubicacion__00000000": 1,
-    "wasichai.audit_log": 6183,
+    "wasichai.audit_log": 6187,
     "wasichai.custom_fields": 570,
     "wasichai.custom_objects": 42,
     "wasichai.document_counters": 0,
@@ -163,7 +163,7 @@
     "wasichai.org_units": 0,
     "wasichai.organizations": 1,
     "wasichai.pages": 0,
-    "wasichai.permissions": 196,
+    "wasichai.permissions": 204,
     "wasichai.relationships": 44,
     "wasichai.roles": 6,
     "wasichai.service_accounts": 0,
