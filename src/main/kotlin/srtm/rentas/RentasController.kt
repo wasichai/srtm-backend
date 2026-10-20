@@ -296,6 +296,15 @@ class RentasController(
         @RequestBody body: Anulacion
     ) = declaraciones.anular(id, body)
 
+    // the rectificatoria: {medio_presentacion?, fecha_presentacion?}. a new declaración, numbered, with what this one
+    // declares, that replaces it (SUSTITUIDA, read-only): its ficha
+    @PostMapping("/declaraciones/{id}/rectificar")
+    @ResponseStatus(HttpStatus.CREATED)
+    suspend fun rectificar(
+        @PathVariable id: UUID,
+        @RequestBody(required = false) body: Rectificacion?
+    ) = declaraciones.rectificar(id, body ?: Rectificacion())
+
     // "datos de los condóminos": another titular of the declaración's predio, year and secuencia
     @PostMapping("/declaraciones/{id}/condominos")
     @ResponseStatus(HttpStatus.CREATED)

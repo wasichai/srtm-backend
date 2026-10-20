@@ -1912,11 +1912,12 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET, PUT, DELETE | `/api/srtm/predios/{id}?anio` | la ficha: datos, nº de titulares y totales del año, y `valuacion_origen.predio` (los códigos del padrón externo con valor, [abajo](#valuación-del-padrón-de-origen)); la edición; y la baja (409 si tiene declaraciones o cuotas de arbitrio) |
 | GET | `/api/srtm/predios/{id}/declaraciones?anio` | sus declaraciones, cada una con su contribuyente |
 | POST | `/api/srtm/declaraciones` | alta corta, desde la ficha del predio (`contribuyente` y `predio` son ids) |
-| POST | `/api/srtm/contribuyentes/{id}/declaraciones-juradas` | presenta una DJ: `{declaracion, predio_id}` sobre un predio del padrón, o `{declaracion, predio}` registrando uno |
+| POST | `/api/srtm/contribuyentes/{id}/declaraciones-juradas` | presenta una DJ: `{declaracion, predio_id}` sobre un predio del padrón, o `{declaracion, predio}` registrando uno; con `desde` (una DJ de otro año del mismo predio y contribuyente) la copia, con sus listas, al año del cuerpo |
 | GET, PUT, DELETE | `/api/srtm/declaraciones/{id}` | la DJ con su predio y su contribuyente; la edición; y la baja (409 si alguna de sus listas tiene filas) |
 | GET | `/api/srtm/declaraciones/{id}/valuacion-origen` | solo lectura: lo que trajo un padrón externo (Ica) a la DJ, su predio y sus niveles, solo los campos con valor ([abajo](#valuación-del-padrón-de-origen)) |
 | GET | `/api/srtm/declaraciones/{id}/autoavaluo-sugerido` | solo lectura: la DJ valuada por el motor del catastro-backend de la organización, con su detalle; no guarda nada ([abajo](#autoavalúo-sugerido)) |
 | POST | `/api/srtm/declaraciones/{id}/anular` | el descargo: `{motivo_anulacion}` la deja ANULADA |
+| POST | `/api/srtm/declaraciones/{id}/rectificar` | la rectificatoria: `{medio_presentacion?, fecha_presentacion?}` crea una DJ nueva, numerada y RECTIFICACION, con lo que declara esta y sus listas (sin la valuación del padrón externo), y deja esta SUSTITUIDA; devuelve la ficha de la nueva |
 | POST | `/api/srtm/declaraciones/{id}/condominos` | "Datos de los condóminos": `{contribuyente, porcentaje_condominio}` agrega otro titular del mismo predio, año y secuencia |
 | GET, POST | `/api/srtm/declaraciones/{id}/{lista}` | las listas de la DJ: `transferentes`, `niveles`, `obras`, `frentes` |
 | PUT, DELETE | `/api/srtm/{lista}/{id}` | edición y baja de una fila de esas listas |

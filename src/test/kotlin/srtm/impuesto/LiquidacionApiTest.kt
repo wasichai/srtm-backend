@@ -49,6 +49,17 @@ class LiquidacionApiTest : ConParametrosApiTest() {
         assertTrue(lista(l["faltan"]).isEmpty())
     }
 
+    // #147: the rectificatoria replaces the declaración it rectifies, which counts no more
+    @Test
+    fun `a rectified declaracion counts by its rectificatoria alone`() {
+        val a = inscribir()
+        val origen = declarar(a, predio(), autoavaluo = "60000.00")
+        val r = tree(send("POST", "/api/srtm/declaraciones/$origen/rectificar", null, HttpStatus.CREATED))["declaracion"]
+        put("/api/srtm/declaraciones/${r["id"].asString()}", fields(r) + ("valor_autoavaluo" to BigDecimal("70000.00")))
+
+        assertEquals(BigDecimal("70000.00"), liquidacion(a, 2026)["base"].let(::dec))
+    }
+
     // 2099: a year no UIT row reaches, in the csv or in another test's data (2027's will come)
     @Test
     fun `a year without its parameters says which are missing and no figure`() {

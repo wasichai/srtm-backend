@@ -79,6 +79,29 @@ class ArbitriosApiTest : ConArbitriosApiTest() {
         assertEquals("8.50 S/ por predio", enero["desglose"][0]["formula"].asString())
     }
 
+    // #147: the rectificatoria replaces the whole year of the declaración it rectifies: the sustituida covers no
+    // month, not even once its rectificatoria is annulled
+    @Test
+    fun `a rectified declaracion is charged by its rectificatoria, the sustituida covers no month`() {
+        val e = Escenario()
+        rectificar(e)
+        assertEquals(24, matriz(e)["pendientes"].asInt())
+        assertEquals(24, tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED)).size())
+        val m = matriz(e)
+        assertEquals(153.0, m["total"].asDouble())
+        assertEquals(List(12) { e.contribuyente }, lista(m["titulares"]) { it["titular"]["id"].asString() })
+
+        val otro = Escenario()
+        send("POST", "/api/srtm/declaraciones/${rectificar(otro)}/anular", mapOf("motivo_anulacion" to "Vendido"), HttpStatus.OK)
+        assertEquals(0, matriz(otro)["pendientes"].asInt())
+    }
+
+    // the escenario's declaración rectified: its rectificatoria's id
+    private fun rectificar(e: Escenario): String {
+        val dj = tree(send("GET", "/api/objects/declaracion_predial/records?predio=${e.predio}", null, HttpStatus.OK))["content"].single()["id"].asString()
+        return tree(send("POST", "/api/srtm/declaraciones/$dj/rectificar", null, HttpStatus.CREATED))["declaracion"]["id"].asString()
+    }
+
     // a predio of two usos (#80). before the year of one PU per uso (no ARBITRIO_PU_POR_USO in force on its 1
     // January) it pays the secuencia of its titular principal's DJ alone: nothing stays pending and its HLA is made.
     // with the row loaded for the year, the 002's are pending and the POST adds them

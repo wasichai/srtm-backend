@@ -16,6 +16,7 @@ import srtm.rentas.PREDIO
 import srtm.rentas.Predio
 import srtm.rentas.Records
 import srtm.rentas.Registros
+import srtm.rentas.SUSTITUIDA
 import srtm.rentas.USO_PREDIO
 import srtm.rentas.UsoPredio
 import tools.jackson.databind.PropertyNamingStrategies
@@ -96,7 +97,11 @@ class ArbitriosService(
         conAnteriores: Boolean = false
     ): PredioArbitrios {
         val id = requireNotNull(predio.id)
-        val declaraciones = registros.all(DECLARACION, Declaracion::class.java, filters = mapOf("predio" to id, "anio" to "$anio"))
+        // the annulled ones too (cubre: up to their fecha_anulacion), not a sustituida: its rectificatoria replaces it
+        val declaraciones =
+            registros
+                .all(DECLARACION, Declaracion::class.java, filters = mapOf("predio" to id, "anio" to "$anio"))
+                .filter { it.estado != SUSTITUIDA }
         val codigos = personas(declaraciones.mapNotNull { it.contribuyente }).mapValues { it.value.codigo }
         val inafectaciones = registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java, filters = mapOf("predio" to id))
         val (existentes, anuladas) = delAnio(id, anio)

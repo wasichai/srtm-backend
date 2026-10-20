@@ -14,6 +14,7 @@ import srtm.impuesto.Parametros
 import srtm.rentas.ANULADA
 import srtm.rentas.Declaracion
 import srtm.rentas.Predio
+import srtm.rentas.SUSTITUIDA
 import srtm.rentas.UsoPredio
 import srtm.rentas.condominio
 import java.math.BigDecimal
@@ -408,6 +409,24 @@ class BrechaTest {
     private val sinDj = predio("p3", codigo = "01-02-0001", sector = "02")
 
     private fun padron(vararg ds: Declaracion) = Padron(listOf(propio, sinCatastro, sinDj), ds.toList())
+
+    // #147: a rectificatoria replaces the declaración it rectifies: the padrón declares what the rectificatoria says
+    @Test
+    fun `a sustituida declaration is measured by its rectificatoria alone`() {
+        val m =
+            Brecha.medir(
+                anio,
+                listOf(item(municipal = "01-01-0001", autoavaluo = "120000.00")),
+                padron(dj("1", "a", "p1", "100000.00").copy(estado = SUSTITUIDA), dj("2", "a", "p1", "110000.00").copy(sustituye = "1")),
+                parametros,
+                null,
+                hoy
+            )
+        val fila = m.filas.single { it.codigoPredio == "01-01-0001" }
+        assertEquals(BigDecimal("110000.00"), fila.autoavaluoDeclarado)
+        assertEquals(BigDecimal("10000.00"), fila.deltaAutoavaluo)
+        assertEquals(liquidar("120000.00") - liquidar("110000.00"), fila.deltaImpuesto)
+    }
 
     @Test
     fun `one row per catastro item and per padron predio the catastro lacks`() {
