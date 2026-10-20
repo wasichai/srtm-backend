@@ -1,0 +1,78 @@
+= Informe de validación de las presentaciones
+:toc: left
+
+Validación del 20 de octubre de 2026, sobre la rama `docs/presentaciones` (PR #142), con los manuales en su edición 1.0
+y Rentas municipales 0.9.0.
+
+== Comprobaciones automáticas
+
+[cols="2,3,2",options="header"]
+|===
+|Comprobación |Cómo |Resultado
+|Tipos y estilo |`npm run lint` (eslint y tsc) |Sin errores
+|Consistencia |`npm run verificar`: anclas de los manuales, capturas, regiones, diagramas, tiempos de lectura, ids,
+índices y storyboards al día |10 vídeos, 193 escenas, 72:56; 0 fallas, 0 avisos
+|Render local |`npm run render` (macOS, Apple M5, 10 núcleos) |10 MP4 y 10 miniaturas, 49 minutos de render
+|MP4 |`npm run comprobar-videos`: H.264, 1920 × 1080, 30 fps, `yuv420p`, número exacto de fotogramas, sin audio,
+miniatura |Los 10 bien
+|Render en CI |`manuales.yml` en el PR, un trabajo por vídeo en Ubuntu |Los 10 bien (5 a 17 minutos cada uno)
+|===
+
+[cols="3,1,1,1",options="header"]
+|===
+|Vídeo |Duración |Escenas |MB
+|01 · Rentas municipales de un vistazo |3:54 |10 |8,4
+|02 · Primeros pasos en el portal |7:21 |21 |21,8
+|03 · Registro tributario |8:15 |26 |31,8
+|04 · Arbitrios y emisión |8:27 |24 |22,2
+|05 · Infracciones administrativas |9:32 |23 |31,1
+|06 · Anuncios y propaganda |4:59 |12 |16,2
+|07 · Consulta y brecha de recaudación |4:10 |13 |11,0
+|08 · Administración del sistema |9:41 |27 |24,3
+|09 · Arquitectura técnica |7:31 |15 |12,6
+|10 · Instalación, operación y recuperación |9:06 |22 |13,5
+|===
+
+== Revisión visual y editorial
+
+Cada vídeo se revisó con sus fotogramas de control (`npm run fotogramas`: uno por escena, uno por foco de cada pantalla
+y uno por paso de cada diagrama), y luego con un fotograma por escena sacado del MP4 codificado
+(`npm run comprobar-videos` → `salida/control/`). Se buscó texto cortado o desbordado, escenas saturadas, recuadros
+que no caen sobre el control, cifras distintas de las del manual y tiempos de lectura cortos.
+
+Defectos encontrados y corregidos::
+* Títulos superpuestos durante los fundidos cruzados: el paso entre escenas es ahora un fundido a blanco.
+* Contenido pegado arriba con mucho vacío debajo: tarjetas, tablas, procesos, comparaciones y cálculos se centran en el
+  alto disponible; los diagramas, entre el título y la barra de pasos.
+* El resalte naranja de lo nuevo en un diagrama no se apagaba: dura un momento.
+* Textos que no daban tiempo a leerse (el verificador los detectó en todos los vídeos): se recortaron textos y se
+  ajustaron duraciones.
+* Acercamientos de hasta 1,9× sobre botones chicos perdían el contexto: el máximo es 1,6×.
+* El pie citaba siempre la primera fuente de una pantalla: cada foco puede citar la suya.
+* Viñetas de alerta en columnas neutras de las comparaciones: ahora es un punto.
+* El título «en tres minutos» no correspondía a la duración real del vídeo 01: «de un vistazo».
+* La versión y la edición de la portada estaban escritas a mano: salen de `docs/manuales/atributos.adoc`.
+* Por vídeo: recuadros de regiones reajustados, rótulos de aristas que tapaban flechas, nodos superpuestos en el
+  diagrama de componentes, cortes de línea en opciones de comandos, encuadres de capturas muy anchas o muy bajas.
+
+== Discrepancias de los manuales
+
+Encontradas al preparar los vídeos. Los vídeos no afirman lo dudoso.
+
+* `comun/busqueda.adoc#fichas-abiertas` dice que cerrar una pestaña con cambios sin grabar pregunta antes;
+  `comun/mensajes.adoc#salir-sin-guardar` dice que solo pregunta la declaración jurada. El vídeo 02 sigue a `mensajes`.
+* `recursos/diagramas/emision-lotes.mmd` lleva «EN_PROCESO → FALLIDA: un lote agota sus 3 intentos»; el texto del manual
+  técnico dice que ese lote queda FALLIDO y el trabajo puede terminar TERMINADA con errores. El vídeo 09 sigue al texto.
+* `arq-modulos` dice que sanciones y anuncios no importan otros módulos de negocio; `componentes.mmd` dibuja sanciones →
+  rentas y anuncios → rentas. El vídeo 09 dibuja las flechas del diagrama y no repite la frase.
+* La leyenda de `administrador/auditoria-cambios.png` habla de «Predios y Estado»; la captura muestra otros campos.
+* `demo/README.adoc` da como «hoy» de la demo el 15/10/2026; los manuales de usuario, el 20/10/2026.
+* El manual técnico da por abierta la decisión D8 de la brecha. Ningún vídeo toca D8.
+
+== Limitaciones conocidas
+
+* Sin narración ni subtítulos (README, «Narración y subtítulos»).
+* Los vídeos 02 a 10 pasan de 1 a 2 minutos la duración prevista: sin voz, el tiempo de lectura manda.
+* El diagrama de componentes (09) reproduce todas las flechas de `componentes.mmd` y queda denso.
+* La brecha de recaudación se explica sin datos: el catastro no está conectado en la demo.
+* Algunas capturas de los manuales ya traen su recuadro naranja; el del visor queda encima como un doble anillo.
