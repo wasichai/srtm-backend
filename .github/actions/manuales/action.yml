@@ -1,0 +1,20 @@
+name: Manuals
+description: Builds docs/manuales (HTML + PDF, validated) into docs/manuales/salida with the gems of its Gemfile.lock
+
+runs:
+  using: composite
+  steps:
+    - uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+      with:
+        ruby-version: '4.0'
+        bundler-cache: true
+        working-directory: docs/manuales
+    # pdffonts and pdfinfo: validar.py checks that the pdfs embed every font and keep their bookmarks
+    - name: Install poppler
+      shell: bash
+      run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends poppler-utils
+    # captures and diagrams are versioned (they need the demo and a browser): the build only renders the sources
+    - name: Build
+      shell: bash
+      working-directory: docs/manuales
+      run: make sitio ASCIIDOCTOR="bundle exec asciidoctor" ASCIIDOCTOR_PDF="bundle exec asciidoctor-pdf"
