@@ -792,7 +792,8 @@ cruza en silencio el padrón de una organización con el catastro de otra.
 
 **Cruce** (D7). Cada ítem del catastro busca su predio: por código municipal (`predio.codigo`), si no por código CPU
 (`codigo_cpu`), si no por sector, manzana y lote (`sector_catastral`, `manzana_catastral`, `lote`), sin distinguir
-mayúsculas ni espacios en los extremos. El cruce va **por pasadas sobre todos los ítems**, así el orden de los ítems no
+mayúsculas, espacios en los extremos ni ceros a la izquierda de cada tramo de números: `01-01-0006` y `1-1-6` son la
+misma llave, como un lote `08` y `8` (el padrón de Perené escribe los dos). El cruce va **por pasadas sobre todos los ítems**, así el orden de los ítems no
 cambia nada: primero todos por código municipal, luego los que quedan por CPU, luego los que quedan por sector, manzana
 y lote. Una llave de respaldo nunca le quita a otro ítem el predio que este nombra por una llave más fuerte. Un predio
 cruza una sola vez. En las dos primeras pasadas, entre varios predios de la misma llave gana el que tiene DJ del año y
@@ -869,6 +870,11 @@ y puede lanzar otra.
 Pide creación y edición sobre `brecha_corrida` y creación sobre `brecha_predio` (**403**); consultar pide lectura
 sobre `brecha_corrida`.
 
+**Quién la ve.** La brecha la consulta cualquier usuario de la municipalidad (decisión del 2026-10-19), y eso se da por
+roles, no por código: **todo rol** de srtm lleva lectura sobre `brecha_corrida` y `brecha_predio`. Core revisa la
+lectura de cada fila y wasichai no tiene un permiso para «cualquier usuario autenticado», así que un rol nuevo sin esa
+lectura ve el panel con 403. Lanzar una corrida queda para quien tenga creación y edición (arriba).
+
 | Método | Ruta | Responde |
 |---|---|---|
 | POST | `/api/srtm/brecha/corridas` `{anio}` | 202 con la corrida; 400 año inválido; 403; 409 catastro no configurado o corrida en curso. |
@@ -887,10 +893,11 @@ El JSON va en camelCase, como `/liquidacion`. `lote_geom` de `brecha_predio` es 
 guarda el lote del predio del padrón o, para un omiso, el del catastro; así `/lotes` lo lee de las filas y la capa gis
 (`/api/gis/objects/brecha_predio/features`) también puede servirlo.
 
-**Decisiones por confirmar** (valores por defecto del plan de la brecha):
+**Decisiones** (confirmadas por la municipalidad el 2026-10-19, salvo D8):
 - D5: una celda «.....» del cuadro de valores no es cero: el predio queda SIN_VALOR con su motivo.
 - D7: llave de cruce código municipal → CPU → sector, manzana y lote.
-- D8: la deducción Amazonía no se aplica; solo la `deduccion` que ya trae cada DJ.
+- D8: la deducción Amazonía no se aplica (Perené no la tiene hoy); solo la `deduccion` que ya trae cada DJ. Abierta
+  para cuando se cargue una municipalidad de la Amazonía.
 - D10: COINCIDE con |Δ autoavalúo| ≤ 5 %.
 - D11: solo 2026 (el año lo decide catastro; srtm acepta cualquiera con sus parámetros).
 - D12: reparto entre secuencias por autoavalúo declarado, si no por área construida, si no en partes iguales.
@@ -1884,7 +1891,9 @@ emisión (hora de Lima); la gerencia; la dirección; una línea punteada, y el t
 - **Los datos** salen del registro `municipalidad` de la organización (nombre, oficina, RUC, gerencia y dirección),
   que se edita en el admin: `/admin`, objeto *Municipalidad*.
   - Hay uno por organización. Si hay más, vale el más antiguo y el log lo avisa.
-  - Sin registro, la cabecera solo lleva `srtm.municipalidad.nombre` (`SRTM_MUNICIPALIDAD_NOMBRE`).
+  - Sin registro, la cabecera solo lleva un nombre de respaldo: `srtm.municipalidad.nombre`
+    (`SRTM_MUNICIPALIDAD_NOMBRE`) si se configura; si no, el nombre de la organización en core. Por defecto está vacío,
+    así una instalación con varias municipalidades no imprime el nombre de otra.
   - Una línea vacía no se imprime.
   - Se lee como el usuario que emite, así que su rol necesita permiso de lectura sobre `municipalidad`, como sobre
     `parametro_tributario`.

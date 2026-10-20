@@ -102,7 +102,7 @@ python3 import_predios.py --excel "/ruta/CODIGO DE PREDIOS AL 2026.xlsx"
 ```
 
 - **Cabecera del PU y la HR:** los datos de `model/data/municipalidad.json` son provisionales. Los reales se editan
-  en `/admin` (objeto *Municipalidad*); el escudo se configura con `SRTM_MUNICIPALIDAD_ESCUDO`.
+  en `/admin` (objeto *Municipalidad*); sin registro lleva el nombre de la organización; el escudo se configura con `SRTM_MUNICIPALIDAD_ESCUDO`.
 - **Datos personales:** el Excel y `model/reports/` traen DNI, nombres y domicilios. No se copian al repo: `*.xlsx`
   y `model/reports/` están en `.gitignore`.
 - **Tiempo de carga:** la importación completa son unos 42 000 registros. Con la base local tarda unos minutos. Por

@@ -109,6 +109,20 @@ class BrechaTest {
     }
 
     @Test
+    fun `leading zeros do not tell codes apart, in the codigo or in the lote`() {
+        assertEquals(Brecha.llave("1-1-6"), Brecha.llave("01-01-0006"))
+        assertEquals("90-1-2097", Brecha.llave(" 90-01-2097 "))
+        assertEquals("8A", Brecha.llave("08a"))
+        assertEquals("0", Brecha.llave("000"))
+        assertEquals(null, Brecha.llave("  "))
+        // the padrón writes the predio as 90-01-2097 and has no lote; the catastro writes 90-1-2097
+        val rural = predio("r", codigo = "90-01-2097")
+        val enLote = predio("l", codigo = "L", sector = "01", manzana = "A", lote = "8")
+        val pares = Brecha.cruzar(listOf(item(municipal = "90-1-2097"), item(sector = "1", manzana = "a", lote = "08")), listOf(rural, enLote))
+        assertEquals(listOf("r", "l"), pares.map { it.second?.id })
+    }
+
+    @Test
     fun `a predio crosses once, a later item tries its next key, and without one is an omiso`() {
         val a = predio("a", codigo = "X", cpu = "CPU-1")
         val b = predio("b", codigo = "Y", cpu = "CPU-1")
