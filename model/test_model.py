@@ -149,12 +149,12 @@ class ShippedModelTests(unittest.TestCase):
     def test_the_padron_externo_fields_are_optional(self):
         # #124: what the padrón of Ica brings and the predial model had no place for. at the end of each object (the
         # order apply.py creates them in on a Core that has the rest) and optional: perené's records and the portal's
-        # have none of them
+        # have none of them. #148: and the declaración's mark that it changed since its valuation was imported
         nuevos = {
             "predio": [("codigo_via", "TEXT"), ("codigo_unidad_urbana", "TEXT"), ("codigo_hu_armonizacion", "TEXT"),
                        ("codigo_via_armonizacion", "TEXT")],
             "declaracion_predial": [("arancel", "DECIMAL"), ("valor_terreno", "DECIMAL"), ("valor_construccion", "DECIMAL"),
-                                    ("valor_otras_instalaciones", "DECIMAL")],
+                                    ("valor_otras_instalaciones", "DECIMAL"), ("origen_modificado", "BOOLEAN")],
             "nivel_construccion": [("clasificacion", "ENUM"), ("valor_unitario", "DECIMAL"), ("incremento", "DECIMAL"),
                                    ("porcentaje_depreciacion", "DECIMAL"), ("valor_total", "DECIMAL")],
             "via": [("codigo", "TEXT")],

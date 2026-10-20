@@ -44,7 +44,8 @@ class DeclaracionService(
         return ValuacionOrigen(
             predio = conValor(predio, PADRON_EXTERNO_PREDIO),
             declaracion = conValor(declaracion, PADRON_EXTERNO_DECLARACION),
-            niveles = niveles
+            niveles = niveles,
+            modificada = declaracion[ORIGEN_MODIFICADO] == true
         )
     }
 
@@ -97,6 +98,7 @@ class DeclaracionService(
         val saved = registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(grupo.first()))
         guardarDerivados(grupo.drop(1), otros)
         if (seUne) recalcular(stored)
+        marcarOrigenModificado(id)
         return saved
     }
 
@@ -134,13 +136,14 @@ class DeclaracionService(
         contribuyentes.get(contribuyente)
         val creada = registrar(nueva(delPredio(origen).copy(porcentajeCondominio = body.porcentajeCondominio), contribuyente, UUID.fromString(origen.predio)))
         val nuevaId = UUID.fromString(creada.id)
-        copiarPadronExterno(DECLARACION, id, nuevaId, PADRON_EXTERNO_DECLARACION)
+        // and its mark: the copy is as faithful to the padrón as its source. its rows are no edit of it
+        copiarPadronExterno(DECLARACION, id, nuevaId, PADRON_EXTERNO_DECLARACION + ORIGEN_MODIFICADO)
         niveles(id).forEach { nivel ->
-            val copia = agregarNivel(nuevaId, nivel.copy(id = null, declaracion = null))
+            val copia = nuevoNivel(nuevaId, nivel.copy(id = null, declaracion = null))
             copiarPadronExterno(NIVEL_CONSTRUCCION, UUID.fromString(nivel.id), UUID.fromString(copia.id), PADRON_EXTERNO_NIVEL)
         }
-        obras(id).forEach { agregarObra(nuevaId, it.copy(id = null, declaracion = null)) }
-        frentes(id).forEach { agregarFrente(nuevaId, it.copy(id = null, declaracion = null)) }
+        obras(id).forEach { nuevaObra(nuevaId, it.copy(id = null, declaracion = null)) }
+        frentes(id).forEach { nuevoFrente(nuevaId, it.copy(id = null, declaracion = null)) }
         return creada
     }
 
@@ -154,6 +157,22 @@ class DeclaracionService(
     ) {
         val valores = conValor(registros.get(objeto, Map::class.java, de), campos)
         if (valores.isNotEmpty()) registros.replace(objeto, Map::class.java, a, valores)
+    }
+
+    // a write of a declaración, or of its niveles, obras or frentes, after an external padrón's valuation was imported
+    // (its own fields or a nivel's): that valuation no longer describes it. marked once, on the stored record (the dtos
+    // do not carry it); the motivo stays the portal's. `quitado`: a nivel with a valuation, already removed
+    private suspend fun marcarOrigenModificado(
+        id: UUID,
+        quitado: Boolean = false
+    ) {
+        val declaracion = registros.get(DECLARACION, Map::class.java, id)
+        if (declaracion[ORIGEN_MODIFICADO] == true) return
+        val conOrigen =
+            quitado ||
+                conValor(declaracion, PADRON_EXTERNO_DECLARACION).isNotEmpty() ||
+                listas.listar(NIVEL_CONSTRUCCION, Map::class.java, PARENT, id).any { conValor(it, PADRON_EXTERNO_NIVEL).isNotEmpty() }
+        if (conOrigen) registros.replace(DECLARACION, Map::class.java, id, mapOf(ORIGEN_MODIFICADO to true))
     }
 
     // a predio of the srtm: its code comes from codigoPredio when blank, its direccion from its ubicación
@@ -234,19 +253,31 @@ class DeclaracionService(
     suspend fun agregarNivel(
         id: UUID,
         body: NivelConstruccion
+    ) = nuevoNivel(id, body).also { marcarOrigenModificado(id) }
+
+    private suspend fun nuevoNivel(
+        id: UUID,
+        body: NivelConstruccion
     ) = listas.agregar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, existe(id), body.copy(estado = body.estado ?: Listas.ACTIVO))
 
     suspend fun actualizarNivel(
         id: UUID,
         body: NivelConstruccion
     ): NivelConstruccion {
-        deVigente(NIVEL_CONSTRUCCION, id)
-        return listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id, body)
+        val declaracion = deVigente(NIVEL_CONSTRUCCION, id)
+        val saved = listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id, body)
+        declaracion?.let { marcarOrigenModificado(it) }
+        return saved
     }
 
     suspend fun obras(id: UUID) = listas.listar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, id)
 
     suspend fun agregarObra(
+        id: UUID,
+        body: ObraComplementaria
+    ) = nuevaObra(id, body).also { marcarOrigenModificado(id) }
+
+    private suspend fun nuevaObra(
         id: UUID,
         body: ObraComplementaria
     ) = listas.agregar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, existe(id), obra(body))
@@ -255,13 +286,20 @@ class DeclaracionService(
         id: UUID,
         body: ObraComplementaria
     ): ObraComplementaria {
-        deVigente(OBRA_COMPLEMENTARIA, id)
-        return listas.cambiar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, id, obra(body))
+        val declaracion = deVigente(OBRA_COMPLEMENTARIA, id)
+        val saved = listas.cambiar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, id, obra(body))
+        declaracion?.let { marcarOrigenModificado(it) }
+        return saved
     }
 
     suspend fun frentes(id: UUID) = listas.listar(OTRO_FRENTE, OtroFrente::class.java, PARENT, id)
 
     suspend fun agregarFrente(
+        id: UUID,
+        body: OtroFrente
+    ) = nuevoFrente(id, body).also { marcarOrigenModificado(id) }
+
+    private suspend fun nuevoFrente(
         id: UUID,
         body: OtroFrente
     ) = listas.agregar(OTRO_FRENTE, OtroFrente::class.java, PARENT, existe(id), body.copy(estado = body.estado ?: Listas.ACTIVO))
@@ -270,16 +308,21 @@ class DeclaracionService(
         id: UUID,
         body: OtroFrente
     ): OtroFrente {
-        deVigente(OTRO_FRENTE, id)
-        return listas.cambiar(OTRO_FRENTE, OtroFrente::class.java, PARENT, id, body)
+        val declaracion = deVigente(OTRO_FRENTE, id)
+        val saved = listas.cambiar(OTRO_FRENTE, OtroFrente::class.java, PARENT, id, body)
+        declaracion?.let { marcarOrigenModificado(it) }
+        return saved
     }
 
+    // a transferente is no part of the valuation. a nivel removed with its own is read before it goes
     suspend fun borrar(
         objectName: String,
         id: UUID
     ) {
-        deVigente(objectName, id)
+        val declaracion = deVigente(objectName, id)
+        val quitado = objectName == NIVEL_CONSTRUCCION && conValor(registros.get(objectName, Map::class.java, id), PADRON_EXTERNO_NIVEL).isNotEmpty()
         listas.borrar(objectName, id)
+        if (objectName in VALUADAS) declaracion?.let { marcarOrigenModificado(it, quitado) }
     }
 
     // the srtm's defaults. condición and % are the condominio's (registrar)
@@ -410,13 +453,14 @@ class DeclaracionService(
         return id
     }
 
-    // and a row of it changed or removed
+    // and a row of it changed or removed: its declaración
     private suspend fun deVigente(
         objectName: String,
         id: UUID
-    ) {
-        val declaracion = registros.get(objectName, Map::class.java, id)[PARENT]?.toString() ?: return
-        modificable(registros.get(DECLARACION, Declaracion::class.java, UUID.fromString(declaracion)))
+    ): UUID? {
+        val declaracion = registros.get(objectName, Map::class.java, id)[PARENT]?.toString()?.let(UUID::fromString) ?: return null
+        modificable(registros.get(DECLARACION, Declaracion::class.java, declaracion))
+        return declaracion
     }
 
     private fun obra(body: ObraComplementaria) = body.copy(estado = body.estado ?: Listas.ACTIVO, totalMetrado = totalMetrado(body))
@@ -425,5 +469,8 @@ class DeclaracionService(
         const val PARENT = "declaracion"
         const val ATTEMPTS = 3
         val LISTAS = listOf(TRANSFERENTE, NIVEL_CONSTRUCCION, OBRA_COMPLEMENTARIA, OTRO_FRENTE)
+
+        // the lists a write of which marks an external padrón's valuation as modified (marcarOrigenModificado)
+        val VALUADAS = listOf(NIVEL_CONSTRUCCION, OBRA_COMPLEMENTARIA, OTRO_FRENTE)
     }
 }

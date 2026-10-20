@@ -100,6 +100,9 @@ fun delPredio(origen: Declaracion) =
 val PADRON_EXTERNO_DECLARACION = listOf("arancel", "valor_terreno", "valor_construccion", "valor_otras_instalaciones")
 val PADRON_EXTERNO_NIVEL = listOf("clasificacion", "valor_unitario", "incremento", "porcentaje_depreciacion", "valor_total")
 
+// the declaración's mark that it changed after that valuation was imported (DeclaracionService.marcarOrigenModificado)
+const val ORIGEN_MODIFICADO = "origen_modificado"
+
 // the predio's codes in the source catastro and in the Formato Padrón Municipal Armonización: only read, never copied
 val PADRON_EXTERNO_PREDIO = listOf("codigo_via", "codigo_unidad_urbana", "codigo_hu_armonizacion", "codigo_via_armonizacion")
 

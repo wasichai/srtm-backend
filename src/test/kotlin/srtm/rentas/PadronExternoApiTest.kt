@@ -1,6 +1,7 @@
 package srtm.rentas
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
@@ -144,6 +145,103 @@ class PadronExternoApiTest : SrtmApiTest() {
         assertEquals(0, sinPadron["valuacion_origen"]["predio"].size(), sinPadron.toString())
     }
 
+    // #148: the valuation is the padrón's, frozen, and the portal's saves keep it. once the declaración or its niveles,
+    // obras or frentes change, it says so (modificada); the motivo is the portal's own (MotivoApiTest)
+    @Test
+    fun `an edit of a declaracion with an external padron's valuation marks it modificada`() {
+        val declaracion = nuevaDeclaracion()
+        importar(DECLARACION, declaracion, DECLARACION_ICA)
+        assertFalse(modificada(declaracion))
+
+        put("/api/srtm/declaraciones/$declaracion", fields(ficha(declaracion)) + ("otros_datos" to "EDITADA"))
+
+        assertTrue(modificada(declaracion))
+        assertValores(DECLARACION_ICA, valuacion(declaracion)["declaracion"])
+    }
+
+    // the valuation only on a nivel: the declaración's own fields are empty
+    @Test
+    fun `every write of the niveles, obras and frentes of a declaracion with a valuation marks it, not its motivo`() {
+        val escrituras =
+            mapOf<String, (String, JsonNode, JsonNode, JsonNode) -> Unit>(
+                "agregar nivel" to { d, _, _, _ -> post("/api/srtm/declaraciones/$d/niveles", NIVEL + ("numero_piso" to 2)) },
+                "cambiar nivel" to { _, n, _, _ -> put("/api/srtm/niveles/${n["id"].asString()}", fields(n) + ("area_construida" to 150)) },
+                "quitar nivel" to { _, n, _, _ -> delete("/api/srtm/niveles/${n["id"].asString()}") },
+                "agregar obra" to { d, _, _, _ -> post("/api/srtm/declaraciones/$d/obras", OBRA) },
+                "cambiar obra" to { _, _, o, _ -> put("/api/srtm/obras/${o["id"].asString()}", fields(o) + ("cantidad" to 3)) },
+                "quitar obra" to { _, _, o, _ -> delete("/api/srtm/obras/${o["id"].asString()}") },
+                "agregar frente" to { d, _, _, _ -> post("/api/srtm/declaraciones/$d/frentes", FRENTE) },
+                "cambiar frente" to { _, _, _, f -> put("/api/srtm/frentes/${f["id"].asString()}", fields(f) + ("frontis" to 9.5)) },
+                "quitar frente" to { _, _, _, f -> delete("/api/srtm/frentes/${f["id"].asString()}") }
+            )
+        for ((escritura, escribir) in escrituras) {
+            val declaracion = nuevaDeclaracion()
+            val nivel = post("/api/srtm/declaraciones/$declaracion/niveles", NIVEL)
+            val obra = post("/api/srtm/declaraciones/$declaracion/obras", OBRA)
+            val frente = post("/api/srtm/declaraciones/$declaracion/frentes", FRENTE)
+            importar(NIVEL_CONSTRUCCION, nivel["id"].asString(), NIVEL_ICA)
+            assertFalse(modificada(declaracion), escritura)
+
+            escribir(declaracion, nivel, obra, frente)
+
+            assertTrue(modificada(declaracion), escritura)
+            assertEquals("INSCRIPCION", registro(DECLARACION, declaracion)["motivo"].asString(), escritura)
+        }
+    }
+
+    @Test
+    fun `a declaracion without an external padron's valuation is never marked`() {
+        val declaracion = nuevaDeclaracion()
+        val nivel = post("/api/srtm/declaraciones/$declaracion/niveles", NIVEL)
+        post("/api/srtm/declaraciones/$declaracion/obras", OBRA)
+        put("/api/srtm/niveles/${nivel["id"].asString()}", fields(nivel) + ("area_construida" to 150))
+        put("/api/srtm/declaraciones/$declaracion", fields(ficha(declaracion)) + ("otros_datos" to "EDITADA"))
+
+        assertFalse(modificada(declaracion))
+        assertTrue(registro(DECLARACION, declaracion)["origen_modificado"].let { it == null || it.isNull })
+    }
+
+    // a condómino's copy is faithful to its source: the valuation and the mark as the source has them, and copying
+    // its niveles, obras and frentes is no edit of either
+    @Test
+    fun `a condomino's copy takes the valuation's mark from its source`() {
+        val (fuente, _) = conValuacion()
+        val fiel = condomino(fuente)
+        assertFalse(modificada(fiel))
+        assertFalse(modificada(fuente))
+
+        val (editada, nivel) = conValuacion()
+        put("/api/srtm/niveles/${nivel["id"].asString()}", fields(nivel) + ("area_construida" to 150))
+        assertTrue(modificada(condomino(editada)))
+        assertFalse(modificada(fiel))
+    }
+
+    // a declaración with two niveles, an obra and a frente, and the valuation of an external padrón on it and on its
+    // first nivel
+    private fun conValuacion(): Pair<String, JsonNode> {
+        val declaracion = nuevaDeclaracion()
+        val nivel = post("/api/srtm/declaraciones/$declaracion/niveles", NIVEL)
+        post("/api/srtm/declaraciones/$declaracion/niveles", NIVEL + ("numero_piso" to 2))
+        post("/api/srtm/declaraciones/$declaracion/obras", OBRA)
+        post("/api/srtm/declaraciones/$declaracion/frentes", FRENTE)
+        importar(DECLARACION, declaracion, DECLARACION_ICA)
+        importar(NIVEL_CONSTRUCCION, nivel["id"].asString(), NIVEL_ICA)
+        return declaracion to nivel
+    }
+
+    private fun condomino(declaracion: String): String =
+        post("/api/srtm/declaraciones/$declaracion/condominos", mapOf("contribuyente" to inscribir(), "porcentaje_condominio" to 25))["id"].asString()
+
+    private fun ficha(declaracion: String) = tree(send("GET", "/api/srtm/declaraciones/$declaracion", null, HttpStatus.OK))["declaracion"]
+
+    private fun valuacion(declaracion: String) = tree(send("GET", "/api/srtm/declaraciones/$declaracion/valuacion-origen", null, HttpStatus.OK))
+
+    private fun modificada(declaracion: String): Boolean {
+        val origen = valuacion(declaracion)
+        assertTrue(origen["modificada"]?.isBoolean == true, origen.toString())
+        return origen["modificada"].asBoolean()
+    }
+
     private fun declaracionConPredio(): Pair<String, String> {
         val declaracion = nuevaDeclaracion()
         return declaracion to registro(DECLARACION, declaracion)["predio"].asString()
@@ -211,6 +309,19 @@ class PadronExternoApiTest : SrtmApiTest() {
                 "estado_conservacion" to "BUENO",
                 "area_construida" to 120
             )
+        val OBRA =
+            mapOf(
+                "ingreso" to "POR CATEGORIAS",
+                "material" to "LADRILLO",
+                "tipo_obra" to "MUROS PERIMETRICOS O CERCOS",
+                "estado_conservacion" to "BUENO",
+                "anio_construccion" to 2024,
+                "mes_construccion" to 2,
+                "numero_piso" to 1,
+                "cantidad" to 2,
+                "metrado" to 50
+            )
+        val FRENTE = mapOf("tipo_via" to "AVENIDA", "via" to "ANDRES AVELINO CACERES", "frontis" to 7, "lado" to "IMPAR")
         val PREDIO_ICA =
             mapOf("codigo_via" to "V0123", "codigo_unidad_urbana" to "U045", "codigo_hu_armonizacion" to "HU-01", "codigo_via_armonizacion" to "VA-02")
         val DECLARACION_ICA =
