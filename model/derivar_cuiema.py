@@ -29,7 +29,11 @@ import re
 import sys
 from decimal import Decimal
 
-import import_cuis
+# under python3 -I neither the cwd nor the script's directory is on sys.path: put back only the latter
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import import_cuis  # noqa: E402
 
 COLUMNAS = ("pagina", "materia", "codigo", "infraccion", "calificacion", "medida_cautelar", "pecuniaria", "no_pecuniaria",
             "base_legal", "nota")
