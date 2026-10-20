@@ -196,8 +196,8 @@ aparece dos veces, una por declaración. La fila *Total 2026* suma lo del año.
 .Lo que un contribuyente declara en 2026
 image::{capturas}/usuario/consulta/predios-del-contribuyente.png[Pestaña Predios con cinco declaraciones sobre cuatro predios, su condición PROPIETARIO UNICO, el 100 por ciento, el uso, el autoavalúo, el valor afecto, el número de DJ y el botón PU, y la fila Total 2026 de S/ 517,339.52]
 
-La pestaña *Declaraciones* lista todas sus declaraciones, de todos los años; una anulada lleva la marca *Anulada* y no
-suma. Lo que significa cada dato está en el {m-registrador}.
+La pestaña *Declaraciones* lista todas sus declaraciones, de todos los años; una anulada lleva la marca *Anulada* (y una
+sustituida por su rectificatoria, *Sustituida*) y no suma. Lo que significa cada dato está en el {m-registrador}.
 
 [[predios]]
 === Predios
@@ -223,8 +223,8 @@ código, código CPU o partida registral, con un mapa, en el padrón (*Buscar en
 === Declaraciones juradas
 
 Una declaración se abre con su número desde la pestaña *Predios* o *Declaraciones* de un contribuyente o de un
-predio. Su banda dice el contribuyente, el número de la declaración, su estado (*Vigente* o *Anulada*), el año, la
-condición del titular y el predio. Sus pestañas son las del formulario: *Datos del predio*, *Datos de la ubicación*,
+predio. Su banda dice el contribuyente, el número de la declaración, su estado (*Vigente*, *Anulada* o
+*Sustituida*), el año, la condición del titular y el predio. Sus pestañas son las del formulario: *Datos del predio*, *Datos de la ubicación*,
 *Datos del transferente*, *Características*, *Datos de los condóminos* y *Otros frentes* (<<fig-declaracion>>).
 
 [[fig-declaracion]]

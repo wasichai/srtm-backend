@@ -80,7 +80,6 @@ object AutoavaluoSugerido {
         }
     }
 
-    // a categoría without its partida's number goes without codigoVu: catastro then names the obra it cannot value
     private fun obra(o: ObraComplementaria) =
         ObraValuacion(
             codigoVu = codigoVu(o),
@@ -90,15 +89,18 @@ object AutoavaluoSugerido {
             estado = o.estadoConservacion.valor()
         )
 
+    // "tipo|n", the key of catastro's cuadro. a categoría without its partida's number goes as declared (none: the tipo
+    // alone): no partida has that key, and catastro's OBRA_DESCONOCIDA motivo names the obra it cannot value
     fun codigoVu(o: ObraComplementaria): String? {
         val tipo = o.tipoObra.valor() ?: return null
+        val categoria = o.categoria.valor() ?: return tipo
         val numero =
-            o.categoria
-                ?.let { NUMERO_DE_PARTIDA.matchEntire(it) }
+            NUMERO_DE_PARTIDA
+                .matchEntire(categoria)
                 ?.groupValues
                 ?.get(1)
-                ?.toIntOrNull() ?: return null
-        return "$tipo|$numero"
+                ?.toIntOrNull()
+        return "$tipo|${numero ?: categoria}"
     }
 
     // the declaración stores the names of its clase, sub clase and uso; catastro wants the uso_predio's code. the names
