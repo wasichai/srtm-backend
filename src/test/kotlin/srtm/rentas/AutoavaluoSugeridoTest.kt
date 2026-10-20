@@ -145,13 +145,23 @@ class AutoavaluoSugeridoTest {
 
     @Test
     fun `an obra's partida from its categoria's number, its cantidad the total metrado`() {
-        val i = insumos(obras = listOf(obra("3. MURO DE LADRILLO DE ARCILLA"), obra("12"), obra("MURO DE ADOBE"), obra(null)))
+        val i = insumos(obras = listOf(obra("3. MURO DE LADRILLO DE ARCILLA"), obra("12")))
 
         assertEquals(
             ObraValuacion("MUROS PERIMETRICOS O CERCOS|3", BigDecimal("30"), 2016, "CONCRETO", "BUENO"),
             i.obras[0]
         )
-        assertEquals(listOf("MUROS PERIMETRICOS O CERCOS|3", "MUROS PERIMETRICOS O CERCOS|12", null, null), i.obras.map { it.codigoVu })
+        assertEquals(listOf("MUROS PERIMETRICOS O CERCOS|3", "MUROS PERIMETRICOS O CERCOS|12"), i.obras.map { it.codigoVu })
+    }
+
+    @Test
+    fun `an obra without its partida's number goes as declared, for catastro's motivo to name it`() {
+        val i = insumos(obras = listOf(obra(" MURO DE ADOBE "), obra(" "), obra(null), obra("1").copy(tipoObra = " ")))
+
+        assertEquals(
+            listOf("MUROS PERIMETRICOS O CERCOS|MURO DE ADOBE", "MUROS PERIMETRICOS O CERCOS", "MUROS PERIMETRICOS O CERCOS", null),
+            i.obras.map { it.codigoVu }
+        )
     }
 
     @Test
