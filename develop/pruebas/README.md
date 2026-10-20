@@ -46,6 +46,7 @@ Todo publica en `127.0.0.1` del host de Docker. Con el daemon en el VPS se entra
    - **Con el daemon del VPS:** `DOCKER_HOST` es el socket que reenvía el túnel de un usuario con acceso a Docker
      (`ssh -fN -o StreamLocalBindUnlink=yes -L /tmp/docker.sock:/var/run/docker.sock <usuario>@<vps>`).
    - **Sin buildkit:** los Dockerfile no usan `COPY --chmod`, porque el daemon remoto puede no tener buildkit.
+   - **En un Mac con Apple Silicon:** ver [En el Mac (arm64)](#en-el-mac-arm64).
 
 4. **Entrar desde el Mac:** un túnel TCP, que también vale con el usuario `github`, que solo hace túneles.
 
@@ -60,6 +61,41 @@ Todo publica en `127.0.0.1` del host de Docker. Con el daemon en el VPS se entra
 Después de cambiar `srtm.env` (por ejemplo, una cuenta de catastro nueva), se recrea solo ese Core:
 `docker compose ... up -d srtm-core`. Al arrancar, su log dice `srtm.catastro: catastro de <slug o id>, ...` con cada
 entrada que reconoció.
+
+## En el Mac (arm64)
+
+Se probó el 2026-10-20 en un Mac con Apple Silicon (16 GB), como proyecto `srtm-local`, al lado del túnel a `srtm-ica`.
+
+- **Runtime:** [Colima](https://github.com/abiosoft/colima) con Rosetta. Hace falta además el plugin `docker-buildx`:
+  el builder clásico no construye para otra arquitectura.
+
+  ```bash
+  brew install colima docker-buildx
+  colima start --vm-type vz --vz-rosetta --cpu 4 --memory 6 --disk 30
+  ```
+
+- **`colima start` deja `colima` como contexto activo.** Si `DOCKER_HOST` apunta al VPS, igual gana `DOCKER_HOST`.
+  Por eso cada comando local lleva `docker --context colima`, y conviene volver con `docker context use default` para
+  no cambiarle el daemon a otras terminales.
+- **PostGIS:** `postgis/postgis` solo se publica para amd64. Corre emulado con Rosetta si `pg` lleva
+  `platform: linux/amd64`, en un archivo de compose aparte que no se versiona:
+
+  ```yaml
+  # compose.local.yml
+  services:
+    pg:
+      platform: linux/amd64
+  ```
+
+- **Puertos:** si el túnel al VPS ocupa los de siempre, se mueven todos.
+
+  ```bash
+  export PRUEBAS_PROYECTO=srtm-local PRUEBAS_PG_PORT=5449 PRUEBAS_SRTM_PORT=8290 PRUEBAS_CATASTRO_PORT=8291 \
+    PRUEBAS_SRTM_UI_PORT=5290 PRUEBAS_CATASTRO_UI_PORT=5291
+  docker --context colima compose -f develop/pruebas/compose.yml -f compose.local.yml up -d --build
+  ```
+
+Con 4 CPU y 6 GB los dos Core arrancan en menos de un minuto.
 
 ## Datos ficticios
 
@@ -76,6 +112,47 @@ de catastro y el padrón valoran igual al céntimo). `develop/pruebas/ficticio/`
 
 El padrón **real** lleva datos personales: solo entra a un entorno de pruebas con la autorización expresa del
 usuario, y no se copia fuera de los contenedores.
+
+### De punta a punta
+
+Los pasos de [alta-organizacion.md](../../docs/develop/alta-organizacion.md) en orden, para una organización
+`ica-prueba`. Es una base desechable: el `--dry-run` de cada script se mira, pero no espera un OK.
+
+1. **Organización:** `POST /api/organizations` en los dos Core, como `admin@wasichai.local`, con el mismo correo y la
+   misma clave de administrador. Se anotan los dos ids.
+2. **srtm, como ese administrador** (`WASICHAI_CORE=http://localhost:8190`):
+   - `apply.py`;
+   - `import_catalogos.py` con los datos de Ica;
+   - `import_parametros.py`;
+   - `import_padron_ica.py --excel <out>/padron_ficticio.xlsx`.
+3. **catastro, como ese administrador** (`WASICHAI_CORE=http://localhost:8191`):
+   - `apply.py` y `apply_roles.py`;
+   - `configurar_region.py --region COSTA`;
+   - `crear_cuenta_srtm.py --clave icaprueba > cuenta.txt`.
+4. **Cuenta en srtm:** el slug lleva guion, así que en `srtm.env` va
+   `SRTM_CATASTRO_ORGANIZACIONES_ICAPRUEBA_ORGANIZACION=<id en srtm>`, junto a `_URL=http://catastro-core:8091` y a
+   `_CLIENT_ID` y `_CLIENT_SECRET`.
+   - **El secreto se copia de la línea `clientSecret:` de `cuenta.txt`.** La línea de ejemplo que imprime debajo trae
+     `<el clientSecret>`: si se copia esa, la brecha falla con «no dio el token de la cuenta de servicio … (401)».
+   - **Entradas de la plantilla:** se quitan las que no tienen cuenta todavía, como `DEMO` e `ICA`.
+   - Después se corre `up -d --force-recreate srtm-core`.
+5. **Catastro:**
+   - `import_aranceles.py --frentes <out>/frentes.csv --valores <out>/valores.csv --anio 2026`;
+   - `import_fichas.py --fichas <out>/fichas.csv --pisos <out>/pisos.csv`.
+6. **Brecha:** `POST /api/srtm/brecha/corridas {"anio":2026}` y después `GET /api/srtm/brecha/2026/panel`.
+
+Con `generar_ficticio.py ... 600`, el panel da:
+
+| Categoría | Predios |
+|---|---|
+| COINCIDE | 536 (Δ 0,00) |
+| SUBVALUADO | 26 |
+| SOBREVALUADO | 12 |
+| OMISO | 8 |
+| SIN_CATASTRO | 17 |
+| SIN_VALOR | 9 |
+
+La versión del catastro es `valuacion-v2`. El mensaje «Δ arbitrios no calculado» se espera, porque no hay ordenanza.
 
 ## Bajarlo
 
