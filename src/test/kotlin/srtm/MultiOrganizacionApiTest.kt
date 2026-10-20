@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus
 import srtm.anuncios.Llaves
 import srtm.sanciones.ConSancionesApiTest
 import srtm.sanciones.RESOLUCION_RECURSO
+import java.util.UUID
 
 // an install with several municipalidades (one organization each): what one writes, the other neither reads nor
 // numbers. A is the seeded admin's organization, B a new one; where a count must start from nothing (a correlativo)
@@ -35,9 +36,14 @@ class MultiOrganizacionApiTest : ConSancionesApiTest() {
             send("GET", "/api/srtm/$ruta", null, HttpStatus.OK)
             send("GET", "/api/srtm/$ruta", null, HttpStatus.NOT_FOUND, b)
         }
-        // the contribuyente's declaraciones is a list: B gets none of A's (it answers [] for an id it does not know, not a 404)
+        // the declaraciones of a contribuyente or a predio: B gets a 404 for A's, and for an id that does not exist
+        val inexistente = UUID.randomUUID()
         assertEquals(1, tree(send("GET", "/api/srtm/contribuyentes/$contribuyente/declaraciones", null, HttpStatus.OK)).size())
-        assertEquals(0, tree(send("GET", "/api/srtm/contribuyentes/$contribuyente/declaraciones", null, HttpStatus.OK, b)).size())
+        send("GET", "/api/srtm/contribuyentes/$contribuyente/declaraciones", null, HttpStatus.NOT_FOUND, b)
+        send("GET", "/api/srtm/contribuyentes/$inexistente/declaraciones", null, HttpStatus.NOT_FOUND)
+        assertEquals(1, tree(send("GET", "/api/srtm/predios/${predio["id"].asString()}/declaraciones", null, HttpStatus.OK)).size())
+        send("GET", "/api/srtm/predios/${predio["id"].asString()}/declaraciones", null, HttpStatus.NOT_FOUND, b)
+        send("GET", "/api/srtm/predios/$inexistente/declaraciones", null, HttpStatus.NOT_FOUND)
         send("GET", "/api/objects/contribuyente/records/$contribuyente", null, HttpStatus.OK)
         send("GET", "/api/objects/contribuyente/records/$contribuyente", null, HttpStatus.NOT_FOUND, b)
         send("GET", "/api/objects/declaracion_jurada/records/$declaracion", null, HttpStatus.NOT_FOUND, b)
