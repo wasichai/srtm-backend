@@ -37,7 +37,42 @@ class AutoavaluoSugeridoService(
     @Suppress("UNCHECKED_CAST")
     suspend fun sugerido(id: UUID): ValuacionDeInsumos {
         val registro = registros.get(DECLARACION, Map::class.java, id) as Map<String, Any?>
-        val catastro = catastro()
+        val catastro = catastro() ?: throw ConflictException(SIN_CATASTRO_CONFIGURADO)
+        return valuar(id, registro, catastro)
+    }
+
+    // #156: the autoavalúo a write of the declaración leaves (DeclaracionService.recalcular). catastro failing is a
+    // mark, never a refused write: catastro's motivo, or that it did not answer. none configured: the user's
+    @Suppress("UNCHECKED_CAST")
+    suspend fun deLaDeclaracion(id: UUID): Autoavaluo {
+        val catastro =
+            try {
+                catastro() ?: return Autoavaluo.Manual
+            } catch (e: ConflictException) {
+                return Autoavaluo.PorRevisar(e.message ?: SIN_CATASTRO_CONFIGURADO)
+            }
+        return try {
+            Derivados.autoavaluo(valuar(id, registros.get(DECLARACION, Map::class.java, id) as Map<String, Any?>, catastro))
+        } catch (e: CatastroNoResponde) {
+            Derivados.noResponde(e.message)
+        }
+    }
+
+    // the organization has no catastro: its users write the autoavalúo. one configured twice has one (its writes are
+    // marked with why)
+    suspend fun manual(): Boolean =
+        try {
+            catastro() == null
+        } catch (_: ConflictException) {
+            false
+        }
+
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun valuar(
+        id: UUID,
+        registro: Map<String, Any?>,
+        catastro: Catastro
+    ): ValuacionDeInsumos {
         val declaracion = Records.read(Declaracion::class.java, id.toString(), registro)
         val predio = declaracion.predio?.let { registros.get(PREDIO, Predio::class.java, UUID.fromString(it)) }
         val niveles =
@@ -56,11 +91,13 @@ class AutoavaluoSugeridoService(
         }
     }
 
-    // the caller's organization's catastro (BrechaService's rule): its slug is read only when some key is a slug
-    private suspend fun catastro(): Catastro {
+    // the caller's organization's catastro (BrechaService's rule), or null: its slug is read only when some key is a
+    // slug, and only when the install has any
+    private suspend fun catastro(): Catastro? {
+        if (!catastros.configurado) return null
         val usuario = currentUser.require()
         val slug = if (catastros.necesitaSlug) organizaciones.findById(usuario.organizationId)?.slug else null
-        return catastros.de(usuario.organizationId, slug) ?: throw ConflictException(SIN_CATASTRO_CONFIGURADO)
+        return catastros.de(usuario.organizationId, slug)
     }
 
     private companion object {

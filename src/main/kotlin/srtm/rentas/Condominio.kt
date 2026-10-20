@@ -92,7 +92,11 @@ fun delPredio(origen: Declaracion) =
         inhabitableFechaInicio = origen.inhabitableFechaInicio,
         claseUso = origen.claseUso,
         subClaseUso = origen.subClaseUso,
-        areaComunTerreno = origen.areaComunTerreno
+        areaComunTerreno = origen.areaComunTerreno,
+        frontisPrincipal = origen.frontisPrincipal,
+        areaComunConstruida = origen.areaComunConstruida,
+        autoavaluoPorRevisar = origen.autoavaluoPorRevisar,
+        autoavaluoMotivo = origen.autoavaluoMotivo
     )
 
 // the valuation an external padrón (Ica) brings (model/model.json), which the dtos do not know: a condómino's copy
