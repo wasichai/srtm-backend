@@ -31,6 +31,23 @@ class DeclaracionService(
         )
     }
 
+    // the stored records as maps (copiarPadronExterno's way): core checks the caller's object and field permissions on
+    // each, as it does for ficha
+    suspend fun valuacionOrigen(id: UUID): ValuacionOrigen {
+        val declaracion = registros.get(DECLARACION, Map::class.java, id)
+        val predio = declaracion["predio"]?.toString()?.let { registros.get(PREDIO, Map::class.java, UUID.fromString(it)) }.orEmpty()
+        val niveles =
+            listas
+                .listar(NIVEL_CONSTRUCCION, Map::class.java, PARENT, id)
+                .associate { it["id"].toString() to conValor(it, PADRON_EXTERNO_NIVEL) }
+                .filterValues { it.isNotEmpty() }
+        return ValuacionOrigen(
+            predio = conValor(predio, PADRON_EXTERNO_PREDIO),
+            declaracion = conValor(declaracion, PADRON_EXTERNO_DECLARACION),
+            niveles = niveles
+        )
+    }
+
     // a new declaration of a contribuyente, on an existing predio or on one it registers. numbered by the backend,
     // with the srtm's defaults. a predio registered here is removed again if the declaration is refused
     suspend fun presentar(

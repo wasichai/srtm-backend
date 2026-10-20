@@ -318,6 +318,12 @@ class RentasController(
         @PathVariable id: UUID
     ) = declaraciones.ficha(id)
 
+    // read-only: what an external padrón (Ica) brought to the declaración, its predio and its niveles, with a value
+    @GetMapping("/declaraciones/{id}/valuacion-origen")
+    suspend fun valuacionOrigen(
+        @PathVariable id: UUID
+    ) = declaraciones.valuacionOrigen(id)
+
     @GetMapping("/declaraciones/{id}/transferentes")
     suspend fun transferentes(
         @PathVariable id: UUID

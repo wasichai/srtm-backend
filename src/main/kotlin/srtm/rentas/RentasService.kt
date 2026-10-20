@@ -65,7 +65,8 @@ class RentasService(
             predio = predio(id),
             anio = year,
             titulares = declaraciones.mapNotNull { it.contribuyente }.distinct().size,
-            totales = totalesDePredio(declaraciones)
+            totales = totalesDePredio(declaraciones),
+            valuacionOrigen = mapOf("predio" to conValor(registros.get(PREDIO, Map::class.java, id), PADRON_EXTERNO_PREDIO))
         )
     }
 
