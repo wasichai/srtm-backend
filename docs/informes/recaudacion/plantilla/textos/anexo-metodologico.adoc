@@ -1,0 +1,163 @@
+// Anexo metodológico: genérico para todas las ediciones. Las fechas, URL y conteos salen de generado/cifras.adoc.
+<<<
+[appendix]
+[[anexo-metodologia]]
+== Metodología
+
+Este anexo permite a un gerente, auditor o analista comprobar cómo se obtuvo cada cifra. El cuerpo del informe se
+entiende sin él.
+
+[[met-fuentes]]
+=== Fuentes consultadas
+
+[cols="3,5,3",options="header"]
+|===
+|Fuente |Qué aporta |Fecha y control
+
+|MEF, Portal de Datos Abiertos: {fuente-ingreso-2026-url}[_Presupuesto y Ejecución de Ingreso_ {anio}]
+|PIA, PIM y recaudado por mes y clasificador de ingresos de la ejecutora {sec-ejec} (ubigeo {ubigeo}):
+{fuente-ingreso-2026-filas} filas.
+|Archivo del {fuente-ingreso-2026-fecha}. SHA-256: `{fuente-ingreso-2026-sha}…`
+
+|MEF, Portal de Datos Abiertos: {fuente-ingreso-2025-url}[_Presupuesto y Ejecución de Ingreso_ {anio-previo}]
+|Lo mismo para {anio-previo}: {fuente-ingreso-2025-filas} filas.
+|Archivo del {fuente-ingreso-2025-fecha}. SHA-256: `{fuente-ingreso-2025-sha}…`
+
+|MEF, Portal de Datos Abiertos: {fuente-comparativo-2012-2025-url}[_Comparación de Presupuesto y Ejecución de Ingreso_]
+|PIA, PIM y recaudado anuales de los años anteriores, por clasificador: {fuente-comparativo-2012-2025-filas} filas.
+Su columna de {anio-previo} está desactualizada y no se usa.
+|Archivo del {fuente-comparativo-2012-2025-fecha}. SHA-256: `{fuente-comparativo-2012-2025-sha}…`
+
+|MEF, Consulta Amigable de Ingresos
+|Los totales anuales publicados, para conciliar los archivos (<<tabla-conciliacion>>), y el recaudado mensual por
+rubro de los años anteriores, que los datos abiertos no traen por mes.
+|Consultada el {elaboracion}.
+
+|Normas de la municipalidad publicadas en gob.pe (<<tabla-normas>>)
+|Los vencimientos del año, el régimen de arbitrios, las deducciones y los beneficios tributarios vigentes.
+|Textos publicados; no se verificó su publicación en el diario.
+
+|Reglamento de Organización y Funciones: {rof-url}[{rof}]
+|Los nombres de las unidades responsables.
+|Ver <<areas>>: las normas de {anio} usan otra denominación.
+
+|Padrón de contribuyentes {anio}, export del sistema de rentas (SRTM del MEF)
+|La emisión del impuesto predial del año: base imponible e impuesto insoluto de cada contribuyente. Solo se usan
+totales y distribuciones; ninguna fila sale del proceso.
+|{contribuyentes-padron} registros; impuesto recalculado y coincidente en {recalculo-coinciden}.
+
+|TUO de la Ley de Tributación Municipal (D.S. N.° 156-2004-EF), arts. 13 y 15, y UIT {anio}
+|Tramos, alícuotas y mínimo del impuesto predial, y sus cuatro cuotas.
+|Parámetros con doble verificación del sistema (`model/data/parametros-predial.csv`).
+
+|MEF, _Consideraciones para el registro de información de recaudación de Impuesto Predial_ (Programa de Incentivos)
+|La diferencia entre las partidas «Predial» (año corriente) y «Predial – Regularización tributaria» (años
+anteriores).
+|Copia en `datos/documentos/` de la edición.
+|===
+
+[[met-periodo]]
+=== Período, fecha de corte y moneda
+
+* *Período analizado:* {periodo}. Los datos del MEF se actualizan a diario; la edición usa los archivos de la fecha
+  indicada arriba, con información registrada en el SIAF hasta el {corte}.
+* *Comparaciones interanuales:* solo meses completos, {periodo-ytd} de {anio} contra el mismo período de
+  {anio-previo}. El mes de la fecha de corte es parcial: se suma al «recaudado al corte», pero no se compara.
+* *Moneda:* soles corrientes, sin ajuste por inflación. Las cifras en millones se redondean a un decimal, y las de
+  las tablas, al sol.
+
+[[met-definiciones]]
+=== Definiciones
+
+Recaudado::
+El monto que el SIAF registra como recaudado en el mes del documento (`MES_DOC`), no en la fecha en que pagó el
+contribuyente. Incluye extornos y devoluciones como montos negativos ({negativos-n} filas en {anio}, por
+{negativos-suma} en total), que se suman tal como están.
+Ingresos propios::
+Los rubros 08 (impuestos municipales) y 09 (recursos directamente recaudados), sin los saldos de balance. Son los que
+dependen de la gestión de la municipalidad.
+Transferencias::
+Los rubros 07 (FONCOMUN), 18 (canon, sobrecanon, regalías y participaciones) y 13 (donaciones y transferencias), sin
+saldos de balance. Los fija el Gobierno nacional; la municipalidad no los recauda.
+Financiamiento::
+Los saldos de balance (genérica 9, recursos de años anteriores que se incorporan) y el endeudamiento (rubro 19). Se
+muestran, pero se excluyen de las comparaciones de desempeño: no son ingresos del año.
+Previsión (PIA y PIM)::
+El presupuesto institucional de apertura y el modificado de ingresos. Son estimaciones presupuestales, no metas de
+recaudación aprobadas: el recaudado puede superarlas. *Avance del PIM* es el recaudado al corte sobre el PIM del año.
+Impuesto predial del año y regularización::
+Según el MEF, la partida «Predial» registra los pagos del impuesto del año corriente y «Predial – Regularización
+tributaria», los de deudas de años anteriores.
+Emisión del impuesto predial::
+La suma del impuesto insoluto anual del padrón {anio}: lo que la municipalidad determinó cobrar en el año, sin
+intereses ni derecho de emisión.
+Exigible al corte, si fraccionan::
+La parte de la emisión cuyas cuotas vencieron al corte ({cuotas-vencidas} de cuatro; vencen el {venc-1}, el
+{venc-2}, el {venc-3} y el {venc-4}, según la {norma-vencimientos}), suponiendo que todos los contribuyentes pagan
+en cuotas. Es el mínimo exigible: quien elige pagar al contado debía el total en el primer vencimiento.
+Cobro aparente del predial::
+El predial del año recaudado al corte sobre la emisión (y sobre el exigible). Es _aparente_ porque las dos fuentes
+son distintas: el SIAF registra el ingreso y el padrón, la obligación. Sin la cuenta corriente de cada contribuyente,
+no puede saberse quién pagó.
+
+[[met-formulas]]
+=== Fórmulas
+
+[cols="2,5",options="header"]
+|===
+|Indicador |Cálculo
+|Variación interanual |(período actual − mismo período del año anterior) ÷ mismo período del año anterior × 100
+|Participación |monto del concepto ÷ total del grupo × 100
+|Avance del PIM |recaudado al corte ÷ PIM del año × 100
+|Cobro aparente del predial |predial del año recaudado al corte ÷ emisión del año × 100
+|Proyección de los ingresos propios |recaudado de {periodo-ytd} ÷ proporción del año que, en {proy-anios}, se había
+recaudado a {ultimo-mes}, sin saldos de balance. Escenario base: la proporción media; favorable: la menor;
+desfavorable: la mayor. Años excluidos: {proy-excluidos}.
+|===
+
+Ningún porcentaje se calcula sobre un denominador nulo: esas celdas muestran «—».
+
+[[met-limites]]
+=== Limitaciones
+
+* *Sin cuenta corriente por contribuyente.* El padrón disponible trae la emisión, no los pagos; la cuenta corriente
+  del sistema de rentas en uso no se exportó para este informe. Por eso no se miden la deuda pendiente, su
+  antigüedad, la morosidad por contribuyente, los pagos parciales, las anulaciones de recibos ni las devoluciones
+  individuales.
+* *Sin metas de recaudación.* No se encontraron metas aprobadas. Se usó la previsión presupuestal (PIA y PIM) como
+  referencia, con esa salvedad.
+* *Registro, no pago.* El SIAF fecha los ingresos por su registro: un pago de fin de mes puede figurar en el mes
+  siguiente.
+* *Sin datos por área.* Las fuentes no dicen qué unidad gestionó cada ingreso. Los responsables del plan se
+  sugieren por la función de cada unidad, no por resultados medidos.
+* *Arbitrios.* Sin la emisión de arbitrios, solo puede analizarse lo recaudado, no su tasa de cobro.
+
+[[met-calidad]]
+=== Controles de calidad
+
+[cols="4,5",options="header"]
+|===
+|Control |Resultado
+|Total recaudado de cada año frente a la Consulta Amigable del MEF |Diferencia cero en cada año (<<tabla-conciliacion>>)
+|Impuesto predial recalculado con la ley y los parámetros del año frente al del padrón |Coinciden {recalculo-coinciden} de {contribuyentes-padron} contribuyentes
+|Padrón de otra municipalidad o de otro año |Ningún registro
+|Suma de los grupos frente al total |Cuadra al céntimo
+|Montos negativos |{negativos-n} filas, {negativos-suma}: extornos y devoluciones, incluidos tal como están
+|Datos personales en las salidas |Ninguno: no hay documentos, nombres ni correos en las tablas, gráficos o textos
+|===
+
+[[met-reproducir]]
+=== Cómo se reproduce
+
+Los scripts y esta plantilla están en el repositorio `srtm-backend`, en `docs/informes/recaudacion`. Desde ahí:
+
+[source,bash]
+----
+make nueva-edicion EDICION=<carpeta>   # copia la plantilla a la carpeta de la edición
+make datos         EDICION=<carpeta>   # baja el MEF y agrega el padrón (solo lectura)
+make build         EDICION=<carpeta>   # indicadores, gráficos, HTML, PDF y validaciones
+----
+
+La fecha de corte, el año y los meses comparables se cambian en `parametros.json`. Las cifras de los textos son
+atributos que el cálculo vuelve a escribir: al regenerar la edición, se actualizan solas. Lo que hay que revisar a
+mano es la interpretación.

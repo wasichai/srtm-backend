@@ -1,0 +1,14 @@
+// Proyección: una estimación estadística, nunca una meta. Método, años usados y excluidos ({proy-anios},
+// {proy-excluidos}), escenarios y supuestos. Si no hay base para proyectar, decir por qué no se presenta.
+[[proyeccion]]
+== Proyección de cierre de los ingresos propios
+
+[[tabla-proyeccion]]
+.Proyección de los ingresos propios al cierre de {anio}
+[cols="3,3,3,3",options="header"]
+|===
+|Escenario |Ingresos propios al cierre |Frente a {anio-previo} ({rec-propios-anual-prev}) |Frente al PIM ({pim-propios})
+|Desfavorable |{proy-desfavorable-soles} |{var-proy-desfavorable} |{proy-desfavorable-pim}
+|Base |{proy-base-soles} |{var-proy} |{proy-base-pim}
+|Favorable |{proy-favorable-soles} |{var-proy-favorable} |{proy-favorable-pim}
+|===

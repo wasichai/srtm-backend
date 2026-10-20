@@ -1,0 +1,99 @@
+# Tema del informe ejecutivo en PDF. Extiende el de los manuales (fuentes Source, paleta, tablas) y cambia lo que es
+# propio de un informe para la alta dirección: portada sobria sin el monograma del sistema (no hay escudo verificado
+# en el repositorio: no se inventa uno), cabeceras con la sección y pies con la fecha de corte.
+extends: ../../../manuales/estilos/pdf/tema-srtm.yml
+page:
+  margin: [22mm, 20mm, 20mm, 20mm]
+  margin-inner: 20mm
+  margin-outer: 20mm
+  numbering:
+    start-at: toc
+base:
+  font-size: 10.4
+  line-height-length: 15
+heading:
+  h1-font-size: 24
+  h2-font-size: 17
+  h3-font-size: 13
+  h2-margin-top: $vertical-rhythm * 0.4
+title-page:
+  align: left
+  background-image: image:portada-informe.svg[fit=fill]
+  logo:
+    image: ~
+  title:
+    top: 18%
+    font-family: SansFuerte
+    font-size: 30
+    font-color: '#FFFFFF'
+    line-height: 1.1
+    margin-bottom: 8
+  subtitle:
+    font-family: Sans
+    font-style: normal
+    font-size: 15
+    font-color: '#DCEAF7'
+    line-height: 1.3
+  authors:
+    margin-top: 150
+    font-family: Sans
+    font-style: bold
+    font-size: 12.5
+    font-color: '#0D3F70'
+    content: '{author}'
+  revision:
+    margin-top: 8
+    font-family: Sans
+    font-size: 10
+    font-color: '#5F6368'
+    delimiter: ' · '
+toc:
+  line-height: 1.32
+  font-size: 9.6
+# el resumen y las decisiones van en recuadros: las conclusiones se ven antes que el detalle
+sidebar:
+  background-color: '#F3F7FB'
+  border-color: '#9CC3E6'
+  border-width: 0
+  border-left-width: 3
+  border-radius: 0
+  padding: [8, 12, 4, 12]
+table:
+  font-size: 8.8
+  cell-padding: [3.6, 4.5, 3.6, 4.5]
+  foot:
+    font-style: bold
+    background-color: '#EAF2FA'
+image:
+  border-width: 0
+role:
+  nota-tabla:
+    font-family: Sans
+    font-size: 8.2
+    font-color: '#5F6368'
+  cifra:
+    font-family: SansFuerte
+    font-size: 15
+    font-color: '#0D5FA8'
+header:
+  recto:
+    left:
+      content: 'Informe ejecutivo de recaudación'
+    right:
+      content: '*{section-or-chapter-title}*'
+  verso:
+    left:
+      content: '*{section-or-chapter-title}*'
+    right:
+      content: 'Informe ejecutivo de recaudación'
+footer:
+  recto:
+    left:
+      content: '{municipalidad} · Corte: {corte} · Versión {revnumber}'
+    right:
+      content: '[.marca]*{page-number}*'
+  verso:
+    left:
+      content: '[.marca]*{page-number}*'
+    right:
+      content: '{municipalidad} · Corte: {corte} · Versión {revnumber}'

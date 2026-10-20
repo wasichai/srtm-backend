@@ -1,0 +1,15 @@
+// Plan de acción: hallazgo y evidencia, acción concreta, responsable sugerido (atributos de textos/unidades.adoc),
+// prioridad con los criterios de <<riesgos>>, plazo, e indicador de seguimiento con su valor de partida. Ninguna
+// acción promete un monto que no pueda estimarse.
+[[plan]]
+== Plan de acción
+
+[[tabla-plan]]
+.Plan de acción priorizado
+[cols="1,5,6,4,5",options="header"]
+|===
+|N.° |Hallazgo y evidencia |Acción propuesta |Responsable sugerido, prioridad y plazo |Indicador de seguimiento y resultado esperado
+|A1 | | |{u-rentas} +
+Prioridad: +
+Plazo: |
+|===

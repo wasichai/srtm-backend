@@ -1,0 +1,108 @@
+= Informe ejecutivo del estado de la recaudación municipal
+:toc: left
+:icons: font
+
+Método y plantilla de un informe ejecutivo de recaudación para el alcalde y las gerencias: cuánto se recaudó, frente a
+qué previsión y al año anterior, de qué fuentes, cuánto del impuesto predial se cobró, qué riesgos hay y qué decidir.
+Se genera en HTML y PDF con el tema editorial de los manuales (`../../manuales/estilos`).
+
+[IMPORTANT]
+====
+*Aquí no hay cifras.* Este directorio guarda los scripts, la plantilla y los parámetros. Cada _edición_ (los datos,
+los textos con su interpretación y la salida) vive *fuera del repositorio*: lleva agregados del padrón de
+contribuyentes y recomendaciones de gestión. Los scripts se niegan a escribir una edición dentro del repositorio.
+====
+
+== Fuentes
+
+[cols="2,3,2",options="header"]
+|===
+|Fuente |Qué aporta |Script
+|MEF, Portal de Datos Abiertos: _Presupuesto y Ejecución de Ingreso_ (año en curso y anterior) y _Comparación de
+Presupuesto y Ejecución de Ingreso_ (años anteriores)
+|PIA, PIM y recaudado por mes y clasificador de ingresos de la ejecutora
+|`herramientas/mef.py`
+|MEF, Consulta Amigable de Ingresos
+|El recaudado mensual por rubro de los años anteriores y los totales publicados, para conciliar
+|`herramientas/consulta_amigable.py`
+|Padrón de contribuyentes del año (export del sistema de rentas)
+|La emisión del impuesto predial. Solo se guardan totales y distribuciones; los grupos de menos de cinco
+contribuyentes van sin monto
+|`herramientas/padron.py`
+|`model/data/parametros-predial.csv` del repositorio
+|UIT, tramos y mínimo del impuesto, para recalcularlo y conciliar el padrón
+|`herramientas/padron.py`
+|===
+
+Todo es de *solo lectura*: ningún script escribe en una base de datos, en el padrón ni en el sistema.
+
+== Cómo se genera una edición
+
+Desde `docs/informes/recaudacion`, con la carpeta de la edición fuera del repositorio:
+
+[source,bash]
+----
+E=~/informes/recaudacion-perene/2026-10-18
+make nueva-edicion EDICION=$E   # copia la plantilla (informe.adoc y textos/); no pisa lo que ya haya
+make datos         EDICION=$E   # baja el MEF (datos abiertos y Consulta Amigable) y agrega el padrón
+make build         EDICION=$E   # indicadores, gráficos, HTML, PDF y validaciones
+make publicar      EDICION=$E   # sube la edición a S3 (parametros.json: publicacion.s3)
+----
+
+[cols="1,3",options="header"]
+|===
+|Carpeta de la edición |Qué tiene
+|`datos/` |Las filas de la municipalidad de cada fuente del MEF, con su manifiesto (URL, fecha, SHA-256), la serie de la
+Consulta Amigable, los totales publicados (`referencias.json`) y los agregados del padrón.
+|`generado/` |`cifras.adoc` (un atributo por cifra), `indicadores.json`, las tablas en AsciiDoc y CSV, y los gráficos en
+SVG. Se regenera con cada `make build`: no se edita a mano.
+|`textos/` |La redacción de la edición: un archivo por sección, más `unidades.adoc` con los nombres de las unidades de
+la municipalidad.
+|`salida/` |`html/index.html` y `pdf/informe-recaudacion.pdf`.
+|===
+
+== Reglas de redacción
+
+* *Ninguna cifra se teclea.* Los textos citan atributos de `generado/cifras.adoc` (`{rec-corte}`, `{var-propios}`…).
+  `make validar` falla si encuentra un monto, un porcentaje o un número de cuatro o más cifras escrito a mano. Al
+  regenerar, las cifras se actualizan solas; lo que hay que revisar es la interpretación.
+* *Hechos, interpretaciones e hipótesis se distinguen.* Una causa solo se afirma si una fuente la respalda; si no, se
+  escribe como hipótesis y se dice qué dato la confirmaría.
+* *Sin metas inventadas.* El PIA y el PIM son previsiones presupuestales, no metas. Los umbrales de prioridad se
+  fijan antes de clasificar.
+* *Sin datos personales.* Ni nombres, ni documentos, ni listas de deudores: solo agregados.
+* *Responsables sugeridos, no asignados.* Las unidades salen del ROF de la municipalidad (`textos/unidades.adoc`); si
+  no se pudo verificar, se dice.
+
+== Parámetros
+
+`parametros.json` concentra lo que cambia de una edición a otra: la municipalidad (nombre, ejecutora SIAF, ubigeo,
+fila de la Consulta Amigable), el año, el año comparable y los históricos, los meses completos, la fecha de corte,
+la versión, las URL de las fuentes del MEF, el padrón, los vencimientos del predial y las normas municipales del año,
+los años que se excluyen de la proyección (con su motivo) y el destino en S3.
+
+Para el corte siguiente: cambiar `fecha_corte`, `fecha_corte_texto`, `meses_completos`, `version_documento` y
+`fecha_elaboracion_texto`; en un año nuevo, también `anio`, `anio_comparable`, `anios_historicos`, las URL de los
+archivos anuales, los vencimientos y las normas. Después, `make nueva-edicion`, `make datos`, `make build`, y revisar
+los textos.
+
+== Validaciones
+
+`make validar` (parte de `make build`) comprueba:
+
+* que el total de cada año coincida al céntimo con el publicado en la Consulta Amigable;
+* que el impuesto recalculado con la ley coincida con el del padrón, y que el padrón sea de la municipalidad y del año;
+* que los grupos sumen el total;
+* que ningún texto lleve una cifra tecleada ni un atributo sin definir;
+* que ninguna salida lleve un DNI, un RUC, un correo o un campo personal del padrón;
+* que el HTML y el PDF existan, que cada gráfico citado exista y que el PDF incruste todas sus fuentes.
+
+La revisión visual del HTML y del PDF sigue siendo manual.
+
+== Requisitos
+
+* Python 3.11 o superior, solo con su biblioteca estándar.
+* Asciidoctor 2.0 y Asciidoctor PDF 2.3 (o las gemas de `../../manuales/Gemfile.lock`, con
+  `ASCIIDOCTOR="bundle exec asciidoctor" ASCIIDOCTOR_PDF="bundle exec asciidoctor-pdf"`).
+* poppler (`pdffonts`), para validar el PDF.
+* La CLI de AWS, solo para `make publicar`.

@@ -1,0 +1,19 @@
+// Anexo de tablas de datos agregados: las genera herramientas/indicadores.py. Genérico para todas las ediciones.
+<<<
+[appendix]
+[[anexo-tablas]]
+== Tablas de datos agregados
+
+Las tablas de este anexo están también en CSV, en `generado/tablas/` de la edición.
+
+include::../generado/tablas/mensual.adoc[]
+
+include::../generado/tablas/conceptos-historico.adoc[]
+
+include::../generado/tablas/arbitrios.adoc[]
+
+include::../generado/tablas/condicion.adoc[]
+
+include::../generado/tablas/conciliacion.adoc[]
+
+include::../generado/tablas/normas.adoc[]

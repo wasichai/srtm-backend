@@ -1,0 +1,18 @@
+// Cuadro de indicadores: una página de lectura rápida. Una fila por indicador con valor, comparación, variación y
+// una lectura breve. Solo indicadores con datos; los que no se pudieron calcular se dicen «No disponible».
+[[indicadores]]
+== Cuadro de indicadores
+
+[[tabla-indicadores]]
+.Indicadores principales al {corte}
+[cols="4,3,3,2,5",options="header"]
+|===
+|Indicador |Valor |Comparación |Variación |Lectura
+
+|Recaudado total al corte |{rec-corte} |PIM {anio}: {pim} |Avance {avance-pim} |
+|Ingresos propios, {periodo-ytd} |{rec-propios-ytd-soles} |{anio-previo}: {rec-propios-ytd-prev-soles} |{var-propios} |
+|Transferencias, {periodo-ytd} |{rec-transf-ytd} |{anio-previo}: {rec-transf-ytd-prev} |{var-transf} |
+|Impuesto predial del año, {periodo-ytd} |{predial-ytd} |{anio-previo}: {predial-ytd-prev} |{var-predial} |
+|Cobro aparente del predial del año |{cobro-predial} de lo emitido |{cobro-predial-exigible} de lo exigible |— |
+|Proyección de cierre de los ingresos propios |{proy-base-soles} |{anio-previo}: {rec-propios-anual-prev} |{var-proy} |
+|===

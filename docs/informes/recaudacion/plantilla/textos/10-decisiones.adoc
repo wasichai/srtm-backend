@@ -1,0 +1,14 @@
+// Decisiones: solo lo que excede la gestión ordinaria. Para cada una: evidencia, alternativas, quién la prepara,
+// qué información falta y consecuencias y riesgos. Indicar si requiere ordenanza, inversión o evaluación jurídica.
+[[decisiones]]
+== Decisiones para la alta dirección
+
+[[dec-1]]
+=== Primera decisión
+
+[horizontal]
+Evidencia::
+Alternativas::
+Prepara la decisión::
+Información adicional::
+Consecuencia y riesgos::
