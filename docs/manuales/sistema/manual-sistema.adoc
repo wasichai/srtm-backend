@@ -1490,6 +1490,11 @@ WARNING: La suite de integración borra el contenido entero de la base externa a
 
 `commits.yml` exige Conventional Commits en los commits del PR (commitlint) y en su título.
 
+`manuales.yml` construye estos manuales (HTML y PDF) y corre sus validaciones. Lo hace en los PR y en los push a
+`main` que cambian `docs/manuales/`, `gradle.properties` o el workflow. El resultado queda como artefacto `manuales`
+del run; en `main`, además, se publica en GitHub Pages. Los detalles están en `docs/manuales/README.adoc`
+(«Integración continua y publicación»).
+
 [[despliegue]]
 == Construcción, versiones y despliegue
 
@@ -1523,11 +1528,12 @@ Verificación:: `java -jar build/libs/app.jar` arranca con la configuración por
 {sigla} usa release-please sobre Conventional Commits (`docs/develop/releasing.md`):
 
 . Los commits convencionales (`feat:`, `fix:`, …) se mezclan a `main`.
-. `release-please.yml` abre o actualiza un PR de release que sube `version=` en `gradle.properties` y escribe
-  `CHANGELOG.md`.
+. `release-please.yml` abre o actualiza un PR de release que sube `version=` en `gradle.properties` y
+  `:version-producto:` en `docs/manuales/atributos.adoc`, y escribe `CHANGELOG.md`.
 . Al mezclar ese PR, release-please crea la etiqueta `vX.Y.Z` y el GitHub Release.
 . El release dispara `release.yml`, que compila `./gradlew bootJar -Pversion=X.Y.Z` y adjunta
-  `srtm-backend-X.Y.Z.jar` y su `.sha256`.
+  `srtm-backend-X.Y.Z.jar` y su `.sha256`. En otro trabajo, construye los manuales y adjunta sus PDF, el sitio
+  HTML en un `.zip` y sus sumas.
 
 // fin de los pasos
 Mientras la versión sea 0.x, un `feat:` sube el minor y un `fix:` el patch (`bump-minor-pre-major`). Para que
@@ -1542,6 +1548,9 @@ proponer 0.9.0 hasta que se quite.
 === Qué se publica
 
 * *El jar* (`srtm-backend-X.Y.Z.jar`) y su suma SHA-256, adjuntos al GitHub Release.
+* *Los manuales*, adjuntos al mismo release: un `srtm-manual-<libro>-X.Y.Z.pdf` por libro,
+  `srtm-manuales-X.Y.Z-html.zip` y `srtm-manuales-X.Y.Z.sha256`. La versión de `main` se publica, además, en el
+  GitHub Pages del repositorio.
 * *No se publica ninguna imagen de Docker*: el repositorio no tiene `Dockerfile` ni workflow que la construya. El
   ejemplo de `compose.yml` con varias réplicas del `README.md` (`image: srtm-backend`) supone una imagen que hay que
   construir aparte.

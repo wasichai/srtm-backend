@@ -5,7 +5,7 @@ on:
     types: [published]
 
 # packages: the wasichai libraries come from github packages (settings.gradle.kts reads GITHUB_ACTOR / GITHUB_TOKEN)
-# contents: write: attaches the jar to the release
+# contents: write: attaches the jar and the manuals to the release
 permissions:
   contents: write
   packages: read
@@ -36,3 +36,26 @@ jobs:
           cp build/libs/app.jar "$jar"
           sha256sum "$jar" > "$jar.sha256"
           gh release upload "$GITHUB_REF_NAME" "$jar" "$jar.sha256" --clobber
+
+  manuals:
+    name: Manuals (PDF + HTML)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # release-please bumps docs/manuales/atributos.adoc with gradle.properties, so validar.py passes on the tag
+      - uses: ./.github/actions/manuales
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: docs/manuales/salida
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir adjuntos
+          for pdf in pdf/*/*.pdf; do
+            nombre="$(basename "$pdf" .pdf)"
+            cp "$pdf" "adjuntos/srtm-manual-${nombre#manual-}-$version.pdf"
+          done
+          zip -qr "adjuntos/srtm-manuales-$version-html.zip" index.html html pdf
+          (cd adjuntos && sha256sum -- * > "srtm-manuales-$version.sha256")
+          gh release upload "$GITHUB_REF_NAME" adjuntos/* --clobber

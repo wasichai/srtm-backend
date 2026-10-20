@@ -2,3 +2,5 @@ salida/
 demo/demo.env
 herramientas/falla-*.png
 demo/__pycache__/
+vendor/
+.bundle/

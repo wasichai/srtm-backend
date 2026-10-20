@@ -35,6 +35,7 @@ Desde `docs/manuales`:
 make build        # HTML + PDF + validaciones
 make html         # solo salida/html (abrir salida/html/index.html)
 make pdf          # solo salida/pdf/<carpeta>/<libro>.pdf
+make sitio        # build + salida/index.html: salida/ queda como el sitio de GitHub Pages
 make validar      # imágenes, rutas, secretos, enlaces del HTML, fuentes del PDF
 make diagramas    # vuelve a dibujar recursos/diagramas/generados (Node + Chromium de Playwright)
 make capturas     # vuelve a tomar las capturas (necesita la demo arriba)
@@ -43,6 +44,8 @@ make limpiar      # borra salida/
 
 Requisitos::
 * Asciidoctor 2.0 y Asciidoctor PDF 2.3 (`gem install asciidoctor asciidoctor-pdf`, o `brew install asciidoctor`).
+  Las versiones exactas que usa el CI están en `Gemfile.lock`; para construir con ellas:
+  `bundle install` y `make build ASCIIDOCTOR="bundle exec asciidoctor" ASCIIDOCTOR_PDF="bundle exec asciidoctor-pdf"`.
 * Python 3.11 o superior (validaciones y demo).
 * poppler (`pdffonts`, `pdfinfo`) para validar el PDF.
 * Node 22 o superior, solo para `make capturas` y `make diagramas`
@@ -51,6 +54,42 @@ Requisitos::
 
 Todo aviso de Asciidoctor detiene la construcción (`--failure-level=WARN`): una referencia cruzada rota, un
 `include::` que falta o una imagen inexistente no llegan a la salida.
+
+== Integración continua y publicación
+
+Tres workflows de GitHub construyen los manuales con la misma acción, `.github/actions/manuales`. La acción instala
+Ruby 4.0 con las gemas de `Gemfile.lock` y poppler, y corre `make sitio`; la construcción falla con cualquier aviso de
+Asciidoctor o de `validar.py`. Ninguno vuelve a tomar las capturas ni a dibujar los diagramas: se versionan, porque
+necesitan la demo y un navegador.
+
+[cols="2,3,4",options="header"]
+|===
+|Cuándo |Workflow |Qué deja
+
+|Cada PR que cambia `docs/manuales/`, `gradle.properties` o la acción
+|`manuales.yml`, trabajo *Manuals (HTML + PDF)*
+|El artefacto `manuales` del run: `salida/` entera, con el HTML y los PDF.
+
+|Cada push a `main` con esos cambios, o a mano (*Run workflow*)
+|`manuales.yml`, trabajos *Manuals* y *GitHub Pages*
+|El sitio en GitHub Pages: la portada del conjunto (`index.html` lleva a `html/index.html`) y los PDF en `pdf/`.
+
+|Cada GitHub Release (`vX.Y.Z`)
+|`release.yml`, trabajo *Manuals (PDF + HTML)*
+|Adjuntos del release: `srtm-manual-<libro>-X.Y.Z.pdf` de cada libro, `srtm-manuales-X.Y.Z-html.zip` (el sitio
+entero) y `srtm-manuales-X.Y.Z.sha256`.
+|===
+
+Requisitos del repositorio::
+* *GitHub Pages* tiene que estar habilitado con la fuente *GitHub Actions* (_Settings_ → _Pages_ → _Build and
+  deployment_ → _Source_). Sin eso, el trabajo *GitHub Pages* falla; los demás no se ven afectados. El sitio es
+  público, como el repositorio.
+* El release solo dispara `release.yml` si release-please lo crea con `RELEASE_PLEASE_TOKEN`
+  (xref:sistema/manual-sistema.adoc#desp-versiones[Manual técnico del sistema, «Versiones y releases»]).
+
+La versión del producto (`:version-producto:` en `atributos.adoc`) la sube release-please junto con
+`gradle.properties`: el archivo está en los `extra-files` de `release-please-config.json`, entre las marcas
+`x-release-please-start-version` y `x-release-please-end`. La edición y su fecha se siguen subiendo a mano.
 
 == Mantener los manuales al día
 

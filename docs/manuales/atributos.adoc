@@ -1,12 +1,14 @@
 // Atributos comunes de todos los manuales. Cada libro lo incluye justo después de su cabecera.
-// La versión del producto sale de gradle.properties (x-release-please); la fecha de edición se fija a mano
-// en cada edición (CHANGELOG.adoc).
+// La versión del producto es la de gradle.properties: release-please sube las dos juntas (el bloque de abajo).
+// La fecha de edición se fija a mano en cada edición (CHANGELOG.adoc).
 :producto: Rentas municipales
 :sigla: SRTM
 // como lo nombra el pie del portal (srtm-ui, PortalShell)
 :producto-largo: Sistema de Gestión Tributaria Municipal
 :municipalidad: Municipalidad Distrital de Perené
+// x-release-please-start-version
 :version-producto: 0.9.0
+// x-release-please-end
 :version-ui: 0.5.0
 :version-wasichai: 1.2.0
 :edicion: 1.0

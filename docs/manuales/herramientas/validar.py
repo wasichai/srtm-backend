@@ -31,8 +31,12 @@ def falla(donde, mensaje):
     fallas.append(f"{donde}: {mensaje}")
 
 
+# lo generado y lo instalado: vendor/ es donde el CI deja las gemas (bundler-cache), con sus propios .adoc
+NO_FUENTES = {"salida", "node_modules", "vendor"}
+
+
 def fuentes():
-    return sorted(p for p in RAIZ.rglob("*.adoc") if "salida" not in p.parts and "node_modules" not in p.parts)
+    return sorted(p for p in RAIZ.rglob("*.adoc") if not NO_FUENTES & set(p.relative_to(RAIZ).parts))
 
 
 # --- imágenes ---------------------------------------------------------------------------------------------------
