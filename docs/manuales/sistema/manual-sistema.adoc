@@ -1540,9 +1540,8 @@ Mientras la versión sea 0.x, un `feat:` sube el minor y un `fix:` el patch (`bu
 `release.yml` corra hace falta el secreto `RELEASE_PLEASE_TOKEN` (un PAT): un release creado con el `GITHUB_TOKEN`
 del workflow no dispara otros workflows, y entonces el jar habría que adjuntarlo a mano.
 
-NOTE: `releasing.md` indica quitar `"release-as": "0.9.0"` de `release-please-config.json` después del primer
-release. La etiqueta `v0.9.0` ya existe y la configuración todavía lo tiene: el siguiente PR de release volvería a
-proponer 0.9.0 hasta que se quite.
+NOTE: El primer release (`v0.9.0`) se forzó con `"release-as"` en `release-please-config.json`. Como indica
+`releasing.md`, esa línea se quitó después de publicarlo: desde entonces la versión la calculan los commits.
 
 [[desp-artefactos]]
 === Qué se publica
