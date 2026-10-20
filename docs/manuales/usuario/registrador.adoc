@@ -469,8 +469,8 @@ documentos; muestra el año en curso y los cuatro anteriores.
 image::{capturas}/usuario/registrador/predios-del-contribuyente.png[Tabla de cinco declaraciones sobre cuatro predios con su condición, porcentaje, uso, autoavalúo, valor afecto, número de DJ y botón PU, y la fila Total 2026]
 
 En la <<fig-predios-del-contribuyente>>, el predio `01-01-0001` aparece dos veces: declara dos usos (una casa y una
-tienda), cada uno en su propia declaración (<<dj-conceptos>>). Una declaración anulada aparece marcada *Anulada* y no
-suma en los totales (<<fig-declaraciones-del-contribuyente>>).
+tienda), cada uno en su propia declaración (<<dj-conceptos>>). Una declaración anulada aparece marcada *Anulada* (y
+una sustituida, *Sustituida*) y no suma en los totales (<<fig-declaraciones-del-contribuyente>>).
 
 [[fig-declaraciones-del-contribuyente]]
 .Pestaña Declaraciones, con una declaración anulada
@@ -946,6 +946,8 @@ obras (<<fig-dj-caracteristicas>>).
   habitantes / Aforo*.
 . En *Valores*, escriba el *Autoavalúo (S/)* que resulta de la declaración, la *Deducción (S/)* si corresponde, y el
   *Área construida (m2)*.
+. Si quiere contrastarlo con el catastro, pulse btn:[Calcular autoavalúo sugerido], en el título de *Valores*
+  (<<autoavaluo-sugerido>>).
 . Pulse btn:[Guardar] (o btn:[Siguiente] en el asistente).
 
 // fin de los pasos
@@ -955,8 +957,8 @@ image::{capturas}/usuario/registrador/dj-caracteristicas.png[Secciones Caracter�
 
 [IMPORTANT]
 ====
-* El sistema *no calcula el autoavalúo* a partir de los niveles y las obras: guarda el que usted escribe. Revíselo
-  contra el formulario de la declaración.
+* El sistema guarda el autoavalúo que usted escribe, no lo calcula por su cuenta. Revíselo contra el formulario de la
+  declaración; el autoavalúo sugerido (<<autoavaluo-sugerido>>) es una ayuda para hacerlo.
 * *Valor de condominio* y *Valor afecto* los calcula el sistema al grabar (<<dj-conceptos>>): lo que escriba en esos
   dos campos se reemplaza.
 * La *Deducción* tampoco se calcula: escriba el monto que corresponde a la condición del predio (por ejemplo, la de
@@ -965,6 +967,27 @@ image::{capturas}/usuario/registrador/dj-caracteristicas.png[Secciones Caracter�
 
 *Frontis (m)* y *Área construida (m2)* son obligatorios cuando la ordenanza de arbitrios del año cobra según el
 frente o el área construida (en la demostración de 2026, ambos). Los arbitrios se explican en el {m-arbitrios}.
+
+[[autoavaluo-sugerido]]
+===== El autoavalúo sugerido
+
+El botón btn:[Calcular autoavalúo sugerido] pide al catastro de la municipalidad que valúe la declaración con su año,
+su área de terreno, su uso, sus niveles y sus obras. Solo aparece en una declaración vigente que usted puede editar, y
+el cálculo se hace solo al pulsarlo.
+
+. Pulse btn:[Calcular autoavalúo sugerido]. Se abre el diálogo *Autoavalúo sugerido*, con el año, la región, la
+  *Versión de las tablas*, el arancel (de la declaración o de la ficha catastral), el *Terreno*, la *Construcción*,
+  las *Obras complementarias* y el *Autoavalúo*; debajo, el desglose por piso y por obra.
+. Si el valor corresponde, pulse btn:[Usar este valor]: queda en *Autoavalúo (S/)*, pendiente de guardar. Si no,
+  pulse btn:[Cerrar].
+. Pulse btn:[Guardar].
+
+// fin de los pasos
+Si el catastro no puede valuarla, el diálogo dice *El catastro no valuó la declaración* y por qué: falta el arancel,
+no hay tablas del año, o no conoce una obra, una clasificación o un estado de conservación. Una obra cuya
+*Categoría* no es una partida del instructivo (por ejemplo, una traída de un padrón externo) no se valúa: el aviso la
+nombra con su tipo y su categoría, para que la corrija (<<proc-obra>>). Si la municipalidad no tiene catastro, el
+botón está deshabilitado y dice *La municipalidad no tiene catastro configurado*.
 
 [[proc-nivel]]
 ==== Niveles de construcción
@@ -1153,15 +1176,36 @@ listas y su autoavalúo como punto de partida, y nace con motivo INSCRIPCION. Pa
 
 La valuación que trajo un padrón externo (por ejemplo, el de Ica) se queda en la declaración importada: ni la
 rectificatoria ni la del otro año la copian. Por eso, una declaración con esa valuación no puede cambiar de año: declare
-el año nuevo desde ella.
+el año nuevo desde ella. Si la declaración importada se corrige, su bloque *Valuación del padrón de origen* avisa *La
+declaración cambió después de la importación: la valuación de origen corresponde a la versión importada.*
 
-.La rectificatoria en esta versión
-[IMPORTANT]
+[[proc-rectificar-declaracion]]
+.Rectificar una declaración jurada
 ====
-El portal *todavía no tiene los botones* para rectificar una declaración ni para declarar otro año desde la anterior.
-El sistema ya los registra, pero solo a través de su interfaz de programación. Mientras el portal no los incorpore,
-pídalo al área de sistemas con el número de la declaración.
+[horizontal]
+Objetivo:: Corregir una declaración presentada con otra que la sustituye.
+Requisitos previos:: La declaración vigente abierta; el formulario de la rectificatoria.
 ====
+
+. En la cabecera de la declaración, pulse btn:[Rectificar], junto a btn:[Anular declaración].
+. En el diálogo *Rectificar la declaración jurada N*, revise el *Medio de presentación* (FÍSICO por omisión) y la
+  *Fecha de presentación* (hoy por omisión).
+. Pulse btn:[Rectificar]. Se abre la rectificatoria, con su número, en el asistente.
+. Corrija lo que cambió, pestaña por pestaña (<<proc-completar-declaracion>>).
+
+// fin de los pasos
+Resultado esperado:: La anterior lleva la marca *Sustituida* y, sobre sus pestañas, el aviso *Declaración sustituida
+el …* con el enlace *Sustituida por la DJ n° …*. La cabecera de la rectificatoria muestra el enlace *Sustituye a la DJ
+n° …*.
+
+WARNING: La sustitución no se puede deshacer. Si la rectificatoria también tiene un error, corríjala o rectifíquela
+a su vez.
+
+Para declarar otro año desde la anterior, presente la declaración nueva como siempre (<<proc-nueva-declaracion>>), con
+el año nuevo. En el paso 2, al elegir un predio que el contribuyente declaró otro año, aparece *El contribuyente
+declaró este predio en …* con el botón btn:[Declarar desde la DJ …], que ofrece la más reciente vigente. Púlselo: del
+paso 1 solo se toman el año y la presentación, y la declaración nueva se abre en *Características* para corregir lo
+copiado. Si el año es el mismo, el sistema lo rechaza bajo el campo *Año*: corresponde rectificar.
 
 [[proc-cambio-titular]]
 === Registrar un cambio de dueño
