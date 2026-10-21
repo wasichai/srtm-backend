@@ -198,7 +198,19 @@ def cargadores(args):
     print("\n== a) cargadores del repo ==")
     correr(args, "apply.py", dry_flag="--diff")
     correr(args, "import_parametros.py")
-    correr(args, "import_catalogos.py", "--workers", "8")
+    # la demo es de Perené (selva): su distrito, su cabecera y las obras complementarias de la selva
+    correr(
+        args,
+        "import_catalogos.py",
+        "--distrito",
+        "120302",
+        "--municipalidad-json",
+        os.path.join(MODEL, "data", "perene", "municipalidad.json"),
+        "--obras-csv",
+        os.path.join(MODEL, "data", "obras_complementarias.csv"),
+        "--workers",
+        "8",
+    )
     correr(args, "import_parametros.py", "--csv", os.path.join(MODEL, "data", "parametros-anuncios-perene.csv"))
     correr(args, "import_parametros.py", "--csv", os.path.join(DATOS, "parametros-sanciones-2026.csv"))
     correr(args, "import_cuis.py", "--csv", os.path.join(MODEL, "data", "cuiema", "perene-2026-cuis.csv"))

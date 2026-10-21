@@ -1,5 +1,5 @@
 {
-  "generado": "2026-10-20T00:27:13+00:00",
+  "generado": "2026-10-21T22:38:53+00:00",
   "base": "srtm_demo",
   "versiones": {
     "srtm_backend": "0.9.0",
@@ -20,6 +20,11 @@
       "documents": {
         "ultima": "1",
         "migraciones": 2,
+        "fallidas": 0
+      },
+      "files": {
+        "ultima": "2",
+        "migraciones": 3,
         "fallidas": 0
       },
       "forms": {
@@ -59,20 +64,20 @@
   ],
   "archivos": {
     "srtm_demo.dump": {
-      "bytes": 1261427,
-      "sha256": "b862898abf44237c31e9875bb99f399383b3e5c06ceb07d1fe27e7caacc90f05"
+      "bytes": 1244373,
+      "sha256": "95b97e4dc58f4a0d16d4415cdb131c9fcf323198fb94097cda40998a431acfd1"
     },
     "srtm_demo.sql": {
-      "bytes": 8650000,
-      "sha256": "0cccc7d64b08fca8e37290c96ddb43e1c19ca82e925b72ffaf5298c882ea9715"
+      "bytes": 8825689,
+      "sha256": "3ab3d49488eb942cb2aa79b85a01f5069efa23e4e001e5ff2d34a326903099c6"
     },
     "datos.sql": {
-      "bytes": 12387270,
-      "sha256": "3bb92f191834f8572d63dd65b4cd145c95fb743c40c6e0599e831bd732217781"
+      "bytes": 12602437,
+      "sha256": "7f658f109559d7b4cea057d0e40ffd99a8d4a32f62dc65e059f19f00da2cfae2"
     },
     "emisiones.tar.gz": {
-      "bytes": 4041478,
-      "sha256": "9f42af940affe4ccfbfd39fb6e994568511c51267f29dc716dfde358f3f139de"
+      "bytes": 4109647,
+      "sha256": "b13051a64e9653b3438b2898f37fbf1d896dc9b85653f993f4ca88d5cf407a1c"
     }
   },
   "restricciones_sin_validar": [
@@ -142,8 +147,8 @@
     "app_data.uso_predio__00000000": 276,
     "app_data.via__00000000": 7,
     "app_data.zona_arbitrio_ubicacion__00000000": 1,
-    "wasichai.audit_log": 6187,
-    "wasichai.custom_fields": 570,
+    "wasichai.audit_log": 6108,
+    "wasichai.custom_fields": 596,
     "wasichai.custom_objects": 42,
     "wasichai.document_counters": 0,
     "wasichai.document_types": 0,
@@ -152,6 +157,7 @@
     "wasichai.flyway_history_core": 18,
     "wasichai.flyway_history_core_seed": 2,
     "wasichai.flyway_history_documents": 2,
+    "wasichai.flyway_history_files": 3,
     "wasichai.flyway_history_forms": 2,
     "wasichai.flyway_history_gis": 2,
     "wasichai.flyway_history_pages": 2,
@@ -163,12 +169,13 @@
     "wasichai.org_units": 0,
     "wasichai.organizations": 1,
     "wasichai.pages": 0,
-    "wasichai.permissions": 204,
+    "wasichai.permissions": 206,
     "wasichai.relationships": 44,
     "wasichai.roles": 6,
     "wasichai.service_accounts": 0,
+    "wasichai.stored_files": 0,
     "wasichai.user_org_units": 0,
-    "wasichai.user_preferences": 6,
+    "wasichai.user_preferences": 0,
     "wasichai.user_roles": 6,
     "wasichai.users": 6,
     "wasichai.views": 0,
