@@ -1869,7 +1869,8 @@ frentes (`DeclaracionService.recalcular`, `Derivados.kt`):
 - **Lo que manda el portal:** en el alta y en la edición se ignoran `area_construida`, `area_comun_construida`,
   `longitud_frente`, `autoavaluo_por_revisar` y `autoavaluo_motivo`, y también `valor_autoavaluo` mientras haya
   catastro. Un cliente anterior a #156 que manda `longitud_frente` sin `frontis_principal` en el alta declara con él el
-  frontis principal; en la edición, `frontis_principal` se toma tal cual llega.
+  frontis principal. En la edición, un `frontis_principal` que no llega conserva el guardado (se borra mandando `0`) y,
+  si la DJ no tiene ninguno (no la alcanzó `migrar_derivados.py`), se toma el `longitud_frente` que llega.
 - **¿Editable?:** la ficha (`GET /api/srtm/declaraciones/{id}`) trae `autoavaluo_manual`: `true` si la organización no
   tiene catastro y el usuario escribe el autoavalúo.
 - **Recalcular:** `POST /api/srtm/declaraciones/{id}/recalcular` vuelve a valuar una DJ vigente sin cambiarla (el

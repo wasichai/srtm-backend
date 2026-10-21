@@ -143,6 +143,7 @@ class DeclaracionService(
                 fechaAnulacion = stored.fechaAnulacion,
                 sustituye = stored.sustituye,
                 fechaSustitucion = stored.fechaSustitucion,
+                frontisPrincipal = frontisAlEditar(body, stored),
                 areaConstruida = stored.areaConstruida,
                 areaComunConstruida = stored.areaComunConstruida,
                 longitudFrente = stored.longitudFrente,
@@ -161,6 +162,13 @@ class DeclaracionService(
         marcarOrigenModificado(id)
         return recalcular(id).despues
     }
+
+    // a frontis principal the body does not send is the stored one: srtm-ui before #156 never sends it, and 0 clears it.
+    // a declaración model/migrar_derivados.py did not reach has none: its longitud_frente is, as on create (delCliente)
+    private fun frontisAlEditar(
+        body: Declaracion,
+        stored: Declaracion
+    ) = body.frontisPrincipal ?: stored.frontisPrincipal ?: body.longitudFrente
 
     // #156: what the declaración derives of its lists (Derivados.totales) and its autoavalúo (catastro's, or the stored
     // one marked with why not, or the user's without a catastro), then its condominio's values, its own and the other

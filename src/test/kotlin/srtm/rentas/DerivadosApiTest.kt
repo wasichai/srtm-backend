@@ -191,6 +191,47 @@ class DerivadosApiTest : SrtmApiTest() {
     }
 
     @Test
+    fun `an edit without the frontis principal keeps it, and 0 clears it`() {
+        val org = conCatastro()
+        val id = declarar(org, mapOf("frontis_principal" to 10))
+
+        // srtm-ui before #156 never sends it
+        put("/api/srtm/declaraciones/$id", fields(declaracion(id, org)) - "frontis_principal" + ("numero_habitantes" to 4), org)
+        declaracion(id, org).let {
+            assertDec("10", it["frontis_principal"])
+            assertDec("10", it["longitud_frente"])
+        }
+
+        put("/api/srtm/declaraciones/$id", fields(declaracion(id, org)) + ("frontis_principal" to 0), org)
+        declaracion(id, org).let {
+            assertDec("0", it["frontis_principal"])
+            assertDec("0", it["longitud_frente"])
+        }
+    }
+
+    @Test
+    fun `an edit of a declaracion never migrated takes its longitud de frente as its frontis principal`() {
+        val org = conCatastro()
+        val id = declarar(org)
+        // as imported: a longitud de frente and no frontis principal
+        val guardada = tree(send("GET", "/api/objects/declaracion_predial/records/$id", null, HttpStatus.OK, org))["attributes"]
+        send(
+            "PUT",
+            "/api/objects/declaracion_predial/records/$id",
+            mapOf("attributes" to fields(guardada) + mapOf("frontis_principal" to null, "longitud_frente" to 7)),
+            HttpStatus.OK,
+            org
+        )
+
+        put("/api/srtm/declaraciones/$id", fields(declaracion(id, org)) - "frontis_principal", org)
+
+        declaracion(id, org).let {
+            assertDec("7", it["frontis_principal"])
+            assertDec("7", it["longitud_frente"])
+        }
+    }
+
+    @Test
     fun `a client that still sends the longitud de frente alone declares its frontis principal`() {
         val org = conCatastro()
         val id = declarar(org, mapOf("longitud_frente" to 8.5))
