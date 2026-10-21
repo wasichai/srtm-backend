@@ -1088,6 +1088,11 @@ Las reglas del condominio:
 * Cada condómino tiene su propia declaración. La del nuevo copia de esta lo que se declara del predio: año, secuencia,
   características, autoavalúo, inhabitabilidad, niveles, obras y otros frentes. No copia lo que es de cada titular:
   la adquisición, los documentos, la condición especial, la deducción ni los transferentes.
+* Lo que se declara del predio es de todo el condominio. Si agrega, cambia o borra un nivel, una obra o un otro frente
+  en la declaración de un condómino, el sistema hace lo mismo en las de los demás. Lo mismo pasa con los datos del
+  predio: uso, clasificación, estado, áreas de terreno, frontis, habitantes e inhabitabilidad. Cada declaración se
+  vuelve a valuar, y cada condómino recibe su % del autoavalúo. Lo que es de cada titular no se copia.
+* Las declaraciones anuladas o sustituidas por una rectificatoria no reciben esos cambios. La rectificatoria sí.
 
 [[proc-agregar-condomino]]
 .Agregar un condómino
