@@ -4,7 +4,10 @@ import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import srtm.arbitrios.ANULACION_CUOTA_ARBITRIO
+import srtm.arbitrios.ArbitriosService
+import srtm.arbitrios.AvisoDeArbitrios
 import srtm.arbitrios.CUOTA_ARBITRIO
+import srtm.arbitrios.Redeterminacion
 import srtm.pide.ConsultasReniec
 import wasichai.core.common.ConflictException
 import wasichai.core.common.ValidationException
@@ -16,13 +19,15 @@ import java.util.UUID
 // (niveles de construcción, obras complementarias), condóminos (the other declarations of the predio) and otros frentes.
 // every write of a declaración, or of its niveles, obras and otros frentes, recomputes what it derives of them and its
 // autoavalúo (recalcular, Derivados.kt), then its condominio (Condominio.kt). what a condómino declares of the predio
-// and those lists is the whole condominio's: it is replicated in the others (#157). reniec: as ContribuyenteService's
+// and those lists is the whole condominio's: it is replicated in the others (#157). last, its predio's arbitrios of
+// the year when what they read changed (redeterminar, #158). reniec: as ContribuyenteService's
 @Service
 class DeclaracionService(
     private val registros: Registros,
     private val listas: Listas,
     private val contribuyentes: ContribuyenteService,
     private val autoavaluos: AutoavaluoSugeridoService,
+    private val arbitrios: ArbitriosService,
     private val reniec: ConsultasReniec = ConsultasReniec(Duration.ZERO)
 ) {
     suspend fun ficha(id: UUID): DeclaracionJurada {
@@ -74,7 +79,7 @@ class DeclaracionService(
                 throw e
             }
         // stored: its predio stays whatever recalcular does
-        recalcular(UUID.fromString(declaracion.id))
+        redeterminar(null, recalcular(UUID.fromString(declaracion.id)).despues)
         return ficha(UUID.fromString(declaracion.id))
     }
 
@@ -101,6 +106,7 @@ class DeclaracionService(
                     fechaPresentacion = d.fechaPresentacion
                 )
             }
+        redeterminar(null, creada)
         return ficha(UUID.fromString(creada.id))
     }
 
@@ -109,7 +115,7 @@ class DeclaracionService(
         val contribuyente = body.contribuyente ?: throw ValidationException("Falta el contribuyente", "contribuyente", "es obligatorio")
         val predio = body.predio ?: throw ValidationException("Falta el predio", "predio", "es obligatorio")
         val creada = registrar(nueva(delCliente(body), UUID.fromString(contribuyente), UUID.fromString(predio)))
-        return recalcular(UUID.fromString(creada.id)).despues
+        return recalcular(UUID.fromString(creada.id)).despues.also { redeterminar(null, it) }
     }
 
     // what a client sends of a new declaración: the derived fields are recalcular's, and the autoavalúo too while its
@@ -165,7 +171,7 @@ class DeclaracionService(
         marcarOrigenModificado(id)
         val recalculo = recalcular(id)
         if (!seUne) replicarPredio(next, otros)
-        return recalculo.despues
+        return recalculo.despues.also { redeterminar(stored, it) }
     }
 
     // #157: what `origen` declares of the predio (delPredioCambiado), written in each condómino that declares it
@@ -211,7 +217,7 @@ class DeclaracionService(
     }
 
     // the portal's «Recalcular»: a vigente declaración valued again without a change (catastro answers now)
-    suspend fun recalcularDeclaracion(id: UUID): Declaracion = recalcular(existe(id)).despues
+    suspend fun recalcularDeclaracion(id: UUID): Declaracion = recalcular(existe(id)).also { redeterminar(it.antes, it.despues) }.despues
 
     // the external padrón's valuation is of its year: that year's declaración keeps it, another year is declared
     // from it (declararDesde) without it
@@ -245,6 +251,7 @@ class DeclaracionService(
             deshacer(creada)
             throw e
         }
+        redeterminar(null, creada)
         return ficha(UUID.fromString(creada.id))
     }
 
@@ -257,6 +264,7 @@ class DeclaracionService(
         val stored = registros.get(DECLARACION, Declaracion::class.java, id)
         val saved = registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(anulada(stored, body.motivoAnulacion, LocalDate.now())))
         recalcularResto(stored)
+        redeterminar(stored, saved)
         return saved
     }
 
@@ -267,6 +275,7 @@ class DeclaracionService(
         bajaDeDeclaracion(LISTAS.filter { listas.contar(it, PARENT, id) > 0 })?.let { throw ConflictException(it) }
         registros.delete(DECLARACION, id)
         recalcularResto(stored)
+        redeterminar(stored, null)
     }
 
     // "datos de los condóminos": another contribuyente's declaración of the same predio, year and secuencia, with what
@@ -292,7 +301,7 @@ class DeclaracionService(
         }
         obras(id).forEach { nuevaObra(nuevaId, it.copy(id = null, declaracion = null, fila = conFila(OBRA_COMPLEMENTARIA, it.id, it.fila))) }
         frentes(id).forEach { nuevoFrente(nuevaId, it.copy(id = null, declaracion = null, fila = conFila(OTRO_FRENTE, it.id, it.fila))) }
-        return recalcular(nuevaId).despues
+        return recalcular(nuevaId).despues.also { redeterminar(null, it) }
     }
 
     // a source row's fila: its own, or one it takes now (a row from before #156 that model/migrar_derivados.py did
@@ -647,7 +656,24 @@ class DeclaracionService(
         quitado: Boolean = false
     ) {
         marcarOrigenModificado(declaracion, quitado)
-        recalcular(declaracion)
+        recalcular(declaracion).let { redeterminar(it.antes, it.despues) }
+    }
+
+    // #158: a write that changes what the arbitrios read (Redeterminacion.cambia; null: a declaración created or
+    // deleted) redetermines the year of the predio it was on and of the one it is on (ArbitriosService.redeterminarPredio),
+    // as the caller. what it did goes to the response's header (AvisoDeArbitrios): a redeterminación that cannot be
+    // done is said there, and the write of the declaración stands
+    private suspend fun redeterminar(
+        antes: Declaracion?,
+        despues: Declaracion?
+    ) {
+        if (!Redeterminacion.cambia(antes, despues)) return
+        val numero = (despues ?: antes)?.numeroDeclaracion
+        val observacion = "Redeterminación por cambio de la DJ " + (numero?.let { "n° $it" } ?: "del padrón")
+        listOfNotNull(antes, despues)
+            .mapNotNull { d -> d.anio?.let { anio -> d.predio?.let { UUID.fromString(it) to anio } } }
+            .distinct()
+            .forEach { (predio, anio) -> arbitrios.redeterminarPredio(predio, anio, observacion)?.let { AvisoDeArbitrios.anotar(it) } }
     }
 
     // the srtm's defaults. condición and % are the condominio's (registrar)

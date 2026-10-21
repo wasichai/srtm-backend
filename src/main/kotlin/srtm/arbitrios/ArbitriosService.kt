@@ -1,5 +1,7 @@
 package srtm.arbitrios
 
+import kotlinx.coroutines.CancellationException
+import org.slf4j.LoggerFactory
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
@@ -74,6 +76,7 @@ class ArbitriosService(
     transacciones: ReactiveTransactionManager
 ) {
     private val transaccion = TransactionalOperator.create(transacciones)
+    private val log = LoggerFactory.getLogger(javaClass)
 
     // the year's ordinance, servicios, parameters, uso catalog and zona_arbitrio_ubicacion rows: read once per
     // determination
@@ -215,6 +218,92 @@ class ArbitriosService(
         } catch (_: DuplicateKeyException) {
             throw ConflictException("La cuota ya está anulada")
         }
+    }
+
+    // #158: a predio's year after a change of its declaraciones (DeclaracionService): the twelve months computed again
+    // and only the ones that come out different written, each annulled (motivo REDETERMINACION, the observación says
+    // which declaración) and written again as its next version (Redeterminacion). with the vigente cuotas and the
+    // anulaciones in one transaction: all of the predio's or none. nothing when the predio has no vigente cuota of the
+    // year: the first determination is the portal's or the masiva's. as the caller, like every write of srtm (#76):
+    // who may not create cuotas and anulaciones gets the reason, not a 403. it never throws: what kept it from being
+    // done is the result's error, and the cuotas stay as they were. a determination of the same predio meanwhile (the
+    // clave and the anulación's clave are unique) makes it read and compute again, once, as escribir does
+    suspend fun redeterminarPredio(
+        predio: UUID,
+        anio: Int,
+        observacion: String
+    ): ResultadoRedeterminacion? =
+        try {
+            conReintento(predio, anio, observacion)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: WasichaiException) {
+            ResultadoRedeterminacion(error = e.message)
+        } catch (e: Exception) {
+            log.error("No se pudieron redeterminar los arbitrios {} del predio {}", anio, predio, e)
+            ResultadoRedeterminacion(error = "No se pudieron redeterminar los arbitrios de $anio del predio")
+        }
+
+    // POST /predios/{id}/arbitrios/redeterminacion: the same by hand, for the arbitrios area (a redeterminación that the
+    // write of a declaración could not do, or a year whose ordinance changed). 403 before anything is read, 422 with
+    // what is missing, as determinarPredio
+    suspend fun redeterminar(
+        id: UUID,
+        pedido: PedidoDeterminacion
+    ): ResultadoRedeterminacion {
+        exigirRedeterminar()
+        val (anio, observacion) = validar(pedido)
+        registros.get(PREDIO, Predio::class.java, id)
+        return conReintento(id, anio, observacion) ?: ResultadoRedeterminacion()
+    }
+
+    private suspend fun conReintento(
+        predio: UUID,
+        anio: Int,
+        observacion: String
+    ) = try {
+        redeterminar(predio, anio, observacion)
+    } catch (_: DuplicateKeyException) {
+        redeterminar(predio, anio, observacion)
+    }
+
+    private suspend fun redeterminar(
+        id: UUID,
+        anio: Int,
+        observacion: String
+    ): ResultadoRedeterminacion? {
+        // one row says whether the predio has cuotas of the year, before the year's ordinance is read
+        val alguna = RecordQuery(page = PageRequest.of(0, 1), filters = mapOf("predio" to "$id", "anio" to "$anio"), count = false)
+        if (registros.page(CUOTA_ARBITRIO, CuotaArbitrio::class.java, alguna).content.isEmpty()) return null
+        val contexto = contexto(anio)
+        val datos = delPredio(registros.get(PREDIO, Predio::class.java, id), anio, Arbitrios.conTope(contexto))
+        val vigentes = Arbitrios.vigentes(datos.existentes, datos.anuladas)
+        if (vigentes.isEmpty()) return null
+        val hoy = LocalDate.now()
+        val d = Redeterminacion.completa(contexto, datos, observacion, hoy)
+        if (d.faltan.isNotEmpty()) throw FaltanArbitrios(anio, d.faltan, d.detalle)
+        val cambios = Redeterminacion.comparar(vigentes, d.cuotas)
+        if (cambios.escribir.isEmpty() && cambios.anular.isEmpty()) return ResultadoRedeterminacion()
+        exigirRedeterminar()
+        val anulaciones =
+            cambios.anular.map {
+                Records.attributes(
+                    AnulacionCuotaArbitrio(
+                        cuota = it.id,
+                        predio = it.predio,
+                        anio = it.anio,
+                        motivo = REDETERMINACION,
+                        observacion = observacion,
+                        fecha = hoy,
+                        clave = it.id
+                    )
+                )
+            }
+        transaccion.executeAndAwait {
+            registros.createAll(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, anulaciones)
+            registros.createAll(CUOTA_ARBITRIO, CuotaArbitrio::class.java, cambios.escribir.map(Records::attributes))
+        }
+        return ResultadoRedeterminacion(cambios.escribir.size, cambios.anular.size)
     }
 
     // GET /predios/{id}/arbitrios
@@ -362,7 +451,22 @@ class ArbitriosService(
         }
     }
 
+    // what a redeterminación writes: cuotas and their anulaciones. said before anything is written
+    private suspend fun exigirRedeterminar() {
+        val usuario = currentUser.require()
+        try {
+            for (objeto in listOf(CUOTA_ARBITRIO, ANULACION_CUOTA_ARBITRIO)) {
+                currentUser.requirePermission(usuario, Actions.CREATE, metadata.definitionOf(objeto).obj.id)
+            }
+        } catch (_: ForbiddenException) {
+            throw ForbiddenException("Redeterminar arbitrios exige permiso de creación sobre $CUOTA_ARBITRIO y $ANULACION_CUOTA_ARBITRIO")
+        }
+    }
+
     companion object {
         val ANIOS = 1900..9999
+
+        // the motivo of the anulaciones a redeterminación writes (redeterminarPredio)
+        const val REDETERMINACION = "REDETERMINACION"
     }
 }

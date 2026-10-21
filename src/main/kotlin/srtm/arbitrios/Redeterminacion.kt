@@ -1,0 +1,113 @@
+package srtm.arbitrios
+
+import srtm.rentas.Declaracion
+import srtm.rentas.secuenciaUso
+import java.math.BigDecimal
+import java.time.LocalDate
+
+// #158: a declaración that changes what its predio's arbitrios are charged on (cambia) redetermines the whole year of
+// it: the twelve months computed again with the declaraciones as they are now (completa), and compared with the
+// vigente cuotas (comparar). a month whose cuota comes out the same is not touched; one that changed is annulled and
+// written again as the next version of its clave; one without a cuota that now has one is written; one no longer
+// charged (its titular gone) is annulled. srtm has no payments: a cuota already paid is annulled all the same
+// (docs/manuales/usuario/arbitrios-emision.adoc, redeterminar). ArbitriosService.redeterminarPredio reads and writes
+object Redeterminacion {
+    // what a redeterminación writes and annuls: never a cuota that comes out the same
+    data class Cambios(
+        val escribir: List<CuotaArbitrio>,
+        val anular: List<CuotaArbitrio>
+    )
+
+    // Arbitrios.determinar with every cuota of the year counted as annulled: no month is skipped for having one, each
+    // takes the next version of its clave, and the tope measures the whole year (none of it is "already written").
+    // a predio no declaración covers any month of (its only one annulled, or deleted) has no cuotas: not a titular
+    // missing, as it is for determinar
+    fun completa(
+        c: ContextoArbitrios,
+        p: PredioArbitrios,
+        observacion: String,
+        hoy: LocalDate
+    ): Determinacion {
+        if (Periodo.MESES.none { m -> p.declaraciones.any { cubre(it, Periodo.atribucion(c.anio, m)) } }) return Determinacion(emptyList(), emptyList())
+        return Arbitrios.determinar(c, p.copy(anuladas = p.existentes.mapNotNull { it.id }.toSet()), observacion, hoy)
+    }
+
+    // the vigente cuotas of a predio's year (Arbitrios.vigentes) against the ones computed now, by servicio, month and
+    // secuencia. a cuota without secuencia (one PU per predio, before #84) is the lowest one's of its month
+    fun comparar(
+        vigentes: List<CuotaArbitrio>,
+        calculadas: List<CuotaArbitrio>
+    ): Cambios {
+        val menores =
+            calculadas
+                .groupBy { it.servicio to it.periodo }
+                .mapValues { (_, cs) -> cs.minOf { secuenciaUso(it.secuenciaUso) } }
+        val antes = vigentes.associateBy { llave(it, menores[it.servicio to it.periodo] ?: secuenciaUso(null)) }
+        val ahora = calculadas.associateBy { llave(it, secuenciaUso(it.secuenciaUso)) }
+        val escribir = calculadas.filter { q -> antes[llave(q, secuenciaUso(q.secuenciaUso))]?.let { igual(it, q) } != true }
+        val anular = vigentes.filter { q -> ahora[llave(q, menores[q.servicio to q.periodo] ?: secuenciaUso(null))]?.let { igual(q, it) } != true }
+        return Cambios(escribir, anular)
+    }
+
+    // whether a declaración's change (null: one created, or deleted) touches what the arbitrios read: who covers
+    // which month (titularPrincipal, cubre), its uso (codigoDeUso) and its bases (Calculo)
+    fun cambia(
+        antes: Declaracion?,
+        despues: Declaracion?
+    ): Boolean = antes == null || despues == null || bases(antes) != bases(despues)
+
+    private fun bases(d: Declaracion) =
+        listOf(
+            d.predio,
+            d.anio,
+            d.estado,
+            d.contribuyente,
+            secuenciaUso(d.secuenciaUso),
+            d.porcentajeCondominio?.stripTrailingZeros(),
+            d.condicionPropiedad,
+            d.fechaAdquisicion,
+            d.fechaAnulacion,
+            d.fechaPresentacion,
+            d.claseUso,
+            d.subClaseUso,
+            d.uso,
+            d.numeroHabitantes,
+            d.areaConstruida?.stripTrailingZeros(),
+            d.longitudFrente?.stripTrailingZeros()
+        )
+
+    private fun llave(
+        q: CuotaArbitrio,
+        secuencia: String
+    ) = Triple(q.servicio, q.periodo, secuencia)
+
+    // what a cuota was determined with and to whom: not when, why (its observación) nor its clave's version
+    private fun igual(
+        a: CuotaArbitrio,
+        b: CuotaArbitrio
+    ) = lectura(a) == lectura(b)
+
+    private fun lectura(q: CuotaArbitrio) =
+        listOf(
+            q.contribuyente,
+            q.parametro,
+            q.monto.valor(),
+            q.parametroAplicado,
+            q.zona,
+            q.usoArbitrio,
+            q.base,
+            q.cantidadBase.valor(),
+            q.tasaUnitaria.valor(),
+            q.habitantes,
+            q.habitantesPresuntos,
+            q.promedioHabitantes.valor(),
+            q.variacionHabitante.valor(),
+            q.influencia,
+            q.afluencia,
+            q.redondeo,
+            q.montoSinTope.valor(),
+            q.topeAplicado.valor()
+        )
+
+    private fun BigDecimal?.valor() = this?.stripTrailingZeros()
+}

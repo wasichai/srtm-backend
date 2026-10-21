@@ -300,8 +300,9 @@ de la declaración y del predio muestran sus botones de edición, pero el sistem
 Una cuota determinada queda tal como se calculó, con la tasa, la zona, el uso y el titular de ese momento, la fecha en
 que se determinó y la *Observación* del acto: nadie la puede editar ni borrar, ni siquiera un administrador. Por eso:
 
-* *Volver a determinar no recalcula*: solo agrega las cuotas que faltan (<<redeterminar>>). Si después se corrige una
-  declaración, las cuotas ya escritas no cambian solas.
+* *Volver a determinar no recalcula*: solo agrega las cuotas que faltan (<<redeterminar>>).
+* *Corregir la declaración sí recalcula*: el sistema anula las cuotas que cambian y las escribe de nuevo, solo
+  (<<redeterminar>>).
 * *Una cuota mal calculada se corrige anulándola* y determinándola de nuevo (<<anular-cuota>>).
 
 [[flujo-anual]]
@@ -564,8 +565,39 @@ faltan; las que ya existen no se recalculan ni se duplican. Volver a determinar 
 * escribir de nuevo una cuota que se anuló (<<anular-cuota>>): la nueva queda como otra versión de la misma cuota, con
   la tasa, la zona, el uso y el titular vigentes al determinarla.
 
-No sirve para corregir una cuota ya escrita: si se rectifica la declaración (un frontis mal medido, un uso equivocado),
-las cuotas ya determinadas siguen como estaban, hasta que se anulen.
+No sirve para corregir una cuota ya escrita: para eso se corrige la declaración.
+
+*Cuando cambia la declaración, el sistema redetermina solo.* Si el predio ya tiene cuotas del año, se redetermina
+cuando el registro tributario:
+
+* presenta, rectifica, anula o borra una declaración del predio;
+* cambia lo que leen los arbitrios: un piso (el área construida), el frontis o un otro frente (la longitud de frente),
+  el uso, los habitantes, el titular, su % o sus fechas.
+
+El sistema calcula de nuevo *los doce meses del año* de esa declaración y los compara con las cuotas vigentes:
+
+* el mes que sale igual no se toca;
+* el mes que cambia se anula, con el motivo `REDETERMINACION` y la observación *Redeterminación por cambio de la DJ
+  n° …*, y se escribe de nuevo como otra versión de la misma cuota;
+* el mes que ahora tiene titular y antes no, se escribe;
+* el mes que ya no tiene titular (la declaración se anuló) se anula.
+
+Todo el predio se graba junto o no se graba nada. Al grabar la declaración, el sistema le informa al portal cuántas
+cuotas se redeterminaron, o por qué no se pudo. Un predio sin cuotas del año no se determina por esto: para eso está
+la determinación del año (<<determinacion-masiva>>).
+
+WARNING: El {sigla} no registra pagos. Una cuota que el contribuyente *ya pagó* también se anula y se escribe de
+nuevo si su mes cambia, aunque la caja la haya cobrado. Antes de corregir la declaración de un predio con meses
+pagados, coordine con la caja la devolución o la compensación de la diferencia.
+
+Casos especiales::
+* *La declaración se graba, pero el aviso dice que no se pudieron redeterminar los arbitrios: …*: falta un dato (por
+  ejemplo, el área construida de un servicio que cobra por m²) o el rol de quien grabó no puede escribir cuotas (el
+  perfil {p-registrador} no puede). Las cuotas quedan como estaban. Si falta un dato, corríjalo en la declaración:
+  al grabarla, se redetermina.
+* *Redeterminar a mano.* Si la redeterminación no se hizo por permisos, o cambió la ordenanza del año, el perfil
+  {p-arbitrios} puede redeterminar el predio. El portal todavía no tiene el botón: se pide al área de sistemas, con
+  el código del predio y el año. Funciona igual que la automática.
 
 [[no-se-puede]]
 === Cuando no se puede determinar
@@ -619,6 +651,9 @@ Una cuota mal calculada (por un frontis mal medido, un uso equivocado o un titul
 * deja que la siguiente determinación del predio escriba la cuota de nuevo, como otra versión, con los datos y la
   ordenanza vigentes entonces.
 
+Una cuota que cambia porque se corrigió la declaración no necesita esto: el sistema la anula y la escribe de nuevo
+solo, con el motivo `REDETERMINACION` (<<redeterminar>>).
+
 En la demostración, el barrido de marzo del predio `01-01-0002` se anuló con el motivo «Frontis mal medido» y se volvió
 a determinar: la ficha y la HLA muestran solo la cuota nueva, mientras que la *Consulta de cuotas* lista las dos
 (<<consulta-cuotas>>).
@@ -634,8 +669,9 @@ predio, el servicio, el mes y el año, el motivo y la observación. Después, de
 (<<proc-determinar-predio>>).
 ====
 
-WARNING: Una anulación no se puede deshacer. Antes de pedirla, corrija la declaración jurada: si la vuelve a
-determinar con los mismos datos, la cuota nueva saldrá igual a la anulada.
+WARNING: Una anulación no se puede deshacer. Si la cuota está mal porque la declaración jurada está mal, corrija la
+declaración: el sistema redetermina el año solo (<<redeterminar>>). Si la anula y la vuelve a determinar con los
+mismos datos, la cuota nueva saldrá igual a la anulada.
 
 [[hla]]
 == La HLA

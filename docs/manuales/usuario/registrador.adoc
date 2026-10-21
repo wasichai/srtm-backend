@@ -978,6 +978,12 @@ image::{capturas}/usuario/registrador/dj-caracteristicas.png[Secciones Caracter�
 La *Longitud de frente* y el *Área construida* (los niveles) son obligatorios cuando la ordenanza de arbitrios del año
 cobra según el frente o el área construida (en la demostración de 2026, ambos). Los arbitrios se explican en el {m-arbitrios}.
 
+NOTE: Si el predio ya tiene arbitrios determinados en el año, corregir lo que leen (los niveles, el frontis, los otros
+frentes, el uso, los habitantes, el titular o su %) o anular la declaración hace que el sistema los redetermine:
+anula los meses que cambian y los escribe de nuevo. Eso exige permiso para escribir cuotas, que el perfil
+{p-registrador} no tiene. Su declaración se graba igual, y el aviso dice que los arbitrios no se redeterminaron:
+avise al área de arbitrios ({m-arbitrios}).
+
 [[autoavaluo-sugerido]]
 ===== El autoavalúo sugerido
 
