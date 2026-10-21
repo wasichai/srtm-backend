@@ -335,13 +335,236 @@ class DerivadosApiTest : SrtmApiTest() {
 
         piso(id, org, 2, 50)
 
-        // the edited one: its 60 % of the new autoavalúo. the copy follows with #157
+        // each its own % of the new autoavalúo: the copy got the piso too (#157)
         declaracion(id, org).let {
             assertDec("17000", it["valor_autoavaluo"])
             assertDec("60", it["porcentaje_condominio"])
             assertDec("10200", it["valor_condominio"])
         }
-        assertDec("40", declaracion(otraId, org)["porcentaje_condominio"])
+        declaracion(otraId, org).let {
+            assertDec("17000", it["valor_autoavaluo"])
+            assertDec("40", it["porcentaje_condominio"])
+            assertDec("6800", it["valor_condominio"])
+        }
+    }
+
+    // #157: a condómino added from `id`, at 50 % unless told: with `id` alone, `id` keeps the rest
+    private fun condomino(
+        id: String,
+        org: String,
+        porcentaje: Int = 50
+    ): String =
+        post("/api/srtm/declaraciones/$id/condominos", mapOf("contribuyente" to contribuyente(org), "porcentaje_condominio" to porcentaje), org)["id"]
+            .asString()
+
+    private fun filas(
+        id: String,
+        lista: String,
+        org: String
+    ): List<JsonNode> = tree(send("GET", "/api/srtm/declaraciones/$id/$lista", null, HttpStatus.OK, org)).iterator().asSequence().toList()
+
+    // a row as an import leaves it: written straight to Core, without a fila
+    private fun importada(
+        objeto: String,
+        declaracion: String,
+        campos: Map<String, Any?>,
+        org: String
+    ): String = post("/api/objects/$objeto/records", mapOf("attributes" to campos + ("declaracion" to declaracion)), org)["id"].asString()
+
+    private fun registro(
+        objeto: String,
+        id: String,
+        org: String
+    ): JsonNode = tree(send("GET", "/api/objects/$objeto/records/$id", null, HttpStatus.OK, org))["attributes"]
+
+    @Test
+    fun `a piso added in one condomino is added to the others with its fila, each valued with its own percent`() {
+        val org = conCatastro()
+        val a = declarar(org)
+        val b = condomino(a, org)
+
+        val nivel = piso(a, org, 1, 100)
+
+        val fila = filas(a, "niveles", org).single { it["id"].asString() == nivel }["fila"].asString()
+        val copia = filas(b, "niveles", org).single()
+        assertEquals(fila, copia["fila"].asString())
+        assertDec("100", copia["area_construida"])
+        for (d in listOf(a, b)) {
+            declaracion(d, org).let {
+                assertDec("100", it["area_construida"])
+                assertDec("12000", it["valor_autoavaluo"])
+                assertDec("50", it["porcentaje_condominio"])
+                assertDec("6000", it["valor_condominio"])
+            }
+        }
+    }
+
+    @Test
+    fun `a piso changed in any condomino changes in the others, and one removed goes from all`() {
+        val org = conCatastro()
+        val a = declarar(org)
+        val b = condomino(a, org)
+        val nivel = piso(a, org, 1, 100)
+        val suyo = filas(b, "niveles", org).single()["id"].asString()
+
+        put("/api/srtm/niveles/$suyo", NIVEL + mapOf("area_construida" to 80), org)
+
+        assertDec("80", filas(a, "niveles", org).single()["area_construida"])
+        for (d in listOf(a, b)) {
+            declaracion(d, org).let {
+                assertDec("80", it["area_construida"])
+                assertDec("10000", it["valor_autoavaluo"])
+                assertDec("5000", it["valor_condominio"])
+            }
+        }
+
+        send("DELETE", "/api/srtm/niveles/$nivel", null, HttpStatus.NO_CONTENT, org)
+
+        assertTrue(filas(b, "niveles", org).isEmpty())
+        declaracion(b, org).let {
+            assertDec("0", it["area_construida"])
+            assertDec("2000", it["valor_autoavaluo"])
+            assertDec("1000", it["valor_condominio"])
+        }
+    }
+
+    @Test
+    fun `obras and otros frentes are replicated in the condominos too`() {
+        val org = conCatastro()
+        val a = declarar(org, mapOf("frontis_principal" to 10))
+        val b = condomino(a, org)
+
+        val obra = post("/api/srtm/declaraciones/$a/obras", OBRA, org)
+        val frente = post("/api/srtm/declaraciones/$a/frentes", FRENTE, org)
+
+        assertEquals(obra["fila"].asString(), filas(b, "obras", org).single()["fila"].asString())
+        assertEquals(frente["fila"].asString(), filas(b, "frentes", org).single()["fila"].asString())
+        assertDec("14", declaracion(b, org)["longitud_frente"])
+
+        val suyo = filas(b, "frentes", org).single()["id"].asString()
+        put("/api/srtm/frentes/$suyo", FRENTE + mapOf("frontis" to 6), org)
+        assertDec("16", declaracion(a, org)["longitud_frente"])
+
+        send("DELETE", "/api/srtm/obras/${obra["id"].asString()}", null, HttpStatus.NO_CONTENT, org)
+        send("DELETE", "/api/srtm/frentes/$suyo", null, HttpStatus.NO_CONTENT, org)
+        assertTrue(filas(b, "obras", org).isEmpty())
+        assertTrue(filas(a, "frentes", org).isEmpty())
+        assertDec("10", declaracion(a, org)["longitud_frente"])
+    }
+
+    @Test
+    fun `the predio's data changed in one condomino reaches the others, the titular's does not`() {
+        val org = conCatastro()
+        val a = declarar(org)
+        val b = condomino(a, org)
+
+        put(
+            "/api/srtm/declaraciones/$a",
+            fields(declaracion(a, org)) + mapOf("area_terreno" to 300, "numero_habitantes" to 5, "fecha_adquisicion" to "2020-05-04", "deduccion" to 100),
+            org
+        )
+
+        declaracion(b, org).let {
+            assertDec("300", it["area_terreno"])
+            assertEquals(5, it["numero_habitantes"].asInt())
+            assertDec("3000", it["valor_autoavaluo"])
+            assertDec("1500", it["valor_condominio"])
+            assertDec("1500", it["valor_afecto"])
+            assertTrue(it["fecha_adquisicion"] == null || it["fecha_adquisicion"].isNull, it.toString())
+        }
+        declaracion(a, org).let {
+            assertDec("1500", it["valor_condominio"])
+            assertDec("1400", it["valor_afecto"])
+        }
+    }
+
+    @Test
+    fun `a condomino moved to another secuencia leaves its old condominio's predio as it is`() {
+        val org = conCatastro()
+        val a = declarar(org)
+        val b = condomino(a, org)
+
+        put(
+            "/api/srtm/declaraciones/$a",
+            fields(declaracion(a, org)) + mapOf("secuencia_uso" to "2", "area_terreno" to 300, "porcentaje_condominio" to 100),
+            org
+        )
+
+        declaracion(b, org).let {
+            assertDec("200", it["area_terreno"])
+            assertDec("2000", it["valor_autoavaluo"])
+        }
+    }
+
+    @Test
+    fun `an annulled or sustituida condomino gets no replica, the rectificatoria does`() {
+        val org = conCatastro()
+        val a = declarar(org)
+        val b = condomino(a, org, 30)
+        put("/api/srtm/declaraciones/$a", fields(declaracion(a, org)) + ("porcentaje_condominio" to 40), org)
+        val c = condomino(a, org, 30)
+        send("POST", "/api/srtm/declaraciones/$c/anular", mapOf("motivo_anulacion" to "Declarada dos veces"), HttpStatus.OK, org)
+        val r = tree(send("POST", "/api/srtm/declaraciones/$a/rectificar", null, HttpStatus.CREATED, org))["declaracion"]["id"].asString()
+
+        piso(b, org, 1, 100)
+
+        assertEquals(1, filas(r, "niveles", org).size)
+        assertTrue(filas(a, "niveles", org).isEmpty())
+        assertTrue(filas(c, "niveles", org).isEmpty())
+        assertDec("12000", declaracion(r, org)["valor_autoavaluo"])
+        assertDec("2000", declaracion(a, org)["valor_autoavaluo"])
+    }
+
+    @Test
+    fun `a replica marks the valuation de origen of the condomino it reaches`() {
+        val org = conCatastro()
+        val a = declarar(org)
+        val b = condomino(a, org)
+        // b's valuation, as an external padrón brings it
+        send(
+            "PUT",
+            "/api/objects/declaracion_predial/records/$b",
+            mapOf("attributes" to fields(registro("declaracion_predial", b, org)) + ("arancel" to 25)),
+            HttpStatus.OK,
+            org
+        )
+
+        piso(a, org, 1, 100)
+
+        assertEquals(true, registro("declaracion_predial", b, org)["origen_modificado"].asBoolean())
+        assertTrue(registro("declaracion_predial", a, org)["origen_modificado"].let { it == null || it.isNull })
+    }
+
+    @Test
+    fun `an imported row without fila pairs by its natural key, and an ambiguous one is left alone`() {
+        val org = conCatastro()
+        val a = declarar(org)
+        val b = condomino(a, org)
+        val nivel = NIVEL - "numero_piso" - "area_construida"
+        val deA = importada("nivel_construccion", a, nivel + mapOf("numero_piso" to 1, "area_construida" to 100), org)
+        val deB = importada("nivel_construccion", b, nivel + mapOf("numero_piso" to 1, "area_construida" to 100), org)
+        val segundoDeA = importada("nivel_construccion", a, nivel + mapOf("numero_piso" to 2, "area_construida" to 50), org)
+        importada("nivel_construccion", b, nivel + mapOf("numero_piso" to 2, "area_construida" to 50), org)
+        importada("nivel_construccion", b, nivel + mapOf("numero_piso" to 2, "area_construida" to 30), org)
+
+        put("/api/srtm/niveles/$deA", NIVEL + mapOf("numero_piso" to 1, "area_construida" to 90), org)
+
+        val fila = registro("nivel_construccion", deA, org)["fila"].asString()
+        registro("nivel_construccion", deB, org).let {
+            assertEquals(fila, it["fila"].asString())
+            assertDec("90", it["area_construida"])
+        }
+
+        // two pisos 2 in b: which one is not known
+        put("/api/srtm/niveles/$segundoDeA", NIVEL + mapOf("numero_piso" to 2, "area_construida" to 60), org)
+
+        val pisos2 = filas(b, "niveles", org).filter { it["numero_piso"].asInt() == 2 }
+        assertEquals(listOf("50", "30"), pisos2.map { dec(it["area_construida"])!!.stripTrailingZeros().toPlainString() })
+        assertTrue(pisos2.all { it["fila"] == null || it["fila"].isNull }, pisos2.toString())
+        assertDec("170", declaracion(b, org)["area_construida"])
+
+        send("DELETE", "/api/srtm/niveles/$deA", null, HttpStatus.NO_CONTENT, org)
+        assertEquals(listOf(2, 2), filas(b, "niveles", org).map { it["numero_piso"].asInt() })
     }
 
     @Test

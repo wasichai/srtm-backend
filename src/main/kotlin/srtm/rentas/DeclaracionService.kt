@@ -1,5 +1,6 @@
 package srtm.rentas
 
+import org.slf4j.LoggerFactory
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.stereotype.Service
 import srtm.arbitrios.ANULACION_CUOTA_ARBITRIO
@@ -14,7 +15,8 @@ import java.util.UUID
 // the srtm's declaración jurada predial: datos del predio, ubicación (the predio's), transferentes, características
 // (niveles de construcción, obras complementarias), condóminos (the other declarations of the predio) and otros frentes.
 // every write of a declaración, or of its niveles, obras and otros frentes, recomputes what it derives of them and its
-// autoavalúo (recalcular, Derivados.kt), then its condominio (Condominio.kt). reniec: as ContribuyenteService's
+// autoavalúo (recalcular, Derivados.kt), then its condominio (Condominio.kt). what a condómino declares of the predio
+// and those lists is the whole condominio's: it is replicated in the others (#157). reniec: as ContribuyenteService's
 @Service
 class DeclaracionService(
     private val registros: Registros,
@@ -126,7 +128,8 @@ class DeclaracionService(
     // a declaración that moves to another predio, year or secuencia joins that condominio and leaves its own. only a
     // vigente one changes, and its estado is anular's and its sustitución rectificar's. a rectificatoria stays in
     // its place, and one with an external padrón's valuation in its year. what it derives is recalcular's: the
-    // body's areas, longitud de frente and mark are not taken, nor its autoavalúo while there is a catastro
+    // body's areas, longitud de frente and mark are not taken, nor its autoavalúo while there is a catastro. what it
+    // declares of the predio reaches its condóminos (replicarPredio); one that moves takes nothing to either group
     suspend fun actualizar(
         id: UUID,
         body: Declaracion
@@ -160,7 +163,26 @@ class DeclaracionService(
         guardarDerivados(grupo.drop(1), otros)
         if (seUne) recalcularResto(stored)
         marcarOrigenModificado(id)
-        return recalcular(id).despues
+        val recalculo = recalcular(id)
+        if (!seUne) replicarPredio(next, otros)
+        return recalculo.despues
+    }
+
+    // #157: what `origen` declares of the predio (delPredioCambiado), written in each condómino that declares it
+    // otherwise, only those fields, and then marked and recomputed as a write of its own
+    private suspend fun replicarPredio(
+        origen: Declaracion,
+        condominos: List<Declaracion>
+    ) {
+        val manual = autoavaluos.manual()
+        val campos = Records.attributes(origen)
+        for (otro in condominos) {
+            val cambios = delPredioCambiado(origen, otro, manual)
+            if (cambios.isEmpty()) continue
+            val otroId = UUID.fromString(otro.id)
+            registros.replace(DECLARACION, Declaracion::class.java, otroId, campos.filterKeys { it in cambios })
+            escrita(otroId)
+        }
     }
 
     // a frontis principal the body does not send is the stored one: srtm-ui before #156 never sends it, and 0 clears it.
@@ -424,11 +446,15 @@ class DeclaracionService(
 
     suspend fun niveles(id: UUID) = listas.listar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id)
 
-    // a row added or changed by the portal: its fila is the backend's, and its declaración is recomputed
+    // a row added or changed by the portal: its fila is the backend's, and its declaración is recomputed. its
+    // condóminos get the same row (replicar)
     suspend fun agregarNivel(
         id: UUID,
         body: NivelConstruccion
-    ) = nuevoNivel(id, body.copy(fila = null)).also { escrita(id) }
+    ) = nuevoNivel(id, body.copy(fila = null)).also { nivel ->
+        escrita(id)
+        replicar(NIVEL_CONSTRUCCION, id, null) { otra, _ -> nuevoNivel(otra, nivel.copy(id = null, declaracion = null)) }
+    }
 
     // a copy's row keeps the fila it brings; a new one gets its own
     private suspend fun nuevoNivel(
@@ -446,9 +472,15 @@ class DeclaracionService(
         id: UUID,
         body: NivelConstruccion
     ): NivelConstruccion {
-        val (declaracion, fila) = deVigente(NIVEL_CONSTRUCCION, id)
-        val saved = listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id, body.copy(fila = fila))
-        declaracion?.let { escrita(it) }
+        val fila = deVigente(NIVEL_CONSTRUCCION, id)
+        val nivel = body.copy(id = null, declaracion = null, fila = fila.fila)
+        val saved = listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id, nivel)
+        fila.declaracion?.let {
+            escrita(it)
+            replicar(NIVEL_CONSTRUCCION, it, fila) { otra, pareja ->
+                if (pareja == null) nuevoNivel(otra, nivel) else listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, pareja, nivel)
+            }
+        }
         return saved
     }
 
@@ -457,7 +489,10 @@ class DeclaracionService(
     suspend fun agregarObra(
         id: UUID,
         body: ObraComplementaria
-    ) = nuevaObra(id, body.copy(fila = null)).also { escrita(id) }
+    ) = nuevaObra(id, body.copy(fila = null)).also { obra ->
+        escrita(id)
+        replicar(OBRA_COMPLEMENTARIA, id, null) { otra, _ -> nuevaObra(otra, obra.copy(id = null, declaracion = null)) }
+    }
 
     private suspend fun nuevaObra(
         id: UUID,
@@ -474,9 +509,15 @@ class DeclaracionService(
         id: UUID,
         body: ObraComplementaria
     ): ObraComplementaria {
-        val (declaracion, fila) = deVigente(OBRA_COMPLEMENTARIA, id)
-        val saved = listas.cambiar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, id, obra(body).copy(fila = fila))
-        declaracion?.let { escrita(it) }
+        val fila = deVigente(OBRA_COMPLEMENTARIA, id)
+        val obra = obra(body).copy(id = null, declaracion = null, fila = fila.fila)
+        val saved = listas.cambiar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, id, obra)
+        fila.declaracion?.let {
+            escrita(it)
+            replicar(OBRA_COMPLEMENTARIA, it, fila) { otra, pareja ->
+                if (pareja == null) nuevaObra(otra, obra) else listas.cambiar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, pareja, obra)
+            }
+        }
         return saved
     }
 
@@ -485,7 +526,10 @@ class DeclaracionService(
     suspend fun agregarFrente(
         id: UUID,
         body: OtroFrente
-    ) = nuevoFrente(id, body.copy(fila = null)).also { escrita(id) }
+    ) = nuevoFrente(id, body.copy(fila = null)).also { frente ->
+        escrita(id)
+        replicar(OTRO_FRENTE, id, null) { otra, _ -> nuevoFrente(otra, frente.copy(id = null, declaracion = null)) }
+    }
 
     private suspend fun nuevoFrente(
         id: UUID,
@@ -502,21 +546,98 @@ class DeclaracionService(
         id: UUID,
         body: OtroFrente
     ): OtroFrente {
-        val (declaracion, fila) = deVigente(OTRO_FRENTE, id)
-        val saved = listas.cambiar(OTRO_FRENTE, OtroFrente::class.java, PARENT, id, body.copy(fila = fila))
-        declaracion?.let { escrita(it) }
+        val fila = deVigente(OTRO_FRENTE, id)
+        val frente = body.copy(id = null, declaracion = null, fila = fila.fila)
+        val saved = listas.cambiar(OTRO_FRENTE, OtroFrente::class.java, PARENT, id, frente)
+        fila.declaracion?.let {
+            escrita(it)
+            replicar(OTRO_FRENTE, it, fila) { otra, pareja ->
+                if (pareja == null) nuevoFrente(otra, frente) else listas.cambiar(OTRO_FRENTE, OtroFrente::class.java, PARENT, pareja, frente)
+            }
+        }
         return saved
     }
 
-    // a transferente is no part of the valuation. a nivel removed with its own is read before it goes
+    // a transferente is no part of the valuation, nor of the condominio. a nivel removed with its own is read before
+    // it goes. the same row goes from the condóminos (replicar); one of them without it has nothing to remove
     suspend fun borrar(
         objectName: String,
         id: UUID
     ) {
-        val (declaracion, _) = deVigente(objectName, id)
-        val quitado = objectName == NIVEL_CONSTRUCCION && conValor(registros.get(objectName, Map::class.java, id), PADRON_EXTERNO_NIVEL).isNotEmpty()
+        val fila = deVigente(objectName, id)
         listas.borrar(objectName, id)
-        if (objectName in VALUADAS) declaracion?.let { escrita(it, quitado) }
+        if (objectName !in VALUADAS) return
+        val declaracion = fila.declaracion ?: return
+        escrita(declaracion, conValorDeOrigen(objectName, fila.registro))
+        replicar(objectName, declaracion, fila, borra = true) { _, pareja -> pareja?.let { listas.borrar(objectName, it) } }
+    }
+
+    private fun conValorDeOrigen(
+        objectName: String,
+        registro: Map<*, *>
+    ) = objectName == NIVEL_CONSTRUCCION && conValor(registro, PADRON_EXTERNO_NIVEL).isNotEmpty()
+
+    // #157: a row written in `declaracion` is the same row in the other vigente declaraciones of its condominio, so
+    // each one gets the same write: `escribir` makes it there, on its pareja (null: it has none). the group is read
+    // once. a replica goes through nuevo* and Listas, never back here: it is not replicated again. each declaración
+    // written is then marked (marcarOrigenModificado) and recomputed, its condominio with its own %. `fila`: the row
+    // changed or removed (null: one added, a new row everywhere)
+    private suspend fun replicar(
+        objectName: String,
+        declaracion: UUID,
+        fila: Fila?,
+        borra: Boolean = false,
+        escribir: suspend (otra: UUID, pareja: UUID?) -> Unit
+    ) {
+        for (otra in condominos(declaracion)) {
+            val pareja = fila?.let { pareja(objectName, otra, it) }
+            if (pareja is Pareja.Dudosa) {
+                log.warn("{} {}: {} filas de su llave sin fila en la declaración {}, no se replica", objectName, fila.fila, pareja.cuantas, otra)
+                continue
+            }
+            val registro = (pareja as? Pareja.Esta)?.registro
+            if (borra && registro == null) continue
+            escribir(otra, registro?.let { UUID.fromString(it["id"].toString()) })
+            escrita(otra, borra && conValorDeOrigen(objectName, registro.orEmpty()))
+        }
+    }
+
+    // the same row in `otra`: the one with its fila; else, for rows from before #156 that model/migrar_derivados.py
+    // did not reach, the one without a fila of the same natural key (the migration's), while there is only one. two
+    // or more of that key: which one is not known (Dudosa)
+    private suspend fun pareja(
+        objectName: String,
+        otra: UUID,
+        escrita: Fila
+    ): Pareja {
+        val filas = listas.listar(objectName, Map::class.java, PARENT, otra)
+        filas.firstOrNull { it[FILA]?.toString() == escrita.fila }?.let { return Pareja.Esta(it) }
+        val llave = llave(objectName, escrita.registro)
+        val sueltas = filas.filter { it[FILA]?.toString().isNullOrBlank() && llave(objectName, it) == llave }
+        return when (sueltas.size) {
+            0 -> Pareja.Ninguna
+            1 -> Pareja.Esta(sueltas.single())
+            else -> Pareja.Dudosa(sueltas.size)
+        }
+    }
+
+    // a row's natural key (model/migrar_derivados.py's LLAVES), trimmed and in capitals
+    private fun llave(
+        objectName: String,
+        registro: Map<*, *>
+    ) = LLAVES.getValue(objectName).map { campo ->
+        registro[campo]
+            ?.toString()
+            ?.trim()
+            ?.uppercase()
+            .orEmpty()
+    }
+
+    // the other vigente declaraciones of `id`'s condominio. a rectificatoria not yet in its place leaves out the one
+    // it replaces (recalcular's rule)
+    private suspend fun condominos(id: UUID): List<UUID> {
+        val d = registros.get(DECLARACION, Declaracion::class.java, id)
+        return titulares(d).filter { it.id != d.id && it.id != d.sustituye }.map { UUID.fromString(it.id) }
     }
 
     // a row of the valuation written by the portal: the external padrón's valuation is marked, the declaración
@@ -662,16 +783,36 @@ class DeclaracionService(
         return id
     }
 
-    // and a row of it changed or removed: its declaración, and the row's fila (one from before #156 takes its own)
+    // and a row of it changed or removed: its declaración, the row's fila (one from before #156 takes its own) and
+    // the row as stored
     private suspend fun deVigente(
         objectName: String,
         id: UUID
-    ): Pair<UUID?, String> {
+    ): Fila {
         val row = registros.get(objectName, Map::class.java, id)
         val fila = row[FILA]?.toString()?.ifBlank { null } ?: UUID.randomUUID().toString()
-        val declaracion = row[PARENT]?.toString()?.let(UUID::fromString) ?: return null to fila
+        val declaracion = row[PARENT]?.toString()?.let(UUID::fromString) ?: return Fila(null, fila, row)
         modificable(registros.get(DECLARACION, Declaracion::class.java, declaracion))
-        return declaracion to fila
+        return Fila(declaracion, fila, row)
+    }
+
+    private data class Fila(
+        val declaracion: UUID?,
+        val fila: String,
+        val registro: Map<*, *>
+    )
+
+    // a written row's pareja in a condómino's declaración (pareja)
+    private sealed interface Pareja {
+        data class Esta(
+            val registro: Map<*, *>
+        ) : Pareja
+
+        data object Ninguna : Pareja
+
+        data class Dudosa(
+            val cuantas: Int
+        ) : Pareja
     }
 
     private fun obra(body: ObraComplementaria) = body.copy(estado = body.estado ?: Listas.ACTIVO, totalMetrado = totalMetrado(body))
@@ -684,5 +825,15 @@ class DeclaracionService(
 
         // the lists a write of which marks an external padrón's valuation as modified (marcarOrigenModificado)
         val VALUADAS = listOf(NIVEL_CONSTRUCCION, OBRA_COMPLEMENTARIA, OTRO_FRENTE)
+
+        // their natural key, to pair a row without fila (model/migrar_derivados.py's LLAVES)
+        val LLAVES =
+            mapOf(
+                NIVEL_CONSTRUCCION to listOf("tipo_nivel", "numero_piso"),
+                OBRA_COMPLEMENTARIA to listOf("tipo_obra", "numero_piso", "categoria"),
+                OTRO_FRENTE to listOf("via", "numero")
+            )
+
+        val log = LoggerFactory.getLogger(DeclaracionService::class.java)
     }
 }

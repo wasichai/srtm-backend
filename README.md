@@ -1863,7 +1863,21 @@ frentes (`DeclaracionService.recalcular`, `Derivados.kt`):
   - **Sin catastro configurado** (el 409 del sugerido), el autoavalúo es manual: lo escribe el usuario, como antes, y
     no se marca nada.
 - **Condominio:** luego se recalculan condición, %, `valor_condominio` y `valor_afecto` de la DJ y de los otros titulares
-  del grupo, como en la edición. Solo se escriben los campos que cambiaron. Las réplicas de filas al grupo son #157.
+  del grupo, como en la edición. Solo se escriben los campos que cambiaron.
+- **Réplica a los condóminos (#157):** lo que se declara del predio es de todo el condominio (las otras DJ vigentes del
+  mismo predio, año y secuencia; no las anuladas ni las sustituidas).
+  - **Filas:** el alta, el cambio y la baja de un nivel, una obra o un otro frente se repiten en la fila con la misma
+    `fila` de cada condómino. Si no la tiene, el cambio la crea y la baja no hace nada.
+  - **Filas sin `fila`** (no las alcanzó `migrar_derivados.py`): se empareja con la única fila sin `fila` de la misma
+    llave natural (la de la migración), que toma la `fila`. Si hay dos o más, esa DJ no se toca y queda un `WARN` en el
+    log.
+  - **Edición de la DJ:** los campos del predio que copia `delPredio` se escriben en los demás, solo si difieren. Son
+    uso, clase, subclase, clasificación, estado, áreas de terreno, frontis principal, habitantes e inhabitabilidad, y
+    el autoavalúo solo si es manual. No se copian los derivados ni los del titular (adquisición, documentos, deducción,
+    condición especial, %). Una DJ que cambia de predio, año o secuencia no lleva nada a ningún grupo.
+  - Cada DJ que recibe una réplica se marca `origen_modificado` si trae la valuación de un padrón externo. Luego se
+    recalcula con su propio %.
+  - Las réplicas no se vuelven a replicar. La rectificatoria y la DJ desde la anterior copian sus filas sin replicarlas.
 - **Una sola vez:** la rectificatoria, la DJ desde la anterior y el condómino nuevo copian todas sus filas y recalculan
   al final (una sola valuación).
 - **Lo que manda el portal:** en el alta y en la edición se ignoran `area_construida`, `area_comun_construida`,

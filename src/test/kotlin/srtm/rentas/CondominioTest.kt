@@ -154,6 +154,37 @@ class CondominioTest {
         assertEquals("RESOLUCION", nuevo.inhabitableTipoDocumento)
     }
 
+    @Test
+    fun `a condomino takes what another declares of the predio, not of its titular nor what is derived`() {
+        val origen =
+            titular("A", porcentaje = "60", deduccion = "1000").copy(
+                uso = "COMERCIAL",
+                areaTerreno = BigDecimal("300"),
+                numeroHabitantes = 5,
+                inhabitableFechaInicio = LocalDate.of(2026, 3, 1),
+                frontisPrincipal = BigDecimal("10"),
+                areaConstruida = BigDecimal("150"),
+                longitudFrente = BigDecimal("14"),
+                tipoAdquisicion = "COMPRA",
+                fechaAdquisicion = LocalDate.of(2020, 5, 4),
+                condicionEspecial = "PENSIONISTA"
+            )
+        val otro =
+            titular(
+                "B",
+                autoavaluo = "1",
+                porcentaje = "40"
+            ).copy(uso = "COMERCIAL", areaTerreno = BigDecimal("200.00"), frontisPrincipal = BigDecimal("10.00"))
+
+        val cambios = delPredioCambiado(origen, otro, autoavaluoManual = false)
+
+        assertEquals(mapOf("area_terreno" to BigDecimal("300"), "numero_habitantes" to 5, "inhabitable_fecha_inicio" to LocalDate.of(2026, 3, 1)), cambios)
+        // the same, whatever its scale
+        assertEquals(emptyMap<String, Any?>(), delPredioCambiado(otro.copy(areaTerreno = BigDecimal("200")), otro, autoavaluoManual = false))
+        // the user's autoavalúo is the predio's
+        assertEquals(BigDecimal("10000.50"), delPredioCambiado(origen, otro, autoavaluoManual = true)["valor_autoavaluo"])
+    }
+
     private fun titular(
         contribuyente: String,
         autoavaluo: String? = "10000.50",
