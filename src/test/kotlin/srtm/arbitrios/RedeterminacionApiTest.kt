@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import tools.jackson.databind.JsonNode
+import java.io.File
 
 // #158: a write of a declaración that changes what its predio's arbitrios are charged on redetermines the whole year:
 // the months that come out different are annulled and written again as the next version, the others are not touched.
@@ -164,6 +165,24 @@ class RedeterminacionApiTest : ConArbitriosApiTest() {
         assertEquals(12, hecha["anuladas"].asInt())
         assertEquals(12 * 1020.0 + 12 * 4.25, matriz(e)["total"].asDouble())
         assertEquals(0, tree(send("POST", redeterminacion, pedido(e.anio), HttpStatus.OK))["redeterminadas"].asInt())
+    }
+
+    // the demo's REGISTRADOR (docs/manuales/demo/perfiles.json, read as it is): its edits of a DJ redetermine the year
+    @Test
+    fun `the registrador of the demo profiles redetermines when it edits a declaración`() {
+        val e = Escenario()
+        val dj = porArea(e)
+        val perfil = tree(File("docs/manuales/demo/perfiles.json").readText())["perfiles"].single { it["rol"].asString() == "REGISTRADOR" }
+        val permisos = perfil["permisos"].properties().flatMap { (objeto, acciones) -> lista(acciones) { permiso(objeto, it.asString()) } }
+        val registrador = funcionario(permisos)
+
+        val (_, aviso) =
+            escribir("POST", "/api/srtm/declaraciones/$dj/niveles", NIVEL + mapOf("numero_piso" to 2, "area_construida" to 20), HttpStatus.CREATED, registrador)
+
+        assertTrue(aviso!!["error"].isNull, aviso.toString())
+        assertEquals(12, aviso["redeterminadas"].asInt(), aviso.toString())
+        assertEquals(12, aviso["anuladas"].asInt())
+        assertEquals(12 * 1020.0 + 12 * 4.25, matriz(e)["total"].asDouble())
     }
 
     @Test

@@ -979,10 +979,11 @@ La *Longitud de frente* y el *Área construida* (los niveles) son obligatorios c
 cobra según el frente o el área construida (en la demostración de 2026, ambos). Los arbitrios se explican en el {m-arbitrios}.
 
 NOTE: Si el predio ya tiene arbitrios determinados en el año, corregir lo que leen (los niveles, el frontis, los otros
-frentes, el uso, los habitantes, el titular o su %) o anular la declaración hace que el sistema los redetermine:
-anula los meses que cambian y los escribe de nuevo. Eso exige permiso para escribir cuotas, que el perfil
-{p-registrador} no tiene. Su declaración se graba igual, y el aviso dice que los arbitrios no se redeterminaron:
-avise al área de arbitrios ({m-arbitrios}).
+frentes, el uso, los habitantes, el titular o su %) o anular la declaración hace que el sistema los redetermine al
+grabar: anula los meses que cambian y los escribe de nuevo. El perfil {p-registrador} tiene el permiso para eso, así
+que no hay nada más que hacer. Si el aviso dice que los arbitrios no se redeterminaron, es que falta un dato de la
+declaración (por ejemplo, el área construida): corríjalo y, al grabar, se redetermina. Si el aviso nombra un permiso,
+el rol de su cuenta no es el sugerido: avise al administrador o al área de arbitrios ({m-arbitrios}).
 
 [[autoavaluo-sugerido]]
 ===== El autoavalúo sugerido
