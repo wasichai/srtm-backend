@@ -125,6 +125,11 @@ def lecturas(i):
 # escrituras que el perfil sí puede: con un cuerpo que pasa el permiso y que las reglas rechazan después (un año sin
 # ordenanza, un acto repetido), así se prueba el permiso sin escribir nada
 PERMITIDAS = {
+    # #158: crea cuotas y anulaciones para que sus cambios de la DJ redeterminen el año; un año sin cuotas no escribe nada
+    "REGISTRADOR": [
+        ("POST", "/api/srtm/predios/{p1}/arbitrios/redeterminacion", {"anio": 2027, "observacion": "Verificación de permisos"}, (200,)),
+        ("POST", "/api/srtm/arbitrios/cuotas/{cuota_anulada}/anulacion", {"motivo": "Verificación", "observacion": "Verificación de permisos"}, (409,)),
+    ],
     "ARBITRIOS_EMISION": [
         ("POST", "/api/srtm/arbitrios/determinaciones", {"anio": 2027, "observacion": "Verificación de permisos"}, (422,)),
         ("POST", "/api/srtm/emisiones", {"anio": 2027, "formato": "PDF", "documentos": ["HR", "PU", "HLA"]}, (422,)),
@@ -140,7 +145,7 @@ PERMITIDAS = {
 }  # fmt: skip
 
 PROHIBIDOS = {
-    "REGISTRADOR": ["determinacion", "determinar_predio", "anular_cuota", "emision", "acta", "notificacion", "anuncio", "cese", "brecha"],
+    "REGISTRADOR": ["determinacion", "emision", "acta", "notificacion", "anuncio", "cese", "brecha"],
     "ARBITRIOS_EMISION": ["contribuyente", "predio", "nivel", "lote", "acta", "notificacion", "anuncio", "brecha"],
     "FISCALIZADOR": ["contribuyente", "predio", "determinacion", "emision", "anuncio", "cese", "brecha"],
     "ANUNCIOS": ["contribuyente", "predio", "determinacion", "emision", "acta", "notificacion", "brecha"],

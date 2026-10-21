@@ -593,7 +593,7 @@ pagados, coordine con la caja la devolución o la compensación de la diferencia
 Casos especiales::
 * *La declaración se graba, pero el aviso dice que no se pudieron redeterminar los arbitrios: …*: falta un dato (por
   ejemplo, el área construida de un servicio que cobra por m²) o el rol de quien grabó no puede escribir cuotas (el
-  perfil {p-registrador} no puede). Las cuotas quedan como estaban. Si falta un dato, corríjalo en la declaración:
+  perfil {p-registrador} sugerido sí puede: redetermina solo). Las cuotas quedan como estaban. Si falta un dato, corríjalo en la declaración:
   al grabarla, se redetermina.
 * *Redeterminar a mano.* Si la redeterminación no se hizo por permisos, o cambió la ordenanza del año, el perfil
   {p-arbitrios} puede redeterminar el predio. El portal todavía no tiene el botón: se pide al área de sistemas, con

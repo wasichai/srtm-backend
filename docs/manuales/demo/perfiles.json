@@ -6,7 +6,7 @@
       "etiqueta": "Registrador del padrón",
       "email": "registrador@demo.srtm.local",
       "displayName": "Registradora Demo",
-      "_para": "Registro tributario: contribuyentes y sus listas, predios, declaraciones juradas y sus listas, catastro fiscal; la ficha completa (con sus pestañas de arbitrios, infracciones y anuncios, solo lectura), el PU, la HR, la HLA y la liquidación.",
+      "_para": "Registro tributario: contribuyentes y sus listas, predios, declaraciones juradas y sus listas, catastro fiscal; la ficha completa (con sus pestañas de arbitrios, infracciones y anuncios, solo lectura), el PU, la HR, la HLA y la liquidación. Crea cuotas y anulaciones de arbitrios para que cada cambio de la DJ redetermine el año del predio (#158).",
       "permisos": {
         "contribuyente": [
           "CREATE",
@@ -117,9 +117,11 @@
           "READ"
         ],
         "cuota_arbitrio": [
+          "CREATE",
           "READ"
         ],
         "anulacion_cuota_arbitrio": [
+          "CREATE",
           "READ"
         ],
         "codigo_infraccion": [

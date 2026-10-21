@@ -67,7 +67,7 @@ Estos permisos están escritos en el código y se comprueban antes de cualquier 
 `POST /api/srtm/predios/{id}/arbitrios/redeterminacion`
 |`CREATE` sobre `cuota_arbitrio` y `anulacion_cuota_arbitrio`. La redeterminación que sigue a una escritura de la DJ
 pide lo mismo, pero sin ellos no hay 403: la DJ se graba y el encabezado `Srtm-Arbitrios` dice por qué no se
-redeterminó.
+redeterminó. Por eso el perfil `{p-registrador}` sugerido los tiene (<<ref-permisos-perfiles>>).
 
 |Agregar o derogar una versión del CUIS +
 `POST /api/srtm/infracciones/cuis`, `…/cuis/derogacion`
@@ -181,7 +181,9 @@ cuenta cada uno, que sirven de punto de partida para los roles reales. *La lista
 (arbitrios, infracciones y anuncios en solo lectura), el PU, la HR, la HLA y la liquidación.
 |CRUD completo sobre `contribuyente`, `domicilio`, `relacionado`, `medio_contacto`, `sustento`, `predio`,
 `declaracion_predial`, `transferente`, `nivel_construccion`, `obra_complementaria`, `otro_frente` y
-`catastro_fiscal`.
+`catastro_fiscal`; `CREATE` sobre `cuota_arbitrio` y `anulacion_cuota_arbitrio`, para que cada cambio de la DJ
+redetermine los arbitrios del año del predio solo. Con ellos también pasa la comprobación de determinar un predio o
+un contribuyente y de anular una cuota (tabla de arriba): es tarea del área de arbitrios, no del registro.
 
 |`{p-arbitrios}`
 |Determinación de arbitrios (por predio, por contribuyente y masiva), anulación de cuotas, HLA y emisión masiva
