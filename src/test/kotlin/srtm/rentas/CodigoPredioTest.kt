@@ -7,6 +7,7 @@ import org.junit.jupiter.api.assertThrows
 import org.mockito.Mockito
 import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.ReactiveTransactionManager
+import srtm.arbitrios.ArbitriosService
 import wasichai.core.common.ValidationException
 import wasichai.core.data.RecordService
 import wasichai.core.metadata.MetadataService
@@ -21,7 +22,8 @@ class CodigoPredioTest {
             registros,
             Listas(registros),
             ContribuyenteService(registros, Listas(registros), Mockito.mock(ReactiveTransactionManager::class.java)),
-            Mockito.mock(AutoavaluoSugeridoService::class.java)
+            Mockito.mock(AutoavaluoSugeridoService::class.java),
+            Mockito.mock(ArbitriosService::class.java)
         )
 
     private fun registrar(predio: Predio) = runBlocking { service.registrarPredio(predio.copy(direccion = "S/N")) }

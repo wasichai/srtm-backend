@@ -280,6 +280,21 @@ valuación del padrón externo); esta queda SUSTITUIDA, de solo lectura. Devuelv
 |200; 201; 204.
 |===
 
+[[ref-api-redeterminacion]]
+Una escritura de la DJ o de sus listas que cambia lo que leen los arbitrios redetermina el año de su predio, si ya
+tiene cuotas. Cambian lo que leen: el alta, la anulación, la rectificación o la baja; el uso, el área construida, la
+longitud de frente, los habitantes, el titular o el %, y las fechas.
+
+* *Encabezado `Srtm-Arbitrios`.* La respuesta lo trae con lo que se hizo: `{"redeterminadas":N,"anuladas":N,"error":…}`,
+  en JSON con los caracteres no ASCII escapados. Viene en cualquier respuesta: la DJ, su ficha, la fila de una lista o
+  un 204.
+* *Sin encabezado:* no hubo redeterminación, porque nada de eso cambió o el predio no tiene cuotas del año.
+* *Con `error`:* la redeterminación no se pudo hacer (le falta un dato, o el usuario no tiene permiso de creación
+  sobre `cuota_arbitrio` y `anulacion_cuota_arbitrio`). La escritura de la DJ se hace igual y las cuotas quedan como
+  estaban. Se hace después con `POST /predios/{id}/arbitrios/redeterminacion` (<<ref-api-arbitrios>>).
+* *Como quién.* La redeterminación se hace como el usuario que escribe la DJ, con sus permisos, igual que toda
+  escritura de {sigla}.
+
 [[ref-api-impuesto]]
 === Impuesto predial y documentos prediales
 
@@ -379,6 +394,12 @@ Base: `/api/srtm`. Controladores `ArbitriosController`, `HlaController` y `Deter
 `{motivo, observacion}`
 |Anula una cuota (se agrega una `anulacion_cuota_arbitrio`).
 |201; 400; 403; 409 ya anulada.
+
+|`POST /predios/{id}/arbitrios/redeterminacion` +
+`{anio, observacion}`
+|Calcula de nuevo el año entero del predio y, en una transacción, anula y escribe como versión siguiente los meses
+que cambian (motivo `REDETERMINACION`). No hace nada sin cuotas vigentes del año.
+|200 `{redeterminadas, anuladas, error: null}`; 400; 403; 422 con `faltan`.
 
 |`GET /contribuyentes/{id}/hla?anio`
 |HLA en PDF, inline.

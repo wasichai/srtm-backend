@@ -66,6 +66,14 @@ class ArbitriosController(
         @RequestBody pedido: PedidoAnulacion
     ) = arbitrios.anular(id, pedido)
 
+    // #158: the year of the predio computed again, the months that come out different annulled and written again:
+    // 200 with how many
+    @PostMapping("/predios/{id}/arbitrios/redeterminacion")
+    suspend fun redeterminar(
+        @PathVariable id: UUID,
+        @RequestBody pedido: PedidoDeterminacion
+    ) = arbitrios.redeterminar(id, pedido)
+
     // 201 with what it wrote; 200 with nothing when nothing was pending
     @PostMapping("/predios/{id}/arbitrios")
     suspend fun determinarPredio(
