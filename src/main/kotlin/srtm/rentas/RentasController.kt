@@ -305,6 +305,12 @@ class RentasController(
         @RequestBody(required = false) body: Rectificacion?
     ) = declaraciones.rectificar(id, body ?: Rectificacion())
 
+    // #156: the declaración valued again (catastro) and its derived values recomputed, without a change: its record
+    @PostMapping("/declaraciones/{id}/recalcular")
+    suspend fun recalcular(
+        @PathVariable id: UUID
+    ) = declaraciones.recalcularDeclaracion(id)
+
     // "datos de los condóminos": another titular of the declaración's predio, year and secuencia
     @PostMapping("/declaraciones/{id}/condominos")
     @ResponseStatus(HttpStatus.CREATED)

@@ -68,17 +68,26 @@ class BrechaApiTest : SrtmApiTest() {
             org
         )["id"].asString()
 
+    // the declared autoavalúo as an imported declaración has it: in an organization with its catastro the portal's
+    // writes value it there (#156), and this stub values no declaración
     private fun declarar(
         org: String,
         contribuyente: String,
         predio: String,
         autoavaluo: String,
         anio: Int = 2026
-    ) = post(
-        "/api/srtm/declaraciones",
-        mapOf("contribuyente" to contribuyente, "predio" to predio, "anio" to anio, "secuencia_uso" to "1", "valor_autoavaluo" to BigDecimal(autoavaluo)),
-        org
-    )
+    ): JsonNode {
+        val id =
+            post(
+                "/api/srtm/declaraciones",
+                mapOf("contribuyente" to contribuyente, "predio" to predio, "anio" to anio, "secuencia_uso" to "1"),
+                org
+            )["id"].asString()
+        val guardada = tree(send("GET", "/api/objects/declaracion_predial/records/$id", null, HttpStatus.OK, org))["attributes"]
+        val valores =
+            mapOf("valor_autoavaluo" to BigDecimal(autoavaluo), "valor_condominio" to BigDecimal(autoavaluo), "valor_afecto" to BigDecimal(autoavaluo))
+        return tree(send("PUT", "/api/objects/declaracion_predial/records/$id", mapOf("attributes" to fields(guardada) + valores), HttpStatus.OK, org))
+    }
 
     private fun contribuyente(org: String) = post("/api/srtm/contribuyentes", personaNatural(uniqueDocumento()), org)["id"].asString()
 
@@ -307,10 +316,10 @@ class BrechaApiTest : SrtmApiTest() {
         assertEquals(setOf("P-$sufijo"), filasPerene.mapNotNull { it["codigoCatastro"]?.asString() }.toSet())
         assertEquals(setOf("I-$sufijo", "I2-$sufijo"), filasIca.mapNotNull { it["codigoCatastro"]?.asString() }.toSet())
         assertEquals(BigDecimal("3500.00"), dec(deIca["catastro"]))
-        // each catastro saw its own service account only (its token is checked by the stub: another's is a 401). the
-        // first organization's token may be cached since an earlier test; the other's is asked once
+        // each catastro saw its own service account only (its token is checked by the stub: another's is a 401). either
+        // token may be cached since an earlier request: the declaración's write already asks its catastro (#156)
         assertTrue(CUENTAS.all { it == "srtm-perene" }, "$CUENTAS")
-        assertEquals(listOf("srtm-ica"), CUENTAS_ICA.toList())
+        assertTrue(CUENTAS_ICA.all { it == "srtm-ica" }, "$CUENTAS_ICA")
     }
 
     @Test

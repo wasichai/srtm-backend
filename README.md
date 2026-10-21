@@ -1473,6 +1473,30 @@ python3 apply.py                          # 3. quita los grupos y ESTACIONAMIENT
 - Flags: `--dry-run`, `--report`, `--workers` (PUTs en paralelo, default 4), `--core`, `--email`, `--password`.
   Salida: `0` ok, `1` Core rechazó algo (se muestra el número de la declaración, o su id si no tiene).
 
+## Migrar a los valores derivados
+
+Antes de #156, `longitud_frente` era lo que se escribía del frente principal y las filas de las listas no tenían `fila`.
+En una base con DJ, después de `apply.py`:
+
+```bash
+cd model
+python3 migrar_derivados.py --dry-run   # lee Core y cuenta lo que haría, sin cambiar nada
+python3 migrar_derivados.py
+```
+
+- **Frontis:** donde `frontis_principal` está vacío, copia `longitud_frente`.
+- **`fila`:** a cada nivel, obra y otro frente sin `fila` le asigna una. En un grupo de condóminos (mismo predio, año y
+  secuencia de uso, DJ vigentes) empareja las filas por su llave natural: el nivel por tipo y piso, la obra por tipo,
+  piso y categoría, y el frente por vía y número. La n-ésima fila de una llave en una DJ va con la n-ésima de las demás,
+  y todas llevan el mismo uuid. Una fila sin pareja recibe uno propio. Si una fila del conjunto ya tiene `fila`, las
+  demás toman esa.
+- **No recalcula** áreas ni autoavalúos: las DJ importadas conservan sus valores hasta su primer cambio en el portal.
+- La salida dice cuántas DJ tienen frontis por copiar y, por lista, cuántas filas sin `fila` hay, cuántas se emparejan
+  y cuántas quedan sueltas. Actualiza cada registro con todos sus campos. **Idempotente:** una segunda corrida no
+  cambia nada.
+- Flags: `--dry-run`, `--workers` (PUTs en paralelo, default 4), `--core`, `--email`, `--password`. Salida: `0` ok,
+  `1` Core rechazó algo.
+
 ## Tipos de unidad urbana
 
 La lista de *tipo de unidad urbana* del SRTM (pág. 5) es el dominio `TIPO_UU` del catastro fiscal del MEF: 43 tipos,
@@ -1790,7 +1814,8 @@ GET /api/srtm/declaraciones/{id}/valuacion-origen
 `GET /api/srtm/declaraciones/{id}/autoavaluo-sugerido` (#149) arma los insumos del motor de valuación con la DJ, su
 predio, sus niveles y sus obras activos (`AutoavaluoSugerido.kt`), y los manda a `POST /api/catastro/valuacion` del
 catastro-backend de la organización, con la misma cuenta de servicio que la brecha (`ClienteCatastro.valuar`). Devuelve
-la respuesta del catastro en snake_case y no guarda nada: `valor_autoavaluo` lo sigue escribiendo el usuario.
+la respuesta del catastro en snake_case y no guarda nada. Es el mismo motor con el que cada escritura de la DJ calcula
+su `valor_autoavaluo` ([Valores derivados de la DJ](#valores-derivados-de-la-dj)): aquí se ve cómo se llegó al valor.
 
 ```
 { "anio": 2026, "version": "valuacion-v2", "region": "SELVA", "codigo_municipal": "01-01-0006", "arancel_m2": 45.5,
@@ -1819,6 +1844,41 @@ la respuesta del catastro en snake_case y no guarda nada: `valor_autoavaluo` lo 
   qué (`ARANCEL_FALTANTE`, `PARAMETRO_FALTANTE:PORCENTAJE_ACTUALIZACION:2027`…).
 - 404 si la DJ no existe o es de otra organización, 409 `SIN_CATASTRO_CONFIGURADO` si la organización no tiene catastro
   y 502 si el catastro no responde o rechaza el pedido.
+
+### Valores derivados de la DJ
+
+Desde #156 el backend calcula lo que la DJ deriva de sus listas. Lo hace después de cada escritura de la DJ (alta, edición,
+rectificatoria, DJ desde la anterior, condómino nuevo) y de cada alta, cambio o baja de sus niveles, obras y otros
+frentes (`DeclaracionService.recalcular`, `Derivados.kt`):
+
+- **Áreas:** `area_construida` es la suma del área construida de los niveles activos y `area_comun_construida` la de su
+  área común, al céntimo. Sin niveles, `0`.
+- **Frente:** `frontis_principal` es lo que se escribe del frente principal; `longitud_frente` es ese frontis más el de
+  los otros frentes activos (la base `FRONTIS_ML` de los arbitrios). Sin ningún frontis, `null`.
+- **Autoavalúo:** lo valúa el catastro de la organización, con el motor del [autoavalúo sugerido](#autoavalúo-sugerido).
+  - Si da valor, `valor_autoavaluo` es ese valor y se limpian `autoavaluo_por_revisar` y `autoavaluo_motivo`.
+  - Si no da valor, se conserva el autoavalúo anterior y se marca `autoavaluo_por_revisar = true`. `autoavaluo_motivo`
+    dice por qué: el `motivo` del catastro (o su `llave`), o `El catastro no respondió: …` si respondió con error. La
+    escritura no se rechaza.
+  - **Sin catastro configurado** (el 409 del sugerido), el autoavalúo es manual: lo escribe el usuario, como antes, y
+    no se marca nada.
+- **Condominio:** luego se recalculan condición, %, `valor_condominio` y `valor_afecto` de la DJ y de los otros titulares
+  del grupo, como en la edición. Solo se escriben los campos que cambiaron. Las réplicas de filas al grupo son #157.
+- **Una sola vez:** la rectificatoria, la DJ desde la anterior y el condómino nuevo copian todas sus filas y recalculan
+  al final (una sola valuación).
+- **Lo que manda el portal:** en el alta y en la edición se ignoran `area_construida`, `area_comun_construida`,
+  `longitud_frente`, `autoavaluo_por_revisar` y `autoavaluo_motivo`, y también `valor_autoavaluo` mientras haya
+  catastro. Un cliente anterior a #156 que manda `longitud_frente` sin `frontis_principal` en el alta declara con él el
+  frontis principal. En la edición, un `frontis_principal` que no llega conserva el guardado (se borra mandando `0`) y,
+  si la DJ no tiene ninguno (no la alcanzó `migrar_derivados.py`), se toma el `longitud_frente` que llega.
+- **¿Editable?:** la ficha (`GET /api/srtm/declaraciones/{id}`) trae `autoavaluo_manual`: `true` si la organización no
+  tiene catastro y el usuario escribe el autoavalúo.
+- **Recalcular:** `POST /api/srtm/declaraciones/{id}/recalcular` vuelve a valuar una DJ vigente sin cambiarla (el
+  catastro ya responde, o ya tiene el parámetro que faltaba) y devuelve la DJ.
+- **`fila`:** cada nivel, obra y otro frente tiene una `fila` (uuid), la misma para la misma fila en las DJ de los
+  condóminos. La pone el backend: se ignora la que manda el cliente; las copias conservan la de su origen.
+- Las DJ importadas conservan sus valores hasta su primer cambio en el portal. Antes, en una base con DJ, se corre
+  [`migrar_derivados.py`](#migrar-a-los-valores-derivados).
 
 **`contribuyente`**: una persona natural, persona jurídica o sucesión. `numero_documento` es único.
 
@@ -1913,7 +1973,8 @@ Se descarta `orden2`, que es solo el número de fila.
 | GET | `/api/srtm/predios/{id}/declaraciones?anio` | sus declaraciones, cada una con su contribuyente |
 | POST | `/api/srtm/declaraciones` | alta corta, desde la ficha del predio (`contribuyente` y `predio` son ids) |
 | POST | `/api/srtm/contribuyentes/{id}/declaraciones-juradas` | presenta una DJ: `{declaracion, predio_id}` sobre un predio del padrón, o `{declaracion, predio}` registrando uno; con `desde` (una DJ de otro año del mismo predio y contribuyente) la copia, con sus listas, al año del cuerpo |
-| GET, PUT, DELETE | `/api/srtm/declaraciones/{id}` | la DJ con su predio y su contribuyente; la edición; y la baja (409 si alguna de sus listas tiene filas) |
+| GET, PUT, DELETE | `/api/srtm/declaraciones/{id}` | la DJ con su predio, su contribuyente y `autoavaluo_manual`; la edición (recalcula sus valores derivados, [abajo](#valores-derivados-de-la-dj)); y la baja (409 si alguna de sus listas tiene filas) |
+| POST | `/api/srtm/declaraciones/{id}/recalcular` | vuelve a valuar la DJ y a calcular sus valores derivados sin cambiarla; devuelve la DJ |
 | GET | `/api/srtm/declaraciones/{id}/valuacion-origen` | solo lectura: lo que trajo un padrón externo (Ica) a la DJ, su predio y sus niveles, solo los campos con valor ([abajo](#valuación-del-padrón-de-origen)) |
 | GET | `/api/srtm/declaraciones/{id}/autoavaluo-sugerido` | solo lectura: la DJ valuada por el motor del catastro-backend de la organización, con su detalle; no guarda nada ([abajo](#autoavalúo-sugerido)) |
 | POST | `/api/srtm/declaraciones/{id}/anular` | el descargo: `{motivo_anulacion}` la deja ANULADA |

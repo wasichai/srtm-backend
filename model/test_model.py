@@ -18,6 +18,15 @@ OPCIONALES = {
     "movimiento_parametro", "brecha_predio_predio",
 }
 
+# #156: the fields each object gained for the derivados of the declaración, in order (field -> type)
+DERIVADOS = {
+    "declaracion_predial": {"frontis_principal": "DECIMAL", "area_comun_construida": "DECIMAL",
+                            "autoavaluo_por_revisar": "BOOLEAN", "autoavaluo_motivo": "TEXT"},
+    "nivel_construccion": {"fila": "UUID"},
+    "obra_complementaria": {"fila": "UUID"},
+    "otro_frente": {"fila": "UUID"},
+}
+
 # object -> (its fields in order, the required ones, the unique ones)
 OBJETOS = {
     "codigo_infraccion": (
@@ -154,8 +163,23 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(fields["fecha_sustitucion"]["type"], "DATE")
         self.assertIn("RECTIFICACION", self.model["enums"]["motivo_declaracion"])
         self.assertFalse(any(fields[f].get("required") for f in ("sustituye", "fecha_sustitucion")))
-        # at the end: apply.py adds them after the rest on a Core that has it
-        self.assertEqual([f["name"] for f in declaracion["fields"]][-2:], ["sustituye", "fecha_sustitucion"])
+        # at the end: apply.py adds them after the rest on a Core that has it. only the derivados (#156) come after
+        nombres = [f["name"] for f in declaracion["fields"] if f["name"] not in DERIVADOS["declaracion_predial"]]
+        self.assertEqual(nombres[-2:], ["sustituye", "fecha_sustitucion"])
+
+    def test_the_derivados_fields_are_optional_and_at_the_end(self):
+        # #156: what the backend derives of the declaración's lists, and the fila that pairs a row across condóminos.
+        # at the end of each object, after everything else, and optional: the imported records have none of them
+        for objeto, campos in DERIVADOS.items():
+            with self.subTest(objeto=objeto):
+                ultimos = list(self.campos(objeto).values())[-len(campos):]
+                self.assertEqual([(f["name"], f["type"]) for f in ultimos], list(campos.items()))
+                self.assertFalse(any(f.get("required") or f.get("unique") for f in ultimos))
+                self.assertTrue(all(f.get("label") and f.get("description") for f in ultimos))
+        declaracion = self.campos("declaracion_predial")
+        # the ones the portal no longer takes from the user say so
+        for campo in ("area_construida", "longitud_frente", "valor_autoavaluo"):
+            self.assertIn("Derivado", declaracion[campo].get("description", ""), campo)
 
     def test_the_padron_externo_fields_are_optional(self):
         # #124: what the padrón of Ica brings and the predial model had no place for. at the end of each object (the
@@ -171,8 +195,9 @@ class ShippedModelTests(unittest.TestCase):
             "via": [("codigo", "TEXT")],
             "unidad_urbana": [("codigo", "TEXT")],
         }
-        # what came after them, at the end too: the rectificatoria's (#147)
-        despues = {"declaracion_predial": {"sustituye", "fecha_sustitucion"}}
+        # what came after them, at the end too: the rectificatoria's (#147) and the derivados (#156)
+        despues = {objeto: set(campos) for objeto, campos in DERIVADOS.items()}
+        despues["declaracion_predial"] |= {"sustituye", "fecha_sustitucion"}
         for objeto, campos in nuevos.items():
             with self.subTest(objeto=objeto):
                 antes = [f for f in self.campos(objeto).values() if f["name"] not in despues.get(objeto, set())]

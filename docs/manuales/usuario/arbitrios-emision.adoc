@@ -171,7 +171,8 @@ cuota = tasa × base × factor de habitantes, redondeada según la ordenanza (y 
 ----
 
 La base:: Lo que la ordenanza mide en cada servicio. *Por predio*: la tasa se cobra una vez al mes. *Por metro
-lineal de frontis*: la tasa se multiplica por el *Frontis (m)* de la declaración jurada. *Por metro cuadrado de área
+lineal de frontis*: la tasa se multiplica por la *Longitud de frente* de la declaración jurada (el frontis
+principal más los otros frentes). *Por metro cuadrado de área
 construida*: la tasa se multiplica por el *Área construida (m2)* de la declaración jurada.
 La tasa:: La tasa mensual del servicio depende de las características del predio que la ordenanza use para ese
 servicio, una o varias:
@@ -273,9 +274,10 @@ tiene.
 influencia, cuando un servicio la usa. Entonces el campo es obligatorio en la declaración.
 |*Clase de uso*, *Sub clase de uso*, *Uso del predio* |Declaración, *Características* (<<fig-dj-caracteristicas>>) |El
 uso de arbitrio y la afluencia.
-|*Frontis (m)* |Declaración, *Características* |La base de un servicio por frontis. Obligatorio si el año tiene uno.
-|*Área construida (m2)* |Declaración, *Características*, sección *Valores* |La base de un servicio por área
-construida. Obligatorio si el año tiene uno.
+|*Frontis principal (m)* y *Otros frentes* |Declaración, *Características* y pestaña *Otros frentes* |Su suma, la
+*Longitud de frente*, es la base de un servicio por frontis. Obligatoria si el año tiene uno.
+|*Niveles de construcción* |Declaración, *Características* |Su suma, el *Área construida (m2)* de la sección *Valores*,
+es la base de un servicio por área construida. Obligatoria si el año tiene uno.
 |*Cant. de habitantes / Aforo* |Declaración, *Características* |El factor de habitantes. Opcional: sin él se toma el
 promedio.
 |Fecha de adquisición, % de condominio, anulación |Declaración |Quién es el titular de cada mes (<<titular-mes>>).

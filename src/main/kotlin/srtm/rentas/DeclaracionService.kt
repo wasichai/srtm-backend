@@ -13,12 +13,14 @@ import java.util.UUID
 
 // the srtm's declaración jurada predial: datos del predio, ubicación (the predio's), transferentes, características
 // (niveles de construcción, obras complementarias), condóminos (the other declarations of the predio) and otros frentes.
-// every write of a declaración recomputes its condominio (Condominio.kt). reniec: as ContribuyenteService's
+// every write of a declaración, or of its niveles, obras and otros frentes, recomputes what it derives of them and its
+// autoavalúo (recalcular, Derivados.kt), then its condominio (Condominio.kt). reniec: as ContribuyenteService's
 @Service
 class DeclaracionService(
     private val registros: Registros,
     private val listas: Listas,
     private val contribuyentes: ContribuyenteService,
+    private val autoavaluos: AutoavaluoSugeridoService,
     private val reniec: ConsultasReniec = ConsultasReniec(Duration.ZERO)
 ) {
     suspend fun ficha(id: UUID): DeclaracionJurada {
@@ -27,7 +29,8 @@ class DeclaracionService(
             declaracion = declaracion,
             predio = registros.get(PREDIO, Predio::class.java, UUID.fromString(declaracion.predio)),
             contribuyente = contribuyentes.get(UUID.fromString(declaracion.contribuyente)),
-            actualizado = actualizado
+            actualizado = actualizado,
+            autoavaluoManual = autoavaluos.manual()
         )
     }
 
@@ -61,13 +64,16 @@ class DeclaracionService(
         val existente = body.predioId?.let { registros.get(PREDIO, Predio::class.java, UUID.fromString(it)) }
         val predio = existente ?: registrarPredio(body.predio ?: throw ValidationException("Falta el predio", "predio_id", "elige un predio o registra uno"))
         val predioId = UUID.fromString(predio.id)
-        try {
-            val declaracion = registrar(nueva(body.declaracion, contribuyente, predioId))
-            return ficha(UUID.fromString(declaracion.id))
-        } catch (e: Exception) {
-            if (existente == null) registros.delete(PREDIO, predioId)
-            throw e
-        }
+        val declaracion =
+            try {
+                registrar(nueva(delCliente(body.declaracion), contribuyente, predioId))
+            } catch (e: Exception) {
+                if (existente == null) registros.delete(PREDIO, predioId)
+                throw e
+            }
+        // stored: its predio stays whatever recalcular does
+        recalcular(UUID.fromString(declaracion.id))
+        return ficha(UUID.fromString(declaracion.id))
     }
 
     // another year's declaración of the same contribuyente and predio as the starting point: its copy (characteristics,
@@ -100,12 +106,27 @@ class DeclaracionService(
     suspend fun crear(body: Declaracion): Declaracion {
         val contribuyente = body.contribuyente ?: throw ValidationException("Falta el contribuyente", "contribuyente", "es obligatorio")
         val predio = body.predio ?: throw ValidationException("Falta el predio", "predio", "es obligatorio")
-        return registrar(nueva(body, UUID.fromString(contribuyente), UUID.fromString(predio)))
+        val creada = registrar(nueva(delCliente(body), UUID.fromString(contribuyente), UUID.fromString(predio)))
+        return recalcular(UUID.fromString(creada.id)).despues
     }
+
+    // what a client sends of a new declaración: the derived fields are recalcular's, and the autoavalúo too while its
+    // organization has a catastro. srtm-ui before #156 sends longitud_frente alone: that is its frontis principal
+    private suspend fun delCliente(d: Declaracion): Declaracion =
+        d.copy(
+            frontisPrincipal = d.frontisPrincipal ?: d.longitudFrente,
+            areaConstruida = null,
+            areaComunConstruida = null,
+            longitudFrente = null,
+            valorAutoavaluo = if (autoavaluos.manual()) d.valorAutoavaluo else null,
+            autoavaluoPorRevisar = null,
+            autoavaluoMotivo = null
+        )
 
     // a declaración that moves to another predio, year or secuencia joins that condominio and leaves its own. only a
     // vigente one changes, and its estado is anular's and its sustitución rectificar's. a rectificatoria stays in
-    // its place, and one with an external padrón's valuation in its year
+    // its place, and one with an external padrón's valuation in its year. what it derives is recalcular's: the
+    // body's areas, longitud de frente and mark are not taken, nor its autoavalúo while there is a catastro
     suspend fun actualizar(
         id: UUID,
         body: Declaracion
@@ -121,19 +142,54 @@ class DeclaracionService(
                 motivoAnulacion = stored.motivoAnulacion,
                 fechaAnulacion = stored.fechaAnulacion,
                 sustituye = stored.sustituye,
-                fechaSustitucion = stored.fechaSustitucion
+                fechaSustitucion = stored.fechaSustitucion,
+                frontisPrincipal = frontisAlEditar(body, stored),
+                areaConstruida = stored.areaConstruida,
+                areaComunConstruida = stored.areaComunConstruida,
+                longitudFrente = stored.longitudFrente,
+                valorAutoavaluo = if (autoavaluos.manual()) body.valorAutoavaluo else stored.valorAutoavaluo,
+                autoavaluoPorRevisar = stored.autoavaluoPorRevisar,
+                autoavaluoMotivo = stored.autoavaluoMotivo
             )
         enSuLugar(stored, next)
         if (next.anio != stored.anio) conservaAnio(id)
         val seUne = grupoDe(next) != grupoDe(stored)
         val otros = titulares(next).filter { it.id != id.toString() }
         val grupo = condominioCon(next, otros, seUne)
-        val saved = registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(grupo.first()))
+        registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(grupo.first()))
         guardarDerivados(grupo.drop(1), otros)
-        if (seUne) recalcular(stored)
+        if (seUne) recalcularResto(stored)
         marcarOrigenModificado(id)
-        return saved
+        return recalcular(id).despues
     }
+
+    // a frontis principal the body does not send is the stored one: srtm-ui before #156 never sends it, and 0 clears it.
+    // a declaración model/migrar_derivados.py did not reach has none: its longitud_frente is, as on create (delCliente)
+    private fun frontisAlEditar(
+        body: Declaracion,
+        stored: Declaracion
+    ) = body.frontisPrincipal ?: stored.frontisPrincipal ?: body.longitudFrente
+
+    // #156: what the declaración derives of its lists (Derivados.totales) and its autoavalúo (catastro's, or the stored
+    // one marked with why not, or the user's without a catastro), then its condominio's values, its own and the other
+    // titulares'. only what changed is written. a rectificatoria not yet in its place leaves out the one it replaces
+    // (registrar's rule). the condominio is recomputed, not checked: a nivel's write is never refused for the % of an
+    // imported condominio. what changed is returned to the hooks that follow (Recalculo)
+    suspend fun recalcular(id: UUID): Recalculo {
+        val stored = registros.get(DECLARACION, Declaracion::class.java, id)
+        val totales = Derivados.totales(niveles(id), frentes(id), stored.frontisPrincipal)
+        val next = Derivados.aplicar(stored, totales, autoavaluos.deLaDeclaracion(id))
+        val otros = if (vigente(stored)) titulares(stored).filter { it.id != stored.id && it.id != stored.sustituye } else emptyList()
+        val grupo = condominio(listOf(next) + otros)
+        val despues = grupo.first()
+        val cambiados = Derivados.cambiados(stored, despues)
+        if (cambiados.isNotEmpty()) registros.replace(DECLARACION, Declaracion::class.java, id, Derivados.campos(despues).filterKeys { it in cambiados })
+        guardarDerivados(grupo.drop(1), otros)
+        return Recalculo(stored, despues)
+    }
+
+    // the portal's «Recalcular»: a vigente declaración valued again without a change (catastro answers now)
+    suspend fun recalcularDeclaracion(id: UUID): Declaracion = recalcular(existe(id)).despues
 
     // the external padrón's valuation is of its year: that year's declaración keeps it, another year is declared
     // from it (declararDesde) without it
@@ -178,7 +234,7 @@ class DeclaracionService(
     ): Declaracion {
         val stored = registros.get(DECLARACION, Declaracion::class.java, id)
         val saved = registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(anulada(stored, body.motivoAnulacion, LocalDate.now())))
-        recalcular(stored)
+        recalcularResto(stored)
         return saved
     }
 
@@ -188,11 +244,12 @@ class DeclaracionService(
         bajaDeRectificacion(stored)?.let { throw ConflictException(it) }
         bajaDeDeclaracion(LISTAS.filter { listas.contar(it, PARENT, id) > 0 })?.let { throw ConflictException(it) }
         registros.delete(DECLARACION, id)
-        recalcular(stored)
+        recalcularResto(stored)
     }
 
     // "datos de los condóminos": another contribuyente's declaración of the same predio, year and secuencia, with what
-    // the source declares of the predio and its niveles, obras and otros frentes
+    // the source declares of the predio and its niveles, obras and otros frentes, each row with the source's fila (one
+    // without it takes one now, on both). recomputed once, at the end
     suspend fun agregarCondomino(
         id: UUID,
         body: NuevoCondomino
@@ -208,17 +265,31 @@ class DeclaracionService(
         // and its mark: the copy is as faithful to the padrón as its source. its rows are no edit of it
         copiarPadronExterno(DECLARACION, id, nuevaId, PADRON_EXTERNO_DECLARACION + ORIGEN_MODIFICADO)
         niveles(id).forEach { nivel ->
-            val copia = nuevoNivel(nuevaId, nivel.copy(id = null, declaracion = null))
+            val copia = nuevoNivel(nuevaId, nivel.copy(id = null, declaracion = null, fila = conFila(NIVEL_CONSTRUCCION, nivel.id, nivel.fila)))
             copiarPadronExterno(NIVEL_CONSTRUCCION, UUID.fromString(nivel.id), UUID.fromString(copia.id), PADRON_EXTERNO_NIVEL)
         }
-        obras(id).forEach { nuevaObra(nuevaId, it.copy(id = null, declaracion = null)) }
-        frentes(id).forEach { nuevoFrente(nuevaId, it.copy(id = null, declaracion = null)) }
-        return creada
+        obras(id).forEach { nuevaObra(nuevaId, it.copy(id = null, declaracion = null, fila = conFila(OBRA_COMPLEMENTARIA, it.id, it.fila))) }
+        frentes(id).forEach { nuevoFrente(nuevaId, it.copy(id = null, declaracion = null, fila = conFila(OTRO_FRENTE, it.id, it.fila))) }
+        return recalcular(nuevaId).despues
+    }
+
+    // a source row's fila: its own, or one it takes now (a row from before #156 that model/migrar_derivados.py did
+    // not reach), so that its copy is the same row
+    private suspend fun conFila(
+        objectName: String,
+        id: String?,
+        fila: String?
+    ): String {
+        if (fila != null) return fila
+        val nueva = UUID.randomUUID().toString()
+        registros.replace(objectName, Map::class.java, UUID.fromString(id), mapOf(FILA to nueva))
+        return nueva
     }
 
     // a declaración copied with its lists, the same contribuyente's on the same predio: copiaDe with `cambios` over it,
-    // numbered as a new one. its transferentes keep their code. the external padrón's valuation stays in origen (the
-    // condómino's copy takes it: copiarPadronExterno). one that fails halfway is removed with what it got
+    // numbered as a new one. its transferentes keep their code, its rows their fila. the external padrón's valuation
+    // stays in origen (the condómino's copy takes it: copiarPadronExterno). recomputed once, with all its rows. one that
+    // fails halfway is removed with what it got
     private suspend fun copiar(
         origen: Declaracion,
         cambios: (Declaracion) -> Declaracion
@@ -233,11 +304,11 @@ class DeclaracionService(
             niveles(id).forEach { nuevoNivel(nuevaId, it.copy(id = null, declaracion = null)) }
             obras(id).forEach { nuevaObra(nuevaId, it.copy(id = null, declaracion = null)) }
             frentes(id).forEach { nuevoFrente(nuevaId, it.copy(id = null, declaracion = null)) }
+            return recalcular(nuevaId).despues
         } catch (e: Exception) {
             deshacer(creada)
             throw e
         }
-        return creada
     }
 
     // a copy that failed: its lists, itself, and what its condominio derived from it
@@ -247,7 +318,7 @@ class DeclaracionService(
             listas.listar(lista, Map::class.java, PARENT, id).forEach { listas.borrar(lista, UUID.fromString(it["id"].toString())) }
         }
         registros.delete(DECLARACION, id)
-        recalcular(creada)
+        recalcularResto(creada)
     }
 
     // what an external padrón (Ica) brings and the dtos do not know: copied from the stored record, when it has any,
@@ -353,23 +424,31 @@ class DeclaracionService(
 
     suspend fun niveles(id: UUID) = listas.listar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id)
 
+    // a row added or changed by the portal: its fila is the backend's, and its declaración is recomputed
     suspend fun agregarNivel(
         id: UUID,
         body: NivelConstruccion
-    ) = nuevoNivel(id, body).also { marcarOrigenModificado(id) }
+    ) = nuevoNivel(id, body.copy(fila = null)).also { escrita(id) }
 
+    // a copy's row keeps the fila it brings; a new one gets its own
     private suspend fun nuevoNivel(
         id: UUID,
         body: NivelConstruccion
-    ) = listas.agregar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, existe(id), body.copy(estado = body.estado ?: Listas.ACTIVO))
+    ) = listas.agregar(
+        NIVEL_CONSTRUCCION,
+        NivelConstruccion::class.java,
+        PARENT,
+        existe(id),
+        body.copy(estado = body.estado ?: Listas.ACTIVO, fila = body.fila ?: UUID.randomUUID().toString())
+    )
 
     suspend fun actualizarNivel(
         id: UUID,
         body: NivelConstruccion
     ): NivelConstruccion {
-        val declaracion = deVigente(NIVEL_CONSTRUCCION, id)
-        val saved = listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id, body)
-        declaracion?.let { marcarOrigenModificado(it) }
+        val (declaracion, fila) = deVigente(NIVEL_CONSTRUCCION, id)
+        val saved = listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id, body.copy(fila = fila))
+        declaracion?.let { escrita(it) }
         return saved
     }
 
@@ -378,20 +457,26 @@ class DeclaracionService(
     suspend fun agregarObra(
         id: UUID,
         body: ObraComplementaria
-    ) = nuevaObra(id, body).also { marcarOrigenModificado(id) }
+    ) = nuevaObra(id, body.copy(fila = null)).also { escrita(id) }
 
     private suspend fun nuevaObra(
         id: UUID,
         body: ObraComplementaria
-    ) = listas.agregar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, existe(id), obra(body))
+    ) = listas.agregar(
+        OBRA_COMPLEMENTARIA,
+        ObraComplementaria::class.java,
+        PARENT,
+        existe(id),
+        obra(body).copy(fila = body.fila ?: UUID.randomUUID().toString())
+    )
 
     suspend fun actualizarObra(
         id: UUID,
         body: ObraComplementaria
     ): ObraComplementaria {
-        val declaracion = deVigente(OBRA_COMPLEMENTARIA, id)
-        val saved = listas.cambiar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, id, obra(body))
-        declaracion?.let { marcarOrigenModificado(it) }
+        val (declaracion, fila) = deVigente(OBRA_COMPLEMENTARIA, id)
+        val saved = listas.cambiar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, id, obra(body).copy(fila = fila))
+        declaracion?.let { escrita(it) }
         return saved
     }
 
@@ -400,20 +485,26 @@ class DeclaracionService(
     suspend fun agregarFrente(
         id: UUID,
         body: OtroFrente
-    ) = nuevoFrente(id, body).also { marcarOrigenModificado(id) }
+    ) = nuevoFrente(id, body.copy(fila = null)).also { escrita(id) }
 
     private suspend fun nuevoFrente(
         id: UUID,
         body: OtroFrente
-    ) = listas.agregar(OTRO_FRENTE, OtroFrente::class.java, PARENT, existe(id), body.copy(estado = body.estado ?: Listas.ACTIVO))
+    ) = listas.agregar(
+        OTRO_FRENTE,
+        OtroFrente::class.java,
+        PARENT,
+        existe(id),
+        body.copy(estado = body.estado ?: Listas.ACTIVO, fila = body.fila ?: UUID.randomUUID().toString())
+    )
 
     suspend fun actualizarFrente(
         id: UUID,
         body: OtroFrente
     ): OtroFrente {
-        val declaracion = deVigente(OTRO_FRENTE, id)
-        val saved = listas.cambiar(OTRO_FRENTE, OtroFrente::class.java, PARENT, id, body)
-        declaracion?.let { marcarOrigenModificado(it) }
+        val (declaracion, fila) = deVigente(OTRO_FRENTE, id)
+        val saved = listas.cambiar(OTRO_FRENTE, OtroFrente::class.java, PARENT, id, body.copy(fila = fila))
+        declaracion?.let { escrita(it) }
         return saved
     }
 
@@ -422,10 +513,20 @@ class DeclaracionService(
         objectName: String,
         id: UUID
     ) {
-        val declaracion = deVigente(objectName, id)
+        val (declaracion, _) = deVigente(objectName, id)
         val quitado = objectName == NIVEL_CONSTRUCCION && conValor(registros.get(objectName, Map::class.java, id), PADRON_EXTERNO_NIVEL).isNotEmpty()
         listas.borrar(objectName, id)
-        if (objectName in VALUADAS) declaracion?.let { marcarOrigenModificado(it, quitado) }
+        if (objectName in VALUADAS) declaracion?.let { escrita(it, quitado) }
+    }
+
+    // a row of the valuation written by the portal: the external padrón's valuation is marked, the declaración
+    // recomputed
+    private suspend fun escrita(
+        declaracion: UUID,
+        quitado: Boolean = false
+    ) {
+        marcarOrigenModificado(declaracion, quitado)
+        recalcular(declaracion)
     }
 
     // the srtm's defaults. condición and % are the condominio's (registrar)
@@ -475,7 +576,7 @@ class DeclaracionService(
     }
 
     // what is left of a condominio a declaración went away from
-    private suspend fun recalcular(fuera: Declaracion) {
+    private suspend fun recalcularResto(fuera: Declaracion) {
         val resto = titulares(fuera).filter { it.id != fuera.id }
         guardarDerivados(condominio(resto), resto)
     }
@@ -561,20 +662,23 @@ class DeclaracionService(
         return id
     }
 
-    // and a row of it changed or removed: its declaración
+    // and a row of it changed or removed: its declaración, and the row's fila (one from before #156 takes its own)
     private suspend fun deVigente(
         objectName: String,
         id: UUID
-    ): UUID? {
-        val declaracion = registros.get(objectName, Map::class.java, id)[PARENT]?.toString()?.let(UUID::fromString) ?: return null
+    ): Pair<UUID?, String> {
+        val row = registros.get(objectName, Map::class.java, id)
+        val fila = row[FILA]?.toString()?.ifBlank { null } ?: UUID.randomUUID().toString()
+        val declaracion = row[PARENT]?.toString()?.let(UUID::fromString) ?: return null to fila
         modificable(registros.get(DECLARACION, Declaracion::class.java, declaracion))
-        return declaracion
+        return declaracion to fila
     }
 
     private fun obra(body: ObraComplementaria) = body.copy(estado = body.estado ?: Listas.ACTIVO, totalMetrado = totalMetrado(body))
 
     private companion object {
         const val PARENT = "declaracion"
+        const val FILA = "fila"
         const val ATTEMPTS = 3
         val LISTAS = listOf(TRANSFERENTE, NIVEL_CONSTRUCCION, OBRA_COMPLEMENTARIA, OTRO_FRENTE)
 

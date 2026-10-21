@@ -20,7 +20,8 @@ class CodigoPredioTest {
         DeclaracionService(
             registros,
             Listas(registros),
-            ContribuyenteService(registros, Listas(registros), Mockito.mock(ReactiveTransactionManager::class.java))
+            ContribuyenteService(registros, Listas(registros), Mockito.mock(ReactiveTransactionManager::class.java)),
+            Mockito.mock(AutoavaluoSugeridoService::class.java)
         )
 
     private fun registrar(predio: Predio) = runBlocking { service.registrarPredio(predio.copy(direccion = "S/N")) }

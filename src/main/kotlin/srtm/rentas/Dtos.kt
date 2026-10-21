@@ -145,7 +145,14 @@ data class Declaracion(
     val fechaAnulacion: LocalDate? = null,
     // a rectificatoria's: the id of the declaración it replaces. the sustituida's: when
     val sustituye: String? = null,
-    val fechaSustitucion: LocalDate? = null
+    val fechaSustitucion: LocalDate? = null,
+    // #156: what is written of the frente principal; longitud_frente, area_construida and area_comun_construida are
+    // the backend's (Derivados), and so is valor_autoavaluo while the organization has its catastro. the mark: catastro
+    // did not value the last change, and why
+    val frontisPrincipal: BigDecimal? = null,
+    val areaComunConstruida: BigDecimal? = null,
+    val autoavaluoPorRevisar: Boolean? = null,
+    val autoavaluoMotivo: String? = null
 )
 
 // the contribuyente's children. contribuyente is the parent's id: the path sets it, a body never moves one
@@ -295,7 +302,9 @@ data class NivelConstruccion(
     val revestimientos: String? = null,
     val banos: String? = null,
     val instalaciones: String? = null,
-    val estado: String? = null
+    val estado: String? = null,
+    // the same row in the condóminos' declaraciones: the backend's
+    val fila: String? = null
 )
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
@@ -316,7 +325,8 @@ data class ObraComplementaria(
     val unidadMedida: String? = null,
     // cantidad x metrado, the backend's
     val totalMetrado: BigDecimal? = null,
-    val estado: String? = null
+    val estado: String? = null,
+    val fila: String? = null
 )
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
@@ -331,16 +341,20 @@ data class OtroFrente(
     val lote: String? = null,
     val cuadra: String? = null,
     val lado: String? = null,
-    val estado: String? = null
+    val estado: String? = null,
+    val fila: String? = null
 )
 
 // a declaración jurada with what it is about: its predio and its contribuyente
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class DeclaracionJurada(
     val declaracion: Declaracion,
     val predio: Predio,
     val contribuyente: Contribuyente,
     // the srtm's "fecha de actualización": when the declaration was last saved
-    val actualizado: java.time.Instant? = null
+    val actualizado: java.time.Instant? = null,
+    // #156: its organization has no catastro, so the user writes valor_autoavaluo; else catastro values it
+    val autoavaluoManual: Boolean = false
 )
 
 // presenting one: an existing predio (predio_id) or a new one (predio, its code generated when blank). desde: the id

@@ -78,7 +78,8 @@ class AutoavaluoSugeridoApiTest : SrtmApiTest() {
         val org = organizacion()
         RESPUESTA.set(200 to VALUADA)
         val id = declaracion(org)
-        val codigo = tree(send("GET", "/api/srtm/declaraciones/$id", null, HttpStatus.OK, org))["predio"]["codigo"].asString()
+        val antes = tree(send("GET", "/api/srtm/declaraciones/$id", null, HttpStatus.OK, org))
+        val codigo = antes["predio"]["codigo"].asString()
 
         val v = sugerido(id, org)
 
@@ -108,9 +109,10 @@ class AutoavaluoSugeridoApiTest : SrtmApiTest() {
         assertTrue(v["motivo"].isNull, v.toString())
         assertEquals(0, BigDecimal("787.816").compareTo(v["detalle"]["pisos"][0]["valor_unitario_depreciado"].decimalValue()), v.toString())
         assertEquals("MUROS PERIMETRICOS O CERCOS|1", v["detalle"]["obras"][0]["codigo_vu"].asString())
-        // nothing is stored
-        val guardada = tree(send("GET", "/api/srtm/declaraciones/$id", null, HttpStatus.OK, org))["declaracion"]
-        assertTrue(guardada["valor_autoavaluo"].isNull, guardada.toString())
+        // nothing is stored: the declaración is as its last write left it (#156: valued by catastro then)
+        val despues = tree(send("GET", "/api/srtm/declaraciones/$id", null, HttpStatus.OK, org))
+        assertEquals(antes["actualizado"], despues["actualizado"])
+        assertEquals(antes["declaracion"], despues["declaracion"])
     }
 
     @Test
