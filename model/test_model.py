@@ -15,7 +15,8 @@ MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.json")
 OPCIONALES = {
     "notif_adm_contribuyente", "notif_adm_predio", "papeleta_contribuyente", "papeleta_predio",
     "papeleta_notificacion_previa", "resolucion_descargo", "notif_resolucion_plazo", "anuncio_predio",
-    "movimiento_parametro", "brecha_predio_predio",
+    "movimiento_parametro", "brecha_predio_predio", "orden_caja_cuota_arbitrio", "orden_caja_cuota_predial",
+    "pago_caja_contribuyente", "pago_caja_detalle_orden", "pago_caja_detalle_contribuyente",
 }
 
 # #156: the fields each object gained for the derivados of the declaración, in order (field -> type)
@@ -107,8 +108,8 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 42)
-        self.assertEqual(len(self.model["relationships"]), 44)
+        self.assertEqual(len(names), 46)
+        self.assertEqual(len(self.model["relationships"]), 52)
 
     def test_the_municipalidad_holds_the_documents_header(self):
         # the PU and HR's header, one record per organization edited in the admin, its escudo an image of wasichai-files
@@ -328,10 +329,10 @@ class ShippedModelTests(unittest.TestCase):
         relaciones = {r["fieldName"]: r["target"] for r in self.model["relationships"] if r["source"] == "anulacion_cuota_arbitrio"}
         self.assertEqual(relaciones, {"cuota": "cuota_arbitrio", "predio": "predio"})
 
-    def test_only_the_cuotas_and_their_anulaciones_are_append_only(self):
+    def test_only_the_cuotas_anulaciones_and_pagos_are_append_only(self):
         # Core refuses their update and delete, for everyone, and the delete of what a cuota points at (ADR-040)
         self.assertEqual([o["name"] for o in self.model["objects"] if o.get("appendOnly")],
-                         ["cuota_arbitrio", "anulacion_cuota_arbitrio"])
+                         ["cuota_arbitrio", "anulacion_cuota_arbitrio", "cuota_predial", "pago_caja", "pago_caja_detalle"])
 
     def test_the_masiva_de_arbitrios_is_a_twin_of_the_emision(self):
         # the same lotes, lease and attempts as emision_masiva / emision_lote; it writes cuotas, never a file
