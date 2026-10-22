@@ -138,6 +138,9 @@ fun motivoDeRetiro(motivo: String): String = unaLinea(motivo).ifEmpty { "Retirad
 
 const val MOTIVO_A_PEDIDO = "Enviado a pedido desde srtm"
 
+// why an orden is withdrawn when the sync is the POST's or the masiva's
+const val MOTIVO_SIN_DEUDA = "La deuda ya no está vigente en srtm"
+
 fun motivoDeEmision(anio: Int) = "Emisión masiva $anio"
 
 private val LIMA: ZoneId = ZoneId.of("America/Lima")
@@ -173,13 +176,18 @@ class CajaService(
         return cajas.de(usuario.organizationId, slug)
     }
 
+    // motivo: the observacion of its altas; motivoDeRetiro: why its retiros and cancelaciones go. enLinea false: only
+    // queued, the loop sends them (the masiva: thousands of contribuyentes do not wait on caja)
     suspend fun sincronizar(
         contribuyente: UUID,
         anio: Int,
-        motivo: String
+        motivo: String,
+        motivoDeRetiro: String = MOTIVO_SIN_DEUDA,
+        enLinea: Boolean = true
     ): ResumenCaja {
         cajaDelLlamante() ?: throw ConflictException(SIN_CAJA_CONFIGURADA)
-        val (resumen, porEnviar) = transaccion.executeAndAwait { planificarYEscribir(contribuyente, anio, motivo) }
+        val (resumen, porEnviar) = transaccion.executeAndAwait { planificarYEscribir(contribuyente, anio, motivo, motivoDeRetiro) }
+        if (!enLinea) return resumen + ResumenCaja(pendientes = porEnviar.size)
         return resumen + envio.enviar(porEnviar, config.plazoEnLinea)
     }
 
@@ -188,7 +196,8 @@ class CajaService(
     suspend fun sincronizarSiEnviado(
         contribuyentes: Set<UUID>,
         anio: Int,
-        motivo: String
+        motivo: String,
+        motivoDeRetiro: String = MOTIVO_SIN_DEUDA
     ): ResumenCaja? {
         val caja =
             try {
@@ -199,7 +208,7 @@ class CajaService(
         if (caja == null) return null
         val enviados = contribuyentes.filter { ordenes(it, anio).isNotEmpty() }
         if (enviados.isEmpty()) return null
-        return enviados.fold(ResumenCaja()) { suma, c -> suma + sincronizar(c, anio, motivo) }
+        return enviados.fold(ResumenCaja()) { suma, c -> suma + sincronizar(c, anio, motivo, motivoDeRetiro) }
     }
 
     // GET /caja: the contribuyente's ordenes of the year
@@ -229,33 +238,40 @@ class CajaService(
     }
 
     // inside the transaction: the plan written. what it did, and the ordenes to send now (the new ones, the retiros,
-    // and the ones still waiting from before)
+    // and the ones still waiting from before). the cancelaciones go first: one a take got to meanwhile defers its
+    // ranura, and its new alta is not written (caja may hold the one it would replace)
     private suspend fun planificarYEscribir(
         id: UUID,
         anio: Int,
-        motivo: String
+        motivo: String,
+        motivoDeRetiro: String
     ): Pair<ResumenCaja, List<UUID>> {
         candados.bloquearEnOrganizacion(Candado.CAJA_CONTRIBUYENTE, id.toString())
         val persona = registros.get(CONTRIBUYENTE, Contribuyente::class.java, id)
         if (persona.tipoDocumento == SIN_DOCUMENTO) return ResumenCaja(sinDocumento = 1) to emptyList()
         val actuales = ordenes(id, anio)
         val plan = planificar(deseadasPredial(id, anio) + deseadasArbitrio(id, anio), actuales)
+        val tabla = if (plan.cancelar.isEmpty() && plan.retiros.isEmpty()) null else tabla()
+        val ranuraDe = actuales.filter { it.id != null }.associate { UUID.fromString(it.id) to it.ranura }
+        val (canceladas, tomadas) = plan.cancelar.partition { cancelar(tabla!!, it, motivoDeRetiro) }
+        val diferidas = tomadas.mapNotNull { ranuraDe[it] }.toSet()
         val altas =
             registros.createAll(
                 ObjetosCaja.ORDEN_CAJA,
                 OrdenCaja::class.java,
-                plan.altas.map { atributos(it, id, anio, persona, motivo) }
+                plan.altas.filter { it.deseada.ranura !in diferidas }.map { atributos(it, id, anio, persona, motivo) }
             )
-        val tabla = if (plan.cancelar.isEmpty() && plan.retiros.isEmpty()) null else tabla()
-        for (orden in plan.cancelar) mover(tabla!!, orden, EstadoOrdenCaja.POR_ENVIAR, EstadoOrdenCaja.CANCELADA, motivo)
-        val retiradas = plan.retiros.filter { mover(tabla!!, it.ordenCaja, EstadoOrdenCaja.ENVIADA, EstadoOrdenCaja.POR_RETIRAR, motivo) }.map { it.ordenCaja }
+        val retiradas =
+            plan.retiros
+                .filter { mover(tabla!!, it.ordenCaja, EstadoOrdenCaja.ENVIADA, EstadoOrdenCaja.POR_RETIRAR, motivoDeRetiro) }
+                .map { it.ordenCaja }
         val esperando =
             actuales
                 .filter { it.estado in POR_MANDAR && it.id != null }
                 .map { UUID.fromString(it.id) }
-                .filter { it !in plan.cancelar }
+                .filter { it !in canceladas }
         val porEnviar = (altas.mapNotNull { it.id }.map(UUID::fromString) + retiradas + esperando).distinct()
-        return ResumenCaja(encoladas = altas.size) to porEnviar
+        return ResumenCaja(encoladas = altas.size, pendientes = plan.diferidas + diferidas.size) to porEnviar
     }
 
     private fun atributos(
@@ -381,8 +397,27 @@ class CajaService(
     // the caller's organization's orden_caja table
     private suspend fun tabla(): TablaCore {
         val organizacion = currentUser.require().organizationId
-        return tablas.de(ObjetosCaja.ORDEN_CAJA, CAMPOS_ORDEN).single { it.organizacion == organizacion }
+        return tablas.de(ObjetosCaja.ORDEN_CAJA, CAMPOS_ORDEN).firstOrNull { it.organizacion == organizacion }
+            ?: throw IllegalStateException("La organización $organizacion: orden_caja no tiene los campos de caja: aplique el modelo")
     }
+
+    // an orden POR_ENVIAR never tried and that nobody holds, CANCELADA. false: a take got to it, and caja may hold it
+    private suspend fun cancelar(
+        t: TablaCore,
+        orden: UUID,
+        motivo: String
+    ): Boolean =
+        db
+            .sql(
+                "UPDATE ${t.tabla} SET ${t.columna("estado")} = :cancelada, ${t.columna("motivo")} = :motivo, updated_at = now() " +
+                    "WHERE id = :id AND ${t.columna("estado")} = :por_enviar AND coalesce(${t.columna("intentos")}, 0) = 0 " +
+                    "AND (${t.columna("tomado_hasta")} IS NULL OR ${t.columna("tomado_hasta")} < now())"
+            ).bind("cancelada", EstadoOrdenCaja.CANCELADA)
+            .bind("motivo", motivo)
+            .bind("id", orden)
+            .bind("por_enviar", EstadoOrdenCaja.POR_ENVIAR)
+            .fetch()
+            .awaitRowsUpdated() > 0
 
     // an orden from `previo` to `nuevo`, with the sincronización's motivo, only if it still is in `previo`
     private suspend fun mover(

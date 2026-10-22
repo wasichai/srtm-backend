@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import srtm.impuesto.Cuota
 import java.math.BigDecimal
+import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
 
@@ -88,5 +89,20 @@ class CajaTest {
             a + b
         )
         assertEquals("otro", (ResumenCaja() + ResumenCaja(error = "otro")).error)
+    }
+
+    @Test
+    fun `tras no contestar la espera se duplica hasta una hora`() {
+        val base = Duration.ofSeconds(30)
+        assertEquals(listOf(30L, 60L, 120L, 240L), (1..4).map { esperaTrasNoContesta(base, it).seconds })
+        assertEquals(Duration.ofHours(1), esperaTrasNoContesta(base, 20))
+        assertEquals(Duration.ZERO, esperaTrasNoContesta(Duration.ZERO, 5))
+    }
+
+    @Test
+    fun `el lease cubre tres veces el timeout mas largo`() {
+        assertEquals(Duration.ofMinutes(2), lease(CajaProperties()))
+        val lenta = CuentaCaja(url = "http://caja", clientId = "rentas", clientSecret = "s", timeout = Duration.ofMinutes(1))
+        assertEquals(Duration.ofMinutes(3), lease(CajaProperties(organizaciones = mapOf("ica" to lenta, "perene" to CuentaCaja()))))
     }
 }

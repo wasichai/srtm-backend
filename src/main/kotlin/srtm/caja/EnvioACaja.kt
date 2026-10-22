@@ -59,8 +59,26 @@ internal val CAMPOS_ORDEN =
 
 private val POR_MANDAR = listOf(EstadoOrdenCaja.POR_ENVIAR, EstadoOrdenCaja.POR_RETIRAR)
 
-// how long a take holds an orden: more than a call to caja can last (its timeout, a 401 and its retry, the token)
-private val LEASE: Duration = Duration.ofMinutes(2)
+// how long a take holds an orden: more than a call to caja can last (its timeout, a 401 and its retry, the token):
+// 2 minutes, or 3 times the longest timeout configured
+internal fun lease(config: CajaProperties): Duration {
+    val timeout = config.cuentas().values.maxOfOrNull { it.timeout ?: ClienteCaja.TIMEOUT } ?: ClienteCaja.TIMEOUT
+    return maxOf(Duration.ofMinutes(2), timeout.multipliedBy(3))
+}
+
+// the longest an orden caja did not answer waits before its next try
+private val ESPERA_MAXIMA: Duration = Duration.ofHours(1)
+
+// how long an orden caja did not answer waits before its next take: srtm.caja.espera-reintento doubled on each try,
+// up to an hour
+fun esperaTrasNoContesta(
+    base: Duration,
+    intentos: Int
+): Duration {
+    if (base.isZero || base.isNegative) return Duration.ZERO
+    val veces = (intentos - 1).coerceIn(0, 20)
+    return minOf(base.multipliedBy(1L shl veces), ESPERA_MAXIMA)
+}
 
 // how long a stop waits for the loop to let its orden go
 private val DETENER: Duration = Duration.ofSeconds(30)
@@ -99,6 +117,7 @@ class EnvioACaja(
     private val organizaciones: OrganizationRepository
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineName("envio-a-caja"))
+    private val lease = lease(config)
 
     @EventListener(ApplicationReadyEvent::class)
     fun arrancar() {
@@ -193,7 +212,7 @@ class EnvioACaja(
         return withContext(NonCancellable) { resolver(t, o, resultado) }
     }
 
-    // D6: what caja answered, as the orden's new estado. the lease is always let go
+    // D6: what caja answered, as the orden's new estado. the lease is let go, after a NoContesta for a while
     private suspend fun resolver(
         t: TablaCore,
         o: Tomada,
@@ -245,7 +264,16 @@ class EnvioACaja(
             }
             is ResultadoCaja.NoContesta -> {
                 val agotada = o.intentos >= config.intentos
-                escribir(t, o, if (agotada) EstadoOrdenCaja.ERROR else o.estado, "${c("ultimo_error")} = :error", "error" to r.causa.take(500))
+                // the next try waits: a caja down is not asked again on every vuelta
+                val espera = if (agotada) Duration.ZERO else esperaTrasNoContesta(config.esperaReintento, o.intentos)
+                escribir(
+                    t,
+                    o,
+                    if (agotada) EstadoOrdenCaja.ERROR else o.estado,
+                    "${c("ultimo_error")} = :error",
+                    "error" to r.causa.take(500),
+                    espera = espera
+                )
                 if (agotada) log.warn("caja: {} ERROR tras {} intentos", o.referencia, o.intentos)
                 ResumenCaja(error = r.causa)
             }
@@ -293,7 +321,7 @@ class EnvioACaja(
                     "${c("intentos")} = coalesce(${c("intentos")}, 0) + 1, updated_at = now() " +
                     "WHERE id = :id AND ${c("estado")} IN (:por_enviar, :por_retirar) AND (${c("tomado_hasta")} IS NULL OR ${c("tomado_hasta")} < now()) " +
                     "RETURNING id, " + leidos.joinToString(", ") { "${c(it)} AS $it" }
-            ).bind("lease", LEASE.toMillis() / 1000.0)
+            ).bind("lease", lease.toMillis() / 1000.0)
             .bind("id", id)
             .bind("por_enviar", EstadoOrdenCaja.POR_ENVIAR)
             .bind("por_retirar", EstadoOrdenCaja.POR_RETIRAR)
@@ -318,23 +346,26 @@ class EnvioACaja(
     }
 
     // a write of the take that got the orden: only while it is in the estado and the intentos of that take. the lease
-    // goes with it
+    // goes with it, or stays `espera` from now: no take before then
     private suspend fun escribir(
         t: TablaCore,
         o: Tomada,
         nuevo: String,
         asignaciones: String,
-        vararg valores: Pair<String, Any>
+        vararg valores: Pair<String, Any>,
+        espera: Duration = Duration.ZERO
     ): Boolean {
+        val hasta = if (espera.isZero) "NULL" else "now() + make_interval(secs => :espera)"
         var spec =
             db
                 .sql(
-                    "UPDATE ${t.tabla} SET ${t.columna("estado")} = :nuevo, $asignaciones, ${t.columna("tomado_hasta")} = NULL, updated_at = now() " +
+                    "UPDATE ${t.tabla} SET ${t.columna("estado")} = :nuevo, $asignaciones, ${t.columna("tomado_hasta")} = $hasta, updated_at = now() " +
                         "WHERE id = :id AND ${t.columna("estado")} = :previo AND ${t.columna("intentos")} = :intentos"
                 ).bind("nuevo", nuevo)
                 .bind("id", o.id)
                 .bind("previo", o.estado)
                 .bind("intentos", o.intentos)
+        if (!espera.isZero) spec = spec.bind("espera", espera.toMillis() / 1000.0)
         valores.forEach { (nombre, valor) -> spec = spec.bind(nombre, valor) }
         return spec.fetch().awaitRowsUpdated() > 0
     }

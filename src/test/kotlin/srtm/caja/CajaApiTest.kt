@@ -1,70 +1,33 @@
 package srtm.caja
 
-import com.sun.net.httpserver.HttpExchange
-import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.r2dbc.core.awaitRowsUpdated
-import org.springframework.test.context.DynamicPropertyRegistry
-import org.springframework.test.context.DynamicPropertySource
-import srtm.arbitrios.ConArbitriosApiTest
 import srtm.emision.EMISION_LOTE
 import srtm.emision.EMISION_MASIVA
 import srtm.emision.TablasCore
 import srtm.emision.TrabajadoresEmision
 import tools.jackson.databind.JsonNode
-import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
-import java.math.RoundingMode
-import java.net.InetSocketAddress
 import java.nio.file.Path
 import java.time.Duration
 import java.util.UUID
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.Executors
 
-// #163: the cuotas de predial and of arbitrios of a contribuyente as ordenes de cobro of its organization's caja. a caja
-// falsa (the jdk's HttpServer) keeps every body it gets and answers as the test programs it. the tests run as the admin
-// of an organization of their own, the one the caja's entry names by its slug; the seeded one has no caja
-class CajaApiTest : ConArbitriosApiTest() {
-    @Autowired
-    lateinit var envio: EnvioACaja
-
+// #163: the cuotas de predial and of arbitrios of a contribuyente as ordenes de cobro of its organization's caja, and
+// what each answer of the caja does to them (D6)
+class CajaApiTest : ConCajaApiTest() {
     @Autowired
     lateinit var tablas: TablasCore
 
     @Autowired
     lateinit var trabajadores: TrabajadoresEmision
-
-    // the seeded admin's: an organization without caja
-    private lateinit var semilla: String
-
-    @BeforeEach
-    fun enLaOrganizacionDeLaCaja() {
-        semilla = token
-        token = organizacion ?: crearOrganizacion().also { organizacion = it }
-        PEDIDOS.clear()
-        respuesta = { null }
-        retraso = { 0L }
-    }
-
-    private fun crearOrganizacion(): String {
-        val email = "admin@$SLUG.test"
-        val clave = "clave-de-la-organizacion-de-la-caja"
-        post("/api/organizations", mapOf("name" to SLUG, "slug" to SLUG, "adminEmail" to email, "adminPassword" to clave))
-        val suyo = bearer(email, clave)
-        aplicarModelo(suyo)
-        return suyo
-    }
 
     @Test
     fun `unPredioDa4PredialesYLasCuotasDeArbitrios`() {
@@ -292,57 +255,129 @@ class CajaApiTest : ConArbitriosApiTest() {
         } finally {
             runBlocking { grupo.detener() }
         }
+        // the masiva only queues them: the loop sends them
+        assertTrue(lista(caja(e.contribuyente, e.anio)["ordenes"]) { it["estado"].asString() }.all { it == EstadoOrdenCaja.POR_ENVIAR })
+        vueltas()
 
         val ordenes = lista(caja(e.contribuyente, e.anio)["ordenes"]) { it }
         assertEquals(List(28) { EstadoOrdenCaja.ENVIADA }, ordenes.map { it["estado"].asString() })
         assertTrue(altasDe(documentoDe(e.contribuyente)).all { it.cuerpo["observacion"] == "Emisión masiva ${e.anio}" })
     }
 
-    // the year's parameters of the predial (the csv's figures of 2026, in force only in the escenario's year) and, with
-    // an autoavalúo, a second predio the contribuyente declares with it: that declaración's id
-    private fun conPredial(
-        e: Escenario,
-        autoavaluo: Int? = 60000
-    ): String? {
-        e.parametro("UIT", null, valor = "5500.00")
-        listOf("0.2", "0.6", "1.0").forEachIndexed { i, v -> e.parametro("TRAMO_PREDIAL", "${i + 1}", valor = v) }
-        listOf("15", "60").forEachIndexed { i, v -> e.parametro("TRAMO_PREDIAL_LIMITE", "${i + 1}", valor = v) }
-        e.parametro("PREDIAL_MINIMO", null, valor = "0.6")
-        if (autoavaluo == null) return null
-        val otro =
-            post(
-                "/api/srtm/predios",
-                mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 124", "tipo_predio" to "PREDIO URBANO")
-            )["id"].asString()
-        return post(
-            "/api/srtm/declaraciones",
-            mapOf("contribuyente" to e.contribuyente, "predio" to otro, "anio" to e.anio, "secuencia_uso" to "1", "valor_autoavaluo" to autoavaluo)
-        )["id"].asString()
+    // a timeout leaves v2 POR_ENVIAR while caja holds it: a v3 waits for it (no alta, no cancel), and caja never holds
+    // two ordenes of one cuota
+    @Test
+    fun `timeoutYOtroCambioNoDejanDosOrdenes`() {
+        val e = Escenario()
+        val dj = conPredial(e)!!
+        enviar(e.contribuyente, e.anio)
+        val referencias = { v: Int -> (1..4).map { "PREDIAL-${e.contribuyente}-${e.anio}-C$it-v$v" } }
+        cambiarAutoavaluo(dj, 80000)
+        retraso = { if (it.cuerpo["sustituye_a"] != null) 2500L else 0L }
+        enviar(e.contribuyente, e.anio)
+        assertTrue(referencias(2).all { ordenes(e.contribuyente, e.anio).getValue(it)["estado"].asString() == EstadoOrdenCaja.POR_ENVIAR })
+
+        // another change while v2 is in caja's hands: v3 is not sent, v2 is (the same body again)
+        retraso = { 0L }
+        cambiarAutoavaluo(dj, 90000)
+        val diferida = enviar(e.contribuyente, e.anio)
+        assertTrue(diferida["pendientes"].asInt() >= 4, diferida.toString())
+        assertTrue(PEDIDOS.none { it.referencia in referencias(3) })
+        assertTrue(referencias(2).all { ordenes(e.contribuyente, e.anio).getValue(it)["estado"].asString() == EstadoOrdenCaja.ENVIADA })
+
+        // once v2 is resolved, v3 replaces it
+        enviar(e.contribuyente, e.anio)
+
+        val despues = ordenes(e.contribuyente, e.anio)
+        assertEquals(List(4) { EstadoOrdenCaja.ENVIADA }, referencias(3).map { despues.getValue(it)["estado"].asString() })
+        assertEquals(List(8) { EstadoOrdenCaja.RETIRADA }, (referencias(1) + referencias(2)).map { despues.getValue(it)["estado"].asString() })
+        assertEquals(referencias(2), referencias(3).map { r -> PEDIDOS.last { it.alta && it.referencia == r }.cuerpo["sustituye_a"] })
+        val prediales = vivasEnCaja().filter { it.startsWith("PREDIAL-${e.contribuyente}-") }
+        assertEquals(referencias(3).toSet(), prediales.toSet())
     }
 
-    private fun enviar(
-        c: String,
-        anio: Int
-    ): JsonNode = tree(send("POST", "/api/srtm/contribuyentes/$c/caja?anio=$anio", null, HttpStatus.OK))
+    // D6: a retiro answered 200 or 404 is RETIRADA, one answered 409 was paid in caja
+    @Test
+    fun `retiroSegunLaRespuesta`() {
+        val e = Escenario()
+        val dj = conPredial(e)!!
+        enviar(e.contribuyente, e.anio)
+        val v1 = (1..4).map { "PREDIAL-${e.contribuyente}-${e.anio}-C$it-v1" }
+        respuesta = {
+            when {
+                it.alta -> null
+                it.referencia == v1[1] -> 404 to """{"detail":"no existe"}"""
+                it.referencia == v1[2] -> 409 to """{"detail":"Pagada con el recibo 001-000123"}"""
+                else -> null
+            }
+        }
+        // without the declaración, the predial is 0.00: nothing to collect
+        send("POST", "/api/srtm/declaraciones/$dj/anular", mapOf("motivo_anulacion" to "Declarada dos veces"), HttpStatus.OK)
 
-    private fun caja(
-        c: String,
-        anio: Int
-    ): JsonNode = tree(send("GET", "/api/srtm/contribuyentes/$c/caja?anio=$anio", null, HttpStatus.OK))
+        val resumen = enviar(e.contribuyente, e.anio)
 
-    // until a vuelta takes nothing: another test's leftovers of this organization may come first
-    private fun vueltas() {
-        repeat(20) { if (runBlocking { envio.vuelta() } == 0) return }
+        val o = ordenes(e.contribuyente, e.anio)
+        assertEquals(
+            listOf(EstadoOrdenCaja.RETIRADA, EstadoOrdenCaja.RETIRADA, EstadoOrdenCaja.PAGADA_EN_CAJA, EstadoOrdenCaja.RETIRADA),
+            v1.map { o.getValue(it)["estado"].asString() }
+        )
+        assertTrue(o.getValue(v1[2])["pagada"].asBoolean())
+        assertEquals(3, resumen["retiradas"].asInt(), resumen.toString())
+        assertEquals(1, resumen["pagadas_en_caja"].asInt(), resumen.toString())
+        val retiros = PEDIDOS.filter { !it.alta && it.referencia in v1 }
+        assertEquals(4, retiros.size)
+        assertTrue(retiros.all { it.cuerpo["motivo"] == MOTIVO_SIN_DEUDA }, retiros.map { it.cuerpo }.toString())
     }
 
-    private fun documentoDe(c: String) =
-        tree(send("GET", "/api/objects/contribuyente/records/$c", null, HttpStatus.OK))["attributes"]["numero_documento"].asString()
+    // D6: an alta answered 409 is CONFLICTO; 400, 422 and 404 are ERROR, each with why
+    @Test
+    fun `altaSegunLaRespuesta`() {
+        val e = Escenario()
+        val cuotas = tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))
+        val r = lista(cuotas) { "ARB-${it["clave"].asString()}" }
+        respuesta = {
+            when {
+                !it.alta -> null
+                it.referencia == r[0] -> 409 to """{"detail":"La referencia ya tiene otra deuda"}"""
+                it.referencia == r[1] -> 400 to """{"detail":"importe inválido"}"""
+                it.referencia == r[2] -> 422 to "{}"
+                it.referencia == r[3] -> 404 to "{}"
+                else -> null
+            }
+        }
 
-    private fun codigoDe(predio: String) = tree(send("GET", "/api/objects/predio/records/$predio", null, HttpStatus.OK))["attributes"]["codigo"].asString()
+        val resumen = enviar(e.contribuyente, e.anio)
 
-    private fun altasDe(documento: String) = PEDIDOS.filter { it.alta && it.cuerpo["pagador_documento"] == documento }
+        val o = ordenes(e.contribuyente, e.anio)
+        assertEquals(
+            listOf(EstadoOrdenCaja.CONFLICTO, EstadoOrdenCaja.ERROR, EstadoOrdenCaja.ERROR, EstadoOrdenCaja.ERROR),
+            r.take(4).map { o.getValue(it)["estado"].asString() }
+        )
+        assertEquals(
+            listOf("La referencia ya tiene otra deuda", "importe inválido", "caja-backend respondió 422", "caja-backend respondió 404"),
+            r.take(4).map { o.getValue(it)["ultimo_error"].asString() }
+        )
+        assertEquals(1, resumen["conflictos"].asInt(), resumen.toString())
+        assertEquals(20, resumen["enviadas"].asInt(), resumen.toString())
+        assertTrue(r.drop(4).all { o.getValue(it)["estado"].asString() == EstadoOrdenCaja.ENVIADA })
+    }
 
-    private fun importe(n: JsonNode) = n.decimalValue().setScale(2, RoundingMode.HALF_UP).toPlainString()
+    // srtm.caja.intentos=3: the third try caja does not answer is ERROR, and it is not tried again
+    @Test
+    fun `intentosAgotadosEsError`() {
+        val e = Escenario()
+        send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED)
+        val documento = documentoDe(e.contribuyente)
+        respuesta = { if (it.alta && it.cuerpo["pagador_documento"] == documento) 503 to "{}" else null }
+
+        enviar(e.contribuyente, e.anio)
+        vueltas()
+
+        val o = registrosDe(e.contribuyente)
+        assertEquals(List(24) { EstadoOrdenCaja.ERROR }, o.map { it["estado"].asString() })
+        assertTrue(o.all { it["intentos"].asInt() == 3 && it["ultimo_error"].asString().contains("503") }, o.first().toString())
+        assertTrue(altasDe(documento).groupBy { it.referencia }.values.all { it.size == 3 })
+    }
 
     // nothing of another class or run is left for this test's group to take: only its emission runs
     private fun soloLaDelTest() {
@@ -373,88 +408,6 @@ class CajaApiTest : ConArbitriosApiTest() {
             if (listo(job)) return job
             assertTrue(System.nanoTime() < limite, "la emisión no avanza: $job")
             Thread.sleep(100)
-        }
-    }
-
-    // a call the caja falsa got
-    class Pedido(
-        val ruta: String,
-        val cuerpo: Map<String, String>
-    ) {
-        val alta: Boolean get() = ruta.endsWith("/ordenes-de-cobro")
-        val referencia: String get() = cuerpo["referencia_externa"].orEmpty()
-    }
-
-    companion object {
-        private val SLUG = "caja-${UUID.randomUUID().toString().take(8)}"
-        private var organizacion: String? = null
-
-        private val JSON = JsonMapper.builder().build()
-
-        val PEDIDOS = CopyOnWriteArrayList<Pedido>()
-
-        // what the caja answers a call (null: an alta's 201, a retiro's 200), and how long it waits first
-        @Volatile
-        var respuesta: (Pedido) -> Pair<Int, String>? = { null }
-
-        @Volatile
-        var retraso: (Pedido) -> Long = { 0L }
-
-        private val CAJA: HttpServer =
-            HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
-                // a call that waits never holds up the next one
-                executor = Executors.newCachedThreadPool()
-                createContext("/api/auth/token") { ex -> responder(ex, 200, """{"token":"t-caja","expiresAt":"2999-01-01T00:00:00Z"}""") }
-                createContext("/api/caja/ordenes-de-cobro") { ex ->
-                    if (ex.requestHeaders.getFirst("Authorization") != "Bearer t-caja") {
-                        responder(ex, 401, "{}")
-                        return@createContext
-                    }
-                    @Suppress("UNCHECKED_CAST")
-                    val cuerpo = JSON.readValue(ex.requestBody.readAllBytes(), Map::class.java) as Map<String, String>
-                    val pedido = Pedido(ex.requestURI.path, cuerpo)
-                    PEDIDOS += pedido
-                    Thread.sleep(retraso(pedido))
-                    val (estado, texto) =
-                        respuesta(pedido)
-                            ?: if (pedido.alta) {
-                                201 to """{"orden_id":"${UUID.randomUUID()}","estado":"PENDIENTE"}"""
-                            } else {
-                                200 to """{"orden_id":"${UUID.randomUUID()}","estado":"ANULADA"}"""
-                            }
-                    runCatching { responder(ex, estado, texto) }
-                }
-                start()
-            }
-
-        private fun responder(
-            ex: HttpExchange,
-            estado: Int,
-            cuerpo: String
-        ) {
-            val bytes = cuerpo.toByteArray()
-            ex.responseHeaders.add("Content-Type", "application/json")
-            ex.sendResponseHeaders(estado, bytes.size.toLong())
-            ex.responseBody.use { it.write(bytes) }
-        }
-
-        @JvmStatic
-        @DynamicPropertySource
-        fun caja(registro: DynamicPropertyRegistry) {
-            registro.add("srtm.caja.organizaciones.prueba.organizacion") { SLUG }
-            registro.add("srtm.caja.organizaciones.prueba.url") { "http://127.0.0.1:${CAJA.address.port}" }
-            registro.add("srtm.caja.organizaciones.prueba.client-id") { "rentas" }
-            registro.add("srtm.caja.organizaciones.prueba.client-secret") { "secreto-de-prueba" }
-            registro.add("srtm.caja.organizaciones.prueba.timeout") { "1s" }
-            registro.add("srtm.caja.plazo-en-linea") { "PT30S" }
-            registro.add("srtm.emision.dir") { "build/emisiones-test" }
-            registro.add("srtm.emision.espera") { "200ms" }
-        }
-
-        @JvmStatic
-        @AfterAll
-        fun parar() {
-            CAJA.stop(0)
         }
     }
 }

@@ -32,6 +32,8 @@ data class CajaProperties(
     val intentos: Int = 20,
     // how long a write of srtm waits for caja before leaving the orden to the worker
     val plazoEnLinea: Duration = Duration.ofSeconds(5),
+    // how long an orden caja did not answer waits before its next try, doubled on each one (up to an hour)
+    val esperaReintento: Duration = Duration.ofSeconds(30),
     val organizaciones: Map<String, CuentaCaja> = emptyMap()
 ) {
     // every account by its organization (trimmed, lowercase: a slug matches without case, an id parses either way)
@@ -58,7 +60,8 @@ data class CajaProperties(
             .mapValues { it.value.sorted() }
 
     // never the secret: this text may end up in a log
-    override fun toString() = "CajaProperties(intervalo=$intervalo, lote=$lote, intentos=$intentos, plazoEnLinea=$plazoEnLinea, organizaciones=$organizaciones)"
+    override fun toString() =
+        "CajaProperties(intervalo=$intervalo, lote=$lote, intentos=$intentos, plazoEnLinea=$plazoEnLinea, esperaReintento=$esperaReintento, organizaciones=$organizaciones)"
 }
 
 // one organization's caja-backend and its service account

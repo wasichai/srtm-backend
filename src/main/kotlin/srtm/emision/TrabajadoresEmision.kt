@@ -315,13 +315,14 @@ class GrupoTrabajadores(
         reclamar(lote)
     }
 
-    // #163: each contribuyente of the lote synchronized with the caja, as the lote's user. a failure is logged and the
+    // #163: each contribuyente of the lote synchronized with the caja, as the lote's user (queued, EnvioACaja sends). a failure is logged and the
     // emission goes on: it is never the lote's
     private suspend fun enviarACaja(lote: LoteTomado) {
         val caja = caja ?: return
         for (c in lote.contribuyentes) {
             try {
-                caja.sincronizar(c.id, lote.anio, motivoDeEmision(lote.anio))
+                // only queued: the loop sends them
+                caja.sincronizar(c.id, lote.anio, motivoDeEmision(lote.anio), enLinea = false)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {

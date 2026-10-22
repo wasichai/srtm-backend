@@ -28,13 +28,15 @@ class SincronizacionTest {
         estado: String,
         ranura: String = "ARB|p|s|2026|1|1",
         version: Int = 1,
-        sustituyeA: String? = null
+        sustituyeA: String? = null,
+        intentos: Int? = null
     ) = OrdenCaja(
         id = UUID.randomUUID().toString(),
         referencia = "$ranura-v$version",
         ranura = ranura,
         estado = estado,
         sustituyeA = sustituyeA,
+        intentos = intentos,
         importe = BigDecimal("10.00")
     )
 
@@ -153,5 +155,58 @@ class SincronizacionTest {
         val ref = referenciaPredial(c, 2026, 4, 12)
         assertEquals("PREDIAL-$c-2026-C4-v12", ref)
         assertTrue(ref.length < 120)
+    }
+
+    // caja may hold an orden POR_ENVIAR already tried: its ranura waits, with neither an alta nor a cancel
+    @Test
+    fun intentadaDifiereLaRanura() {
+        val v1 = actual(EstadoOrdenCaja.ENVIADA)
+        val v2 = actual(EstadoOrdenCaja.POR_ENVIAR, version = 2, sustituyeA = v1.referencia, intentos = 1)
+        assertEquals(Plan(emptyList(), emptyList(), emptyList(), 1), planificar(listOf(deseada(version = 3)), listOf(v1, v2)))
+        // without a deseada too: it is withdrawn once the queue resolves it, never cancelled
+        assertEquals(Plan(emptyList(), emptyList(), emptyList(), 1), planificar(emptyList(), listOf(v2)))
+        // its own version is just waiting for the queue
+        assertEquals(Plan(emptyList(), emptyList(), emptyList()), planificar(listOf(deseada(version = 2)), listOf(v1, v2)))
+    }
+
+    @Test
+    fun nuncaIntentadaSeCancela() {
+        val v1 = actual(EstadoOrdenCaja.POR_ENVIAR, intentos = 0)
+        val d = deseada(version = 2)
+        val plan = planificar(listOf(d), listOf(v1))
+        assertEquals(Plan(listOf(Alta(d, null)), emptyList(), listOf(UUID.fromString(v1.id))), plan)
+    }
+
+    @Test
+    fun mismaReferenciaPorEnviarOErrorNoHaceNada() {
+        for (estado in listOf(EstadoOrdenCaja.POR_ENVIAR, EstadoOrdenCaja.ERROR)) {
+            assertEquals(Plan(emptyList(), emptyList(), emptyList()), planificar(listOf(deseada()), listOf(actual(estado, intentos = 3))), estado)
+        }
+    }
+
+    @Test
+    fun errorYOtraVersionSustituyeALaEnviada() {
+        val v1 = actual(EstadoOrdenCaja.ENVIADA)
+        val v2 = actual(EstadoOrdenCaja.ERROR, version = 2, sustituyeA = v1.referencia, intentos = 20)
+        val d = deseada(version = 3)
+        assertEquals(Plan(listOf(Alta(d, v1.referencia)), emptyList(), emptyList()), planificar(listOf(d), listOf(v1, v2)))
+    }
+
+    @Test
+    fun porEnviarBajoUnaDeseadaEnCeroSeCancela() {
+        val v1 = actual(EstadoOrdenCaja.POR_ENVIAR, intentos = 0)
+        val plan = planificar(listOf(deseada(version = 2, importe = "0.00")), listOf(v1))
+        assertEquals(Plan(emptyList(), emptyList(), listOf(UUID.fromString(v1.id))), plan)
+    }
+
+    @Test
+    fun elOrdenEntreRanurasEsElDeLaEntrada() {
+        val ranuras = listOf("ARB|p|s|2026|3|1", "ARB|p|s|2026|1|1", "ARB|p|s|2026|2|1")
+        val deseadas = ranuras.map { deseada(ranura = it, version = 2) }
+        val enviadas = ranuras.reversed().map { actual(EstadoOrdenCaja.ENVIADA, ranura = it) }
+        val plan = planificar(deseadas, enviadas)
+        assertEquals(ranuras, plan.altas.map { it.deseada.ranura })
+        val retiros = planificar(emptyList(), enviadas).retiros
+        assertEquals(enviadas.map { it.referencia }, retiros.map { it.referencia })
     }
 }
