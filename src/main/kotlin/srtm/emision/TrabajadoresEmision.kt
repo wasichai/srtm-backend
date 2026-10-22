@@ -30,6 +30,8 @@ import org.springframework.context.event.EventListener
 import org.springframework.core.env.Environment
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.stereotype.Component
+import srtm.caja.CajaService
+import srtm.caja.motivoDeEmision
 import srtm.impuesto.ParametrosTributarios
 import java.net.InetAddress
 import java.nio.file.Files
@@ -148,7 +150,8 @@ class GrupoTrabajadores(
     private val identidad: IdentidadEmision,
     private val retencion: RetencionEmision,
     private val parametros: ParametrosTributarios,
-    private val otros: List<TrabajoPorLotes> = emptyList()
+    private val otros: List<TrabajoPorLotes> = emptyList(),
+    private val caja: CajaService? = null
 ) {
     private val generador = GeneradorEmision(documentos, merger)
     private val ensamblador = EnsambladorEmision(almacen, merger)
@@ -278,6 +281,7 @@ class GrupoTrabajadores(
                                 if (!lotes.avanzar(lote, instancia, procesados, errores)) throw Perdido()
                             }
                         almacen.guardar(clave, parcial)
+                        if (lote.enviarACaja) enviarACaja(lote)
                         hecho
                     }
                 }
@@ -309,6 +313,22 @@ class GrupoTrabajadores(
             documentosPorSegundo(documentos, duracion)
         )
         reclamar(lote)
+    }
+
+    // #163: each contribuyente of the lote synchronized with the caja, as the lote's user (queued, EnvioACaja sends). a failure is logged and the
+    // emission goes on: it is never the lote's
+    private suspend fun enviarACaja(lote: LoteTomado) {
+        val caja = caja ?: return
+        for (c in lote.contribuyentes) {
+            try {
+                // only queued: the loop sends them
+                caja.sincronizar(c.id, lote.anio, motivoDeEmision(lote.anio), enLinea = false)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                log.warn("lote {} de la emisión masiva {}: un contribuyente no se envió a caja ({})", lote.numero, lote.emision, e.javaClass.simpleName)
+            }
+        }
     }
 
     // the lote could not be generated: FALLIDO, with all its contribuyentes among its errores
@@ -433,7 +453,8 @@ class TrabajadoresEmision(
     private val retencion: RetencionEmision,
     private val parametros: ParametrosTributarios,
     private val entorno: Environment,
-    private val otros: ObjectProvider<TrabajoPorLotes>
+    private val otros: ObjectProvider<TrabajoPorLotes>,
+    private val caja: CajaService
 ) {
     @Volatile
     private var propio: GrupoTrabajadores? = null
@@ -457,7 +478,8 @@ class TrabajadoresEmision(
         identidad,
         retencion,
         parametros,
-        otros.orderedStream().toList()
+        otros.orderedStream().toList(),
+        caja
     )
 
     @EventListener(ApplicationReadyEvent::class)

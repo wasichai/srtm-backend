@@ -18,6 +18,8 @@ import org.springframework.core.io.Resource
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.stereotype.Service
+import srtm.caja.CajaService
+import srtm.caja.SIN_CAJA_CONFIGURADA
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
 import srtm.rentas.DECLARACION
@@ -143,16 +145,19 @@ class EmisionMasivaService(
     private val retencion: RetencionEmision,
     private val trabajadores: TrabajadoresEmision,
     private val config: EmisionProperties,
-    private val documentos: DocumentosDeEmision
+    private val documentos: DocumentosDeEmision,
+    private val caja: CajaService
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // `incluir`: the documents of each contribuyente. one that asks for the HLA is refused (422, with what is missing)
-    // when the year lacks what every HLA needs, before anything exists
+    // when the year lacks what every HLA needs, before anything exists. enviarACaja (#163): each lote synchronizes its
+    // contribuyentes with the caja, which the organization must have (409)
     suspend fun emitir(
         anio: Int,
         formato: FormatoEmision,
-        incluir: Set<DocumentoEmision> = POR_DEFECTO
+        incluir: Set<DocumentoEmision> = POR_DEFECTO,
+        enviarACaja: Boolean = false
     ): Emision {
         val llamante =
             ReactiveSecurityContextHolder.getContext().awaitFirstOrNull()?.authentication
@@ -162,6 +167,7 @@ class EmisionMasivaService(
             val faltan = documentos.faltanHla(anio)
             if (faltan.isNotEmpty()) throw FaltanParametros(anio, faltan)
         }
+        if (enviarACaja && caja.cajaDelLlamante() == null) throw ConflictException(SIN_CAJA_CONFIGURADA)
         val organizacion = usuario.organizationId
         if (estado.activas(organizacion, anio).isNotEmpty()) throw ConflictException(enCurso(anio))
         val job =
@@ -172,6 +178,7 @@ class EmisionMasivaService(
                     "anio" to anio,
                     "formato" to formato.name,
                     "documentos" to documentosJson(incluir),
+                    "enviar_a_caja" to enviarACaja,
                     "estado" to PENDIENTE,
                     "total" to 0,
                     "procesados" to 0,

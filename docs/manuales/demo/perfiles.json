@@ -159,6 +159,20 @@
         ],
         "brecha_predio": [
           "READ"
+        ],
+        "cuota_predial": [
+          "CREATE",
+          "READ"
+        ],
+        "orden_caja": [
+          "CREATE",
+          "READ"
+        ],
+        "pago_caja": [
+          "READ"
+        ],
+        "pago_caja_detalle": [
+          "READ"
         ]
       }
     },
@@ -264,6 +278,20 @@
           "READ"
         ],
         "brecha_predio": [
+          "READ"
+        ],
+        "cuota_predial": [
+          "CREATE",
+          "READ"
+        ],
+        "orden_caja": [
+          "CREATE",
+          "READ"
+        ],
+        "pago_caja": [
+          "READ"
+        ],
+        "pago_caja_detalle": [
           "READ"
         ]
       }
@@ -526,6 +554,18 @@
           "READ"
         ],
         "brecha_predio": [
+          "READ"
+        ],
+        "cuota_predial": [
+          "READ"
+        ],
+        "orden_caja": [
+          "READ"
+        ],
+        "pago_caja": [
+          "READ"
+        ],
+        "pago_caja_detalle": [
           "READ"
         ]
       }

@@ -1,5 +1,6 @@
 package srtm.emision
 
+import com.fasterxml.jackson.annotation.JsonProperty
 import kotlinx.coroutines.reactor.awaitSingleOrNull
 import org.springframework.core.ResolvableType
 import org.springframework.core.io.Resource
@@ -28,11 +29,13 @@ import java.time.LocalDate
 import java.util.UUID
 
 // the body of POST /emisiones: without anio, the current year; without formato, one pdf; without documentos, each
-// contribuyente's HR and PUs (HR, PU, HLA: any of them)
+// contribuyente's HR and PUs (HR, PU, HLA: any of them). enviar_a_caja: each contribuyente's cuotas go to the caja too
 data class PedidoEmision(
     val anio: Int? = null,
     val formato: FormatoEmision? = null,
-    val documentos: List<String>? = null
+    val documentos: List<String>? = null,
+    @param:JsonProperty("enviar_a_caja") @get:JsonProperty("enviar_a_caja")
+    val enviarACaja: Boolean? = null
 )
 
 // the documents a POST asks for: a name that is none of them, or none at all, is a 400 that names the field
@@ -58,7 +61,13 @@ class EmisionMasivaController(
     @ResponseStatus(HttpStatus.ACCEPTED)
     suspend fun emitir(
         @RequestBody pedido: PedidoEmision
-    ): Emision = emisiones.emitir(pedido.anio ?: LocalDate.now().year, pedido.formato ?: FormatoEmision.PDF, documentosPedidos(pedido.documentos))
+    ): Emision =
+        emisiones.emitir(
+            pedido.anio ?: LocalDate.now().year,
+            pedido.formato ?: FormatoEmision.PDF,
+            documentosPedidos(pedido.documentos),
+            pedido.enviarACaja == true
+        )
 
     // the most recent first
     @GetMapping

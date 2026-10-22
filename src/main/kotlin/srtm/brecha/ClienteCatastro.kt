@@ -1,8 +1,6 @@
 package srtm.brecha
 
 import kotlinx.coroutines.reactor.awaitSingleOrNull
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.slf4j.LoggerFactory
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -15,6 +13,8 @@ import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.util.UriComponentsBuilder
 import reactor.core.publisher.Mono
+import srtm.PorOrganizacion
+import srtm.TokenDeServicio
 import tools.jackson.databind.DeserializationFeature
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
@@ -112,37 +112,18 @@ class Catastros(
     porOrganizacion: Map<String, Catastro>,
     repetidas: Map<String, Collection<String>> = emptyMap()
 ) {
-    private val entradas = porOrganizacion.mapKeys { it.key.trim() }
-    private val repetidas = repetidas.mapKeys { it.key.trim() }
+    private val registro = PorOrganizacion(porOrganizacion, repetidas, ::dosCatastros)
 
-    val configurado: Boolean get() = entradas.isNotEmpty() || repetidas.isNotEmpty()
+    val configurado: Boolean get() = registro.configurado
 
     // some key is a slug: the caller's organization has to be read for it
-    val necesitaSlug: Boolean = (entradas.keys + repetidas.keys).any { comoId(it) == null }
+    val necesitaSlug: Boolean get() = registro.necesitaSlug
 
-    // this organization's catastro, or null when it has none. a key that is an id matches by id; else by slug
-    // (without case). named twice (by its slug and by its id, or by two entries of the map): 409, never one of the two
-    // at random
+    // this organization's catastro, or null when it has none; named twice: 409
     fun de(
         id: UUID,
         slug: String?
-    ): Catastro? {
-        repetidas.entries.firstOrNull { esDe(it.key, id, slug) }?.let { throw ConflictException(dosCatastros(it.value)) }
-        val suyas = entradas.filterKeys { esDe(it, id, slug) }
-        if (suyas.size > 1) throw ConflictException(dosCatastros(suyas.keys))
-        return suyas.values.firstOrNull()
-    }
-
-    private fun esDe(
-        clave: String,
-        id: UUID,
-        slug: String?
-    ): Boolean {
-        val comoId = comoId(clave)
-        return if (comoId != null) comoId == id else slug != null && slug.equals(clave, ignoreCase = true)
-    }
-
-    private fun comoId(clave: String) = runCatching { UUID.fromString(clave) }.getOrNull()
+    ): Catastro? = registro.de(id, slug)
 }
 
 const val NO_CONFIGURADO =
@@ -179,9 +160,8 @@ class ClienteCatastro(
             .codecs { it.defaultCodecs().maxInMemorySize(TAMANIO_MAXIMO) }
             .build()
 
-    private val candado = Mutex()
-    private var token: String? = null
-    private var vence: Instant = Instant.MIN
+    private val servicio =
+        TokenDeServicio(client, cuenta.url.trimEnd('/') + "/api/auth/token", cuenta.clientId, cuenta.clientSecret, timeout, ahora, "catastro-backend")
 
     override suspend fun valuaciones(
         anio: Int,
@@ -271,7 +251,7 @@ class ClienteCatastro(
                 throw e
             } catch (e: WebClientResponseException) {
                 if (e.statusCode == HttpStatus.UNAUTHORIZED && intento == 0) {
-                    candado.withLock { token = null }
+                    servicio.olvidar()
                 } else {
                     throw CatastroException("catastro-backend respondió ${e.statusCode.value()} a $que")
                 }
@@ -284,46 +264,16 @@ class ClienteCatastro(
 
     // the cached token while it has more than a minute left; else a new one
     private suspend fun token(): String =
-        candado.withLock {
-            val vigente = token
-            if (vigente != null && ahora() < vence.minus(MARGEN)) return@withLock vigente
-            val respuesta =
-                try {
-                    client
-                        .post()
-                        .uri(cuenta.url.trimEnd('/') + "/api/auth/token")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .accept(MediaType.APPLICATION_JSON)
-                        .bodyValue(mapOf("clientId" to cuenta.clientId, "clientSecret" to cuenta.clientSecret))
-                        .retrieve()
-                        .bodyToMono(String::class.java)
-                        .timeout(timeout)
-                        .awaitSingleOrNull()
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    // the reason only: the request carries the secret
-                    val estado =
-                        (e as? WebClientResponseException)
-                            ?.statusCode
-                            ?.value()
-                            ?.let { " ($it)" }
-                            .orEmpty()
-                    log.warn("catastro: no se obtuvo el token de la cuenta de servicio {}{}", cuenta.clientId, estado)
-                    throw CatastroException("catastro-backend no dio el token de la cuenta de servicio ${cuenta.clientId}$estado")
-                }
-            val nodo = JSON.readTree(respuesta.orEmpty())
-            val nuevo = nodo.path("token").texto() ?: throw CatastroException("catastro-backend respondió el token sin token")
-            token = nuevo
-            vence = nodo.path("expiresAt").texto()?.let { runCatching { Instant.parse(it) }.getOrNull() } ?: ahora()
-            nuevo
+        try {
+            servicio.token()
+        } catch (e: TokenDeServicio.TokenException) {
+            throw CatastroException(e.message.orEmpty())
         }
 
     companion object {
         const val TAMANIO_PAGINA = 500
         val TIMEOUT: Duration = Duration.ofSeconds(60)
         private const val TAMANIO_MAXIMO = 32 * 1024 * 1024
-        private val MARGEN: Duration = Duration.ofSeconds(60)
         private val JSON = JsonMapper.builder().build()
 
         // the items' figures as decimals, never through a double (a 17-digit autoavalúo would lose its céntimos)

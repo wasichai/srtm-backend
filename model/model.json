@@ -351,7 +351,10 @@
     "paridad_numeracion": ["PAR", "IMPAR", "AMBOS"],
     "base_arbitrio": ["PREDIO", "FRONTIS_ML", "AREA_CONSTRUIDA_M2"],
     "estado_brecha": ["PENDIENTE", "EN_CURSO", "TERMINADA", "FALLIDA"],
-    "categoria_brecha": ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE"]
+    "categoria_brecha": ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE"],
+    "estado_orden_caja": ["POR_ENVIAR", "ENVIADA", "POR_RETIRAR", "RETIRADA", "CANCELADA", "PAGADA_EN_CAJA", "CONFLICTO", "ERROR"],
+    "tipo_orden_caja": ["PREDIAL", "ARBITRIO"],
+    "tipo_pago_caja": ["PAGO_REGISTRADO", "PAGO_ANULADO"]
   },
   "objects": [
     {
@@ -908,7 +911,9 @@
         {"name": "latido", "label": "Latido", "type": "DATETIME",
           "description": "Lease de la instancia que la prepara o la ensambla: la renueva mientras trabaja; vencida, otra la toma."},
         {"name": "documentos", "label": "Documentos", "type": "LONG_TEXT",
-          "description": "JSON: los documentos de cada contribuyente, de HR, PU y HLA (hoja de liquidación de arbitrios). Vacío: HR y PU."}
+          "description": "JSON: los documentos de cada contribuyente, de HR, PU y HLA (hoja de liquidación de arbitrios). Vacío: HR y PU."},
+        {"name": "enviar_a_caja", "label": "Enviar a caja", "type": "BOOLEAN",
+          "description": "Cada lote sincroniza a sus contribuyentes con la caja de la municipalidad (#163). Vacío: no."}
       ]
     },
     {
@@ -1361,6 +1366,92 @@
           "description": "El lote del predio del padrón o, para un omiso, el del catastro (UTM 18S)."},
         {"name": "orden", "label": "Orden", "type": "INTEGER", "description": "Su lugar en la lista: por código del predio, luego por código catastral."}
       ]
+    },
+    {
+      "name": "cuota_predial",
+      "label": "Cuota de impuesto predial",
+      "pluralLabel": "Cuotas de impuesto predial",
+      "description": "Una de las cuatro cuotas trimestrales del impuesto predial de un contribuyente y un año, a su fecha_calculo. Inmutable: nunca se edita ni se borra; un cambio de monto agrega la versión siguiente de su clave.",
+      "appendOnly": true,
+      "indexes": [["anio", "contribuyente"]],
+      "fields": [
+        {"name": "anio", "label": "Año", "type": "INTEGER", "required": true},
+        {"name": "numero", "label": "Número de cuota", "type": "INTEGER", "required": true, "description": "De 1 a 4."},
+        {"name": "revision", "label": "Versión", "type": "INTEGER", "required": true, "description": "La versión de la cuota, desde 1 (el nombre version lo reserva Core)."},
+        {"name": "monto", "label": "Monto", "type": "DECIMAL", "required": true},
+        {"name": "vencimiento", "label": "Vencimiento", "type": "DATE", "required": true},
+        {"name": "valor_afecto", "label": "Valor afecto", "type": "DECIMAL", "required": true, "description": "La base imponible sobre la que se calculó la cuota."},
+        {"name": "fecha_calculo", "label": "Fecha de cálculo", "type": "DATE", "required": true},
+        {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true,
+          "description": "contribuyente|anio|numero|revision: una sola cuota por contribuyente, año y número por versión."}
+      ]
+    },
+    {
+      "name": "orden_caja",
+      "label": "Orden de caja",
+      "pluralLabel": "Órdenes de caja",
+      "description": "Una orden de cobro que srtm manda a la caja: una cuota de predial o de arbitrio. Solo la escribe el servicio de srtm; su estado lo mueve el trabajador de la cola con UPDATE directo.",
+      "indexes": [["anio", "contribuyente"], ["estado"]],
+      "fields": [
+        {"name": "referencia", "label": "Referencia", "type": "TEXT", "required": true, "unique": true, "description": "La referencia_externa de la orden en la caja."},
+        {"name": "tipo", "label": "Tipo", "type": "ENUM", "enum": "tipo_orden_caja", "required": true},
+        {"name": "ranura", "label": "Ranura", "type": "TEXT", "required": true, "description": "Qué cuota o periodo cubre dentro del año; la fija el planificador."},
+        {"name": "anio", "label": "Año", "type": "INTEGER", "required": true},
+        {"name": "importe", "label": "Importe", "type": "DECIMAL", "required": true},
+        {"name": "concepto", "label": "Concepto", "type": "TEXT", "required": true},
+        {"name": "detalle", "label": "Detalle", "type": "TEXT"},
+        {"name": "fecha_exigibilidad", "label": "Fecha de exigibilidad", "type": "DATE"},
+        {"name": "pagador_documento", "label": "Documento del pagador", "type": "TEXT"},
+        {"name": "pagador_nombre", "label": "Nombre del pagador", "type": "TEXT"},
+        {"name": "sustituye_a", "label": "Sustituye a", "type": "TEXT", "description": "La referencia de la orden que esta reemplaza."},
+        {"name": "motivo", "label": "Motivo", "type": "TEXT"},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_orden_caja", "required": true},
+        {"name": "intentos", "label": "Intentos", "type": "INTEGER"},
+        {"name": "tomado_hasta", "label": "Tomada hasta", "type": "DATETIME", "description": "Lease del trabajador que la toma."},
+        {"name": "ultimo_error", "label": "Último error", "type": "TEXT"},
+        {"name": "orden_id", "label": "Id en la caja", "type": "TEXT", "description": "El UUID de la orden en la caja."},
+        {"name": "enviada_en", "label": "Enviada en", "type": "DATETIME"},
+        {"name": "retirada_en", "label": "Retirada en", "type": "DATETIME"}
+      ]
+    },
+    {
+      "name": "pago_caja",
+      "label": "Pago de caja",
+      "pluralLabel": "Pagos de caja",
+      "description": "Un pago o una anulación de pago que la caja avisa. Inmutable: se agrega, nunca se edita ni se borra.",
+      "appendOnly": true,
+      "indexes": [["fecha_pago"]],
+      "fields": [
+        {"name": "pago_id", "label": "Id del pago", "type": "TEXT", "required": true, "unique": true},
+        {"name": "tipo", "label": "Tipo", "type": "ENUM", "enum": "tipo_pago_caja", "required": true},
+        {"name": "recibo_numero", "label": "Número de recibo", "type": "TEXT"},
+        {"name": "recibo_serie", "label": "Serie del recibo", "type": "TEXT"},
+        {"name": "fecha_pago", "label": "Fecha de pago", "type": "DATE"},
+        {"name": "cajero", "label": "Cajero", "type": "TEXT"},
+        {"name": "forma_pago", "label": "Forma de pago", "type": "TEXT"},
+        {"name": "pagador_documento", "label": "Documento del pagador", "type": "TEXT"},
+        {"name": "pagador_nombre", "label": "Nombre del pagador", "type": "TEXT"},
+        {"name": "total", "label": "Total", "type": "DECIMAL"},
+        {"name": "pago_original", "label": "Pago original", "type": "TEXT", "description": "El pagoOriginalId de un pago anulado."},
+        {"name": "motivo", "label": "Motivo", "type": "TEXT"},
+        {"name": "aplicado", "label": "Aplicado", "type": "BOOLEAN"},
+        {"name": "a_cuenta", "label": "A cuenta", "type": "BOOLEAN"},
+        {"name": "respuesta", "label": "Respuesta", "type": "LONG_TEXT", "description": "El cuerpo devuelto, para repetirlo en el 409 de un aviso repetido."}
+      ]
+    },
+    {
+      "name": "pago_caja_detalle",
+      "label": "Detalle de pago de caja",
+      "pluralLabel": "Detalles de pagos de caja",
+      "description": "Una orden que un pago de caja cubre, y si se aplicó. Inmutable: se agrega, nunca se edita ni se borra.",
+      "appendOnly": true,
+      "fields": [
+        {"name": "referencia", "label": "Referencia", "type": "TEXT", "required": true},
+        {"name": "importe", "label": "Importe", "type": "DECIMAL", "required": true},
+        {"name": "aplicado", "label": "Aplicado", "type": "BOOLEAN"},
+        {"name": "motivo", "label": "Motivo", "type": "TEXT"},
+        {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true, "description": "pago_id|referencia: una sola fila por pago y orden."}
+      ]
     }
   ],
   "relationships": [
@@ -1758,6 +1849,78 @@
       "source": "brecha_predio",
       "target": "predio",
       "fieldName": "predio",
+      "required": false
+    },
+    {
+      "name": "cuota_predial_contribuyente",
+      "label": "Contribuyente",
+      "inverseLabel": "Cuotas de predial",
+      "source": "cuota_predial",
+      "target": "contribuyente",
+      "fieldName": "contribuyente",
+      "required": true
+    },
+    {
+      "name": "orden_caja_contribuyente",
+      "label": "Contribuyente",
+      "inverseLabel": "Órdenes de caja",
+      "source": "orden_caja",
+      "target": "contribuyente",
+      "fieldName": "contribuyente",
+      "required": true
+    },
+    {
+      "name": "orden_caja_cuota_arbitrio",
+      "label": "Cuota de arbitrio",
+      "inverseLabel": "Órdenes de caja",
+      "source": "orden_caja",
+      "target": "cuota_arbitrio",
+      "fieldName": "cuota_arbitrio",
+      "required": false
+    },
+    {
+      "name": "orden_caja_cuota_predial",
+      "label": "Cuota de predial",
+      "inverseLabel": "Órdenes de caja",
+      "source": "orden_caja",
+      "target": "cuota_predial",
+      "fieldName": "cuota_predial",
+      "required": false
+    },
+    {
+      "name": "pago_caja_contribuyente",
+      "label": "Contribuyente",
+      "inverseLabel": "Pagos de caja",
+      "source": "pago_caja",
+      "target": "contribuyente",
+      "fieldName": "contribuyente",
+      "required": false
+    },
+    {
+      "name": "pago_caja_detalle_pago",
+      "label": "Pago",
+      "inverseLabel": "Detalles",
+      "source": "pago_caja_detalle",
+      "target": "pago_caja",
+      "fieldName": "pago",
+      "required": true
+    },
+    {
+      "name": "pago_caja_detalle_orden",
+      "label": "Orden",
+      "inverseLabel": "Pagos",
+      "source": "pago_caja_detalle",
+      "target": "orden_caja",
+      "fieldName": "orden",
+      "required": false
+    },
+    {
+      "name": "pago_caja_detalle_contribuyente",
+      "label": "Contribuyente",
+      "inverseLabel": "Detalles de pagos de caja",
+      "source": "pago_caja_detalle",
+      "target": "contribuyente",
+      "fieldName": "contribuyente",
       "required": false
     }
   ]

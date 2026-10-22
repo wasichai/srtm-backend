@@ -96,6 +96,21 @@ srtm:
     # the srtm organization (its slug or its id) whose catastro the single url and account are. empty: they are no
     # organization's and are not used
     organizacion: ${SRTM_CATASTRO_ORGANIZACION:}
+  caja:
+    # caja-backend's ordenes de cobro, a caja per organization of srtm, each written as its service account (rentas).
+    # off until an entry is complete, and the secrets come from the environment, never here. organizaciones.<slug-or-id>:
+    # url (caja's root), client-id, client-secret, timeout (default 10s) and, optional, organizacion (an id or a slug
+    # with a dash or an underscore goes there, under any key). no entry is declared here: the environment adds them,
+    # SRTM_CAJA_ORGANIZACIONES_<KEY>_URL, _CLIENT_ID, _CLIENT_SECRET, _TIMEOUT, _ORGANIZACION. an organization without
+    # an entry behaves as before: no ordenes, no calls
+    # how often the worker looks for the ordenes to send, how many it takes, and how many tries one gets before ERROR
+    intervalo: ${SRTM_CAJA_INTERVALO:PT30S}
+    lote: ${SRTM_CAJA_LOTE:50}
+    intentos: ${SRTM_CAJA_INTENTOS:20}
+    # how long a write of srtm waits for caja before leaving the orden to the worker
+    plazo-en-linea: ${SRTM_CAJA_PLAZO_EN_LINEA:PT5S}
+    # how long an orden caja did not answer waits before its next try, doubled on each one (up to an hour)
+    espera-reintento: ${SRTM_CAJA_ESPERA_REINTENTO:PT30S}
   emision:
     # where the emisiones' files are kept (AlmacenEmision): local, on this server's disk under dir, or s3, in the
     # bucket of s3.* (no shared volume: what k8s wants)
