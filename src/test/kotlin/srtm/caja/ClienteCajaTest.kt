@@ -7,9 +7,11 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import tools.jackson.databind.json.JsonMapper
+import wasichai.core.common.ConflictException
 import java.math.BigDecimal
 import java.net.InetSocketAddress
 import java.time.Duration
@@ -29,12 +31,14 @@ class ClienteCajaTest {
     private var respuestaRetiro = ORDEN
     private var rechazos = 0
     private var demora = 0L
+    private var cuerpoDelToken: String? = null
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
 
     init {
         server.createContext("/api/auth/token") { ex ->
             ex.requestBody.readAllBytes()
             tokens++
+            cuerpoDelToken?.let { return@createContext responder(ex, 200, it) }
             responder(ex, 200, """{"token":"t$tokens","expiresAt":"${java.time.Instant.now().plusSeconds(900)}"}""")
         }
         server.createContext("/api/caja/ordenes-de-cobro") { ex ->
@@ -185,6 +189,23 @@ class ClienteCajaTest {
         rechazos = 2
         assertTrue(runBlocking { cliente().alta(orden) } is ResultadoCaja.NoContesta)
         assertEquals(2, tokens)
+    }
+
+    @Test
+    fun tokenQueNoEsJsonEsNoContesta() {
+        cuerpoDelToken = "<html>no es json</html>"
+        assertTrue(runBlocking { cliente().alta(orden) } is ResultadoCaja.NoContesta)
+        assertTrue(runBlocking { cliente().retiro("ARB-1", "m") } is ResultadoCaja.NoContesta)
+        assertTrue(cuerpos.isEmpty())
+    }
+
+    @Test
+    fun unaOrganizacionRepetidaEsConflicto() {
+        val id = UUID.randomUUID()
+        val cajas = Cajas(mapOf("ica" to cliente()), mapOf("lima" to listOf("lima", "LIMA_B")))
+        assertThrows(ConflictException::class.java) { cajas.de(id, "lima") }
+        assertNull(cajas.de(id, "otra"))
+        assertThrows(ConflictException::class.java) { Cajas(mapOf("ica" to cliente(), "ICA " to cliente())).de(id, "ica") }
     }
 
     @Test

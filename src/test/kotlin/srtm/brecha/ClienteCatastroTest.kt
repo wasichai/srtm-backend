@@ -22,6 +22,7 @@ class ClienteCatastroTest {
     private var tokens = 0
     private var expira: Instant = Instant.now().plusSeconds(3600)
     private var rechazarUnaVez = false
+    private var cuerpoDelToken: String? = null
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
 
     init {
@@ -29,6 +30,7 @@ class ClienteCatastroTest {
             val body = ex.requestBody.readAllBytes().decodeToString()
             pedidos += "token $body"
             tokens++
+            cuerpoDelToken?.let { return@createContext responder(ex, 200, it) }
             responder(ex, 200, """{"token":"t$tokens","expiresAt":"$expira","serviceAccount":"srtm"}""")
         }
         server.createContext("/api/catastro/valuaciones") { ex ->
@@ -118,6 +120,13 @@ class ClienteCatastroTest {
         rechazarUnaVez = true
         runBlocking { otro.valuaciones(2026) }
         assertEquals(4, tokens)
+    }
+
+    @Test
+    fun `a token that is not json fails with a CatastroException`() {
+        cuerpoDelToken = "<html>no es json</html>"
+        val e = assertThrows(CatastroException::class.java) { runBlocking { cliente().valuaciones(2026) } }
+        assertTrue(e.message!!.contains("catastro-backend"))
     }
 
     @Test

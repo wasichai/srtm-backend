@@ -9,9 +9,9 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.web.reactive.function.client.WebClient
+import srtm.PorOrganizacion
 import srtm.TokenDeServicio
 import tools.jackson.databind.json.JsonMapper
-import wasichai.core.common.ConflictException
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Duration
@@ -150,38 +150,20 @@ class Cajas(
     porOrganizacion: Map<String, Caja>,
     repetidas: Map<String, Collection<String>> = emptyMap()
 ) {
-    private val entradas = porOrganizacion.mapKeys { it.key.trim() }
-    private val repetidas = repetidas.mapKeys { it.key.trim() }
+    private val registro = PorOrganizacion(porOrganizacion, repetidas, ::dosCajas)
 
-    val configurado: Boolean get() = entradas.isNotEmpty() || repetidas.isNotEmpty()
+    val configurado: Boolean get() = registro.configurado
 
     // some key is a slug: the caller's organization has to be read for it
-    val necesitaSlug: Boolean = (entradas.keys + repetidas.keys).any { comoId(it) == null }
+    val necesitaSlug: Boolean get() = registro.necesitaSlug
 
-    fun organizaciones(): Set<String> = entradas.keys + repetidas.keys
+    fun organizaciones(): Set<String> = registro.claves()
 
-    // this organization's caja, or null when it has none. a key that is an id matches by id; else by slug (without
-    // case). named twice: 409, never one of the two at random
+    // this organization's caja, or null when it has none; named twice: 409
     fun de(
         id: UUID,
         slug: String?
-    ): Caja? {
-        repetidas.entries.firstOrNull { esDe(it.key, id, slug) }?.let { throw ConflictException(dosCajas(it.value)) }
-        val suyas = entradas.filterKeys { esDe(it, id, slug) }
-        if (suyas.size > 1) throw ConflictException(dosCajas(suyas.keys))
-        return suyas.values.firstOrNull()
-    }
-
-    private fun esDe(
-        clave: String,
-        id: UUID,
-        slug: String?
-    ): Boolean {
-        val comoId = comoId(clave)
-        return if (comoId != null) comoId == id else slug != null && slug.equals(clave, ignoreCase = true)
-    }
-
-    private fun comoId(clave: String) = runCatching { UUID.fromString(clave) }.getOrNull()
+    ): Caja? = registro.de(id, slug)
 }
 
 const val SIN_CAJA_CONFIGURADA = "caja no está configurada para esta municipalidad"
@@ -225,6 +207,8 @@ class ClienteCaja(
                     throw e
                 } catch (e: TokenDeServicio.TokenException) {
                     return ResultadoCaja.NoContesta(e.message.orEmpty())
+                } catch (e: Exception) {
+                    return ResultadoCaja.NoContesta("caja-backend no dio el token: ${e.javaClass.simpleName}")
                 }
             val (estado, texto) =
                 try {

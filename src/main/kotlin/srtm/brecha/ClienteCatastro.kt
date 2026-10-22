@@ -13,6 +13,7 @@ import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.util.UriComponentsBuilder
 import reactor.core.publisher.Mono
+import srtm.PorOrganizacion
 import srtm.TokenDeServicio
 import tools.jackson.databind.DeserializationFeature
 import tools.jackson.databind.JsonNode
@@ -111,37 +112,18 @@ class Catastros(
     porOrganizacion: Map<String, Catastro>,
     repetidas: Map<String, Collection<String>> = emptyMap()
 ) {
-    private val entradas = porOrganizacion.mapKeys { it.key.trim() }
-    private val repetidas = repetidas.mapKeys { it.key.trim() }
+    private val registro = PorOrganizacion(porOrganizacion, repetidas, ::dosCatastros)
 
-    val configurado: Boolean get() = entradas.isNotEmpty() || repetidas.isNotEmpty()
+    val configurado: Boolean get() = registro.configurado
 
     // some key is a slug: the caller's organization has to be read for it
-    val necesitaSlug: Boolean = (entradas.keys + repetidas.keys).any { comoId(it) == null }
+    val necesitaSlug: Boolean get() = registro.necesitaSlug
 
-    // this organization's catastro, or null when it has none. a key that is an id matches by id; else by slug
-    // (without case). named twice (by its slug and by its id, or by two entries of the map): 409, never one of the two
-    // at random
+    // this organization's catastro, or null when it has none; named twice: 409
     fun de(
         id: UUID,
         slug: String?
-    ): Catastro? {
-        repetidas.entries.firstOrNull { esDe(it.key, id, slug) }?.let { throw ConflictException(dosCatastros(it.value)) }
-        val suyas = entradas.filterKeys { esDe(it, id, slug) }
-        if (suyas.size > 1) throw ConflictException(dosCatastros(suyas.keys))
-        return suyas.values.firstOrNull()
-    }
-
-    private fun esDe(
-        clave: String,
-        id: UUID,
-        slug: String?
-    ): Boolean {
-        val comoId = comoId(clave)
-        return if (comoId != null) comoId == id else slug != null && slug.equals(clave, ignoreCase = true)
-    }
-
-    private fun comoId(clave: String) = runCatching { UUID.fromString(clave) }.getOrNull()
+    ): Catastro? = registro.de(id, slug)
 }
 
 const val NO_CONFIGURADO =

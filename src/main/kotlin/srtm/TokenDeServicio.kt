@@ -60,7 +60,12 @@ class TokenDeServicio(
                     log.warn("{}: no se obtuvo el token de la cuenta de servicio {}{}", nombre, clientId, estado)
                     throw TokenException("$nombre no dio el token de la cuenta de servicio $clientId$estado")
                 }
-            val nodo = JSON.readTree(respuesta.orEmpty())
+            val nodo =
+                try {
+                    JSON.readTree(respuesta.orEmpty())
+                } catch (e: Exception) {
+                    throw TokenException("$nombre respondió el token con un cuerpo que no es JSON")
+                }
             val nuevo =
                 nodo
                     .path("token")
