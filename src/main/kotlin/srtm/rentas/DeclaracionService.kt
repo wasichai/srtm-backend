@@ -206,7 +206,7 @@ class DeclaracionService(
             if (cambios.isEmpty()) continue
             val otroId = UUID.fromString(otro.id)
             registros.replace(DECLARACION, Declaracion::class.java, otroId, campos.filterKeys { it in cambios })
-            escrita(otroId, conCaja = false)
+            escrita(otroId)
         }
     }
 
@@ -480,7 +480,7 @@ class DeclaracionService(
         id: UUID,
         body: NivelConstruccion
     ) = nuevoNivel(id, body.copy(fila = null)).also { nivel ->
-        escrita(id, conCaja = false)
+        escrita(id)
         replicar(NIVEL_CONSTRUCCION, id, null) { otra, _ -> nuevoNivel(otra, nivel.copy(id = null, declaracion = null)) }
     }
 
@@ -504,7 +504,7 @@ class DeclaracionService(
         val nivel = body.copy(id = null, declaracion = null, fila = fila.fila)
         val saved = listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id, nivel)
         fila.declaracion?.let {
-            escrita(it, conCaja = false)
+            escrita(it)
             replicar(NIVEL_CONSTRUCCION, it, fila) { otra, pareja ->
                 if (pareja == null) nuevoNivel(otra, nivel) else listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, pareja, nivel)
             }
@@ -518,7 +518,7 @@ class DeclaracionService(
         id: UUID,
         body: ObraComplementaria
     ) = nuevaObra(id, body.copy(fila = null)).also { obra ->
-        escrita(id, conCaja = false)
+        escrita(id)
         replicar(OBRA_COMPLEMENTARIA, id, null) { otra, _ -> nuevaObra(otra, obra.copy(id = null, declaracion = null)) }
     }
 
@@ -541,7 +541,7 @@ class DeclaracionService(
         val obra = obra(body).copy(id = null, declaracion = null, fila = fila.fila)
         val saved = listas.cambiar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, id, obra)
         fila.declaracion?.let {
-            escrita(it, conCaja = false)
+            escrita(it)
             replicar(OBRA_COMPLEMENTARIA, it, fila) { otra, pareja ->
                 if (pareja == null) nuevaObra(otra, obra) else listas.cambiar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, pareja, obra)
             }
@@ -555,7 +555,7 @@ class DeclaracionService(
         id: UUID,
         body: OtroFrente
     ) = nuevoFrente(id, body.copy(fila = null)).also { frente ->
-        escrita(id, conCaja = false)
+        escrita(id)
         replicar(OTRO_FRENTE, id, null) { otra, _ -> nuevoFrente(otra, frente.copy(id = null, declaracion = null)) }
     }
 
@@ -578,7 +578,7 @@ class DeclaracionService(
         val frente = body.copy(id = null, declaracion = null, fila = fila.fila)
         val saved = listas.cambiar(OTRO_FRENTE, OtroFrente::class.java, PARENT, id, frente)
         fila.declaracion?.let {
-            escrita(it, conCaja = false)
+            escrita(it)
             replicar(OTRO_FRENTE, it, fila) { otra, pareja ->
                 if (pareja == null) nuevoFrente(otra, frente) else listas.cambiar(OTRO_FRENTE, OtroFrente::class.java, PARENT, pareja, frente)
             }
@@ -596,7 +596,7 @@ class DeclaracionService(
         listas.borrar(objectName, id)
         if (objectName !in VALUADAS) return
         val declaracion = fila.declaracion ?: return
-        escrita(declaracion, conValorDeOrigen(objectName, fila.registro), conCaja = false)
+        escrita(declaracion, conValorDeOrigen(objectName, fila.registro))
         replicar(objectName, declaracion, fila, borra = true) { _, pareja -> pareja?.let { listas.borrar(objectName, it) } }
     }
 
@@ -627,7 +627,7 @@ class DeclaracionService(
             val registro = (pareja as? Pareja.Esta)?.registro
             if (borra && registro == null) continue
             escribir(otra, registro?.let { UUID.fromString(it["id"].toString()) })
-            escrita(otra, borra && conValorDeOrigen(objectName, registro.orEmpty()), conCaja = false)
+            escrita(otra, borra && conValorDeOrigen(objectName, registro.orEmpty()))
         }
         caja.despuesDeEscribir { cambioDeDeuda(null, registros.get(DECLARACION, Declaracion::class.java, declaracion)) }
     }
@@ -674,11 +674,11 @@ class DeclaracionService(
     // recomputed
     private suspend fun escrita(
         declaracion: UUID,
-        quitado: Boolean = false,
-        conCaja: Boolean = true
+        quitado: Boolean = false
     ) {
         marcarOrigenModificado(declaracion, quitado)
-        recalcular(declaracion).let { despuesDeCambiar(it.antes, it.despues, conCaja) }
+        // its caller syncs the condominio with caja once, at the end (replicar, actualizar)
+        recalcular(declaracion).let { despuesDeCambiar(it.antes, it.despues, conCaja = false) }
     }
 
     // #158: a write that changes what the arbitrios read (Redeterminacion.cambia; null: a declaración created or

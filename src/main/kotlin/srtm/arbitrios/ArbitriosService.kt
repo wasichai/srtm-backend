@@ -185,7 +185,11 @@ class ArbitriosService(
         predio: UUID,
         observacion: String,
         hoy: LocalDate
-    ): List<CuotaArbitrio> = escribir(contexto, registros.get(PREDIO, Predio::class.java, predio), observacion, hoy).also { aCaja(it, DETERMINACION_EN_CAJA) }
+    ): List<CuotaArbitrio> =
+        escribir(contexto, registros.get(PREDIO, Predio::class.java, predio), observacion, hoy).also {
+            // a masiva only queues: the loop sends them (EnvioACaja)
+            aCaja(it, DETERMINACION_EN_CAJA, enLinea = false)
+        }
 
     // POST /arbitrios/cuotas/{id}/anulacion: the cuota stops counting, and the next determination of its predio writes
     // it again with the next version of its clave. a cuota is annulled once (409); motivo and observación say why (400)
@@ -419,10 +423,11 @@ class ArbitriosService(
     // which never throws: the cuotas stand)
     private suspend fun aCaja(
         cuotas: List<CuotaArbitrio>,
-        motivo: String
+        motivo: String,
+        enLinea: Boolean = true
     ) {
         if (cuotas.isEmpty()) return
-        caja.despuesDeEscribir { CambioDeDeuda(motivo, porAnio(cuotas)) }
+        caja.despuesDeEscribir(enLinea) { CambioDeDeuda(motivo, porAnio(cuotas)) }
     }
 
     private fun porAnio(cuotas: List<CuotaArbitrio>): Map<Int, Set<UUID>> =

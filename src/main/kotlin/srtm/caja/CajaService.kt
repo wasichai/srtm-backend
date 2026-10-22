@@ -203,60 +203,86 @@ class CajaService(
     }
 
     // the hooks of srtm's writes (#164): only the contribuyentes that already have ordenes of the year. null: none has,
-    // or the organization has no caja
+    // or the organization has no caja. enLinea false: only queued (a masiva's job)
     suspend fun sincronizarSiEnviado(
         contribuyentes: Set<UUID>,
         anio: Int,
         motivo: String,
-        motivoDeRetiro: String = MOTIVO_SIN_DEUDA
+        motivoDeRetiro: String = MOTIVO_SIN_DEUDA,
+        enLinea: Boolean = true
     ): ResumenCaja? {
-        val caja =
-            try {
-                cajaDelLlamante()
-            } catch (_: ConflictException) {
-                null
-            }
-        if (caja == null) return null
-        val enviados = contribuyentes.filter { ordenes(it, anio).isNotEmpty() }
-        if (enviados.isEmpty()) return null
-        return enviados.fold(ResumenCaja()) { suma, c -> suma + sincronizar(c, anio, motivo, motivoDeRetiro) }
+        if (!hayCaja()) return null
+        return siEnviados(mapOf(anio to contribuyentes), motivo, motivoDeRetiro, enLinea)
     }
 
-    // #164: after a write of srtm that changed a debt (a declaración, a cuota de arbitrio): the ordenes of each year's
-    // contribuyentes follow it, for those that already have ordenes (sincronizarSiEnviado), each on its own. the
-    // cambio is read only when the organization has a caja: without one nothing more is read. what it did goes to the
-    // response's header (AvisoDeCaja). it never throws: the write stands, and what kept a contribuyente from being
-    // synced is the header's error (logged by its class only: no data of the contribuyente)
-    suspend fun despuesDeEscribir(cambio: suspend () -> CambioDeDeuda) {
-        val (motivo, porAnio) =
-            try {
-                if (cajaDelLlamante() == null) return
-                cambio()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: ConflictException) {
-                // a caja configured twice: nothing is sent, as sincronizarSiEnviado
-                return
-            } catch (e: Exception) {
-                AvisoDeCaja.anotar(fallo(e))
-                return
-            }
+    // each contribuyente with ordenes of its year planned and written on its own (one that fails is the result's error,
+    // the others go on), then everything they queued sent at once, for one plazo: a write never waits on caja once per
+    // contribuyente. null: none had ordenes
+    private suspend fun siEnviados(
+        porAnio: Map<Int, Set<UUID>>,
+        motivo: String,
+        motivoDeRetiro: String,
+        enLinea: Boolean
+    ): ResumenCaja? {
         var total: ResumenCaja? = null
+        val porEnviar = mutableListOf<UUID>()
         for ((anio, suyos) in porAnio) {
             for (c in suyos) {
                 val resumen =
                     try {
-                        sincronizarSiEnviado(setOf(c), anio, motivo, motivo)
+                        if (ordenes(c, anio).isEmpty()) continue
+                        val (hecho, ids) = transaccion.executeAndAwait { planificarYEscribir(c, anio, motivo, motivoDeRetiro) }
+                        porEnviar += ids
+                        hecho
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         fallo(e)
                     }
-                resumen?.let { total = total?.plus(it) ?: it }
+                total = total?.plus(resumen) ?: resumen
             }
         }
-        total?.let { AvisoDeCaja.anotar(it) }
+        if (total == null) return null
+        val ids = porEnviar.distinct()
+        if (!enLinea) return total + ResumenCaja(pendientes = ids.size)
+        return total +
+            try {
+                envio.enviar(ids, config.plazoEnLinea)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                fallo(e).copy(pendientes = ids.size)
+            }
     }
+
+    // #164: after a write of srtm that changed a debt (a declaración, a cuota de arbitrio): the ordenes of each year's
+    // contribuyentes follow it, for those that already have ordenes (siEnviados). the cambio is read only when the
+    // organization has a caja: without one nothing more is read. what it did goes to the response's header
+    // (AvisoDeCaja). enLinea false: only queued, the loop sends them (a masiva's job). it never throws: the write
+    // stands, and what kept a contribuyente from being synced is the header's error (logged by its class only: no
+    // data of the contribuyente)
+    suspend fun despuesDeEscribir(
+        enLinea: Boolean = true,
+        cambio: suspend () -> CambioDeDeuda
+    ) {
+        try {
+            if (!hayCaja()) return
+            val (motivo, porAnio) = cambio()
+            siEnviados(porAnio, motivo, motivo, enLinea)?.let { AvisoDeCaja.anotar(it) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AvisoDeCaja.anotar(fallo(e))
+        }
+    }
+
+    // a caja configured twice is none for the hooks: nothing is sent
+    private suspend fun hayCaja(): Boolean =
+        try {
+            cajaDelLlamante() != null
+        } catch (_: ConflictException) {
+            false
+        }
 
     private fun fallo(e: Exception): ResumenCaja {
         log.warn("caja: no se pudo sincronizar tras la escritura ({})", e.javaClass.simpleName)

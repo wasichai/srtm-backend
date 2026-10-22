@@ -1,18 +1,32 @@
 package srtm.caja
 
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
+import org.springframework.r2dbc.core.awaitRowsUpdated
+import srtm.arbitrios.DETERMINACION_LOTE
+import srtm.arbitrios.DETERMINACION_MASIVA
 import srtm.arbitrios.Llaves
+import srtm.emision.TablasCore
+import srtm.emision.TrabajadoresEmision
 import tools.jackson.databind.JsonNode
 import java.math.BigDecimal
+import java.nio.file.Files
 
 // #164: a write of srtm that changes a debt already sent to caja replaces its ordenes there (an alta with sustituye_a)
 // or withdraws them, at once, and says what it did in the Srtm-Caja header. a contribuyente without ordenes of the year
 // is not synced, and the write never fails for caja
 class CambiosEnCajaApiTest : ConCajaApiTest() {
+    @Autowired
+    lateinit var tablas: TablasCore
+
+    @Autowired
+    lateinit var trabajadores: TrabajadoresEmision
+
     // with the escenario's first servicio charged per m² construido and a piso of 100 m², a nivel of 20 m² more
     // changes its twelve months: only those are replaced, the other servicio's are not touched
     @Test
@@ -62,9 +76,10 @@ class CambiosEnCajaApiTest : ConCajaApiTest() {
         assertEquals(listOf(4, 4, 4, 0, 0, 0, 0), numeros(aviso!!), aviso.toString())
     }
 
-    // the rectificatoria with the same data changes no cuota; edited, it replaces the year's predial
+    // the rectificatoria with the same data changes no cuota: caja gets nothing. its next edit replaces the year's
+    // predial, as the rectificatoria's
     @Test
-    fun `rectificatoriaSustituyeElPredialDelAnio`() {
+    fun `rectificatoriaSinCambiosNoEnviaYSuEdicionSustituyeElPredial`() {
         val e = Escenario()
         val dj = conPredial(e)!!
         enviar(e.contribuyente, e.anio)
@@ -141,6 +156,34 @@ class CambiosEnCajaApiTest : ConCajaApiTest() {
         assertEquals(cuotas.toSet(), PEDIDOS.filter { it.alta }.map { it.referencia }.toSet())
         assertTrue(PEDIDOS.all { it.cuerpo["observacion"] == "Determinación de arbitrios" && it.cuerpo["sustituye_a"] == null })
         assertEquals(listOf(24, 24, 0, 0, 0, 0, 0), numeros(aviso!!), aviso.toString())
+    }
+
+    // a masiva's determination only queues (the masiva does not wait on caja): the loop sends them
+    @Test
+    fun `determinacionMasivaSoloEncola`() {
+        val e = Escenario()
+        conPredial(e)
+        enviar(e.contribuyente, e.anio)
+        soloLaDelTest()
+        PEDIDOS.clear()
+
+        val id = tree(send("POST", MASIVAS, pedido(e.anio), HttpStatus.ACCEPTED))["id"].asString()
+        esperar(id) { it["estado"].asString() == "EN_PROCESO" }
+        val grupo = trabajadores.grupo("caja-masiva", 1, Files.createTempDirectory("caja-masiva"))
+        grupo.iniciar()
+        try {
+            esperar(id) { it["estado"].asString() == "TERMINADA" }
+        } finally {
+            runBlocking { grupo.detener() }
+        }
+
+        assertTrue(PEDIDOS.isEmpty(), PEDIDOS.map { it.referencia }.toString())
+        val arbitrios = registrosDe(e.contribuyente).filter { it["referencia"].asString().startsWith("ARB-") }
+        assertEquals(List(24) { EstadoOrdenCaja.POR_ENVIAR }, arbitrios.map { it["estado"].asString() })
+        vueltas()
+        val altas = PEDIDOS.filter { it.alta && it.referencia.startsWith("ARB-") }
+        assertEquals(24, altas.size)
+        assertTrue(altas.all { it.cuerpo["observacion"] == "Determinación de arbitrios" })
     }
 
     // D6: caja answers 409 to a retiro of an orden that was paid there
@@ -243,6 +286,38 @@ class CambiosEnCajaApiTest : ConCajaApiTest() {
         assertEquals(List(4) { EstadoOrdenCaja.ENVIADA }, referencias(e.contribuyente, e.anio, 2).map { o.getValue(it)["estado"].asString() })
     }
 
+    // nothing of another class or run is left for this test's group to take: only its masiva runs
+    private fun soloLaDelTest() {
+        runBlocking {
+            for (t in tablas.de(DETERMINACION_LOTE, listOf("estado"))) {
+                db
+                    .sql("UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDO' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO')")
+                    .fetch()
+                    .awaitRowsUpdated()
+            }
+            for (t in tablas.de(DETERMINACION_MASIVA, listOf("estado"))) {
+                db
+                    .sql(
+                        "UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDA' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO', 'ENSAMBLANDO')"
+                    ).fetch()
+                    .awaitRowsUpdated()
+            }
+        }
+    }
+
+    private fun esperar(
+        id: String,
+        listo: (JsonNode) -> Boolean
+    ): JsonNode {
+        val limite = System.nanoTime() + 90_000_000_000L
+        while (true) {
+            val job = tree(send("GET", "$MASIVAS/$id", null, HttpStatus.OK))
+            if (listo(job)) return job
+            assertTrue(System.nanoTime() < limite, "la determinación masiva no avanza: $job")
+            Thread.sleep(200)
+        }
+    }
+
     // the escenario's declaración
     private fun declaracionDe(e: Escenario): String =
         tree(send("GET", "/api/objects/declaracion_predial/records?predio=${e.predio}", null, HttpStatus.OK))["content"].single()["id"].asString()
@@ -259,6 +334,8 @@ class CambiosEnCajaApiTest : ConCajaApiTest() {
     private fun numeros(aviso: JsonNode) = CLAVES.dropLast(1).map { aviso[it].asInt() }
 
     private companion object {
+        const val MASIVAS = "/api/srtm/arbitrios/determinaciones"
+
         val CLAVES = listOf("encoladas", "enviadas", "sustituidas", "retiradas", "pagadas_en_caja", "conflictos", "pendientes", "error")
 
         val NIVEL =
