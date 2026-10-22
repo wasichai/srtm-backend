@@ -24,6 +24,7 @@ data class PredioResumen(
     val direccion: String?
 )
 
+// pagada: every cuota of the cell was paid in caja (#165), and is no debt any more
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class CuotaMes(
     val id: String?,
@@ -31,7 +32,8 @@ data class CuotaMes(
     val contribuyente: String?,
     val fechaCalculo: LocalDate?,
     val parametroAplicado: String?,
-    val desglose: List<DesgloseCuota>
+    val desglose: List<DesgloseCuota>,
+    val pagada: Boolean = false
 )
 
 // one secuencia de uso's cuota, within a cell: its own desglose plus formula, the readable version of the same
@@ -108,13 +110,15 @@ data class ParametrosArbitrios(
 object Consultas {
     private const val CONSULTA = "Consulta de lo pendiente"
 
-    // soloDe: only the cuotas charged to that contribuyente (its own view); null, all of them
+    // soloDe: only the cuotas charged to that contribuyente (its own view); null, all of them. pagadas: the ids of the
+    // cuotas paid in caja
     fun matriz(
         contexto: ContextoArbitrios,
         datos: PredioArbitrios,
         personas: Map<String, Contribuyente>,
         hoy: LocalDate,
-        soloDe: String? = null
+        soloDe: String? = null,
+        pagadas: Set<String> = emptySet()
     ): MatrizArbitrios {
         val anio = contexto.anio
         val cuotas = datos.vigentes.filter { it.anio == anio && (soloDe == null || it.contribuyente == soloDe) }
@@ -131,7 +135,7 @@ object Consultas {
                             .filter { it.servicio == servicio.id && it.periodo == m }
                             .sortedBy { it.secuenciaUso }
                             .ifEmpty { null }
-                            ?.let(::celda)
+                            ?.let { celda(it, pagadas) }
                     }
                 FilaServicio(servicio, meses, suma(meses.mapNotNull { it?.monto }))
             }
@@ -172,7 +176,10 @@ object Consultas {
     // the id is the first one's, by secuencia (a cuota of before the PU por uso has none, and sorts first), and
     // parametroAplicado joins every cuota's own, so a predio of several usos shows each one's key. desglose keeps
     // each cuota apart, by secuencia (cs arrives sorted that way), for the portal to show the formula of each uso
-    private fun celda(cs: List<CuotaArbitrio>): CuotaMes {
+    private fun celda(
+        cs: List<CuotaArbitrio>,
+        pagadas: Set<String>
+    ): CuotaMes {
         val primera = cs.first()
         return CuotaMes(
             primera.id,
@@ -184,7 +191,8 @@ object Consultas {
             primera.contribuyente,
             primera.fechaCalculo,
             cs.mapNotNull { it.parametroAplicado }.joinToString("; "),
-            cs.map(::desglose)
+            cs.map(::desglose),
+            cs.all { it.id != null && it.id in pagadas }
         )
     }
 

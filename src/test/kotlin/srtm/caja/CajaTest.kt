@@ -75,6 +75,23 @@ class CajaTest {
         assertEquals(listOf(3 to null, 1 to null), p.map { it.revision to it.escrita })
     }
 
+    // #165: a cuota paid in caja keeps its revision whatever the liquidación says now, and is sent as paid
+    @Test
+    fun `una cuota pagada no cambia de revision`() {
+        val pagada = escrita(1, 2, "10.00").copy(vencimiento = LocalDate.of(2026, 2, 27))
+        val p = prediales(listOf(cuota(1, "12.00"), cuota(2, "12.00")), listOf(escrita(1, 1, "8.00"), pagada), setOf(pagada.id!!))
+        assertEquals(listOf(Triple(1, 2, true), Triple(2, 1, false)), p.map { Triple(it.cuota.numero, it.revision, it.pagada) })
+        assertEquals(BigDecimal("10.00"), p[0].cuota.monto)
+        assertEquals(pagada, p[0].escrita)
+    }
+
+    @Test
+    fun `una cuota pagada sigue aunque la liquidacion ya no la tenga`() {
+        val pagada = escrita(3, 1, "10.00").copy(vencimiento = LocalDate.of(2026, 8, 31))
+        val p = prediales(emptyList(), listOf(pagada), setOf(pagada.id!!))
+        assertEquals(listOf(Triple(3, 1, true)), p.map { Triple(it.cuota.numero, it.revision, it.pagada) })
+    }
+
     @Test
     fun `una cuota en cero no se escribe ni se envia`() {
         assertEquals(listOf(2), prediales(listOf(cuota(1, "0.00"), cuota(2, "5.00")), emptyList()).map { it.cuota.numero })

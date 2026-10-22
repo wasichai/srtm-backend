@@ -38,7 +38,11 @@ enum class Candado(
 
     // the ordenes de caja of a contribuyente: a sincronización reads what was queued and writes its plan as one step
     // (organización|contribuyente, see bloquearEnOrganizacion)
-    CAJA_CONTRIBUYENTE(0x5352_0008)
+    CAJA_CONTRIBUYENTE(0x5352_0008),
+
+    // a pago of caja (#165): the buzón's retries of one pagoId do not cross, and a PAGO_ANULADO waits for its original
+    // (organización|pagoId, see bloquearEnOrganizacion)
+    CAJA_PAGO(0x5352_0009)
 }
 
 // postgres' transaction advisory locks, by kind and key (caja-backend's Candados). wasichai has no row lock nor

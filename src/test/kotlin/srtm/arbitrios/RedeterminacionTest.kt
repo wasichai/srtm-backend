@@ -86,6 +86,19 @@ class RedeterminacionTest {
         assertEquals(listOf(3), cambios.escribir.map { it.periodo })
     }
 
+    // #165: a month paid in caja is not redetermined: neither annulled nor written again, and counted
+    @Test
+    fun `a month paid in caja is left as it is, and counted`() {
+        val vigentes = (1..12).map { cuota(it) }
+        val calculadas = (1..12).map { calculada(it, if (it >= 6) "10.00" else "8.50") }
+        val pagadas = setOf(vigentes[5].id!!, vigentes[0].id!!)
+        val cambios = Redeterminacion.comparar(vigentes, calculadas, pagadas)
+        assertEquals((7..12).toList(), cambios.anular.map { it.periodo })
+        assertEquals((7..12).toList(), cambios.escribir.map { it.periodo })
+        // january is paid too, but comes out the same: only june is kept from a change
+        assertEquals(1, cambios.pagadas)
+    }
+
     // one PU per predio before #84: its cuota has no secuencia, and counts as the lowest one's
     @Test
     fun `a cuota without secuencia is the one of the lowest secuencia`() {
