@@ -105,4 +105,16 @@ class CajaTest {
         val lenta = CuentaCaja(url = "http://caja", clientId = "rentas", clientSecret = "s", timeout = Duration.ofMinutes(1))
         assertEquals(Duration.ofMinutes(3), lease(CajaProperties(organizaciones = mapOf("ica" to lenta, "perene" to CuentaCaja()))))
     }
+
+    // #164: the header's keys in their order, as ascii json
+    @Test
+    fun cabeceraSrtmCaja() {
+        val r = ResumenCaja(encoladas = 4, enviadas = 3, sustituidas = 3, pagadasEnCaja = 1, sinDocumento = 1, error = "La orden está pagada")
+        assertEquals(
+            """{"encoladas":4,"enviadas":3,"sustituidas":3,"retiradas":0,"pagadas_en_caja":1,"conflictos":0,"pendientes":0,""" +
+                """"error":"La orden est\u00E1 pagada"}""",
+            AvisoDeCaja.valor(r)
+        )
+        assertEquals(""""error":null}""", AvisoDeCaja.valor(ResumenCaja()).substringAfterLast(','))
+    }
 }

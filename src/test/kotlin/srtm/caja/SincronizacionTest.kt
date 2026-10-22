@@ -169,6 +169,18 @@ class SincronizacionTest {
         assertEquals(Plan(emptyList(), emptyList(), emptyList()), planificar(listOf(deseada(version = 2)), listOf(v1, v2)))
     }
 
+    // #164: a retiro still queued defers its ranura too: caja may answer that it was paid, and a new alta would charge
+    // it twice
+    @Test
+    fun retiroPendienteDifiereLaRanura() {
+        val v1 = actual(EstadoOrdenCaja.POR_RETIRAR)
+        val v2 = actual(EstadoOrdenCaja.POR_ENVIAR, version = 2, intentos = 0)
+        assertEquals(Plan(emptyList(), emptyList(), emptyList(), 1), planificar(listOf(deseada(version = 3)), listOf(v1, v2)))
+        assertEquals(Plan(emptyList(), emptyList(), emptyList(), 1), planificar(listOf(deseada(version = 2)), listOf(v1)))
+        // without a deseada it is just being withdrawn
+        assertEquals(Plan(emptyList(), emptyList(), emptyList()), planificar(emptyList(), listOf(v1)))
+    }
+
     @Test
     fun nuncaIntentadaSeCancela() {
         val v1 = actual(EstadoOrdenCaja.POR_ENVIAR, intentos = 0)

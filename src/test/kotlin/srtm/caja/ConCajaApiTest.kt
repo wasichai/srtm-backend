@@ -3,8 +3,11 @@ package srtm.caja
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
@@ -67,15 +70,41 @@ abstract class ConCajaApiTest : ConArbitriosApiTest() {
         )["id"].asString()
     }
 
-    // the declaración with another autoavalúo
+    // the declaración with another autoavalúo: its Srtm-Caja header (#164)
     protected fun cambiarAutoavaluo(
         dj: String,
         autoavaluo: Int
-    ) {
-        put(
+    ): JsonNode? =
+        escribir(
+            "PUT",
             "/api/srtm/declaraciones/$dj",
             fields(tree(send("GET", "/api/srtm/declaraciones/$dj", null, HttpStatus.OK))["declaracion"]) + ("valor_autoavaluo" to autoavaluo)
-        )
+        ).second
+
+    // the body of a write that must answer `status`, and its Srtm-Caja header (null without one), checked to be ascii
+    protected fun escribir(
+        method: String,
+        path: String,
+        body: Any?,
+        status: HttpStatus = HttpStatus.OK
+    ): Pair<String, JsonNode?> {
+        val spec =
+            when (method) {
+                "DELETE" -> client.delete().uri(path)
+                "PUT" -> client.put().uri(path).bodyValue(body!!)
+                else -> client.post().uri(path).let { post -> body?.let { post.bodyValue(it) } ?: post }
+            }
+        val result =
+            spec
+                .header(HttpHeaders.AUTHORIZATION, token)
+                .exchange()
+                .expectBody(String::class.java)
+                .returnResult()
+        val cuerpo = result.responseBody ?: ""
+        assertEquals(status.value(), result.status.value(), "$method $path: $cuerpo")
+        val aviso = result.responseHeaders.getFirst(SRTM_CAJA) ?: return cuerpo to null
+        assertTrue(aviso.all { it.code < 128 }, aviso)
+        return cuerpo to tree(aviso)
     }
 
     protected fun enviar(
@@ -132,6 +161,8 @@ abstract class ConCajaApiTest : ConArbitriosApiTest() {
         private var organizacion: String? = null
 
         private val JSON = JsonMapper.builder().build()
+
+        const val SRTM_CAJA = "Srtm-Caja"
 
         val PEDIDOS = CopyOnWriteArrayList<Pedido>()
 
