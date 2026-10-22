@@ -9,6 +9,8 @@ import org.springframework.transaction.ReactiveTransactionManager
 import org.springframework.transaction.reactive.TransactionalOperator
 import org.springframework.transaction.reactive.executeAndAwait
 import srtm.Observacion
+import srtm.caja.CajaService
+import srtm.caja.CambioDeDeuda
 import srtm.impuesto.ParametrosTributarios
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
@@ -73,6 +75,7 @@ class ArbitriosService(
     private val parametrosTributarios: ParametrosTributarios,
     private val metadata: MetadataService,
     private val currentUser: CurrentUser,
+    private val caja: CajaService,
     transacciones: ReactiveTransactionManager
 ) {
     private val transaccion = TransactionalOperator.create(transacciones)
@@ -140,7 +143,7 @@ class ArbitriosService(
         exigirDeterminar()
         val (anio, observacion) = validar(pedido)
         val predio = registros.get(PREDIO, Predio::class.java, id)
-        return escribir(contexto(anio), predio, observacion, LocalDate.now())
+        return escribir(contexto(anio), predio, observacion, LocalDate.now()).also { aCaja(it, DETERMINACION_EN_CAJA) }
     }
 
     // POST /contribuyentes/{id}/arbitrios: every predio of its declarations of the year (an annulled one too: it may
@@ -172,7 +175,7 @@ class ArbitriosService(
                     }
                 }.distinctBy { it.mensaje }
         if (detalle.isNotEmpty()) throw FaltanArbitrios(anio, detalle.map { it.mensaje }, detalle)
-        return calculadas.flatMap { (p, d) -> escribir(contexto, p, observacion, hoy, d) }
+        return calculadas.flatMap { (p, d) -> escribir(contexto, p, observacion, hoy, d) }.also { aCaja(it, DETERMINACION_EN_CAJA) }
     }
 
     // one predio of a masiva's lote, with the lote's contexto and the job's observación: what it wrote. FaltanArbitrios
@@ -182,7 +185,7 @@ class ArbitriosService(
         predio: UUID,
         observacion: String,
         hoy: LocalDate
-    ): List<CuotaArbitrio> = escribir(contexto, registros.get(PREDIO, Predio::class.java, predio), observacion, hoy)
+    ): List<CuotaArbitrio> = escribir(contexto, registros.get(PREDIO, Predio::class.java, predio), observacion, hoy).also { aCaja(it, DETERMINACION_EN_CAJA) }
 
     // POST /arbitrios/cuotas/{id}/anulacion: the cuota stops counting, and the next determination of its predio writes
     // it again with the next version of its clave. a cuota is annulled once (409); motivo and observación say why (400)
@@ -199,25 +202,28 @@ class ArbitriosService(
         val motivo = pedido.motivo?.trim()?.ifEmpty { null } ?: throw ValidationException("Falta el motivo", "motivo", "indica por qué se anula")
         val observacion = Observacion.de(pedido.observacion)
         val cuota = registros.get(CUOTA_ARBITRIO, CuotaArbitrio::class.java, id)
-        return try {
-            registros.create(
-                ANULACION_CUOTA_ARBITRIO,
-                AnulacionCuotaArbitrio::class.java,
-                Records.attributes(
-                    AnulacionCuotaArbitrio(
-                        cuota = cuota.id,
-                        predio = cuota.predio,
-                        anio = cuota.anio,
-                        motivo = motivo,
-                        observacion = observacion,
-                        fecha = LocalDate.now(),
-                        clave = cuota.id
+        val anulacion =
+            try {
+                registros.create(
+                    ANULACION_CUOTA_ARBITRIO,
+                    AnulacionCuotaArbitrio::class.java,
+                    Records.attributes(
+                        AnulacionCuotaArbitrio(
+                            cuota = cuota.id,
+                            predio = cuota.predio,
+                            anio = cuota.anio,
+                            motivo = motivo,
+                            observacion = observacion,
+                            fecha = LocalDate.now(),
+                            clave = cuota.id
+                        )
                     )
                 )
-            )
-        } catch (_: DuplicateKeyException) {
-            throw ConflictException("La cuota ya está anulada")
-        }
+            } catch (_: DuplicateKeyException) {
+                throw ConflictException("La cuota ya está anulada")
+            }
+        aCaja(listOf(cuota), ANULACION_EN_CAJA)
+        return anulacion
     }
 
     // #158: a predio's year after a change of its declaraciones (DeclaracionService): the twelve months computed again
@@ -254,7 +260,12 @@ class ArbitriosService(
         exigirRedeterminar()
         val (anio, observacion) = validar(pedido)
         registros.get(PREDIO, Predio::class.java, id)
-        return conReintento(id, anio, observacion) ?: ResultadoRedeterminacion()
+        val resultado = conReintento(id, anio, observacion) ?: return ResultadoRedeterminacion()
+        // the cuotas it annulled and wrote are the predio's of the year: their contribuyentes, read only with a caja
+        if (resultado.redeterminadas + resultado.anuladas > 0) {
+            caja.despuesDeEscribir { CambioDeDeuda(DETERMINACION_EN_CAJA, porAnio(cuotas(mapOf("predio" to "$id", "anio" to "$anio")))) }
+        }
+        return resultado
     }
 
     private suspend fun conReintento(
@@ -404,6 +415,22 @@ class ArbitriosService(
         return transaccion.executeAndAwait { registros.createAll(CUOTA_ARBITRIO, CuotaArbitrio::class.java, d.cuotas.map(Records::attributes)) }
     }
 
+    // #164: the ordenes in caja of the contribuyentes of the cuotas written or annulled (CajaService.despuesDeEscribir,
+    // which never throws: the cuotas stand)
+    private suspend fun aCaja(
+        cuotas: List<CuotaArbitrio>,
+        motivo: String
+    ) {
+        if (cuotas.isEmpty()) return
+        caja.despuesDeEscribir { CambioDeDeuda(motivo, porAnio(cuotas)) }
+    }
+
+    private fun porAnio(cuotas: List<CuotaArbitrio>): Map<Int, Set<UUID>> =
+        cuotas
+            .filter { it.anio != null && it.contribuyente != null }
+            .groupBy({ it.anio!! }, { UUID.fromString(it.contribuyente) })
+            .mapValues { it.value.toSet() }
+
     // the cuotas of the year charged to a contribuyente
     internal suspend fun cuotasDe(
         contribuyente: UUID,
@@ -468,5 +495,9 @@ class ArbitriosService(
 
         // the motivo of the anulaciones a redeterminación writes (redeterminarPredio)
         const val REDETERMINACION = "REDETERMINACION"
+
+        // #164: why caja is told of a write of cuotas (the observacion of its altas, the motivo of its retiros)
+        const val DETERMINACION_EN_CAJA = "Determinación de arbitrios"
+        const val ANULACION_EN_CAJA = "Anulación de la cuota de arbitrios"
     }
 }

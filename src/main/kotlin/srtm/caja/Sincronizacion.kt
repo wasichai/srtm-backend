@@ -27,8 +27,8 @@ data class Retiro(
     val referencia: String
 )
 
-// diferidas: the ranuras whose plan waits for an orden caja may already hold (POR_ENVIAR, already tried): neither an
-// alta nor a cancel for them until that one is resolved
+// diferidas: the ranuras whose plan waits for an orden caja may still answer for (POR_ENVIAR already tried, or
+// POR_RETIRAR): neither an alta nor a cancel for them until that one is resolved
 data class Plan(
     val altas: List<Alta>,
     val retiros: List<Retiro>,
@@ -58,9 +58,14 @@ fun ranuraArbitrio(clave: String) = "ARB|${clave.substringBeforeLast('|')}"
 // an orden POR_ENVIAR a take already tried: caja may hold it (a timeout, an answer lost, a send in flight)
 fun intentada(o: OrdenCaja) = o.estado == EstadoOrdenCaja.POR_ENVIAR && (o.intentos ?: 0) > 0
 
+// what caja may still answer for (#164): an alta already tried, or a retiro queued (caja may say it was paid). while
+// one of them is in the ranura, a new alta could charge the cuota twice
+private fun esperaACaja(o: OrdenCaja) = intentada(o) || o.estado == EstadoOrdenCaja.POR_RETIRAR
+
 // compares what srtm wants with what was queued, ranura by ranura. pure: the caller persists the plan.
 // CONFLICTO, ERROR, CANCELADA and RETIRADA rows are not vigentes. only an orden POR_ENVIAR never tried is cancelled: one
-// already tried defers its ranura (Plan.diferidas) until the queue resolves it, so caja never holds two of one cuota.
+// already tried, or a retiro queued, defers its ranura (Plan.diferidas) until the queue resolves it, so caja never holds
+// two of one cuota.
 // altas follow the deseadas' order, retiros and cancelaciones the actuales'
 fun planificar(
     deseadas: List<OrdenDeseada>,
@@ -79,7 +84,7 @@ fun planificar(
     for (d in vivas.values) {
         if (d.pagada || d.ranura in pagadas || d.referencia in referencias) continue
         val suyas = porRanura[d.ranura].orEmpty()
-        if (suyas.any(::intentada)) {
+        if (suyas.any(::esperaACaja)) {
             diferidas += d.ranura
             continue
         }

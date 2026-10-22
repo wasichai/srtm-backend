@@ -8,6 +8,8 @@ import srtm.arbitrios.ArbitriosService
 import srtm.arbitrios.AvisoDeArbitrios
 import srtm.arbitrios.CUOTA_ARBITRIO
 import srtm.arbitrios.Redeterminacion
+import srtm.caja.CajaService
+import srtm.caja.CambioDeDeuda
 import srtm.pide.ConsultasReniec
 import wasichai.core.common.ConflictException
 import wasichai.core.common.ValidationException
@@ -15,12 +17,28 @@ import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
 
+// #164: why a change of a declaración moved its contribuyentes' debt in caja: the observacion of the altas and the
+// motivo of the retiros it causes. a declaración imported without número is the padrón's
+internal fun motivoEnCaja(
+    antes: Declaracion?,
+    despues: Declaracion?
+): String {
+    val d = despues ?: antes
+    val cual = d?.numeroDeclaracion?.let { "n° $it" } ?: "del padrón"
+    return when {
+        despues?.estado == ANULADA && antes?.estado != ANULADA -> "Anulación de la DJ $cual"
+        d?.motivo == RECTIFICACION -> "Rectificatoria $cual"
+        else -> "Redeterminación por la DJ $cual"
+    }
+}
+
 // the srtm's declaración jurada predial: datos del predio, ubicación (the predio's), transferentes, características
 // (niveles de construcción, obras complementarias), condóminos (the other declarations of the predio) and otros frentes.
 // every write of a declaración, or of its niveles, obras and otros frentes, recomputes what it derives of them and its
 // autoavalúo (recalcular, Derivados.kt), then its condominio (Condominio.kt). what a condómino declares of the predio
 // and those lists is the whole condominio's: it is replicated in the others (#157). last, its predio's arbitrios of
-// the year when what they read changed (redeterminar, #158). reniec: as ContribuyenteService's
+// the year when what they read changed, and its contribuyentes' ordenes in caja (despuesDeCambiar, #158, #164). reniec:
+// as ContribuyenteService's
 @Service
 class DeclaracionService(
     private val registros: Registros,
@@ -28,6 +46,7 @@ class DeclaracionService(
     private val contribuyentes: ContribuyenteService,
     private val autoavaluos: AutoavaluoSugeridoService,
     private val arbitrios: ArbitriosService,
+    private val caja: CajaService,
     private val reniec: ConsultasReniec = ConsultasReniec(Duration.ZERO)
 ) {
     suspend fun ficha(id: UUID): DeclaracionJurada {
@@ -79,7 +98,7 @@ class DeclaracionService(
                 throw e
             }
         // stored: its predio stays whatever recalcular does
-        redeterminar(null, recalcular(UUID.fromString(declaracion.id)).despues)
+        despuesDeCambiar(null, recalcular(UUID.fromString(declaracion.id)).despues)
         return ficha(UUID.fromString(declaracion.id))
     }
 
@@ -106,7 +125,7 @@ class DeclaracionService(
                     fechaPresentacion = d.fechaPresentacion
                 )
             }
-        redeterminar(null, creada)
+        despuesDeCambiar(null, creada)
         return ficha(UUID.fromString(creada.id))
     }
 
@@ -115,7 +134,7 @@ class DeclaracionService(
         val contribuyente = body.contribuyente ?: throw ValidationException("Falta el contribuyente", "contribuyente", "es obligatorio")
         val predio = body.predio ?: throw ValidationException("Falta el predio", "predio", "es obligatorio")
         val creada = registrar(nueva(delCliente(body), UUID.fromString(contribuyente), UUID.fromString(predio)))
-        return recalcular(UUID.fromString(creada.id)).despues.also { redeterminar(null, it) }
+        return recalcular(UUID.fromString(creada.id)).despues.also { despuesDeCambiar(null, it) }
     }
 
     // what a client sends of a new declaración: the derived fields are recalcular's, and the autoavalúo too while its
@@ -171,7 +190,7 @@ class DeclaracionService(
         marcarOrigenModificado(id)
         val recalculo = recalcular(id)
         if (!seUne) replicarPredio(next, otros)
-        return recalculo.despues.also { redeterminar(stored, it) }
+        return recalculo.despues.also { despuesDeCambiar(stored, it) }
     }
 
     // #157: what `origen` declares of the predio (delPredioCambiado), written in each condómino that declares it
@@ -187,7 +206,7 @@ class DeclaracionService(
             if (cambios.isEmpty()) continue
             val otroId = UUID.fromString(otro.id)
             registros.replace(DECLARACION, Declaracion::class.java, otroId, campos.filterKeys { it in cambios })
-            escrita(otroId)
+            escrita(otroId, conCaja = false)
         }
     }
 
@@ -217,7 +236,7 @@ class DeclaracionService(
     }
 
     // the portal's «Recalcular»: a vigente declaración valued again without a change (catastro answers now)
-    suspend fun recalcularDeclaracion(id: UUID): Declaracion = recalcular(existe(id)).also { redeterminar(it.antes, it.despues) }.despues
+    suspend fun recalcularDeclaracion(id: UUID): Declaracion = recalcular(existe(id)).also { despuesDeCambiar(it.antes, it.despues) }.despues
 
     // the external padrón's valuation is of its year: that year's declaración keeps it, another year is declared
     // from it (declararDesde) without it
@@ -251,7 +270,7 @@ class DeclaracionService(
             deshacer(creada)
             throw e
         }
-        redeterminar(null, creada)
+        despuesDeCambiar(null, creada)
         return ficha(UUID.fromString(creada.id))
     }
 
@@ -264,7 +283,7 @@ class DeclaracionService(
         val stored = registros.get(DECLARACION, Declaracion::class.java, id)
         val saved = registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(anulada(stored, body.motivoAnulacion, LocalDate.now())))
         recalcularResto(stored)
-        redeterminar(stored, saved)
+        despuesDeCambiar(stored, saved)
         return saved
     }
 
@@ -275,7 +294,7 @@ class DeclaracionService(
         bajaDeDeclaracion(LISTAS.filter { listas.contar(it, PARENT, id) > 0 })?.let { throw ConflictException(it) }
         registros.delete(DECLARACION, id)
         recalcularResto(stored)
-        redeterminar(stored, null)
+        despuesDeCambiar(stored, null)
     }
 
     // "datos de los condóminos": another contribuyente's declaración of the same predio, year and secuencia, with what
@@ -301,7 +320,7 @@ class DeclaracionService(
         }
         obras(id).forEach { nuevaObra(nuevaId, it.copy(id = null, declaracion = null, fila = conFila(OBRA_COMPLEMENTARIA, it.id, it.fila))) }
         frentes(id).forEach { nuevoFrente(nuevaId, it.copy(id = null, declaracion = null, fila = conFila(OTRO_FRENTE, it.id, it.fila))) }
-        return recalcular(nuevaId).despues.also { redeterminar(null, it) }
+        return recalcular(nuevaId).despues.also { despuesDeCambiar(null, it) }
     }
 
     // a source row's fila: its own, or one it takes now (a row from before #156 that model/migrar_derivados.py did
@@ -461,7 +480,7 @@ class DeclaracionService(
         id: UUID,
         body: NivelConstruccion
     ) = nuevoNivel(id, body.copy(fila = null)).also { nivel ->
-        escrita(id)
+        escrita(id, conCaja = false)
         replicar(NIVEL_CONSTRUCCION, id, null) { otra, _ -> nuevoNivel(otra, nivel.copy(id = null, declaracion = null)) }
     }
 
@@ -485,7 +504,7 @@ class DeclaracionService(
         val nivel = body.copy(id = null, declaracion = null, fila = fila.fila)
         val saved = listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id, nivel)
         fila.declaracion?.let {
-            escrita(it)
+            escrita(it, conCaja = false)
             replicar(NIVEL_CONSTRUCCION, it, fila) { otra, pareja ->
                 if (pareja == null) nuevoNivel(otra, nivel) else listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, pareja, nivel)
             }
@@ -499,7 +518,7 @@ class DeclaracionService(
         id: UUID,
         body: ObraComplementaria
     ) = nuevaObra(id, body.copy(fila = null)).also { obra ->
-        escrita(id)
+        escrita(id, conCaja = false)
         replicar(OBRA_COMPLEMENTARIA, id, null) { otra, _ -> nuevaObra(otra, obra.copy(id = null, declaracion = null)) }
     }
 
@@ -522,7 +541,7 @@ class DeclaracionService(
         val obra = obra(body).copy(id = null, declaracion = null, fila = fila.fila)
         val saved = listas.cambiar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, id, obra)
         fila.declaracion?.let {
-            escrita(it)
+            escrita(it, conCaja = false)
             replicar(OBRA_COMPLEMENTARIA, it, fila) { otra, pareja ->
                 if (pareja == null) nuevaObra(otra, obra) else listas.cambiar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, pareja, obra)
             }
@@ -536,7 +555,7 @@ class DeclaracionService(
         id: UUID,
         body: OtroFrente
     ) = nuevoFrente(id, body.copy(fila = null)).also { frente ->
-        escrita(id)
+        escrita(id, conCaja = false)
         replicar(OTRO_FRENTE, id, null) { otra, _ -> nuevoFrente(otra, frente.copy(id = null, declaracion = null)) }
     }
 
@@ -559,7 +578,7 @@ class DeclaracionService(
         val frente = body.copy(id = null, declaracion = null, fila = fila.fila)
         val saved = listas.cambiar(OTRO_FRENTE, OtroFrente::class.java, PARENT, id, frente)
         fila.declaracion?.let {
-            escrita(it)
+            escrita(it, conCaja = false)
             replicar(OTRO_FRENTE, it, fila) { otra, pareja ->
                 if (pareja == null) nuevoFrente(otra, frente) else listas.cambiar(OTRO_FRENTE, OtroFrente::class.java, PARENT, pareja, frente)
             }
@@ -577,7 +596,7 @@ class DeclaracionService(
         listas.borrar(objectName, id)
         if (objectName !in VALUADAS) return
         val declaracion = fila.declaracion ?: return
-        escrita(declaracion, conValorDeOrigen(objectName, fila.registro))
+        escrita(declaracion, conValorDeOrigen(objectName, fila.registro), conCaja = false)
         replicar(objectName, declaracion, fila, borra = true) { _, pareja -> pareja?.let { listas.borrar(objectName, it) } }
     }
 
@@ -589,8 +608,9 @@ class DeclaracionService(
     // #157: a row written in `declaracion` is the same row in the other vigente declaraciones of its condominio, so
     // each one gets the same write: `escribir` makes it there, on its pareja (null: it has none). the group is read
     // once. a replica goes through nuevo* and Listas, never back here: it is not replicated again. each declaración
-    // written is then marked (marcarOrigenModificado) and recomputed, its condominio with its own %. `fila`: the row
-    // changed or removed (null: one added, a new row everywhere)
+    // written is then marked (marcarOrigenModificado) and recomputed, its condominio with its own %, and the
+    // condominio's ordenes in caja are synced once, at the end (#164). `fila`: the row changed or removed (null: one
+    // added, a new row everywhere)
     private suspend fun replicar(
         objectName: String,
         declaracion: UUID,
@@ -607,8 +627,9 @@ class DeclaracionService(
             val registro = (pareja as? Pareja.Esta)?.registro
             if (borra && registro == null) continue
             escribir(otra, registro?.let { UUID.fromString(it["id"].toString()) })
-            escrita(otra, borra && conValorDeOrigen(objectName, registro.orEmpty()))
+            escrita(otra, borra && conValorDeOrigen(objectName, registro.orEmpty()), conCaja = false)
         }
+        caja.despuesDeEscribir { cambioDeDeuda(null, registros.get(DECLARACION, Declaracion::class.java, declaracion)) }
     }
 
     // the same row in `otra`: the one with its fila; else, for rows from before #156 that model/migrar_derivados.py
@@ -653,27 +674,62 @@ class DeclaracionService(
     // recomputed
     private suspend fun escrita(
         declaracion: UUID,
-        quitado: Boolean = false
+        quitado: Boolean = false,
+        conCaja: Boolean = true
     ) {
         marcarOrigenModificado(declaracion, quitado)
-        recalcular(declaracion).let { redeterminar(it.antes, it.despues) }
+        recalcular(declaracion).let { despuesDeCambiar(it.antes, it.despues, conCaja) }
     }
 
     // #158: a write that changes what the arbitrios read (Redeterminacion.cambia; null: a declaración created or
     // deleted) redetermines the year of the predio it was on and of the one it is on (ArbitriosService.redeterminarPredio),
     // as the caller. what it did goes to the response's header (AvisoDeArbitrios): a redeterminación that cannot be
-    // done is said there, and the write of the declaración stands
-    private suspend fun redeterminar(
+    // done is said there, and the write of the declaración stands. then, with or without a change of the arbitrios (the
+    // predial reads the valor afecto), the ordenes in caja of those contribuyentes (#164, aCaja). conCaja false: the
+    // write of a replica, whose caller syncs the condominio once at the end
+    private suspend fun despuesDeCambiar(
+        antes: Declaracion?,
+        despues: Declaracion?,
+        conCaja: Boolean = true
+    ) {
+        if (Redeterminacion.cambia(antes, despues)) {
+            val numero = (despues ?: antes)?.numeroDeclaracion
+            val observacion = "Redeterminación por cambio de la DJ " + (numero?.let { "n° $it" } ?: "del padrón")
+            listOfNotNull(antes, despues)
+                .mapNotNull { d -> d.anio?.let { anio -> d.predio?.let { UUID.fromString(it) to anio } } }
+                .distinct()
+                .forEach { (predio, anio) -> arbitrios.redeterminarPredio(predio, anio, observacion)?.let { AvisoDeArbitrios.anotar(it) } }
+        }
+        if (conCaja) aCaja(antes, despues)
+    }
+
+    // #164: the contribuyentes whose debt of the year a change of these declaraciones may have moved, synced with caja
+    // (CajaService.despuesDeEscribir, which never throws): theirs, and those of every declaración of their predio's year
+    // that the arbitrios read (the annulled ones too: they may be charged the months before; a sustituida is its
+    // rectificatoria's). read only when the organization has a caja
+    private suspend fun aCaja(
         antes: Declaracion?,
         despues: Declaracion?
-    ) {
-        if (!Redeterminacion.cambia(antes, despues)) return
-        val numero = (despues ?: antes)?.numeroDeclaracion
-        val observacion = "Redeterminación por cambio de la DJ " + (numero?.let { "n° $it" } ?: "del padrón")
-        listOfNotNull(antes, despues)
-            .mapNotNull { d -> d.anio?.let { anio -> d.predio?.let { UUID.fromString(it) to anio } } }
-            .distinct()
-            .forEach { (predio, anio) -> arbitrios.redeterminarPredio(predio, anio, observacion)?.let { AvisoDeArbitrios.anotar(it) } }
+    ) = caja.despuesDeEscribir { cambioDeDeuda(antes, despues) }
+
+    private suspend fun cambioDeDeuda(
+        antes: Declaracion?,
+        despues: Declaracion?
+    ): CambioDeDeuda {
+        val cambiadas = listOfNotNull(antes, despues)
+        val porAnio = mutableMapOf<Int, MutableSet<UUID>>()
+        for (d in cambiadas) {
+            val anio = d.anio ?: continue
+            d.contribuyente?.let { porAnio.getOrPut(anio) { mutableSetOf() } += UUID.fromString(it) }
+        }
+        for ((predio, anio) in cambiadas.mapNotNull { d -> d.anio?.let { anio -> d.predio?.let { it to anio } } }.distinct()) {
+            registros
+                .all(DECLARACION, Declaracion::class.java, filters = mapOf("predio" to predio, "anio" to "$anio"))
+                .filter { it.estado != SUSTITUIDA }
+                .mapNotNull { it.contribuyente }
+                .forEach { porAnio.getOrPut(anio) { mutableSetOf() } += UUID.fromString(it) }
+        }
+        return CambioDeDeuda(motivoEnCaja(antes, despues), porAnio)
     }
 
     // the srtm's defaults. condición and % are the condominio's (registrar)

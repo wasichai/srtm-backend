@@ -205,15 +205,12 @@ class CajaApiTest : ConCajaApiTest() {
         val dj = conPredial(e)!!
         enviar(e.contribuyente, e.anio)
         val primeras = (1..4).map { "PREDIAL-${e.contribuyente}-${e.anio}-C$it-v1" }
-        put(
-            "/api/srtm/declaraciones/$dj",
-            fields(tree(send("GET", "/api/srtm/declaraciones/$dj", null, HttpStatus.OK))["declaracion"]) + ("valor_autoavaluo" to 80000)
-        )
         // the caja takes longer than the client's timeout (1 s) to answer a sustitución
         retraso = { if (it.cuerpo["sustituye_a"] != null) 2500L else 0L }
         PEDIDOS.clear()
 
-        val resumen = enviar(e.contribuyente, e.anio)
+        // the write of the declaración sends them (#164)
+        val resumen = cambiarAutoavaluo(dj, 80000)!!
 
         assertEquals(4, resumen["pendientes"].asInt(), resumen.toString())
         val segundas = (1..4).map { "PREDIAL-${e.contribuyente}-${e.anio}-C$it-v2" }
@@ -272,15 +269,13 @@ class CajaApiTest : ConCajaApiTest() {
         val dj = conPredial(e)!!
         enviar(e.contribuyente, e.anio)
         val referencias = { v: Int -> (1..4).map { "PREDIAL-${e.contribuyente}-${e.anio}-C$it-v$v" } }
-        cambiarAutoavaluo(dj, 80000)
         retraso = { if (it.cuerpo["sustituye_a"] != null) 2500L else 0L }
-        enviar(e.contribuyente, e.anio)
+        cambiarAutoavaluo(dj, 80000)
         assertTrue(referencias(2).all { ordenes(e.contribuyente, e.anio).getValue(it)["estado"].asString() == EstadoOrdenCaja.POR_ENVIAR })
 
         // another change while v2 is in caja's hands: v3 is not sent, v2 is (the same body again)
         retraso = { 0L }
-        cambiarAutoavaluo(dj, 90000)
-        val diferida = enviar(e.contribuyente, e.anio)
+        val diferida = cambiarAutoavaluo(dj, 90000)!!
         assertTrue(diferida["pendientes"].asInt() >= 4, diferida.toString())
         assertTrue(PEDIDOS.none { it.referencia in referencias(3) })
         assertTrue(referencias(2).all { ordenes(e.contribuyente, e.anio).getValue(it)["estado"].asString() == EstadoOrdenCaja.ENVIADA })
@@ -311,10 +306,10 @@ class CajaApiTest : ConCajaApiTest() {
                 else -> null
             }
         }
-        // without the declaración, the predial is 0.00: nothing to collect
-        send("POST", "/api/srtm/declaraciones/$dj/anular", mapOf("motivo_anulacion" to "Declarada dos veces"), HttpStatus.OK)
+        // without the declaración, the predial is 0.00: nothing to collect. its anulación withdraws them (#164)
+        val numero = tree(send("GET", "/api/srtm/declaraciones/$dj", null, HttpStatus.OK))["declaracion"]["numero_declaracion"].asString()
 
-        val resumen = enviar(e.contribuyente, e.anio)
+        val resumen = escribir("POST", "/api/srtm/declaraciones/$dj/anular", mapOf("motivo_anulacion" to "Declarada dos veces")).second!!
 
         val o = ordenes(e.contribuyente, e.anio)
         assertEquals(
@@ -326,7 +321,7 @@ class CajaApiTest : ConCajaApiTest() {
         assertEquals(1, resumen["pagadas_en_caja"].asInt(), resumen.toString())
         val retiros = PEDIDOS.filter { !it.alta && it.referencia in v1 }
         assertEquals(4, retiros.size)
-        assertTrue(retiros.all { it.cuerpo["motivo"] == MOTIVO_SIN_DEUDA }, retiros.map { it.cuerpo }.toString())
+        assertTrue(retiros.all { it.cuerpo["motivo"] == "Anulación de la DJ n° $numero" }, retiros.map { it.cuerpo }.toString())
     }
 
     // D6: an alta answered 409 is CONFLICTO; 400, 422 and 404 are ERROR, each with why
