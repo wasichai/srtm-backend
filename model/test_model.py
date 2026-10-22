@@ -233,12 +233,13 @@ class ShippedModelTests(unittest.TestCase):
         emision = next(o for o in self.model["objects"] if o["name"] == "emision_masiva")
         fields = {f["name"]: f for f in emision["fields"]}
         self.assertEqual(list(fields), ["anio", "formato", "estado", "total", "procesados", "errores", "archivo", "tamano",
-                                        "mensaje", "iniciado", "terminado", "latido", "documentos"])
+                                        "mensaje", "iniciado", "terminado", "latido", "documentos", "enviar_a_caja"])
         types = {n: f["type"] for n, f in fields.items()}
         self.assertEqual(types, {"anio": "INTEGER", "formato": "ENUM", "estado": "ENUM", "total": "INTEGER",
                                  "procesados": "INTEGER", "errores": "LONG_TEXT", "archivo": "TEXT", "tamano": "INTEGER",
                                  "mensaje": "LONG_TEXT", "iniciado": "DATETIME", "terminado": "DATETIME",
-                                 "latido": "DATETIME", "documentos": "LONG_TEXT"})
+                                 "latido": "DATETIME", "documentos": "LONG_TEXT",
+                                 "enviar_a_caja": "BOOLEAN"})
         self.assertEqual(self.model["enums"][fields["formato"]["enum"]], ["PDF", "ZIP"])
         self.assertEqual(self.model["enums"][fields["estado"]["enum"]],
                          ["PENDIENTE", "EN_PROCESO", "ENSAMBLANDO", "TERMINADA", "FALLIDA"])

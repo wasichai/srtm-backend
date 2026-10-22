@@ -42,6 +42,13 @@ fun referenciaPredial(
 
 fun referenciaArbitrio(clave: String) = "ARB-$clave"
 
+// a cuota de predial without its revision
+fun ranuraPredial(
+    contribuyente: UUID,
+    anio: Int,
+    numero: Int
+) = "PREDIAL|$contribuyente|$anio|$numero"
+
 // the clave without its version: predio|servicio|anio|periodo|secuencia (or without secuencia in the legacy ones)
 fun ranuraArbitrio(clave: String) = "ARB|${clave.substringBeforeLast('|')}"
 
@@ -54,7 +61,8 @@ fun planificar(
     val referencias = actuales.mapNotNull { it.referencia }.toSet()
     val porRanura = actuales.groupBy { it.ranura }
     val pagadas = actuales.filter { it.estado == EstadoOrdenCaja.PAGADA_EN_CAJA }.map { it.ranura }.toSet()
-    // an importe of 0 is nothing to collect: the ranura goes on as if there were no deseada
+    // an importe of 0 is nothing to collect: the ranura goes on as if there were no deseada. one deseada per ranura
+    // (the caller's precondition): associateBy keeps only the last of several
     val vivas = deseadas.filter { it.importe.compareTo(BigDecimal.ZERO) != 0 }.associateBy { it.ranura }
 
     val altas = mutableListOf<Alta>()

@@ -34,7 +34,11 @@ enum class Candado(
     NOTIFICACION_RESOLUCION(0x5352_0006),
 
     // the corrida de brecha of a year: one active per organization and year (organización|anio)
-    BRECHA(0x5352_0007)
+    BRECHA(0x5352_0007),
+
+    // the ordenes de caja of a contribuyente: a sincronización reads what was queued and writes its plan as one step
+    // (organización|contribuyente, see bloquearEnOrganizacion)
+    CAJA_CONTRIBUYENTE(0x5352_0008)
 }
 
 // postgres' transaction advisory locks, by kind and key (caja-backend's Candados). wasichai has no row lock nor

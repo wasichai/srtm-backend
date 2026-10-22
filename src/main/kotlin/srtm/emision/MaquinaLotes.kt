@@ -28,7 +28,7 @@ class TipoLotes(
     val producidos: String,
     val camposTrabajo: List<String>,
     val camposLote: List<String>,
-    // the job's fields a take returns besides its anio (the emission's formato)
+    // the job's fields a take returns besides its anio (the emission's formato), as text
     val delTrabajo: List<String> = emptyList()
 )
 
@@ -152,7 +152,7 @@ class MaquinaLotes internal constructor(
         for (t in todas.drop(desde) + todas.take(desde)) {
             val l = t.lotes
             val e = t.trabajos
-            val extras = tipo.delTrabajo.withIndex().joinToString("") { (i, c) -> ", e.${e.columna(c)} AS x$i" }
+            val extras = tipo.delTrabajo.withIndex().joinToString("") { (i, c) -> ", e.${e.columna(c)}::text AS x$i" }
             val tomado =
                 db
                     .sql(

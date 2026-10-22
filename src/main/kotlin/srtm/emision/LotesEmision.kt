@@ -11,10 +11,25 @@ const val EMISION_LOTE = "emision_lote"
 internal val CAMPOS_LOTE =
     listOf("emision", "numero", "contribuyentes", "estado", "tomado_por", "latido", "intentos", "procesados", "documentos", "errores", "parte")
 internal val CAMPOS_EMISION =
-    listOf("anio", "formato", "estado", "total", "procesados", "errores", "archivo", "tamano", "mensaje", "iniciado", "terminado", "latido", "documentos")
+    listOf(
+        "anio",
+        "formato",
+        "estado",
+        "total",
+        "procesados",
+        "errores",
+        "archivo",
+        "tamano",
+        "mensaje",
+        "iniciado",
+        "terminado",
+        "latido",
+        "documentos",
+        "enviar_a_caja"
+    )
 
 // the emission as a kind of job by lotes: its lotes carry contribuyentes and count documentos, and a take returns the
-// emission's formato and the documents it asks for with its anio
+// emission's formato, the documents it asks for and whether it goes to the caja, with its anio
 val TIPO_EMISION =
     TipoLotes(
         trabajo = EMISION_MASIVA,
@@ -24,7 +39,7 @@ val TIPO_EMISION =
         producidos = "documentos",
         camposTrabajo = CAMPOS_EMISION,
         camposLote = CAMPOS_LOTE,
-        delTrabajo = listOf("formato", "documentos")
+        delTrabajo = listOf("formato", "documentos", "enviar_a_caja")
     )
 
 // a lote a worker of this instance took: what it needs to generate its part
@@ -39,7 +54,9 @@ data class LoteTomado(
     val anio: Int,
     val formato: FormatoEmision,
     // what each contribuyente gets: the emission's documentos
-    val documentos: Set<DocumentoEmision> = POR_DEFECTO
+    val documentos: Set<DocumentoEmision> = POR_DEFECTO,
+    // #163: each contribuyente is synchronized with the organization's caja
+    val enviarACaja: Boolean = false
 ) : TomaDeLote {
     override val trabajo: UUID get() = emision
 }
@@ -83,7 +100,8 @@ class LotesEmision(
                 creadoPor = it.creadoPor,
                 anio = it.anio,
                 formato = FormatoEmision.valueOf(it.delTrabajo.getValue("formato")!!),
-                documentos = documentosDe(it.delTrabajo["documentos"])
+                documentos = documentosDe(it.delTrabajo["documentos"]),
+                enviarACaja = it.delTrabajo["enviar_a_caja"].toBoolean()
             )
         }
 

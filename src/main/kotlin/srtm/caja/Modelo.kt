@@ -67,3 +67,19 @@ data class OrdenCaja(
     val cuotaArbitrio: String? = null,
     val cuotaPredial: String? = null
 )
+
+// one of the four cuotas of a contribuyente's impuesto predial of a year, at its fecha_calculo: never edited, a new
+// monto is the next revision of its numero (the field version is core's)
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class CuotaPredial(
+    val id: String? = null,
+    val anio: Int? = null,
+    val numero: Int? = null,
+    val revision: Int? = null,
+    val monto: BigDecimal? = null,
+    val vencimiento: LocalDate? = null,
+    val valorAfecto: BigDecimal? = null,
+    val fechaCalculo: LocalDate? = null,
+    val clave: String? = null,
+    val contribuyente: String? = null
+)
