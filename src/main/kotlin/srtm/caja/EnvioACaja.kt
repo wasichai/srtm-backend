@@ -221,6 +221,14 @@ class EnvioACaja(
         val alta = o.estado == EstadoOrdenCaja.POR_ENVIAR
         val c = { campo: String -> t.columna(campo) }
         return when (r) {
+            // caja already withdrew it (a retry after a timeout, once its vigencia said no): nothing in caja to collect,
+            // never ENVIADA. a CONFLICTO, like an alta caja refuses
+            is ResultadoCaja.Hecho if alta && r.estado == ANULADA_EN_CAJA -> {
+                val detalle = "caja-backend tiene la orden $ANULADA_EN_CAJA"
+                val escrita = escribir(t, o, EstadoOrdenCaja.CONFLICTO, "${c("ultimo_error")} = :error", "error" to detalle)
+                log.warn("caja: {} CONFLICTO (anulada en caja)", o.referencia)
+                ResumenCaja(conflictos = if (escrita) 1 else 0, error = detalle)
+            }
             is ResultadoCaja.Hecho if alta -> {
                 val escrita =
                     escribir(
@@ -434,5 +442,8 @@ class EnvioACaja(
 
     private companion object {
         val log = LoggerFactory.getLogger(EnvioACaja::class.java)
+
+        // the estado of an orden de cobro its sistema de origen withdrew (caja-backend's OrdenDeCobro)
+        const val ANULADA_EN_CAJA = "ANULADA"
     }
 }

@@ -79,6 +79,17 @@ class ConciliacionTest {
         assertFalse(VigenciaDeOrdenes.decidir("R", orden.copy(estado = EstadoOrdenCaja.POR_ENVIAR), true, null, null, null).vigente)
     }
 
+    // caja asking for an orden POR_ENVIAR already tried proves it holds it (a timeout): it is vigente, like an ENVIADA
+    @Test
+    fun `una orden por enviar ya intentada es vigente`() {
+        val intentada = OrdenCaja(importe = BigDecimal("12.5"), estado = EstadoOrdenCaja.POR_ENVIAR, intentos = 1)
+
+        assertTrue(VigenciaDeOrdenes.decidir("R", intentada, true, null, null, null).vigente)
+        val nunca = VigenciaDeOrdenes.decidir("R", intentada.copy(intentos = 0), true, null, null, null)
+        assertFalse(nunca.vigente)
+        assertEquals("todavía no se envió a caja", nunca.motivo)
+    }
+
     @Test
     fun `el cuerpo de vigencia lleva las cuatro claves y el importe nulo`() {
         val j = JsonMapper.builder().build().readTree(VigenciaDeOrdenes.cuerpo(listOf(VigenciaDeOrden("R", false, null, "no existe"))))

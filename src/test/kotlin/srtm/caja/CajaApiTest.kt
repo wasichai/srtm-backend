@@ -357,6 +357,23 @@ class CajaApiTest : ConCajaApiTest() {
         assertTrue(r.drop(4).all { o.getValue(it)["estado"].asString() == EstadoOrdenCaja.ENVIADA })
     }
 
+    // Ruling 26: caja answers an alta it already withdrew (a retry after a timeout, its vigencia said no) with 200 and
+    // estado ANULADA: the orden is not in caja to collect, so it is CONFLICTO with why, never ENVIADA
+    @Test
+    fun `altaAnuladaEnCajaEsConflicto`() {
+        val e = Escenario()
+        val r = lista(tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))) { "ARB-${it["clave"].asString()}" }
+        respuesta = { if (it.alta && it.referencia == r[0]) 200 to """{"orden_id":"${UUID.randomUUID()}","estado":"ANULADA"}""" else null }
+
+        val resumen = enviar(e.contribuyente, e.anio)
+
+        val o = ordenes(e.contribuyente, e.anio).getValue(r[0])
+        assertEquals(EstadoOrdenCaja.CONFLICTO, o["estado"].asString(), o.toString())
+        assertEquals("caja-backend tiene la orden ANULADA", o["ultimo_error"].asString())
+        assertEquals(1, resumen["conflictos"].asInt(), resumen.toString())
+        assertEquals(23, resumen["enviadas"].asInt(), resumen.toString())
+    }
+
     // srtm.caja.intentos=3: the third try caja does not answer is ERROR, and it is not tried again
     @Test
     fun `intentosAgotadosEsError`() {

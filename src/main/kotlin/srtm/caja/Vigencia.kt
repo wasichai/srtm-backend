@@ -42,7 +42,8 @@ object VigenciaDeOrdenes {
             ?.trim()
             ?.ifEmpty { null }
 
-    // an orden srtm collects: the one that exists in the organization, was sent (ENVIADA), is still its cuota's (not
+    // an orden srtm collects: the one that exists in the organization, was sent (ENVIADA, or POR_ENVIAR already tried:
+    // caja asking about it proves it holds it, and the pagos take it as vigente too), is still its cuota's (not
     // annulled, not replaced) and was not paid in caja. otherwise the motivo says why (the cuota's first: an orden srtm
     // already withdrew still says why). importe: srtm's
     fun decidir(
@@ -64,7 +65,7 @@ object VigenciaDeOrdenes {
                 recibo != null -> "ya pagada con el recibo $recibo"
                 orden.estado == EstadoOrdenCaja.PAGADA_EN_CAJA -> "ya pagada en caja"
                 orden.estado in RETIRADAS_POR_SRTM -> "retirada"
-                orden.estado != EstadoOrdenCaja.ENVIADA -> "todavía no se envió a caja"
+                orden.estado != EstadoOrdenCaja.ENVIADA && !intentada(orden) -> "todavía no se envió a caja"
                 else -> null
             }
         return VigenciaDeOrden(referencia, motivo == null, importe, motivo)
