@@ -22,17 +22,9 @@ import kotlin.random.Random
 // CAJA). each orden is applied to its cuota, or kept as saldo a favor when it cannot be (202); a pagoId seen before
 // answers 409 with the same body; a PAGO_ANULADO undoes its original. the events have the contract's shape
 // (caja-backend's cuerpoPagoRegistrado and cuerpoPagoAnulado)
-class PagosApiTest : ConCajaApiTest() {
+class PagosApiTest : ConPagosApiTest() {
     @Autowired
     lateinit var registros: Registros
-
-    // the service account's token, in the caja's organization
-    private lateinit var caja: String
-
-    @BeforeEach
-    fun comoLaCuentaDeCaja() {
-        caja = tokenDeCaja()
-    }
 
     @Test
     fun `pagoNormalAplicaYLaCuotaQuedaPagada`() {
@@ -324,15 +316,6 @@ class PagosApiTest : ConCajaApiTest() {
         assertEquals("la cuota ya se pagó en caja (recibo 001-0000042)", problema["detail"].asString())
     }
 
-    // the escenario's year determined and sent to caja: its first cuota
-    private fun determinadaYEnviada(e: Escenario): JsonNode {
-        val cuotas = tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))
-        enviar(e.contribuyente, e.anio)
-        return cuotas[0]
-    }
-
-    private fun referencia(cuota: JsonNode) = "ARB-${cuota["clave"].asString()}"
-
     // the cuota's month in its predio's matriz
     private fun celda(
         e: Escenario,
@@ -368,97 +351,8 @@ class PagosApiTest : ConCajaApiTest() {
         return tree(result.responseHeaders.getFirst(AvisoDeArbitrios.ENCABEZADO)!!)
     }
 
-    // an event as caja-backend writes it: its pagoId and its json
-    class Evento(
-        val id: String,
-        val json: String
-    )
-
-    private fun registrado(
-        ordenes: List<Pair<String, String>>,
-        numero: String = "001-${Random.nextInt(1_000_000, 9_999_999)}"
-    ): Evento {
-        val id = UUID.randomUUID().toString()
-        val total = ordenes.sumOf { it.second.toBigDecimalOrNull() ?: BigDecimal.ZERO }.toPlainString()
-        val lineas =
-            ordenes.joinToString(",") { (ref, importe) ->
-                """{"ordenId":"${UUID.randomUUID()}","referenciaExterna":"$ref","importe":"$importe","actualizadoA":"2026-10-22"}"""
-            }
-        return Evento(
-            id,
-            """{"pagoId":"$id","tipo":"PAGO_REGISTRADO","sistemaOrigen":"rentas",""" +
-                """"recibo":{"numero":"$numero","serie":"001","fechaDePago":"2026-10-22","cajero":"ana@muni.gob.pe","formaDePago":"EFECTIVO"},""" +
-                """"pagador":{"documento":"12345678","nombre":"FLORES OTINIANO JUNIOR","idExterno":null},""" +
-                """"total":"$total","actualizadoA":"2026-10-22","ordenes":[$lineas]}"""
-        )
-    }
-
-    private fun anulado(original: Evento): Evento {
-        val id = UUID.randomUUID().toString()
-        val o = tree(original.json)
-        return Evento(
-            id,
-            """{"pagoId":"$id","tipo":"PAGO_ANULADO","pagoOriginalId":"${original.id}","recibo":${o["recibo"]},""" +
-                """"motivo":"Error de digitación","fecha":"2026-10-22","total":"${o["total"].asString()}"}"""
-        )
-    }
-
-    private fun pagar(
-        evento: Evento,
-        quien: String? = caja
-    ) = pagar(evento.json, quien)
-
-    // caja's POST {url}/pagos: the status and the body as they came
-    private fun pagar(
-        json: String,
-        quien: String? = caja
-    ): Pair<HttpStatus, String> {
-        val spec =
-            client
-                .post()
-                .uri("/api/srtm/caja/pagos")
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(json)
-        val result =
-            (quien?.let { spec.header(HttpHeaders.AUTHORIZATION, it) } ?: spec)
-                .exchange()
-                .expectBody(String::class.java)
-                .returnResult()
-        return HttpStatus.valueOf(result.status.value()) to (result.responseBody ?: "")
-    }
-
-    // docs/develop/alta-organizacion.md: the role CAJA and the service account caja of the organization, created once
-    // per run; a token of its own for each test (it lives 15 minutes)
-    private fun tokenDeCaja(): String {
-        val (id, secreto) =
-            credencial ?: run {
-                val rol = "CAJA_${uniqueDocumento()}"
-                send("POST", "/api/roles", mapOf("name" to rol, "label" to rol), HttpStatus.CREATED)
-                val crear = listOf(ObjetosCaja.PAGO_CAJA, ObjetosCaja.PAGO_CAJA_DETALLE)
-                val leer = listOf(ObjetosCaja.ORDEN_CAJA, "cuota_arbitrio", "anulacion_cuota_arbitrio", ObjetosCaja.CUOTA_PREDIAL, "contribuyente")
-                val permisos = crear.flatMap { listOf(permiso(it, "CREATE"), permiso(it, "READ")) } + leer.map { permiso(it, "READ") }
-                send("PUT", "/api/roles/$rol/permissions", mapOf("permissions" to permisos), HttpStatus.OK)
-                val cuenta = post("/api/service-accounts", mapOf("name" to "caja-${uniqueDocumento()}", "roles" to listOf(rol)))
-                (cuenta["clientId"].asString() to cuenta["clientSecret"].asString()).also { credencial = it }
-            }
-        val respuesta =
-            client
-                .post()
-                .uri("/api/auth/token")
-                .bodyValue(mapOf("clientId" to id, "clientSecret" to secreto))
-                .exchange()
-                .expectStatus()
-                .isOk
-                .expectBody(String::class.java)
-                .returnResult()
-                .responseBody!!
-        return "Bearer ${tree(respuesta)["token"].asString()}"
-    }
-
     private companion object {
         const val APLICADO = """{"aplicado":true,"a_cuenta":false,"motivo":null}"""
-
-        var credencial: Pair<String, String>? = null
 
         val NIVEL =
             mapOf(

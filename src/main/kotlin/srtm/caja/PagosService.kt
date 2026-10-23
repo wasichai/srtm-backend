@@ -18,6 +18,7 @@ import srtm.rentas.Records
 import srtm.rentas.Registros
 import tools.jackson.databind.json.JsonMapper
 import wasichai.core.data.RecordCriterion
+import java.time.LocalDate
 import java.util.UUID
 
 // what srtm answers caja's buzón: the status decides the delivery (caja-backend's clasificar), the body is exact
@@ -61,6 +62,47 @@ class PagosService(
             }
         }
     }
+
+    // #166: caja's conciliación of a day. a 503 without caja (caja asks again), like the pagos
+    suspend fun conciliar(fecha: LocalDate): RespuestaACaja {
+        val dia = pagadas.delDia(fecha) ?: return RespuestaACaja(HttpStatus.SERVICE_UNAVAILABLE, motivo(SIN_CAJA_CONFIGURADA))
+        return RespuestaACaja(HttpStatus.OK, Conciliacion.cuerpo(fecha, dia))
+    }
+
+    // #168: whether the ordenes caja is about to collect still stand. all is read in a few queries (the ordenes by
+    // referencia, their cuotas, the pagadas) and nothing is liquidated again: the cuota is vigente as the pagos see it
+    // (vigentes). only an orden whose cuota is not does read its reason. the answer has every referencia asked, in order
+    suspend fun vigencia(cuerpo: String?): RespuestaACaja {
+        val referencias = VigenciaDeOrdenes.referencias(cuerpo)
+        if (pagadas.organizacionConCaja() == null) return RespuestaACaja(HttpStatus.SERVICE_UNAVAILABLE, motivo(SIN_CAJA_CONFIGURADA))
+        val ordenes =
+            registros
+                .donde(ObjetosCaja.ORDEN_CAJA, OrdenCaja::class.java, listOf(entre("referencia", referencias.distinct())))
+                .filter { it.id != null }
+                .associateBy { it.referencia }
+        val vigentes = vigentes(ordenes.values, conRetiradas = true)
+        val recibos = pagadas.deOrdenes(ordenes.values.filter { it.id in vigentes }.mapNotNull { it.id }).associate { it.orden to it.recibo }
+        val respuestas =
+            referencias.map { r ->
+                val orden = ordenes[r]
+                val vigente = orden?.id in vigentes
+                VigenciaDeOrdenes.decidir(
+                    r,
+                    orden,
+                    vigente,
+                    orden?.id?.let(recibos::get),
+                    if (orden != null && !vigente) sustituta(orden) else null,
+                    if (orden != null && !vigente) anulacion(orden) else null
+                )
+            }
+        return RespuestaACaja(HttpStatus.OK, VigenciaDeOrdenes.cuerpo(respuestas))
+    }
+
+    // the motivo with which the cuota de arbitrio of an orden was annulled
+    private suspend fun anulacion(o: OrdenCaja): String? =
+        o.cuotaArbitrio?.let { cuota ->
+            registros.all(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, filters = mapOf("cuota" to cuota)).firstOrNull()?.motivo
+        }
 
     private suspend fun registrar(e: PagoRegistrado): RespuestaACaja {
         candados.bloquearEnOrganizacion(Candado.CAJA_PAGO, e.pagoId)
@@ -204,8 +246,12 @@ class PagosService(
     // the ids of the ordenes whose debt srtm still has: their cuota is vigente (de arbitrio: not annulled and the
     // latest version, Arbitrios.vigentes; de predial: the highest revision of its numero), and srtm did not withdraw
     // them (a retiro queued or done, a cancelación, or a retiro caja refused because it was paid)
-    private suspend fun vigentes(ordenes: Collection<OrdenCaja>): Set<String> {
-        val vivas = ordenes.filter { it.id != null && it.estado !in RETIRADAS }
+    // conRetiradas: the ones srtm withdrew too (the vigencia answers why one is not collected)
+    private suspend fun vigentes(
+        ordenes: Collection<OrdenCaja>,
+        conRetiradas: Boolean = false
+    ): Set<String> {
+        val vivas = ordenes.filter { it.id != null && (conRetiradas || it.estado !in RETIRADAS) }
         val arbitrios = vivas.mapNotNull { it.cuotaArbitrio }
         val prediales = vivas.mapNotNull { it.cuotaPredial }
         val cuotasVigentes = mutableSetOf<String>()

@@ -187,6 +187,15 @@ curl -X POST "$SRTM/api/service-accounts" -H "Authorization: Bearer $TOKEN" -H '
 | Cuerpo ilegible | 400, y caja lo deja `MUERTO` |
 | Sin token o con el token vencido | 401. Sin el rol, 403. Caja reintenta los dos |
 
+**La conciliación y la vigencia (#166, #168):** con la misma cuenta, el mismo rol y la misma `url`, caja pregunta
+también por el día y por las órdenes (solo lectura: `pago_caja` y `orden_caja`, que el rol ya tiene).
+
+| Pregunta de caja | Respuesta |
+|---|---|
+| `GET {url}/pagos/conciliacion?fecha=AAAA-MM-DD` | 200 `{"fecha","recibidos","aplicados","rechazados":0,"recibidos_a_cuenta","importe_aplicado","importe_a_cuenta"}`: conteos enteros, importes en cadena con 2 decimales. Los pagos del día son los registrados con esa fecha de pago, sin los anulados. Sin `fecha` o mal escrita, 400 |
+| `POST {url}/ordenes/vigencia` con `{"ordenes":[{"referencia_externa","importe"}]}` (hasta 50) | 200 `{"ordenes":[{"referencia_externa","vigente","importe","motivo"}]}`, en el mismo orden y con el importe de srtm. No es vigente la desconocida, la que ya no se cobra (anulada, sustituida o retirada) ni la ya pagada |
+| Organización sin caja configurada | 503, y caja la toma como «no contesta» |
+
 ## Registro de Ica (2026-10-20)
 
 **Dev:**

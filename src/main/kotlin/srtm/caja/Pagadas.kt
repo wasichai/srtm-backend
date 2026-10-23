@@ -12,6 +12,7 @@ import wasichai.core.identity.CurrentUser
 import wasichai.core.organization.OrganizationRepository
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.time.LocalDate
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -70,6 +71,39 @@ class Pagadas(
         return (suma ?: cero).setScale(2, RoundingMode.HALF_UP)
     }
 
+    // #166: the pagos of a day (a PAGO_REGISTRADO with that fecha_pago and no PAGO_ANULADO, of any date) of the
+    // caller's organization. a row per pago_id, so a pago caja sent twice counts once. aplicados: all its detalles
+    // applied; a cuenta: at least one is not (a mixed pago is only here). null when the organization has no caja
+    suspend fun delDia(fecha: LocalDate): ResumenDelDia? {
+        val organizacion = organizacionConCaja() ?: return null
+        val (d, p) = tablasDePago(organizacion) ?: return null
+        val aplicado = "coalesce(d.${d.columna("aplicado")}, false)"
+        return db
+            .sql(
+                "SELECT count(*) AS recibidos, count(*) FILTER (WHERE x.sin_aplicar = 0) AS aplicados, " +
+                    "count(*) FILTER (WHERE x.sin_aplicar > 0) AS a_cuenta, " +
+                    "coalesce(sum(x.importe_aplicado), 0) AS importe_aplicado, coalesce(sum(x.importe_a_cuenta), 0) AS importe_a_cuenta FROM (" +
+                    "SELECT p.id, count(d.id) FILTER (WHERE NOT $aplicado) AS sin_aplicar, " +
+                    "coalesce(sum(d.${d.columna("importe")}) FILTER (WHERE $aplicado), 0) AS importe_aplicado, " +
+                    "coalesce(sum(d.${d.columna("importe")}) FILTER (WHERE NOT $aplicado), 0) AS importe_a_cuenta " +
+                    "FROM ${p.tabla} p LEFT JOIN ${d.tabla} d ON d.${d.columna("pago")} = p.id " +
+                    "WHERE p.${p.columna("tipo")} = :registrado AND p.${p.columna("fecha_pago")} = :fecha AND ${noAnulado(p)} " +
+                    "GROUP BY p.id) x"
+            ).bind("registrado", TipoPagoCaja.PAGO_REGISTRADO)
+            .bind("anulado", TipoPagoCaja.PAGO_ANULADO)
+            .bind("fecha", fecha)
+            .map { row, _ ->
+                ResumenDelDia(
+                    (row.get("recibidos") as Number).toLong(),
+                    (row.get("aplicados") as Number).toLong(),
+                    (row.get("a_cuenta") as Number).toLong(),
+                    BigDecimal(row.get("importe_aplicado").toString()),
+                    BigDecimal(row.get("importe_a_cuenta").toString())
+                )
+            }.one()
+            .awaitFirstOrNull()
+    }
+
     private suspend fun pagadas(
         campo: String,
         ids: Collection<String>
@@ -106,7 +140,8 @@ class Pagadas(
 
     private suspend fun tablasDePago(organizacion: UUID): Pair<TablaCore, TablaCore>? {
         val d = tabla(organizacion, ObjetosCaja.PAGO_CAJA_DETALLE, listOf("importe", "aplicado", "pago", "orden", "contribuyente")) ?: return null
-        val p = tabla(organizacion, ObjetosCaja.PAGO_CAJA, listOf("pago_id", "tipo", "pago_original", "recibo_serie", "recibo_numero")) ?: return null
+        val p =
+            tabla(organizacion, ObjetosCaja.PAGO_CAJA, listOf("pago_id", "tipo", "pago_original", "recibo_serie", "recibo_numero", "fecha_pago")) ?: return null
         return d to p
     }
 
