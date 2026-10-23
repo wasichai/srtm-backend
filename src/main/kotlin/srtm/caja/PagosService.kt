@@ -105,23 +105,25 @@ class PagosService(
     private suspend fun registrar(e: PagoRegistrado): RespuestaACaja {
         candados.bloquearEnOrganizacion(Candado.CAJA_PAGO, e.pagoId)
         recibido(e.pagoId)?.let { return repetido(it) }
-        val enSrtm =
-            registros
-                .donde(ObjetosCaja.ORDEN_CAJA, OrdenCaja::class.java, listOf(entre("referencia", e.ordenes.map { it.referencia })))
-                .associateBy { it.referencia }
-        for (c in enSrtm.values
+        val referencias = e.ordenes.map { it.referencia }
+        val leidas = ordenesPorReferencia(referencias)
+        for (c in leidas.values
             .mapNotNull { it.contribuyente }
             .distinct()
             .sorted()) {
             candados.bloquearEnOrganizacion(Candado.CAJA_CONTRIBUYENTE, c)
         }
+        // read again under the locks: a sincronización that held one may have moved its estado meanwhile (its
+        // contribuyente does not change, so the locks taken are the right ones)
+        val enSrtm = ordenesPorReferencia(referencias)
         val ya = pagadas.deOrdenes(enSrtm.values.mapNotNull { it.id }).associate { it.orden to it.recibo }
         val vigentes = vigentes(enSrtm.values)
+        val reemplazos = sustitutas(enSrtm.values.filter { it.id !in vigentes })
         val detalles =
             e.ordenes.map { o ->
                 val suya = enSrtm[o.referencia]
                 val vigente = suya?.id in vigentes
-                Imputacion.clasificar(o, suya, vigente, suya?.id?.let(ya::get), if (suya != null && !vigente) sustituta(suya) else null)
+                Imputacion.clasificar(o, suya, vigente, suya?.id?.let(ya::get), if (suya != null && !vigente) reemplazos[suya.referencia] else null)
             }
         val contribuyente = (detalles.filter { it.aplicado } + detalles).firstNotNullOfOrNull { it.contribuyente }
         val aplicado = detalles.all { it.aplicado }
@@ -234,6 +236,11 @@ class PagosService(
         }
     }
 
+    private suspend fun ordenesPorReferencia(referencias: List<String>): Map<String?, OrdenCaja> =
+        registros
+            .donde(ObjetosCaja.ORDEN_CAJA, OrdenCaja::class.java, listOf(entre("referencia", referencias)))
+            .associateBy { it.referencia }
+
     private suspend fun recibido(pagoId: String): PagoCaja? =
         registros.all(ObjetosCaja.PAGO_CAJA, PagoCaja::class.java, filters = mapOf("pago_id" to pagoId)).firstOrNull()
 
@@ -267,8 +274,10 @@ class PagosService(
             // a cuota without predio or anio has no year to be vigente in: never a filter of "null" (a 400 kills the delivery)
             val predios = suyas.filter { it.anio != null }.mapNotNull { it.predio }.distinct()
             if (predios.isNotEmpty()) {
-                val bajas = registros.donde(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, listOf(entreIds("predio", predios)))
-                val delAnio = registros.donde(CUOTA_ARBITRIO, CuotaArbitrio::class.java, listOf(entreIds("predio", predios)))
+                val deSusAnios = suyas.mapNotNull { it.anio }.distinct()
+                val bajas =
+                    registros.donde(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, listOf(entreIds("predio", predios), entreAnios(deSusAnios)))
+                val delAnio = registros.donde(CUOTA_ARBITRIO, CuotaArbitrio::class.java, listOf(entreIds("predio", predios), entreAnios(deSusAnios)))
                 bajas.forEach { b -> b.cuota?.let { anuladas[it] = b.motivo } }
                 val anios = suyas.mapNotNull { q -> q.anio?.let { anio -> q.predio?.let { it to anio } } }.toSet()
                 for ((predio, anio) in anios) {
@@ -281,7 +290,13 @@ class PagosService(
             val suyas = registros.byIds(ObjetosCaja.CUOTA_PREDIAL, CuotaPredial::class.java, prediales).values
             val contribuyentes = suyas.filter { it.anio != null }.mapNotNull { it.contribuyente }.distinct()
             if (contribuyentes.isNotEmpty()) {
-                val escritas = registros.donde(ObjetosCaja.CUOTA_PREDIAL, CuotaPredial::class.java, listOf(entreIds("contribuyente", contribuyentes)))
+                val deSusAnios = suyas.mapNotNull { it.anio }.distinct()
+                val escritas =
+                    registros.donde(
+                        ObjetosCaja.CUOTA_PREDIAL,
+                        CuotaPredial::class.java,
+                        listOf(entreIds("contribuyente", contribuyentes), entreAnios(deSusAnios))
+                    )
                 val anios = suyas.mapNotNull { q -> q.anio?.let { anio -> q.contribuyente?.let { it to anio } } }.toSet()
                 for ((contribuyente, anio) in anios) {
                     cuotasVigentes += vigentesPredial(escritas.filter { it.contribuyente == contribuyente && it.anio == anio }).values.mapNotNull { it.id }
@@ -297,19 +312,20 @@ class PagosService(
         val anuladas: Map<String, String?>
     )
 
-    // the ordenes that replaced these (their altas' sustituye_a), in one query: the replaced referencia -> the new one
+    // the ordenes that replaced these (their altas' sustituye_a), in one query: the replaced referencia -> the new one.
+    // never one cancelled, refused (CONFLICTO) or in ERROR: caja did not take it. of several, the ENVIADA, then the
+    // latest referencia: the same answer every time
     private suspend fun sustitutas(ordenes: Collection<OrdenCaja>): Map<String, String> {
         val referencias = ordenes.mapNotNull { it.referencia }.distinct()
         if (referencias.isEmpty()) return emptyMap()
         return registros
             .donde(ObjetosCaja.ORDEN_CAJA, OrdenCaja::class.java, listOf(entre("sustituye_a", referencias)))
-            .filter { it.estado != EstadoOrdenCaja.CANCELADA }
-            .mapNotNull { n -> n.sustituyeA?.let { it to n.referencia } }
-            .associate { (vieja, nueva) -> vieja to nueva!! }
+            .filter { it.estado !in NO_SUSTITUYEN && it.sustituyeA != null && it.referencia != null }
+            .groupBy { it.sustituyeA!! }
+            .mapValues { (_, nuevas) ->
+                nuevas.sortedWith(compareBy<OrdenCaja>({ it.estado != EstadoOrdenCaja.ENVIADA }).thenByDescending { it.referencia }).first().referencia!!
+            }
     }
-
-    // the orden that replaced one srtm no longer collects: its referencia
-    private suspend fun sustituta(o: OrdenCaja): String? = sustitutas(listOf(o))[o.referencia]
 
     private fun atributos(dto: Any): Map<String, Any?> = Records.attributes(dto).filterValues { it != null }
 
@@ -321,6 +337,9 @@ class PagosService(
         const val SIN_ORIGINAL = "no conozco el pago original"
 
         // what srtm no longer collects, and also what caja refused to withdraw because it was paid (the pagos' vigentes)
+        // what caja never took as a sustitución
+        val NO_SUSTITUYEN = setOf(EstadoOrdenCaja.CANCELADA, EstadoOrdenCaja.CONFLICTO, EstadoOrdenCaja.ERROR)
+
         val SIN_DEUDA = setOf(EstadoOrdenCaja.POR_RETIRAR, EstadoOrdenCaja.RETIRADA, EstadoOrdenCaja.CANCELADA, EstadoOrdenCaja.PAGADA_EN_CAJA)
 
         // a text field among `valores`: core binds them as one array
@@ -331,6 +350,13 @@ class PagosService(
             val columna = "\"${definition.fields.first { it.name == campo }.columnName}\""
             "$columna = ANY(${bind(valores.toTypedArray())})"
         }
+
+        // the anio (an INTEGER field) among `anios`: the array is bound as text and cast
+        fun entreAnios(anios: Collection<Int>) =
+            RecordCriterion { definition, bind ->
+                val columna = "\"${definition.fields.first { it.name == "anio" }.columnName}\""
+                "$columna = ANY(CAST(CAST(${bind(anios.map(Int::toString).toTypedArray())} AS text[]) AS integer[]))"
+            }
 
         // a relation (uuid) field among `valores`: the array is bound as text and cast, so the column keeps its index
         fun entreIds(
