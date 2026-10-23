@@ -20,14 +20,15 @@ class CajaController(
     private val caja: CajaService,
     private val permisos: Permisos
 ) {
-    // the cuotas de predial and of arbitrios sent now as ordenes de cobro: what changed since the last time
+    // the cuotas de predial and of arbitrios sent now as ordenes de cobro: what changed since the last time, and the
+    // ordenes in ERROR tried again (Ruling 27)
     @PostMapping("/contribuyentes/{id}/caja")
     suspend fun enviar(
         @PathVariable id: UUID,
         @RequestParam(required = false) anio: Int?
     ): ResumenCaja {
         permisos.exigirCrear(ObjetosCaja.ORDEN_CAJA, "enviar a caja")
-        return caja.sincronizar(id, anioDe(anio), MOTIVO_A_PEDIDO)
+        return caja.sincronizar(id, anioDe(anio), MOTIVO_A_PEDIDO, aPedido = true)
     }
 
     @GetMapping("/contribuyentes/{id}/caja")

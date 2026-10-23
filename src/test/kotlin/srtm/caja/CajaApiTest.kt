@@ -391,6 +391,32 @@ class CajaApiTest : ConCajaApiTest() {
         assertTrue(altasDe(documento).groupBy { it.referencia }.values.all { it.size == 3 })
     }
 
+    // Ruling 27: ERROR is not for ever. the POST a pedido queues again the ordenes in ERROR srtm still wants, as tried
+    // (caja may hold them), and sends them now
+    @Test
+    fun `errorDeseadoVuelveAEnviarseAPedido`() {
+        val e = Escenario()
+        send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED)
+        val documento = documentoDe(e.contribuyente)
+        respuesta = { if (it.alta && it.cuerpo["pagador_documento"] == documento) 503 to "{}" else null }
+        enviar(e.contribuyente, e.anio)
+        vueltas()
+        assertEquals(List(24) { EstadoOrdenCaja.ERROR }, registrosDe(e.contribuyente).map { it["estado"].asString() })
+        respuesta = { null }
+        PEDIDOS.clear()
+
+        val resumen = enviar(e.contribuyente, e.anio)
+
+        assertEquals(24, resumen["enviadas"].asInt(), resumen.toString())
+        assertEquals(0, resumen["encoladas"].asInt(), resumen.toString())
+        val o = registrosDe(e.contribuyente)
+        assertEquals(List(24) { EstadoOrdenCaja.ENVIADA }, o.map { it["estado"].asString() })
+        assertTrue(o.all { it["intentos"].asInt() == 4 }, o.first().toString())
+        // the same orden, once each: no new version
+        assertEquals(24, altasDe(documento).map { it.referencia }.toSet().size)
+        assertEquals(24, altasDe(documento).size)
+    }
+
     // nothing of another class or run is left for this test's group to take: only its emission runs
     private fun soloLaDelTest() {
         runBlocking {

@@ -58,14 +58,31 @@ fun ranuraArbitrio(clave: String) = "ARB|${clave.substringBeforeLast('|')}"
 // an orden POR_ENVIAR a take already tried: caja may hold it (a timeout, an answer lost, a send in flight)
 fun intentada(o: OrdenCaja) = o.estado == EstadoOrdenCaja.POR_ENVIAR && (o.intentos ?: 0) > 0
 
-// what caja may still answer for (#164): an alta already tried, or a retiro queued (caja may say it was paid). while
-// one of them is in the ranura, a new alta could charge the cuota twice
-private fun esperaACaja(o: OrdenCaja) = intentada(o) || o.estado == EstadoOrdenCaja.POR_RETIRAR
+// what caja may still answer for (#164): an alta already tried, a retiro queued (caja may say it was paid), or an
+// ERROR already tried (Ruling 27: a NoContesta exhausted may be in caja). while one of them is in the ranura, a new
+// alta could charge the cuota twice
+private fun esperaACaja(o: OrdenCaja) = intentada(o) || o.estado == EstadoOrdenCaja.POR_RETIRAR || (o.estado == EstadoOrdenCaja.ERROR && (o.intentos ?: 0) > 0)
+
+// Ruling 27: what a sincronización a pedido does first with the ordenes in ERROR (caja may hold any of them): the one
+// whose referencia srtm still wants is sent again, the others are withdrawn, so none holds its ranura for ever. a ranura
+// paid (its deseada, or a PAGADA_EN_CAJA) is left as it is. pure: the id of each and its new estado
+fun reintentosAPedido(
+    deseadas: List<OrdenDeseada>,
+    actuales: List<OrdenCaja>
+): Map<UUID, String> {
+    val vivas = deseadas.filter { it.importe.compareTo(BigDecimal.ZERO) != 0 && !it.pagada }.map { it.referencia }.toSet()
+    val pagadas =
+        deseadas.filter { it.pagada }.map { it.ranura }.toSet() +
+            actuales.filter { it.estado == EstadoOrdenCaja.PAGADA_EN_CAJA }.mapNotNull { it.ranura }
+    return actuales
+        .filter { it.estado == EstadoOrdenCaja.ERROR && it.id != null && it.ranura !in pagadas }
+        .associate { UUID.fromString(it.id) to if (it.referencia in vivas) EstadoOrdenCaja.POR_ENVIAR else EstadoOrdenCaja.POR_RETIRAR }
+}
 
 // compares what srtm wants with what was queued, ranura by ranura. pure: the caller persists the plan.
 // CONFLICTO, ERROR, CANCELADA and RETIRADA rows are not vigentes. only an orden POR_ENVIAR never tried is cancelled: one
-// already tried, or a retiro queued, defers its ranura (Plan.diferidas) until the queue resolves it, so caja never holds
-// two of one cuota.
+// already tried, a retiro queued, or an ERROR tried, defers its ranura (Plan.diferidas) until the queue resolves it, so
+// caja never holds two of one cuota.
 // altas follow the deseadas' order, retiros and cancelaciones the actuales'
 fun planificar(
     deseadas: List<OrdenDeseada>,

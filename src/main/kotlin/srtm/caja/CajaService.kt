@@ -204,16 +204,18 @@ class CajaService(
     }
 
     // motivo: the observacion of its altas; motivoDeRetiro: why its retiros and cancelaciones go. enLinea false: only
-    // queued, the loop sends them (the masiva: thousands of contribuyentes do not wait on caja)
+    // queued, the loop sends them (the masiva: thousands of contribuyentes do not wait on caja). aPedido: the POST's,
+    // which queues its ordenes in ERROR again (reintentosAPedido)
     suspend fun sincronizar(
         contribuyente: UUID,
         anio: Int,
         motivo: String,
         motivoDeRetiro: String = MOTIVO_SIN_DEUDA,
-        enLinea: Boolean = true
+        enLinea: Boolean = true,
+        aPedido: Boolean = false
     ): ResumenCaja {
         cajaDelLlamante() ?: throw ConflictException(SIN_CAJA_CONFIGURADA)
-        val (resumen, porEnviar) = transaccion.executeAndAwait { planificarYEscribir(contribuyente, anio, motivo, motivoDeRetiro) }
+        val (resumen, porEnviar) = transaccion.executeAndAwait { planificarYEscribir(contribuyente, anio, motivo, motivoDeRetiro, aPedido) }
         if (!enLinea) return resumen + ResumenCaja(pendientes = porEnviar.size)
         return resumen + envio.enviar(porEnviar, config.plazoEnLinea)
     }
@@ -365,20 +367,20 @@ class CajaService(
         id: UUID,
         anio: Int,
         motivo: String,
-        motivoDeRetiro: String
+        motivoDeRetiro: String,
+        aPedido: Boolean = false
     ): Pair<ResumenCaja, List<UUID>> {
         candados.bloquearEnOrganizacion(Candado.CAJA_CONTRIBUYENTE, id.toString())
         val persona = registros.get(CONTRIBUYENTE, Contribuyente::class.java, id)
         if (persona.tipoDocumento == SIN_DOCUMENTO) return ResumenCaja(sinDocumento = 1) to emptyList()
-        val actuales = ordenes(id, anio)
+        val leidas = ordenes(id, anio)
         // under the contribuyente's lock, as a pago that arrives (PagosService): a cuota paid is no alta nor retiro
         val suyas = pagadas.deContribuyentes(listOf("$id"))
-        val plan =
-            planificar(
-                deseadasPredial(id, anio, suyas.mapNotNull { it.cuotaPredial }.toSet()) +
-                    deseadasArbitrio(id, anio, suyas.mapNotNull { it.cuotaArbitrio }.toSet()),
-                actuales
-            )
+        val deseadas =
+            deseadasPredial(id, anio, suyas.mapNotNull { it.cuotaPredial }.toSet()) +
+                deseadasArbitrio(id, anio, suyas.mapNotNull { it.cuotaArbitrio }.toSet())
+        val actuales = if (aPedido) reintentar(leidas, reintentosAPedido(deseadas, leidas), motivoDeRetiro) else leidas
+        val plan = planificar(deseadas, actuales)
         val tabla = if (plan.cancelar.isEmpty() && plan.retiros.isEmpty()) null else tabla()
         val ranuraDe = actuales.filter { it.id != null }.associate { UUID.fromString(it.id) to it.ranura }
         val (canceladas, tomadas) = plan.cancelar.partition { cancelar(tabla!!, it, motivoDeRetiro) }
@@ -531,6 +533,37 @@ class CajaService(
         val organizacion = currentUser.require().organizationId
         return tablas.de(ObjetosCaja.ORDEN_CAJA, CAMPOS_ORDEN).firstOrNull { it.organizacion == organizacion }
             ?: throw IllegalStateException("La organización $organizacion: orden_caja no tiene los campos de caja: aplique el modelo")
+    }
+
+    // Ruling 27: the ordenes in ERROR queued again with their new estado, by compare-and-set from ERROR: tried (caja
+    // may hold them, so no cancel), and free to take now. one withdrawn goes with the sincronización's motivo. the
+    // ordenes as they are now, for the plan (and the ones it sends)
+    private suspend fun reintentar(
+        actuales: List<OrdenCaja>,
+        nuevos: Map<UUID, String>,
+        motivoDeRetiro: String
+    ): List<OrdenCaja> {
+        if (nuevos.isEmpty()) return actuales
+        val t = tabla()
+        val c = { campo: String -> t.columna(campo) }
+        val movidas =
+            nuevos.filter { (orden, estado) ->
+                val motivo = if (estado == EstadoOrdenCaja.POR_RETIRAR) ", ${c("motivo")} = :motivo" else ""
+                var spec =
+                    db
+                        .sql(
+                            "UPDATE ${t.tabla} SET ${c("estado")} = :nuevo, ${c("intentos")} = greatest(coalesce(${c("intentos")}, 0), 1), " +
+                                "${c("tomado_hasta")} = NULL$motivo, updated_at = now() WHERE id = :id AND ${c("estado")} = :error"
+                        ).bind("nuevo", estado)
+                        .bind("id", orden)
+                        .bind("error", EstadoOrdenCaja.ERROR)
+                if (motivo.isNotEmpty()) spec = spec.bind("motivo", motivoDeRetiro)
+                spec.fetch().awaitRowsUpdated() > 0
+            }
+        return actuales.map { o ->
+            val nuevo = o.id?.let { movidas[UUID.fromString(it)] } ?: return@map o
+            o.copy(estado = nuevo, intentos = maxOf(o.intentos ?: 0, 1))
+        }
     }
 
     // an orden POR_ENVIAR never tried and that nobody holds, CANCELADA. false: a take got to it, and caja may hold it
