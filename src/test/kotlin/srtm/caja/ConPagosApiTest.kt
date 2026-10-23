@@ -109,17 +109,8 @@ abstract class ConPagosApiTest : ConCajaApiTest() {
     private fun cuentaDeCaja(admin: String): Pair<String, String> {
         val rol = "CAJA_${uniqueDocumento()}"
         send("POST", "/api/roles", mapOf("name" to rol, "label" to rol), HttpStatus.CREATED, admin)
-        val crear = listOf(ObjetosCaja.PAGO_CAJA, ObjetosCaja.PAGO_CAJA_DETALLE, ObjetosCaja.ORDEN_CAJA, ObjetosCaja.CUOTA_PREDIAL)
-        val leer =
-            listOf(
-                "cuota_arbitrio",
-                "anulacion_cuota_arbitrio",
-                "contribuyente",
-                "declaracion_predial",
-                "parametro_tributario",
-                "servicio_arbitrio",
-                "predio"
-            )
+        val crear = listOf(ObjetosCaja.PAGO_CAJA, ObjetosCaja.PAGO_CAJA_DETALLE)
+        val leer = listOf(ObjetosCaja.ORDEN_CAJA, "cuota_arbitrio", "anulacion_cuota_arbitrio", ObjetosCaja.CUOTA_PREDIAL, "contribuyente")
         val permisos = crear.flatMap { listOf(permiso(it, "CREATE"), permiso(it, "READ")) } + leer.map { permiso(it, "READ") }
         send("PUT", "/api/roles/$rol/permissions", mapOf("permissions" to permisos), HttpStatus.OK, admin)
         val cuenta = post("/api/service-accounts", mapOf("name" to "caja-${uniqueDocumento()}", "roles" to listOf(rol)), admin)

@@ -2,6 +2,8 @@ package srtm.caja
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.reactive.asFlow
 import org.slf4j.LoggerFactory
 import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.r2dbc.core.awaitRowsUpdated
@@ -75,6 +77,14 @@ data class ResumenCaja(
 data class CambioDeDeuda(
     val motivo: String,
     val contribuyentes: Map<Int, Set<UUID>>
+)
+
+// an orden_caja as the follow-up of a PAGO_ANULADO reads it (CajaService.conCreador), oldest first
+data class OrdenConCreador(
+    val id: UUID,
+    val contribuyente: UUID?,
+    val anio: Int?,
+    val creadoPor: UUID?
 )
 
 // an orden of the contribuyente as GET /caja shows it. recibo: serie-numero of the pago of caja applied to it, not
@@ -247,6 +257,18 @@ class CajaService(
         motivoDeRetiro: String,
         enLinea: Boolean
     ): ResumenCaja? {
+        val (total, ids) = planificarSiEnviados(porAnio, motivo, motivoDeRetiro)
+        if (total == null) return null
+        if (!enLinea) return total + ResumenCaja(pendientes = ids.size)
+        return total + enviarAhora(ids)
+    }
+
+    // the planning half of siEnviados: what it did (null: none had ordenes), and the ordenes it left to send
+    suspend fun planificarSiEnviados(
+        porAnio: Map<Int, Set<UUID>>,
+        motivo: String,
+        motivoDeRetiro: String = MOTIVO_SIN_DEUDA
+    ): Pair<ResumenCaja?, List<UUID>> {
         var total: ResumenCaja? = null
         val porEnviar = mutableListOf<UUID>()
         for ((anio, suyos) in porAnio) {
@@ -265,18 +287,19 @@ class CajaService(
                 total = total?.plus(resumen) ?: resumen
             }
         }
-        if (total == null) return null
-        val ids = porEnviar.distinct()
-        if (!enLinea) return total + ResumenCaja(pendientes = ids.size)
-        return total +
-            try {
-                envio.enviar(ids, config.plazoEnLinea)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                fallo(e).copy(pendientes = ids.size)
-            }
+        return total to porEnviar.distinct()
     }
+
+    // these ordenes sent now, for one plazo (the rest is the loop's). it needs no user: the queue's writes are the
+    // system's (EnvioACaja). it never throws
+    suspend fun enviarAhora(ids: List<UUID>): ResumenCaja =
+        try {
+            envio.enviar(ids.distinct(), config.plazoEnLinea)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            fallo(e).copy(pendientes = ids.distinct().size)
+        }
 
     // #164: after a write of srtm that changed a debt (a declaración, a cuota de arbitrio): the ordenes of each year's
     // contribuyentes follow it, for those that already have ordenes (siEnviados). the cambio is read only when the
@@ -301,26 +324,48 @@ class CajaService(
 
     // #165: ordenes caja holds as PENDIENTE again (its PAGO_ANULADO returned them) whose debt srtm no longer has:
     // queued as retiros, by compare-and-set from what they were (ENVIADA, or PAGADA_EN_CAJA after a retiro caja
-    // refused), with a try count of their own, and sent now for the plazo; the rest is the loop's
-    suspend fun retirarDevueltas(ids: List<UUID>): ResumenCaja {
-        if (ids.isEmpty()) return ResumenCaja()
+    // refused), with a try count of their own. the ones it moved, for the caller to send (enviarAhora)
+    suspend fun moverDevueltas(ids: List<UUID>): List<UUID> {
+        if (ids.isEmpty()) return emptyList()
         val t = tabla()
-        val movidas =
-            ids.filter { id ->
-                db
-                    .sql(
-                        "UPDATE ${t.tabla} SET ${t.columna("estado")} = :por_retirar, ${t.columna("motivo")} = :motivo, ${t.columna("intentos")} = 0, " +
-                            "${t.columna("ultimo_error")} = NULL, updated_at = now() WHERE id = :id AND ${t.columna("estado")} IN (:enviada, :pagada)"
-                    ).bind("por_retirar", EstadoOrdenCaja.POR_RETIRAR)
-                    .bind("motivo", MOTIVO_SIN_DEUDA)
-                    .bind("id", id)
-                    .bind("enviada", EstadoOrdenCaja.ENVIADA)
-                    .bind("pagada", EstadoOrdenCaja.PAGADA_EN_CAJA)
-                    .fetch()
-                    .awaitRowsUpdated() > 0
-            }
-        if (movidas.isEmpty()) return ResumenCaja()
-        return envio.enviar(movidas, config.plazoEnLinea)
+        return ids.filter { id ->
+            db
+                .sql(
+                    "UPDATE ${t.tabla} SET ${t.columna("estado")} = :por_retirar, ${t.columna("motivo")} = :motivo, ${t.columna("intentos")} = 0, " +
+                        "${t.columna("ultimo_error")} = NULL, updated_at = now() WHERE id = :id AND ${t.columna("estado")} IN (:enviada, :pagada)"
+                ).bind("por_retirar", EstadoOrdenCaja.POR_RETIRAR)
+                .bind("motivo", MOTIVO_SIN_DEUDA)
+                .bind("id", id)
+                .bind("enviada", EstadoOrdenCaja.ENVIADA)
+                .bind("pagada", EstadoOrdenCaja.PAGADA_EN_CAJA)
+                .fetch()
+                .awaitRowsUpdated() > 0
+        }
+    }
+
+    // #175 (Ruling 38): these ordenes of the organization with their contribuyente, year and the user who created them,
+    // read on its table (no user needed: the caller may be the caja's account, which reads none of it as such)
+    suspend fun conCreador(
+        organizacion: UUID,
+        ids: List<String>
+    ): List<OrdenConCreador> {
+        if (ids.isEmpty()) return emptyList()
+        val t = tablas.de(ObjetosCaja.ORDEN_CAJA, listOf("contribuyente", "anio")).firstOrNull { it.organizacion == organizacion } ?: return emptyList()
+        return db
+            .sql(
+                "SELECT id, ${t.columna("contribuyente")} AS contribuyente, ${t.columna("anio")} AS anio, created_by " +
+                    "FROM ${t.tabla} WHERE id IN (:ids) ORDER BY created_at, id"
+            ).bind("ids", ids.distinct().map(UUID::fromString))
+            .map { row, _ ->
+                OrdenConCreador(
+                    row.get("id", UUID::class.java)!!,
+                    row.get("contribuyente", UUID::class.java),
+                    (row.get("anio") as Number?)?.toInt(),
+                    row.get("created_by", UUID::class.java)
+                )
+            }.all()
+            .asFlow()
+            .toList()
     }
 
     // a caja configured twice is none for the hooks: nothing is sent

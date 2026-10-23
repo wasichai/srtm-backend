@@ -154,6 +154,9 @@ class PagosApiTest : ConPagosApiTest() {
 
         assertEquals(HttpStatus.OK, estado, cuerpo)
         assertEquals(APLICADO, cuerpo)
+        // the sincronización runs after the answer, off the request (Ruling 38)
+        hasta { PEDIDOS.any { it.alta && it.referencia == v2 && it.estado != null } }
+        hasta { ordenes(e.contribuyente, e.anio)[v2]?.get("estado")?.asString() == EstadoOrdenCaja.ENVIADA }
         val alta = PEDIDOS.single { it.alta && it.referencia == v2 }
         assertEquals(v1, alta.cuerpo["sustituye_a"], alta.cuerpo.toString())
         assertEquals(importeNuevo, alta.cuerpo["importe"])
@@ -167,7 +170,34 @@ class PagosApiTest : ConPagosApiTest() {
 
         PEDIDOS.clear()
         assertEquals(HttpStatus.CONFLICT to APLICADO, pagar(anulacion))
+        Thread.sleep(2000)
         assertTrue(PEDIDOS.isEmpty(), PEDIDOS.map { it.referencia }.toString())
+    }
+
+    // #175: caja is down when the sincronización after the anulación runs. the anulación answers as ever (caja would
+    // send it again otherwise) and the pago is undone; what the sincronización could not send is the loop's
+    @Test
+    fun `anulacionConCajaCaidaContestaIgual`() {
+        val e = Escenario()
+        val dj = conPredial(e)!!
+        enviar(e.contribuyente, e.anio)
+        val v1 = "PREDIAL-${e.contribuyente}-${e.anio}-C1-v1"
+        val v2 = "PREDIAL-${e.contribuyente}-${e.anio}-C1-v2"
+        val pago = registrado(listOf(v1 to importe(ordenes(e.contribuyente, e.anio).getValue(v1)["importe"])))
+        assertEquals(HttpStatus.OK to APLICADO, pagar(pago))
+        cambiarAutoavaluo(dj, 80000)
+        respuesta = { 503 to "{}" }
+        PEDIDOS.clear()
+
+        val (estado, cuerpo) = pagar(anulado(pago))
+
+        assertEquals(HttpStatus.OK, estado, cuerpo)
+        assertEquals(APLICADO, cuerpo)
+        hasta { PEDIDOS.any { it.alta && it.referencia == v2 && it.estado == 503 } }
+        val o = ordenes(e.contribuyente, e.anio)
+        assertFalse(o.getValue(v1)["pagada"].asBoolean())
+        assertTrue(o.getValue(v1)["recibo"].isNull, o.getValue(v1).toString())
+        assertEquals(EstadoOrdenCaja.POR_ENVIAR, o.getValue(v2)["estado"].asString(), o.getValue(v2).toString())
     }
 
     @Test
@@ -209,6 +239,7 @@ class PagosApiTest : ConPagosApiTest() {
         val (estado, cuerpo) = pagar(anulado(pago))
 
         assertEquals(HttpStatus.OK, estado, cuerpo)
+        hasta { ordenes(e.contribuyente, e.anio).getValue(v1)["estado"].asString() == EstadoOrdenCaja.RETIRADA }
         assertEquals(listOf(v1), PEDIDOS.filter { !it.alta }.map { it.referencia })
         assertEquals(EstadoOrdenCaja.RETIRADA, ordenes(e.contribuyente, e.anio).getValue(v1)["estado"].asString())
     }
@@ -428,6 +459,15 @@ class PagosApiTest : ConPagosApiTest() {
     ): JsonNode {
         val fila = lista(matriz(e)["filas"]) { it }.first { it["servicio"]["id"].asString() == cuota["servicio"].asString() }
         return fila["meses"][cuota["periodo"].asInt() - 1]
+    }
+
+    // what runs after an answer (off the request) is waited for, up to 20 s
+    private fun hasta(condicion: () -> Boolean) {
+        val fin = System.nanoTime() + 20_000_000_000L
+        while (!condicion()) {
+            assertTrue(System.nanoTime() < fin, "no pasó en 20 s")
+            Thread.sleep(200)
+        }
     }
 
     // caja's question of vigencia of one orden: its answer
