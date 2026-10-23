@@ -10,7 +10,8 @@ import java.time.LocalDate
 // vigente cuotas (comparar). a month whose cuota comes out the same is not touched; one that changed is annulled and
 // written again as the next version of its clave; one without a cuota that now has one is written; one no longer
 // charged (its titular gone) is annulled. a cuota paid in caja (#165, D7) is neither annulled nor written again: it
-// stays as it was paid, and is counted (by its servicio, month and secuencia: another secuencia is another cuota). ArbitriosService.redeterminarPredio reads and writes
+// stays as it was paid, and is counted (by its servicio, month and secuencia: another secuencia is another cuota).
+// ArbitriosService.redeterminarPredio reads and writes
 object Redeterminacion {
     // what a redeterminación writes and annuls: never a cuota that comes out the same. pagadas: the cuotas paid in
     // caja it would have changed, left as they are

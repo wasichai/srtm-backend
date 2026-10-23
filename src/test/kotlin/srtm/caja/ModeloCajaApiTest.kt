@@ -44,7 +44,9 @@ class ModeloCajaApiTest : SrtmApiTest() {
             )
         val problema = tree(send("POST", "/api/objects/${ObjetosCaja.ORDEN_CAJA}/records", mapOf("attributes" to orden), HttpStatus.FORBIDDEN))
         assertTrue(problema["detail"].asString().contains("«orden_caja»"), problema.toString())
-        assertEquals(0, tree(send("GET", "/api/objects/${ObjetosCaja.ORDEN_CAJA}/records?size=1", null, HttpStatus.OK))["totalElements"].asLong())
+        // its own referencia: the base is shared, other tests' ordenes may be there
+        val suyas = tree(send("GET", "/api/objects/${ObjetosCaja.ORDEN_CAJA}/records?referencia=${orden["referencia"]}&size=1", null, HttpStatus.OK))
+        assertEquals(0, suyas["totalElements"].asLong(), suyas.toString())
     }
 
     // only from the service, not never: with srtm's mark the orden is written, and its DATETIME fields come back as
