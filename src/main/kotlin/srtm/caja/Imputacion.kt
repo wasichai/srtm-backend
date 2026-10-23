@@ -190,8 +190,8 @@ object Imputacion {
                 enSrtm == null -> "no existe"
                 !vigente && sustituta != null -> "la deuda $ref fue sustituida por $sustituta"
                 !vigente -> "la deuda $ref ya no está vigente"
-                enSrtm.importe == null || enSrtm.importe.compareTo(orden.importe) != 0 ->
-                    "el importe no coincide: ${soles(orden.importe)} en caja, ${enSrtm.importe?.let(::soles)} en srtm"
+                enSrtm.importe == null -> "el importe no coincide: ${soles(orden.importe)} en caja, sin importe en srtm"
+                enSrtm.importe.compareTo(orden.importe) != 0 -> "el importe no coincide: ${soles(orden.importe)} en caja, ${soles(enSrtm.importe)} en srtm"
                 yaPagada != null -> "ya pagada con el recibo $yaPagada"
                 else -> null
             }

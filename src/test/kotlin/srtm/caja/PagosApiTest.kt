@@ -137,11 +137,15 @@ class PagosApiTest : ConCajaApiTest() {
         assertEquals(HttpStatus.ACCEPTED, pagar(pago).first)
         assertEquals(0, saldo(e).compareTo(BigDecimal("1.00")))
 
-        val (estado, cuerpo) = pagar(anulado(pago))
+        val anulacion = anulado(pago)
+        val (estado, cuerpo) = pagar(anulacion)
 
+        // an anulación is no payment: never a cuenta, even of a pago that was
         assertEquals(HttpStatus.OK, estado, cuerpo)
-        assertEquals("""{"aplicado":true,"a_cuenta":true,"motivo":null}""", cuerpo)
+        assertEquals(APLICADO, cuerpo)
         assertEquals(0, saldo(e).compareTo(BigDecimal.ZERO))
+        // its retry repeats it: caja would read a_cuenta from the 409
+        assertEquals(HttpStatus.CONFLICT to APLICADO, pagar(anulacion))
     }
 
     // caja refused the sustitución of an orden it had collected (D6: the new one CONFLICTO, the old one ENVIADA). its
@@ -219,6 +223,39 @@ class PagosApiTest : ConCajaApiTest() {
     }
 
     @Test
+    fun `segundoPagoDeOrdenYaPagadaVaACuenta`() {
+        val e = Escenario()
+        val cuota = determinadaYEnviada(e)
+        assertEquals(HttpStatus.OK to APLICADO, pagar(registrado(listOf(referencia(cuota) to importe(cuota["monto"])), numero = "001-0000077")))
+
+        val (estado, cuerpo) = pagar(registrado(listOf(referencia(cuota) to importe(cuota["monto"]))))
+
+        assertEquals(HttpStatus.ACCEPTED, estado, cuerpo)
+        assertEquals("""{"aplicado":false,"a_cuenta":true,"motivo":"ya pagada con el recibo 001-0000077"}""", cuerpo)
+        assertEquals(0, saldo(e).compareTo(cuota["monto"].decimalValue()))
+    }
+
+    // caja never sends an anulación before its pago: one srtm does not know is asked again (503), and nothing is kept
+    @Test
+    fun `anuladoSinOriginalEs503`() {
+        val huerfano = anulado(registrado(listOf("ARB-x" to "1.00")))
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE to """{"motivo":"no conozco el pago original"}""", pagar(huerfano))
+        assertTrue(registrosDePago(huerfano.id).isEmpty())
+    }
+
+    // an organization without caja: a 409 would be caja's «delivered», so it is asked again later
+    @Test
+    fun `sinCajaEs503`() {
+        val ajena = otraOrganizacion()
+
+        val (estado, cuerpo) = pagar(registrado(listOf("ARB-x" to "1.00")), ajena)
+
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, estado, cuerpo)
+        assertEquals("""{"motivo":"caja no está configurada para esta municipalidad"}""", cuerpo)
+    }
+
+    @Test
     fun `cuerpoIlegibleEs400`() {
         assertEquals(HttpStatus.BAD_REQUEST, pagar("{").first)
         assertEquals(HttpStatus.BAD_REQUEST, pagar(registrado(listOf("ARB-x" to "1.00")).json.replace("PAGO_REGISTRADO", "PAGO_RARO")).first)
@@ -239,7 +276,7 @@ class PagosApiTest : ConCajaApiTest() {
         assertTrue(registrosDePago(pago.id).isEmpty())
     }
 
-    // a month paid in caja is not redetermined: the nivel changes the twelve months of the first servicio, eleven
+    // a cuota paid in caja is not redetermined: the nivel changes the twelve months of the first servicio, eleven
     // are annulled and written again, the paid one stays vigente, and the header counts it
     @Test
     fun `redeterminacionNoTocaMesesPagados`() {

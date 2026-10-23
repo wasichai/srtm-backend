@@ -17,7 +17,6 @@ import srtm.arbitrios.CuotaArbitrio
 import srtm.rentas.Records
 import srtm.rentas.Registros
 import tools.jackson.databind.json.JsonMapper
-import wasichai.core.common.ConflictException
 import wasichai.core.data.RecordCriterion
 import java.util.UUID
 
@@ -31,8 +30,12 @@ data class RespuestaACaja(
 // received once: its pago_caja keeps the body srtm answered, and the buzón's retry of it gets that body again with a
 // 409 (delivered, for caja; a 202's a_cuenta is not lost). a PAGO_REGISTRADO has each orden applied to its cuota or
 // kept a cuenta (Imputacion); a PAGO_ANULADO undoes its original. pago and detalles are written in one transaction,
-// through Registros (srtm's mark), under the pagoId's lock and the contribuyentes': a sincronización reads what is
-// paid under the same one. caja waits 10 s for the answer
+// through Registros (srtm's mark), under the pagoId's lock and the contribuyentes' (Candados: the caja's locks, in
+// their order): a sincronización and a write of cuotas read what is paid under the same ones. a PAGO_ANULADO locks
+// only its original's contribuyente (the pago's, its first applied orden's): one whose other ordenes are another
+// contribuyente's does not wait for that one's sincronización, which at worst still reads them paid and holds back an
+// alta caja already holds again as PENDIENTE; the next sincronización reads them unpaid. caja waits 10 s for the
+// answer
 @Service
 class PagosService(
     private val registros: Registros,
@@ -47,7 +50,7 @@ class PagosService(
     suspend fun recibir(cuerpo: String?): RespuestaACaja {
         val evento = leerEvento(cuerpo)
         // a 409 would be caja's «delivered», and the pago lost: an organization without caja is asked again later
-        if (!conCaja()) return RespuestaACaja(HttpStatus.SERVICE_UNAVAILABLE, motivo(SIN_CAJA_CONFIGURADA))
+        if (pagadas.organizacionConCaja() == null) return RespuestaACaja(HttpStatus.SERVICE_UNAVAILABLE, motivo(SIN_CAJA_CONFIGURADA))
         return when (evento) {
             is PagoRegistrado -> transaccion.executeAndAwait { registrar(evento) }
             is PagoAnulado -> {
@@ -139,7 +142,9 @@ class PagosService(
             recibido(e.pagoOriginalId)?.takeIf { it.tipo == TipoPagoCaja.PAGO_REGISTRADO }
                 ?: return RespuestaACaja(HttpStatus.SERVICE_UNAVAILABLE, motivo(SIN_ORIGINAL)) to emptyList()
         original.contribuyente?.let { candados.bloquearEnOrganizacion(Candado.CAJA_CONTRIBUYENTE, it) }
-        val cuerpo = Imputacion.respuesta(true, original.aCuenta == true, null)
+        // an anulación is no payment: never a cuenta, whatever its original was (caja reads a_cuenta from the 409 of a
+        // retry, and would mark the anulación itself)
+        val cuerpo = Imputacion.respuesta(true, false, null)
         registros.create(
             ObjetosCaja.PAGO_CAJA,
             PagoCaja::class.java,
@@ -158,7 +163,7 @@ class PagosService(
                     pagoOriginal = e.pagoOriginalId,
                     motivo = e.motivo,
                     aplicado = true,
-                    aCuenta = original.aCuenta,
+                    aCuenta = false,
                     respuesta = cuerpo,
                     contribuyente = original.contribuyente
                 )
@@ -206,7 +211,9 @@ class PagosService(
         val cuotasVigentes = mutableSetOf<String>()
         if (arbitrios.isNotEmpty()) {
             val cuotas = registros.byIds(CUOTA_ARBITRIO, CuotaArbitrio::class.java, arbitrios).values
-            for ((predio, anio) in cuotas.mapNotNull { q -> q.predio?.let { it to q.anio } }.distinct()) {
+            // a cuota without predio or anio has no year to be vigente in: never a filter of "null" (a 400 kills the delivery)
+            val anios = cuotas.mapNotNull { q -> q.anio?.let { anio -> q.predio?.let { it to anio } } }.distinct()
+            for ((predio, anio) in anios) {
                 val delAnio = mapOf("predio" to predio, "anio" to "$anio")
                 val anuladas = registros.all(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, filters = delAnio).mapNotNull { it.cuota }.toSet()
                 cuotasVigentes += Arbitrios.vigentes(registros.all(CUOTA_ARBITRIO, CuotaArbitrio::class.java, filters = delAnio), anuladas).mapNotNull { it.id }
@@ -214,7 +221,8 @@ class PagosService(
         }
         if (prediales.isNotEmpty()) {
             val cuotas = registros.byIds(ObjetosCaja.CUOTA_PREDIAL, CuotaPredial::class.java, prediales).values
-            for ((contribuyente, anio) in cuotas.mapNotNull { q -> q.contribuyente?.let { it to q.anio } }.distinct()) {
+            val anios = cuotas.mapNotNull { q -> q.anio?.let { anio -> q.contribuyente?.let { it to anio } } }.distinct()
+            for ((contribuyente, anio) in anios) {
                 val escritas =
                     registros.all(
                         ObjetosCaja.CUOTA_PREDIAL,
@@ -237,13 +245,6 @@ class PagosService(
             .all(ObjetosCaja.ORDEN_CAJA, OrdenCaja::class.java, filters = mapOf("sustituye_a" to o.referencia.orEmpty()))
             .firstOrNull { it.estado != EstadoOrdenCaja.CANCELADA }
             ?.referencia
-
-    private suspend fun conCaja(): Boolean =
-        try {
-            caja.cajaDelLlamante() != null
-        } catch (_: ConflictException) {
-            false
-        }
 
     private fun atributos(dto: Any): Map<String, Any?> = Records.attributes(dto).filterValues { it != null }
 

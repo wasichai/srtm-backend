@@ -41,7 +41,11 @@ enum class Candado(
     CAJA_CONTRIBUYENTE(0x5352_0008),
 
     // a pago of caja (#165): the buzón's retries of one pagoId do not cross, and a PAGO_ANULADO waits for its original
-    // (organización|pagoId, see bloquearEnOrganizacion)
+    // (organización|pagoId, see bloquearEnOrganizacion).
+    // THE ORDER OF THE CAJA'S LOCKS, in every transaction that takes more than one: first CAJA_PAGO (the pago's own
+    // pagoId, then its original's), then CAJA_CONTRIBUYENTE, by the contribuyentes' ids ascending. a pago
+    // (PagosService), a sincronización (CajaService, one contribuyente) and a write of cuotas de arbitrio (anular,
+    // redeterminar: the contribuyentes only) all follow it, so none waits on another in a cycle
     CAJA_PAGO(0x5352_0009)
 }
 

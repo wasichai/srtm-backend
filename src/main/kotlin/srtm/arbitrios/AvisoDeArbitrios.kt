@@ -10,7 +10,7 @@ import reactor.core.publisher.Mono
 import tools.jackson.core.json.JsonWriteFeature
 import tools.jackson.databind.json.JsonMapper
 
-// what the redeterminaciones of a request did (#158): the cuotas written and annulled, the months left as they are
+// what the redeterminaciones of a request did (#158): the cuotas written and annulled, the cuotas left as they are
 // because they were paid in caja (#165), and why one could not be done (null when every one could)
 data class ResultadoRedeterminacion(
     val redeterminadas: Int = 0,

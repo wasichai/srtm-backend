@@ -107,7 +107,7 @@ class ConsultasTest {
 
     // #165: a month whose every cuota was paid in caja says so
     @Test
-    fun `a month paid in caja is pagada`() {
+    fun `a cell whose cuotas were paid in caja is pagada`() {
         val todas = guardadas(hoy, Arbitrios.determinar(contexto, datos(emptyList()), "Determinación de prueba", hoy).cuotas)
         val enero = todas.first { it.periodo == 1 }
         val m = Consultas.matriz(contexto, datos(todas), personas, hoy, pagadas = setOf(enero.id!!))

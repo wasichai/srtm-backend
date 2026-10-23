@@ -348,6 +348,7 @@ class CajaService(
                     it.importe,
                     it.concepto,
                     it.estado,
+                    // PAGADA_EN_CAJA too: caja refused its retiro because it is paid there, whether or not its pago arrived
                     it.estado == EstadoOrdenCaja.PAGADA_EN_CAJA || it.id in pagadasAqui,
                     it.ultimoError,
                     it.enviadaEn,

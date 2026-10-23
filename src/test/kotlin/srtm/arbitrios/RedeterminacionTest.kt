@@ -86,9 +86,9 @@ class RedeterminacionTest {
         assertEquals(listOf(3), cambios.escribir.map { it.periodo })
     }
 
-    // #165: a month paid in caja is not redetermined: neither annulled nor written again, and counted
+    // #165: a cuota paid in caja is not redetermined: neither annulled nor written again, and counted
     @Test
-    fun `a month paid in caja is left as it is, and counted`() {
+    fun `a cuota paid in caja is left as it is, and counted`() {
         val vigentes = (1..12).map { cuota(it) }
         val calculadas = (1..12).map { calculada(it, if (it >= 6) "10.00" else "8.50") }
         val pagadas = setOf(vigentes[5].id!!, vigentes[0].id!!)

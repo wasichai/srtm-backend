@@ -55,6 +55,12 @@ class ImputacionTest {
     }
 
     @Test
+    fun `una orden sin importe en srtm va a cuenta`() {
+        val d = Imputacion.clasificar(delPago("100"), enSrtm.copy(importe = null), vigente = true, yaPagada = null)
+        assertEquals("el importe no coincide: 100.00 en caja, sin importe en srtm", d.motivo)
+    }
+
+    @Test
     fun `una orden ya pagada va a cuenta`() {
         val d = Imputacion.clasificar(delPago(), enSrtm, vigente = true, yaPagada = "001-0000007")
         assertEquals(false, d.aplicado)
@@ -136,7 +142,7 @@ class ImputacionTest {
     fun `una orden repetida en el pago es un 400`() {
         val doble = REGISTRADO.replace("]}", """,{"ordenId":"x","referenciaExterna":"$ref","importe":"1.00","actualizadoA":"2026-10-22"}]}""")
         val e = assertThrows<ValidationException> { leerEvento(doble) }
-        assertTrue(e.message!!.contains("repetida"), e.message)
+        assertTrue(e.message.contains("repetida"), e.message)
     }
 
     private companion object {

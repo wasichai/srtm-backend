@@ -288,8 +288,8 @@ longitud de frente, los habitantes, el titular o el %, y las fechas.
 * *Encabezado `Srtm-Arbitrios`.* La respuesta lo trae con lo que se hizo:
   `{"redeterminadas":N,"anuladas":N,"error":…,"pagadas":N}`, en JSON con los caracteres no ASCII escapados. Viene en
   cualquier respuesta: la DJ, su ficha, la fila de una lista o un 204.
-* *Meses pagados en caja:* no se redeterminan. La cuota pagada sigue vigente, y `pagadas` cuenta los meses que habrían
-  cambiado.
+* *Cuotas pagadas en caja:* no se redeterminan. La cuota pagada sigue vigente, y `pagadas` cuenta las cuotas pagadas
+  que habrían cambiado.
 * *Sin encabezado:* no hubo redeterminación, porque nada de eso cambió o el predio no tiene cuotas del año.
 * *Con `error`:* la redeterminación no se pudo hacer (le falta un dato, o el usuario no tiene permiso de creación
   sobre `cuota_arbitrio` y `anulacion_cuota_arbitrio`). La escritura de la DJ se hace igual y las cuotas quedan como

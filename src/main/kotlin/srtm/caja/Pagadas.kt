@@ -53,7 +53,7 @@ class Pagadas(
     // the contribuyente's saldo a favor: 0.00 when it has none
     suspend fun saldoAFavor(contribuyente: String): BigDecimal {
         val cero = BigDecimal.ZERO.setScale(2)
-        val organizacion = conCaja() ?: return cero
+        val organizacion = organizacionConCaja() ?: return cero
         val (d, p) = tablasDePago(organizacion) ?: return cero
         val suma =
             db
@@ -75,7 +75,7 @@ class Pagadas(
         ids: Collection<String>
     ): List<OrdenPagada> {
         if (ids.isEmpty()) return emptyList()
-        val organizacion = conCaja() ?: return emptyList()
+        val organizacion = organizacionConCaja() ?: return emptyList()
         val (d, p) = tablasDePago(organizacion) ?: return emptyList()
         val o = tabla(organizacion, ObjetosCaja.ORDEN_CAJA, listOf("cuota_arbitrio", "cuota_predial")) ?: return emptyList()
         return db
@@ -123,8 +123,9 @@ class Pagadas(
         return t
     }
 
-    // the caller's organization, when it has a caja (CajaService.cajaDelLlamante); one configured twice has none
-    private suspend fun conCaja(): UUID? {
+    // the caller's organization, when it has a caja (CajaService.cajaDelLlamante); one configured twice has none. the
+    // one answer to "does the caller's organization have caja" of what reads or writes pagos
+    suspend fun organizacionConCaja(): UUID? {
         if (!cajas.configurado) return null
         val organizacion = currentUser.require().organizationId
         val slug = if (cajas.necesitaSlug) organizaciones.findById(organizacion)?.slug else null

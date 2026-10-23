@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.ReactiveTransactionManager
 import org.springframework.transaction.reactive.TransactionalOperator
 import org.springframework.transaction.reactive.executeAndAwait
+import srtm.Candado
+import srtm.Candados
 import srtm.Observacion
 import srtm.caja.CajaService
 import srtm.caja.CambioDeDeuda
@@ -78,6 +80,7 @@ class ArbitriosService(
     private val currentUser: CurrentUser,
     private val caja: CajaService,
     private val pagadas: Pagadas,
+    private val candados: Candados,
     transacciones: ReactiveTransactionManager
 ) {
     private val transaccion = TransactionalOperator.create(transacciones)
@@ -209,24 +212,30 @@ class ArbitriosService(
         val motivo = pedido.motivo?.trim()?.ifEmpty { null } ?: throw ValidationException("Falta el motivo", "motivo", "indica por qué se anula")
         val observacion = Observacion.de(pedido.observacion)
         val cuota = registros.get(CUOTA_ARBITRIO, CuotaArbitrio::class.java, id)
-        pagadas.cuotasArbitrio(listOfNotNull(cuota.contribuyente))[cuota.id]?.let { throw ConflictException("la cuota ya se pagó en caja (recibo $it)") }
         val anulacion =
             try {
-                registros.create(
-                    ANULACION_CUOTA_ARBITRIO,
-                    AnulacionCuotaArbitrio::class.java,
-                    Records.attributes(
-                        AnulacionCuotaArbitrio(
-                            cuota = cuota.id,
-                            predio = cuota.predio,
-                            anio = cuota.anio,
-                            motivo = motivo,
-                            observacion = observacion,
-                            fecha = LocalDate.now(),
-                            clave = cuota.id
+                // whether it was paid, read under its contribuyente's lock and written in the same transaction: a pago
+                // of caja does not commit in between (Candados, the caja's locks)
+                transaccion.executeAndAwait {
+                    val suyo = listOfNotNull(cuota.contribuyente)
+                    bloquearEnCaja(suyo)
+                    pagadas.cuotasArbitrio(suyo)[cuota.id]?.let { throw ConflictException("la cuota ya se pagó en caja (recibo $it)") }
+                    registros.create(
+                        ANULACION_CUOTA_ARBITRIO,
+                        AnulacionCuotaArbitrio::class.java,
+                        Records.attributes(
+                            AnulacionCuotaArbitrio(
+                                cuota = cuota.id,
+                                predio = cuota.predio,
+                                anio = cuota.anio,
+                                motivo = motivo,
+                                observacion = observacion,
+                                fecha = LocalDate.now(),
+                                clave = cuota.id
+                            )
                         )
                     )
-                )
+                }
             } catch (_: DuplicateKeyException) {
                 throw ConflictException("La cuota ya está anulada")
             }
@@ -301,30 +310,40 @@ class ArbitriosService(
         val hoy = LocalDate.now()
         val d = Redeterminacion.completa(contexto, datos, observacion, hoy)
         if (d.faltan.isNotEmpty()) throw FaltanArbitrios(anio, d.faltan, d.detalle)
-        // #165: the months paid in caja stay as they were paid
-        val pagadasEnCaja = pagadas.cuotasArbitrio(vigentes.mapNotNull { it.contribuyente }.distinct()).keys
-        val cambios = Redeterminacion.comparar(vigentes, d.cuotas, pagadasEnCaja)
-        if (cambios.escribir.isEmpty() && cambios.anular.isEmpty()) return ResultadoRedeterminacion(pagadas = cambios.pagadas)
-        exigirRedeterminar()
-        val anulaciones =
-            cambios.anular.map {
-                Records.attributes(
-                    AnulacionCuotaArbitrio(
-                        cuota = it.id,
-                        predio = it.predio,
-                        anio = it.anio,
-                        motivo = REDETERMINACION,
-                        observacion = observacion,
-                        fecha = hoy,
-                        clave = it.id
+        // #165: the cuotas paid in caja stay as they were paid. what is paid is read under the locks of the vigentes'
+        // contribuyentes, the ones a pago of caja takes, and the cuotas are written in the same transaction: no pago
+        // commits between the read and the write (Candados, the caja's locks)
+        val contribuyentes = vigentes.mapNotNull { it.contribuyente }.distinct().sorted()
+        return transaccion.executeAndAwait {
+            bloquearEnCaja(contribuyentes)
+            val cambios = Redeterminacion.comparar(vigentes, d.cuotas, pagadas.cuotasArbitrio(contribuyentes).keys)
+            if (cambios.escribir.isEmpty() && cambios.anular.isEmpty()) return@executeAndAwait ResultadoRedeterminacion(pagadas = cambios.pagadas)
+            exigirRedeterminar()
+            val anulaciones =
+                cambios.anular.map {
+                    Records.attributes(
+                        AnulacionCuotaArbitrio(
+                            cuota = it.id,
+                            predio = it.predio,
+                            anio = it.anio,
+                            motivo = REDETERMINACION,
+                            observacion = observacion,
+                            fecha = hoy,
+                            clave = it.id
+                        )
                     )
-                )
-            }
-        transaccion.executeAndAwait {
+                }
             registros.createAll(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, anulaciones)
             registros.createAll(CUOTA_ARBITRIO, CuotaArbitrio::class.java, cambios.escribir.map(Records::attributes))
+            ResultadoRedeterminacion(cambios.escribir.size, cambios.anular.size, pagadas = cambios.pagadas)
         }
-        return ResultadoRedeterminacion(cambios.escribir.size, cambios.anular.size, pagadas = cambios.pagadas)
+    }
+
+    // inside a transaction: the caja's locks of these contribuyentes, in their order (Candados). an organization
+    // without caja has no pagos, and takes none
+    private suspend fun bloquearEnCaja(contribuyentes: List<String>) {
+        if (pagadas.organizacionConCaja() == null) return
+        for (c in contribuyentes.distinct().sorted()) candados.bloquearEnOrganizacion(Candado.CAJA_CONTRIBUYENTE, c)
     }
 
     // GET /predios/{id}/arbitrios
