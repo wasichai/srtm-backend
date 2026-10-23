@@ -1,8 +1,18 @@
 package srtm.caja
 
+import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.reactor.asCoroutineContext
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
+import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.ReactiveTransactionManager
 import org.springframework.transaction.reactive.TransactionalOperator
@@ -14,6 +24,7 @@ import srtm.arbitrios.AnulacionCuotaArbitrio
 import srtm.arbitrios.Arbitrios
 import srtm.arbitrios.CUOTA_ARBITRIO
 import srtm.arbitrios.CuotaArbitrio
+import srtm.emision.IdentidadEmision
 import srtm.rentas.Records
 import srtm.rentas.Registros
 import tools.jackson.databind.json.JsonMapper
@@ -35,29 +46,34 @@ data class RespuestaACaja(
 // their order): a sincronización and a write of cuotas read what is paid under the same ones. a PAGO_ANULADO locks
 // only its original's contribuyente (the pago's, its first applied orden's): one whose other ordenes are another
 // contribuyente's does not wait for that one's sincronización, which at worst still reads them paid and holds back an
-// alta caja already holds again as PENDIENTE; the next sincronización reads them unpaid. caja waits 10 s for the
-// answer
+// alta caja already holds again as PENDIENTE; the sincronización after the anulación (despuesDeAnular, off the
+// request) reads them unpaid. caja waits 10 s for the answer
 @Service
 class PagosService(
     private val registros: Registros,
     private val caja: CajaService,
     private val pagadas: Pagadas,
     private val candados: Candados,
+    private val identidad: IdentidadEmision,
     transacciones: ReactiveTransactionManager
 ) {
     private val transaccion = TransactionalOperator.create(transacciones)
     private val log = LoggerFactory.getLogger(javaClass)
 
+    // what follows a PAGO_ANULADO, off its request (despuesDeAnular)
+    private val seguidas = CoroutineScope(SupervisorJob() + Dispatchers.IO + CoroutineName("caja-tras-anulacion"))
+
     suspend fun recibir(cuerpo: String?): RespuestaACaja {
         val evento = leerEvento(cuerpo)
         // a 409 would be caja's «delivered», and the pago lost: an organization without caja is asked again later
-        if (pagadas.organizacionConCaja() == null) return RespuestaACaja(HttpStatus.SERVICE_UNAVAILABLE, motivo(SIN_CAJA_CONFIGURADA))
+        val organizacion = pagadas.organizacionConCaja() ?: return RespuestaACaja(HttpStatus.SERVICE_UNAVAILABLE, motivo(SIN_CAJA_CONFIGURADA))
         return when (evento) {
             is PagoRegistrado -> transaccion.executeAndAwait { registrar(evento) }
             is PagoAnulado -> {
                 val (respuesta, ordenes) = transaccion.executeAndAwait { anular(evento) }
-                // after the commit, never inside it: what it does with caja never changes the answer
-                retirar(ordenes)
+                // after the commit and off the request: caja waits 10 s for the answer (Ruling 18), and what follows
+                // never changes it. a retry (409) or a 503 has no ordenes: nothing follows
+                if (ordenes.isNotEmpty()) seguidas.launch { despuesDeAnular(organizacion, ordenes) }
                 respuesta
             }
         }
@@ -219,22 +235,64 @@ class PagosService(
         return RespuestaACaja(HttpStatus.OK, cuerpo) to ordenes
     }
 
-    // #164: caja returned the anulled pago's ordenes to PENDIENTE. the ones whose debt srtm no longer has are
-    // withdrawn now; the vigentes are debt again as they were. a failure here is logged by its class only (no data of
-    // the contribuyente) and leaves them to the next sincronización
-    private suspend fun retirar(ordenes: List<String>) {
-        if (ordenes.isEmpty()) return
+    // #164: caja returned the anulled pago's ordenes to PENDIENTE. the ones whose debt srtm no longer has are queued
+    // as retiros, and (#175, Ruling 36) their contribuyentes' years are synced, as after a write of srtm: a cuota
+    // redetermined while it was paid kept its old monto (D7) and caja holds it again with that importe; the
+    // sincronización replaces it with the liquidación's. Ruling 38: each contribuyente's year runs as the user who
+    // created the latest of its ordenes here (IdentidadEmision, as a lote of the emisión): core checks that user's
+    // permissions, not the caja's account's, which reads no declaración. everything they queued goes to caja in ONE
+    // send. a creator gone or disabled, or one who may not, skips those contribuyentes; a failure is logged by its
+    // class only (no data of the contribuyente) and left to the next sincronización
+    private suspend fun despuesDeAnular(
+        organizacion: UUID,
+        ordenes: List<String>
+    ) {
         try {
-            val suyas = registros.byIds(ObjetosCaja.ORDEN_CAJA, OrdenCaja::class.java, ordenes).values
-            val vigentes = vigentes(suyas)
-            val sinDeuda = suyas.filter { it.id != null && it.id !in vigentes }.map { UUID.fromString(it.id) }
-            caja.retirarDevueltas(sinDeuda)
+            val grupos =
+                caja
+                    .conCreador(organizacion, ordenes)
+                    .filter { it.contribuyente != null && it.anio != null }
+                    .groupBy { it.contribuyente!! to it.anio!! }
+            val porEnviar = mutableListOf<UUID>()
+            for ((creador, suyos) in grupos.entries.groupBy({ it.value.last().creadoPor }, { it })) {
+                val autenticacion = creador?.let { identidad.de(it) }
+                if (autenticacion == null) {
+                    log.warn("caja: tras un pago anulado, {} contribuyentes sin sincronizar: su creador no existe o está deshabilitado", suyos.size)
+                    continue
+                }
+                try {
+                    withContext(ReactiveSecurityContextHolder.withAuthentication(autenticacion).asCoroutineContext()) {
+                        porEnviar += seguir(suyos.flatMap { g -> g.value.map { it.id.toString() } }, suyos.map { it.key })
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    log.warn("caja: no se pudo sincronizar tras un pago anulado ({})", e.javaClass.simpleName)
+                }
+            }
+            caja.enviarAhora(porEnviar)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            log.warn("caja: no se pudieron retirar las órdenes de un pago anulado ({})", e.javaClass.simpleName)
+            log.warn("caja: no se pudo seguir a un pago anulado ({})", e.javaClass.simpleName)
         }
     }
+
+    // as the creator: the ordenes without debt queued as retiros, then the contribuyentes' years planned (the plan
+    // also withdraws an ENVIADA it no longer wants). what is left to send
+    private suspend fun seguir(
+        ordenes: List<String>,
+        contribuyentes: List<Pair<UUID, Int>>
+    ): List<UUID> {
+        val suyas = registros.byIds(ObjetosCaja.ORDEN_CAJA, OrdenCaja::class.java, ordenes).values
+        val vigentes = vigentes(suyas)
+        val retiros = caja.moverDevueltas(suyas.filter { it.id != null && it.id !in vigentes }.map { UUID.fromString(it.id) })
+        val porAnio = contribuyentes.groupBy({ it.second }, { it.first }).mapValues { it.value.toSet() }
+        return retiros + caja.planificarSiEnviados(porAnio, MOTIVO_PAGO_ANULADO).second
+    }
+
+    @PreDestroy
+    fun detener() = seguidas.cancel()
 
     private suspend fun ordenesPorReferencia(referencias: List<String>): Map<String?, OrdenCaja> =
         registros

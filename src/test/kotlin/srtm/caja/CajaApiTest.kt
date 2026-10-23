@@ -73,6 +73,7 @@ class CajaApiTest : ConCajaApiTest() {
         val estado = caja(c, e.anio)
         assertEquals(List(28) { EstadoOrdenCaja.ENVIADA }, lista(estado["ordenes"]) { it["estado"].asString() })
         assertTrue(lista(estado["ordenes"]) { it["pagada"].asBoolean() }.none { it })
+        assertTrue(lista(estado["ordenes"]) { it["recibo"] }.all { it.isNull })
         assertEquals(0, estado["saldo_a_favor"].decimalValue().signum())
         // the cuotas de predial it wrote, in their first revision
         val escritas = tree(send("GET", "/api/objects/${ObjetosCaja.CUOTA_PREDIAL}/records?contribuyente=$c&size=10", null, HttpStatus.OK))
