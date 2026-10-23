@@ -284,7 +284,7 @@ class PagosApiTest : ConPagosApiTest() {
     // an organization without caja: a 409 would be caja's «delivered», so it is asked again later
     @Test
     fun `sinCajaEs503`() {
-        val ajena = otraOrganizacion()
+        val ajena = cuentaDeServicio(otraOrganizacion())
 
         val (estado, cuerpo) = pagar(registrado(listOf("ARB-x" to "1.00")), ajena)
 
@@ -310,6 +310,17 @@ class PagosApiTest : ConPagosApiTest() {
         val pago = registrado(listOf("ARB-x" to "1.00"))
 
         assertEquals(HttpStatus.FORBIDDEN, pagar(pago, lector).first)
+        assertTrue(registrosDePago(pago.id).isEmpty())
+    }
+
+    // Ruling 29: the pagos are caja's, its service account's: a person, even the organization's admin, gets a 403
+    @Test
+    fun `adminHumanoEs403`() {
+        val pago = registrado(listOf("ARB-x" to "1.00"))
+
+        val (estado, cuerpo) = pagar(pago, token)
+
+        assertEquals(HttpStatus.FORBIDDEN, estado, cuerpo)
         assertTrue(registrosDePago(pago.id).isEmpty())
     }
 
