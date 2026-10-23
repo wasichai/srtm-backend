@@ -261,6 +261,21 @@ class CajaApiTest : ConCajaApiTest() {
         assertTrue(altasDe(documentoDe(e.contribuyente)).all { it.cuerpo["observacion"] == "Emisión masiva ${e.anio}" })
     }
 
+    // the masiva with enviar_a_caja writes ordenes and cuotas de predial as its caller: who may launch it but not
+    // create those is refused at once, not in each lote
+    @Test
+    fun `emisionACajaSinPermisoDeOrdenesEs403`() {
+        val sin =
+            funcionario(
+                listOf(permiso(EMISION_MASIVA, "CREATE"), permiso(EMISION_MASIVA, "UPDATE"), permiso(EMISION_MASIVA, "READ"), permiso(EMISION_LOTE, "CREATE"))
+            )
+
+        val (estado, cuerpo) = exchange("POST", "/api/srtm/emisiones", mapOf("anio" to 2026, "formato" to "PDF", "enviar_a_caja" to true), sin)
+
+        assertEquals(HttpStatus.FORBIDDEN, estado, cuerpo)
+        assertTrue(tree(cuerpo)["detail"].asString().contains(ObjetosCaja.ORDEN_CAJA), cuerpo)
+    }
+
     // a timeout leaves v2 POR_ENVIAR while caja holds it: a v3 waits for it (no alta, no cancel), and caja never holds
     // two ordenes of one cuota
     @Test
