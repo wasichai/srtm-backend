@@ -432,6 +432,54 @@ class CajaApiTest : ConCajaApiTest() {
         assertEquals(24, altasDe(documento).size)
     }
 
+    // R31: v2 (sustituye_a v1) ran out of tries, but caja did create it, so caja's v1 is already replaced. the POST
+    // withdraws v2 (it is not v3, the debt now) and caja answers 200 ANULADA: v1 went with it, and v3 goes without
+    // sustituye_a (caja would refuse to replace v1 twice)
+    @Test
+    fun `retiroDeUnaSustitutaQueCajaTeniaRetiraLaSustituida`() {
+        val (v1, v3) = sustitutaEnError { null }
+
+        val despues = ordenes(sus.contribuyente, sus.anio)
+        assertEquals(List(4) { EstadoOrdenCaja.RETIRADA }, v1.map { despues.getValue(it)["estado"].asString() })
+        assertEquals(List(4) { EstadoOrdenCaja.ENVIADA }, v3.map { despues.getValue(it)["estado"].asString() })
+        assertTrue(v3.all { r -> "sustituye_a" !in PEDIDOS.last { it.alta && it.referencia == r }.cuerpo })
+    }
+
+    // R31: v2 never reached caja (the retiro answers 404): v1 is still caja's, and v3 replaces it
+    @Test
+    fun `retiroDeUnaSustitutaQueCajaNoTeniaDejaLaSustituida`() {
+        val (v1, v3) = sustitutaEnError { if (!it.alta && it.referencia.endsWith("-v2")) 404 to """{"detail":"no existe"}""" else null }
+
+        val despues = ordenes(sus.contribuyente, sus.anio)
+        assertEquals(v1, v3.map { r -> PEDIDOS.last { it.alta && it.referencia == r }.cuerpo["sustituye_a"] })
+        assertEquals(List(4) { EstadoOrdenCaja.ENVIADA }, v3.map { despues.getValue(it)["estado"].asString() })
+        assertEquals(List(4) { EstadoOrdenCaja.RETIRADA }, v1.map { despues.getValue(it)["estado"].asString() })
+    }
+
+    private lateinit var sus: Escenario
+
+    // v1 sent, v2 (sustituye_a v1) ERROR after its tries, the debt now v3; then the POST (which withdraws v2, caja
+    // answering as `retiro` says) and another one (which sends v3). the referencias of v1 and of v3
+    private fun sustitutaEnError(retiro: (Pedido) -> Pair<Int, String>?): Pair<List<String>, List<String>> {
+        sus = Escenario()
+        val dj = conPredial(sus)!!
+        enviar(sus.contribuyente, sus.anio)
+        val v = { n: Int -> (1..4).map { "PREDIAL-${sus.contribuyente}-${sus.anio}-C$it-v$n" } }
+        respuesta = { if (it.alta && it.cuerpo["sustituye_a"] != null) 503 to "{}" else null }
+        cambiarAutoavaluo(dj, 80000)
+        vueltas()
+        assertTrue(v(2).all { ordenes(sus.contribuyente, sus.anio).getValue(it)["estado"].asString() == EstadoOrdenCaja.ERROR })
+        respuesta = retiro
+        cambiarAutoavaluo(dj, 90000)
+        assertTrue(PEDIDOS.none { it.referencia in v(3) })
+
+        enviar(sus.contribuyente, sus.anio)
+        assertTrue(v(2).all { ordenes(sus.contribuyente, sus.anio).getValue(it)["estado"].asString() == EstadoOrdenCaja.RETIRADA })
+        enviar(sus.contribuyente, sus.anio)
+
+        return v(1) to v(3)
+    }
+
     // nothing of another class or run is left for this test's group to take: only its emission runs
     private fun soloLaDelTest() {
         runBlocking {
