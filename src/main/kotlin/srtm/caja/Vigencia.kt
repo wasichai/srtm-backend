@@ -59,11 +59,12 @@ object VigenciaDeOrdenes {
             when {
                 !cuotaVigente && anulacion != null -> "anulada: $anulacion"
                 !cuotaVigente && sustituta != null -> "sustituida por $sustituta"
-                !cuotaVigente -> "sustituida"
-                orden.estado == EstadoOrdenCaja.PAGADA_EN_CAJA -> "ya pagada en caja"
-                orden.estado in RETIRADAS -> "retirada"
-                orden.estado != EstadoOrdenCaja.ENVIADA -> "todavía no se envió a caja"
+                !cuotaVigente -> "la cuota ya no se cobra"
+                // the recibo first: a PAGADA_EN_CAJA orden whose pago srtm already has names it
                 recibo != null -> "ya pagada con el recibo $recibo"
+                orden.estado == EstadoOrdenCaja.PAGADA_EN_CAJA -> "ya pagada en caja"
+                orden.estado in RETIRADAS_POR_SRTM -> "retirada"
+                orden.estado != EstadoOrdenCaja.ENVIADA -> "todavía no se envió a caja"
                 else -> null
             }
         return VigenciaDeOrden(referencia, motivo == null, importe, motivo)
@@ -84,7 +85,9 @@ object VigenciaDeOrdenes {
             )
         )
 
-    private val RETIRADAS = setOf(EstadoOrdenCaja.POR_RETIRAR, EstadoOrdenCaja.RETIRADA, EstadoOrdenCaja.CANCELADA)
+    // the ordenes srtm withdrew or cancelled. not PagosService's SIN_DEUDA, which also has PAGADA_EN_CAJA (paid, not
+    // withdrawn: here it has its own motivo)
+    private val RETIRADAS_POR_SRTM = setOf(EstadoOrdenCaja.POR_RETIRAR, EstadoOrdenCaja.RETIRADA, EstadoOrdenCaja.CANCELADA)
 
     private fun invalida(
         campo: String,

@@ -110,6 +110,54 @@ class VigenciaApiTest : ConPagosApiTest() {
         assertEquals("ya pagada con el recibo 001-0000099", o["motivo"].asString())
     }
 
+    // the retiro of the orden is refused (caja says it was paid there): PAGADA_EN_CAJA. srtm has no recibo of it (a pago
+    // that comes after goes a cuenta, and one applied before is never withdrawn), so it says it was paid in caja. with
+    // the recibo it names it: decidir's rule, in ConciliacionTest
+    @Test
+    fun `pagadaEnCajaSinReciboLoDice`() {
+        val e = Escenario()
+        val dj = conPredial(e)!!
+        enviar(e.contribuyente, e.anio)
+        val v1 = "PREDIAL-${e.contribuyente}-${e.anio}-C1-v1"
+        val importe = importe(ordenes(e.contribuyente, e.anio).getValue(v1)["importe"])
+        respuesta = { if (!it.alta && it.referencia == v1) 409 to """{"detail":"Pagada con el recibo 001-0000123"}""" else null }
+        escribir("POST", "/api/srtm/declaraciones/$dj/anular", mapOf("motivo_anulacion" to "Declarada dos veces"))
+        assertEquals(EstadoOrdenCaja.PAGADA_EN_CAJA, ordenes(e.contribuyente, e.anio).getValue(v1)["estado"].asString())
+
+        val o = una(v1, importe)
+
+        assertEquals(false, o["vigente"].asBoolean())
+        assertEquals("ya pagada en caja", o["motivo"].asString())
+    }
+
+    // the queries do not grow with the referencias: 50 ordenes of 50 predios, all with their cuota annulled (the reasons
+    // are read too), under a second
+    @Test
+    fun `cincuentaAnuladasDeCincuentaPrediosEnMenosDeUnSegundo`() {
+        val referencias =
+            (1..50).map {
+                val e = Escenario()
+                val cuota = determinadaYEnviada(e)
+                send(
+                    "POST",
+                    "/api/srtm/arbitrios/cuotas/${cuota["id"].asString()}/anulacion",
+                    mapOf("motivo" to "Uso mal declarado", "observacion" to "Informe de fiscalización de prueba"),
+                    HttpStatus.CREATED
+                )
+                referencia(cuota) to importe(cuota["monto"])
+            }
+        preguntar(referencias)
+
+        val desde = System.nanoTime()
+        val (estado, cuerpo) = preguntar(referencias)
+        val milisegundos = (System.nanoTime() - desde) / 1_000_000
+
+        assertEquals(HttpStatus.OK, estado, cuerpo)
+        val ordenes = tree(cuerpo)["ordenes"]
+        assertEquals(50, ordenes.count { !it["vigente"].asBoolean() && it["motivo"].asString() == "anulada: Uso mal declarado" }, cuerpo)
+        assertTrue(milisegundos < 1000, "tardó $milisegundos ms")
+    }
+
     @Test
     fun `sinTokenEs401`() {
         assertEquals(HttpStatus.UNAUTHORIZED, preguntar(listOf("ARB-x" to "1.00"), null).first)
@@ -155,7 +203,6 @@ class VigenciaApiTest : ConPagosApiTest() {
 
         assertEquals(HttpStatus.OK, estado, cuerpo)
         assertEquals(50, tree(cuerpo)["ordenes"].count { it["vigente"].asBoolean() }, cuerpo)
-        println("vigencia de 50 órdenes: $milisegundos ms")
         assertTrue(milisegundos < 1000, "tardó $milisegundos ms")
     }
 

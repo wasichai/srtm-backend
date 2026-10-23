@@ -73,7 +73,8 @@ class Pagadas(
 
     // #166: the pagos of a day (a PAGO_REGISTRADO with that fecha_pago and no PAGO_ANULADO, of any date) of the
     // caller's organization. a row per pago_id, so a pago caja sent twice counts once. aplicados: all its detalles
-    // applied; a cuenta: at least one is not (a mixed pago is only here). null when the organization has no caja
+    // applied (a pago always has detalles: PagosService writes it with them, and a pago without ordenes is a 400); a
+    // cuenta: at least one is not (a mixed pago is only here). null when the organization has no caja
     suspend fun delDia(fecha: LocalDate): ResumenDelDia? {
         val organizacion = organizacionConCaja() ?: return null
         val (d, p) = tablasDePago(organizacion) ?: return null

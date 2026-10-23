@@ -80,8 +80,10 @@ class PagosService(
                 .donde(ObjetosCaja.ORDEN_CAJA, OrdenCaja::class.java, listOf(entre("referencia", referencias.distinct())))
                 .filter { it.id != null }
                 .associateBy { it.referencia }
-        val vigentes = vigentes(ordenes.values, conRetiradas = true)
+        val cuotas = cuotasVigentes(ordenes.values, conRetiradas = true)
+        val vigentes = cuotas.ordenes
         val recibos = pagadas.deOrdenes(ordenes.values.filter { it.id in vigentes }.mapNotNull { it.id }).associate { it.orden to it.recibo }
+        val reemplazos = sustitutas(ordenes.values.filter { it.id !in vigentes })
         val respuestas =
             referencias.map { r ->
                 val orden = ordenes[r]
@@ -91,18 +93,12 @@ class PagosService(
                     orden,
                     vigente,
                     orden?.id?.let(recibos::get),
-                    if (orden != null && !vigente) sustituta(orden) else null,
-                    if (orden != null && !vigente) anulacion(orden) else null
+                    orden?.referencia?.let(reemplazos::get),
+                    orden?.cuotaArbitrio?.let { if (it in cuotas.anuladas) cuotas.anuladas[it] ?: "sin motivo" else null }
                 )
             }
         return RespuestaACaja(HttpStatus.OK, VigenciaDeOrdenes.cuerpo(respuestas))
     }
-
-    // the motivo with which the cuota de arbitrio of an orden was annulled
-    private suspend fun anulacion(o: OrdenCaja): String? =
-        o.cuotaArbitrio?.let { cuota ->
-            registros.all(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, filters = mapOf("cuota" to cuota)).firstOrNull()?.motivo
-        }
 
     private suspend fun registrar(e: PagoRegistrado): RespuestaACaja {
         candados.bloquearEnOrganizacion(Candado.CAJA_PAGO, e.pagoId)
@@ -250,47 +246,68 @@ class PagosService(
     private suspend fun vigentes(
         ordenes: Collection<OrdenCaja>,
         conRetiradas: Boolean = false
-    ): Set<String> {
-        val vivas = ordenes.filter { it.id != null && (conRetiradas || it.estado !in RETIRADAS) }
+    ): Set<String> = cuotasVigentes(ordenes, conRetiradas).ordenes
+
+    // the same, and the motivo of each cuota de arbitrio annulled among them. the queries do not depend on how many
+    // ordenes there are: the cuotas by id, and those of their predios (de arbitrio: the cuotas and the anulaciones) or
+    // contribuyentes (de predial) in one query each, grouped by year here
+    private suspend fun cuotasVigentes(
+        ordenes: Collection<OrdenCaja>,
+        conRetiradas: Boolean
+    ): CuotasVigentes {
+        val vivas = ordenes.filter { it.id != null && (conRetiradas || it.estado !in SIN_DEUDA) }
         val arbitrios = vivas.mapNotNull { it.cuotaArbitrio }
         val prediales = vivas.mapNotNull { it.cuotaPredial }
         val cuotasVigentes = mutableSetOf<String>()
+        val anuladas = mutableMapOf<String, String?>()
         if (arbitrios.isNotEmpty()) {
-            val cuotas = registros.byIds(CUOTA_ARBITRIO, CuotaArbitrio::class.java, arbitrios).values
+            val suyas = registros.byIds(CUOTA_ARBITRIO, CuotaArbitrio::class.java, arbitrios).values
             // a cuota without predio or anio has no year to be vigente in: never a filter of "null" (a 400 kills the delivery)
-            val anios = cuotas.mapNotNull { q -> q.anio?.let { anio -> q.predio?.let { it to anio } } }.distinct()
-            for ((predio, anio) in anios) {
-                val delAnio = mapOf("predio" to predio, "anio" to "$anio")
-                val anuladas = registros.all(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, filters = delAnio).mapNotNull { it.cuota }.toSet()
-                cuotasVigentes += Arbitrios.vigentes(registros.all(CUOTA_ARBITRIO, CuotaArbitrio::class.java, filters = delAnio), anuladas).mapNotNull { it.id }
+            val predios = suyas.filter { it.anio != null }.mapNotNull { it.predio }.distinct()
+            if (predios.isNotEmpty()) {
+                val bajas = registros.donde(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, listOf(entreIds("predio", predios)))
+                val delAnio = registros.donde(CUOTA_ARBITRIO, CuotaArbitrio::class.java, listOf(entreIds("predio", predios)))
+                bajas.forEach { b -> b.cuota?.let { anuladas[it] = b.motivo } }
+                val anios = suyas.mapNotNull { q -> q.anio?.let { anio -> q.predio?.let { it to anio } } }.toSet()
+                for ((predio, anio) in anios) {
+                    val delPredio = delAnio.filter { it.predio == predio && it.anio == anio }
+                    cuotasVigentes += Arbitrios.vigentes(delPredio, anuladas.keys).mapNotNull { it.id }
+                }
             }
         }
         if (prediales.isNotEmpty()) {
-            val cuotas = registros.byIds(ObjetosCaja.CUOTA_PREDIAL, CuotaPredial::class.java, prediales).values
-            val anios = cuotas.mapNotNull { q -> q.anio?.let { anio -> q.contribuyente?.let { it to anio } } }.distinct()
-            for ((contribuyente, anio) in anios) {
-                val escritas =
-                    registros.all(
-                        ObjetosCaja.CUOTA_PREDIAL,
-                        CuotaPredial::class.java,
-                        filters =
-                            mapOf(
-                                "contribuyente" to contribuyente,
-                                "anio" to "$anio"
-                            )
-                    )
-                cuotasVigentes += vigentesPredial(escritas).values.mapNotNull { it.id }
+            val suyas = registros.byIds(ObjetosCaja.CUOTA_PREDIAL, CuotaPredial::class.java, prediales).values
+            val contribuyentes = suyas.filter { it.anio != null }.mapNotNull { it.contribuyente }.distinct()
+            if (contribuyentes.isNotEmpty()) {
+                val escritas = registros.donde(ObjetosCaja.CUOTA_PREDIAL, CuotaPredial::class.java, listOf(entreIds("contribuyente", contribuyentes)))
+                val anios = suyas.mapNotNull { q -> q.anio?.let { anio -> q.contribuyente?.let { it to anio } } }.toSet()
+                for ((contribuyente, anio) in anios) {
+                    cuotasVigentes += vigentesPredial(escritas.filter { it.contribuyente == contribuyente && it.anio == anio }).values.mapNotNull { it.id }
+                }
             }
         }
-        return vivas.filter { (it.cuotaArbitrio ?: it.cuotaPredial) in cuotasVigentes }.mapNotNull { it.id }.toSet()
+        val ids = vivas.filter { (it.cuotaArbitrio ?: it.cuotaPredial) in cuotasVigentes }.mapNotNull { it.id }.toSet()
+        return CuotasVigentes(ids, anuladas)
     }
 
-    // the orden that replaced one srtm no longer collects (its alta's sustituye_a): its referencia
-    private suspend fun sustituta(o: OrdenCaja): String? =
-        registros
-            .all(ObjetosCaja.ORDEN_CAJA, OrdenCaja::class.java, filters = mapOf("sustituye_a" to o.referencia.orEmpty()))
-            .firstOrNull { it.estado != EstadoOrdenCaja.CANCELADA }
-            ?.referencia
+    private class CuotasVigentes(
+        val ordenes: Set<String>,
+        val anuladas: Map<String, String?>
+    )
+
+    // the ordenes that replaced these (their altas' sustituye_a), in one query: the replaced referencia -> the new one
+    private suspend fun sustitutas(ordenes: Collection<OrdenCaja>): Map<String, String> {
+        val referencias = ordenes.mapNotNull { it.referencia }.distinct()
+        if (referencias.isEmpty()) return emptyMap()
+        return registros
+            .donde(ObjetosCaja.ORDEN_CAJA, OrdenCaja::class.java, listOf(entre("sustituye_a", referencias)))
+            .filter { it.estado != EstadoOrdenCaja.CANCELADA }
+            .mapNotNull { n -> n.sustituyeA?.let { it to n.referencia } }
+            .associate { (vieja, nueva) -> vieja to nueva!! }
+    }
+
+    // the orden that replaced one srtm no longer collects: its referencia
+    private suspend fun sustituta(o: OrdenCaja): String? = sustitutas(listOf(o))[o.referencia]
 
     private fun atributos(dto: Any): Map<String, Any?> = Records.attributes(dto).filterValues { it != null }
 
@@ -301,7 +318,8 @@ class PagosService(
 
         const val SIN_ORIGINAL = "no conozco el pago original"
 
-        val RETIRADAS = setOf(EstadoOrdenCaja.POR_RETIRAR, EstadoOrdenCaja.RETIRADA, EstadoOrdenCaja.CANCELADA, EstadoOrdenCaja.PAGADA_EN_CAJA)
+        // what srtm no longer collects, and also what caja refused to withdraw because it was paid (the pagos' vigentes)
+        val SIN_DEUDA = setOf(EstadoOrdenCaja.POR_RETIRAR, EstadoOrdenCaja.RETIRADA, EstadoOrdenCaja.CANCELADA, EstadoOrdenCaja.PAGADA_EN_CAJA)
 
         // a text field among `valores`: core binds them as one array
         fun entre(
@@ -310,6 +328,15 @@ class PagosService(
         ) = RecordCriterion { definition, bind ->
             val columna = "\"${definition.fields.first { it.name == campo }.columnName}\""
             "$columna = ANY(${bind(valores.toTypedArray())})"
+        }
+
+        // a relation (uuid) field among `valores`: the array is bound as text and cast, so the column keeps its index
+        fun entreIds(
+            campo: String,
+            valores: Collection<String>
+        ) = RecordCriterion { definition, bind ->
+            val columna = "\"${definition.fields.first { it.name == campo }.columnName}\""
+            "$columna = ANY(CAST(CAST(${bind(valores.toTypedArray())} AS text[]) AS uuid[]))"
         }
     }
 }

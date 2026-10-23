@@ -70,6 +70,11 @@ class ConciliacionTest {
         assertEquals("ya pagada con el recibo 001-7", VigenciaDeOrdenes.decidir("R", orden, true, "001-7", null, null).motivo)
         // the cuota's reason first, even when srtm already withdrew the orden
         assertEquals("sustituida por R2", VigenciaDeOrdenes.decidir("R", orden.copy(estado = EstadoOrdenCaja.RETIRADA), false, null, "R2", null).motivo)
+        assertEquals("la cuota ya no se cobra", VigenciaDeOrdenes.decidir("R", orden, false, null, null, null).motivo)
+        // paid in caja and srtm has the recibo: the recibo is named; without it, «ya pagada en caja»
+        val enCaja = orden.copy(estado = EstadoOrdenCaja.PAGADA_EN_CAJA)
+        assertEquals("ya pagada con el recibo 001-7", VigenciaDeOrdenes.decidir("R", enCaja, true, "001-7", null, null).motivo)
+        assertEquals("ya pagada en caja", VigenciaDeOrdenes.decidir("R", enCaja, true, null, null, null).motivo)
         assertEquals("retirada", VigenciaDeOrdenes.decidir("R", orden.copy(estado = EstadoOrdenCaja.POR_RETIRAR), true, null, null, null).motivo)
         assertFalse(VigenciaDeOrdenes.decidir("R", orden.copy(estado = EstadoOrdenCaja.POR_ENVIAR), true, null, null, null).vigente)
     }
