@@ -267,7 +267,7 @@ class CajaApiTest : ConCajaApiTest() {
     fun `emisionACajaSinPermisoDeOrdenesEs403`() {
         val sin =
             funcionario(
-                listOf(permiso(EMISION_MASIVA, "CREATE"), permiso(EMISION_MASIVA, "UPDATE"), permiso(EMISION_MASIVA, "READ"), permiso(EMISION_LOTE, "CREATE"))
+                listOf(permiso(null, "READ"), permiso(EMISION_MASIVA, "CREATE"), permiso(EMISION_MASIVA, "UPDATE"), permiso(EMISION_LOTE, "CREATE"))
             )
 
         val (estado, cuerpo) = exchange("POST", "/api/srtm/emisiones", mapOf("anio" to 2026, "formato" to "PDF", "enviar_a_caja" to true), sin)
