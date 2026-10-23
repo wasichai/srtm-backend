@@ -35,8 +35,8 @@ data class RespuestaACaja(
 // their order): a sincronización and a write of cuotas read what is paid under the same ones. a PAGO_ANULADO locks
 // only its original's contribuyente (the pago's, its first applied orden's): one whose other ordenes are another
 // contribuyente's does not wait for that one's sincronización, which at worst still reads them paid and holds back an
-// alta caja already holds again as PENDIENTE; the next sincronización reads them unpaid. caja waits 10 s for the
-// answer
+// alta caja already holds again as PENDIENTE; the sincronización after the anulación (despuesDeAnular) reads them
+// unpaid. caja waits 10 s for the answer
 @Service
 class PagosService(
     private val registros: Registros,
@@ -57,7 +57,7 @@ class PagosService(
             is PagoAnulado -> {
                 val (respuesta, ordenes) = transaccion.executeAndAwait { anular(evento) }
                 // after the commit, never inside it: what it does with caja never changes the answer
-                retirar(ordenes)
+                despuesDeAnular(ordenes)
                 respuesta
             }
         }
@@ -220,21 +220,38 @@ class PagosService(
     }
 
     // #164: caja returned the anulled pago's ordenes to PENDIENTE. the ones whose debt srtm no longer has are
-    // withdrawn now; the vigentes are debt again as they were. a failure here is logged by its class only (no data of
-    // the contribuyente) and leaves them to the next sincronización
-    private suspend fun retirar(ordenes: List<String>) {
+    // withdrawn now. then (#175, Ruling 36) their contribuyentes' years are synced, as after a write of srtm
+    // (CajaService.sincronizarSiEnviado): a cuota redetermined while it was paid kept its old monto (D7), and caja holds
+    // it again with that importe; the sincronización replaces it with the liquidación's. a failure here is logged by
+    // its class only (no data of the contribuyente) and never changes the answer: caja would send the PAGO_ANULADO again,
+    // and its retry (a 409) syncs nothing
+    private suspend fun despuesDeAnular(ordenes: List<String>) {
         if (ordenes.isEmpty()) return
-        try {
-            val suyas = registros.byIds(ObjetosCaja.ORDEN_CAJA, OrdenCaja::class.java, ordenes).values
+        val suyas =
+            sinFallar("leer las órdenes de un pago anulado") { registros.byIds(ObjetosCaja.ORDEN_CAJA, OrdenCaja::class.java, ordenes).values } ?: return
+        sinFallar("retirar las órdenes de un pago anulado") {
             val vigentes = vigentes(suyas)
-            val sinDeuda = suyas.filter { it.id != null && it.id !in vigentes }.map { UUID.fromString(it.id) }
-            caja.retirarDevueltas(sinDeuda)
+            caja.retirarDevueltas(suyas.filter { it.id != null && it.id !in vigentes }.map { UUID.fromString(it.id) })
+        }
+        // synced even when the retiros failed: its plan withdraws the ENVIADA it no longer wants
+        val porAnio = suyas.filter { it.anio != null && it.contribuyente != null }.groupBy({ it.anio!! }, { UUID.fromString(it.contribuyente) })
+        for ((anio, contribuyentes) in porAnio) {
+            sinFallar("sincronizar tras un pago anulado") { caja.sincronizarSiEnviado(contribuyentes.toSet(), anio, MOTIVO_PAGO_ANULADO) }
+        }
+    }
+
+    private suspend fun <T> sinFallar(
+        que: String,
+        accion: suspend () -> T
+    ): T? =
+        try {
+            accion()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            log.warn("caja: no se pudieron retirar las órdenes de un pago anulado ({})", e.javaClass.simpleName)
+            log.warn("caja: no se pudo {} ({})", que, e.javaClass.simpleName)
+            null
         }
-    }
 
     private suspend fun ordenesPorReferencia(referencias: List<String>): Map<String?, OrdenCaja> =
         registros

@@ -137,7 +137,15 @@ El buzón de caja-backend entrega cada pago con `POST {url}/pagos`, y srtm lo re
 Caja entra como una **cuenta de servicio de srtm** (wasichai ADR-043), y la organización sale de su token. Los pasos
 van como administrador de la organización, en el Core de srtm.
 
-**El rol `CAJA`:** crea y lee `pago_caja` y `pago_caja_detalle`, y lee lo que la imputación consulta.
+**El rol `CAJA`:** crea y lee `pago_caja` y `pago_caja_detalle`, y lee lo que la imputación consulta. Además crea
+`orden_caja` y `cuota_predial`, y lee lo que la liquidación consulta (#175). Después de un `PAGO_ANULADO`, srtm
+sincroniza con caja la deuda de los contribuyentes del pago, y lo hace con esa cuenta. Así, una cuota redeterminada
+mientras estaba pagada vuelve a caja con el importe vigente.
+
+- **Sin esos permisos:** el `PAGO_ANULADO` se aplica igual, pero la sincronización falla y queda solo en el log. La
+  orden vieja sigue en caja con el importe viejo hasta el próximo `POST /contribuyentes/{id}/caja`.
+- **Las órdenes y las cuotas:** esas altas pasan por la guardia de srtm (`ReglasDeCaja`). La cuenta no las puede
+  escribir por la API genérica.
 
 ```bash
 curl -X POST "$SRTM/api/roles" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
@@ -146,8 +154,11 @@ curl -X PUT "$SRTM/api/roles/CAJA/permissions" -H "Authorization: Bearer $TOKEN"
   {"objectName": "pago_caja", "action": "CREATE"}, {"objectName": "pago_caja", "action": "READ"},
   {"objectName": "pago_caja_detalle", "action": "CREATE"}, {"objectName": "pago_caja_detalle", "action": "READ"},
   {"objectName": "orden_caja", "action": "READ"}, {"objectName": "cuota_arbitrio", "action": "READ"},
+  {"objectName": "orden_caja", "action": "CREATE"}, {"objectName": "cuota_predial", "action": "CREATE"},
   {"objectName": "anulacion_cuota_arbitrio", "action": "READ"}, {"objectName": "cuota_predial", "action": "READ"},
-  {"objectName": "contribuyente", "action": "READ"}]}'
+  {"objectName": "contribuyente", "action": "READ"}, {"objectName": "declaracion_predial", "action": "READ"},
+  {"objectName": "parametro_tributario", "action": "READ"}, {"objectName": "servicio_arbitrio", "action": "READ"},
+  {"objectName": "predio", "action": "READ"}]}'
 ```
 
 **La cuenta de servicio `caja`:**

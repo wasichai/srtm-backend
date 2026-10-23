@@ -121,6 +121,51 @@ class PagosApiTest : ConPagosApiTest() {
         assertFalse(ordenes(e.contribuyente, e.anio).getValue(referencia(cuota))["pagada"].asBoolean())
     }
 
+    // #175 (Ruling 36): C1-v1 was paid, then redetermined (D7 keeps it as it was paid), then its recibo annulled.
+    // caja holds v1 as PENDIENTE again with the old importe: the sincronización after the anulación replaces it with
+    // C1-v2 at the liquidación's importe, and caja's vigencia no longer collects v1. the retry of the anulación (409)
+    // sends nothing more
+    @Test
+    fun `anulacionTrasRedeterminarSustituyeLaOrdenVieja`() {
+        val e = Escenario()
+        val dj = conPredial(e)!!
+        enviar(e.contribuyente, e.anio)
+        val v1 = "PREDIAL-${e.contribuyente}-${e.anio}-C1-v1"
+        val v2 = "PREDIAL-${e.contribuyente}-${e.anio}-C1-v2"
+        val importeViejo = importe(ordenes(e.contribuyente, e.anio).getValue(v1)["importe"])
+        val pago = registrado(listOf(v1 to importeViejo))
+        assertEquals(HttpStatus.OK to APLICADO, pagar(pago))
+        cambiarAutoavaluo(dj, 80000)
+        val antes = ordenes(e.contribuyente, e.anio)
+        assertTrue(antes.getValue(v1)["pagada"].asBoolean(), antes.getValue(v1).toString())
+        assertFalse(v2 in antes, antes.keys.toString())
+        // what the liquidación says of C1 now
+        val liquidacion = tree(send("GET", "/api/srtm/contribuyentes/${e.contribuyente}/liquidacion?anio=${e.anio}", null, HttpStatus.OK))
+        val importeNuevo = importe(liquidacion["cuotas"][0]["monto"])
+        assertTrue(importeNuevo != importeViejo, importeNuevo)
+        PEDIDOS.clear()
+        val anulacion = anulado(pago)
+
+        val (estado, cuerpo) = pagar(anulacion)
+
+        assertEquals(HttpStatus.OK, estado, cuerpo)
+        assertEquals(APLICADO, cuerpo)
+        val alta = PEDIDOS.single { it.alta && it.referencia == v2 }
+        assertEquals(v1, alta.cuerpo["sustituye_a"], alta.cuerpo.toString())
+        assertEquals(importeNuevo, alta.cuerpo["importe"])
+        val despues = ordenes(e.contribuyente, e.anio)
+        assertTrue(despues.getValue(v1)["estado"].asString() in setOf(EstadoOrdenCaja.POR_RETIRAR, EstadoOrdenCaja.RETIRADA), despues.getValue(v1).toString())
+        assertFalse(despues.getValue(v1)["pagada"].asBoolean())
+        assertEquals(EstadoOrdenCaja.ENVIADA, despues.getValue(v2)["estado"].asString())
+        assertEquals(importeNuevo, importe(despues.getValue(v2)["importe"]))
+        assertFalse(vigenciaDe(v1, importeViejo)["vigente"].asBoolean())
+        assertTrue(vigenciaDe(v2, importeNuevo)["vigente"].asBoolean())
+
+        PEDIDOS.clear()
+        assertEquals(HttpStatus.CONFLICT to APLICADO, pagar(anulacion))
+        assertTrue(PEDIDOS.isEmpty(), PEDIDOS.map { it.referencia }.toString())
+    }
+
     @Test
     fun `anulacionDeUnACuentaRevierteElSaldo`() {
         val e = Escenario()

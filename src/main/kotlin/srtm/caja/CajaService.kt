@@ -163,6 +163,9 @@ fun motivoDeRetiro(motivo: String): String = unaLinea(motivo).ifEmpty { "Retirad
 
 const val MOTIVO_A_PEDIDO = "Enviado a pedido desde srtm"
 
+// the observacion of the altas a PAGO_ANULADO's sincronización sends (#175)
+const val MOTIVO_PAGO_ANULADO = "Recibo anulado en caja: la deuda vuelve con su importe vigente"
+
 // why an orden is withdrawn when the sync is the POST's or the masiva's
 const val MOTIVO_SIN_DEUDA = "La deuda ya no está vigente en srtm"
 
