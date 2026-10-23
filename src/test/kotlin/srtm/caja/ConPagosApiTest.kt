@@ -96,17 +96,31 @@ abstract class ConPagosApiTest : ConCajaApiTest() {
     // docs/develop/alta-organizacion.md: the role CAJA and the service account caja of the organization, created once
     // per run; a token of its own for each test (it lives 15 minutes)
     protected fun tokenDeCaja(): String {
-        val (id, secreto) =
-            credencial ?: run {
-                val rol = "CAJA_${uniqueDocumento()}"
-                send("POST", "/api/roles", mapOf("name" to rol, "label" to rol), HttpStatus.CREATED)
-                val crear = listOf(ObjetosCaja.PAGO_CAJA, ObjetosCaja.PAGO_CAJA_DETALLE)
-                val leer = listOf(ObjetosCaja.ORDEN_CAJA, "cuota_arbitrio", "anulacion_cuota_arbitrio", ObjetosCaja.CUOTA_PREDIAL, "contribuyente")
-                val permisos = crear.flatMap { listOf(permiso(it, "CREATE"), permiso(it, "READ")) } + leer.map { permiso(it, "READ") }
-                send("PUT", "/api/roles/$rol/permissions", mapOf("permissions" to permisos), HttpStatus.OK)
-                val cuenta = post("/api/service-accounts", mapOf("name" to "caja-${uniqueDocumento()}", "roles" to listOf(rol)))
-                (cuenta["clientId"].asString() to cuenta["clientSecret"].asString()).also { credencial = it }
-            }
+        val (id, secreto) = credencial ?: cuentaDeCaja(token).also { credencial = it }
+        return tokenDe(id, secreto)
+    }
+
+    // the role CAJA and a service account with it in the organization of `admin`: a token of it
+    protected fun cuentaDeServicio(admin: String): String {
+        val (id, secreto) = cuentaDeCaja(admin)
+        return tokenDe(id, secreto)
+    }
+
+    private fun cuentaDeCaja(admin: String): Pair<String, String> {
+        val rol = "CAJA_${uniqueDocumento()}"
+        send("POST", "/api/roles", mapOf("name" to rol, "label" to rol), HttpStatus.CREATED, admin)
+        val crear = listOf(ObjetosCaja.PAGO_CAJA, ObjetosCaja.PAGO_CAJA_DETALLE)
+        val leer = listOf(ObjetosCaja.ORDEN_CAJA, "cuota_arbitrio", "anulacion_cuota_arbitrio", ObjetosCaja.CUOTA_PREDIAL, "contribuyente")
+        val permisos = crear.flatMap { listOf(permiso(it, "CREATE"), permiso(it, "READ")) } + leer.map { permiso(it, "READ") }
+        send("PUT", "/api/roles/$rol/permissions", mapOf("permissions" to permisos), HttpStatus.OK, admin)
+        val cuenta = post("/api/service-accounts", mapOf("name" to "caja-${uniqueDocumento()}", "roles" to listOf(rol)), admin)
+        return cuenta["clientId"].asString() to cuenta["clientSecret"].asString()
+    }
+
+    private fun tokenDe(
+        id: String,
+        secreto: String
+    ): String {
         val respuesta =
             client
                 .post()

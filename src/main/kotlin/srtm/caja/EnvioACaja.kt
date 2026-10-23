@@ -221,6 +221,14 @@ class EnvioACaja(
         val alta = o.estado == EstadoOrdenCaja.POR_ENVIAR
         val c = { campo: String -> t.columna(campo) }
         return when (r) {
+            // caja already withdrew it (a retry after a timeout, once its vigencia said no): nothing in caja to collect,
+            // never ENVIADA. a CONFLICTO, like an alta caja refuses
+            is ResultadoCaja.Hecho if alta && r.estado == ANULADA_EN_CAJA -> {
+                val detalle = "caja-backend tiene la orden $ANULADA_EN_CAJA"
+                val escrita = escribir(t, o, EstadoOrdenCaja.CONFLICTO, "${c("ultimo_error")} = :error", "error" to detalle)
+                log.warn("caja: {} CONFLICTO (anulada en caja)", o.referencia)
+                ResumenCaja(conflictos = if (escrita) 1 else 0, error = detalle)
+            }
             is ResultadoCaja.Hecho if alta -> {
                 val escrita =
                     escribir(
@@ -242,8 +250,12 @@ class EnvioACaja(
                     return ResumenCaja(error = "caja-backend respondió 404")
                 }
                 val escrita = escribir(t, o, EstadoOrdenCaja.RETIRADA, "${c("retirada_en")} = now(), ${c("ultimo_error")} = NULL")
+                // R31: caja held it (200 ANULADA, not 404), so it had taken it as the sustitución it was: the one it
+                // replaced is gone from caja too, and the next alta does not name it (caja replaces an orden once)
+                val sustituida =
+                    escrita && r is ResultadoCaja.Hecho && r.estado == ANULADA_EN_CAJA && o.sustituyeA != null && retirarSustituida(t, o.sustituyeA)
                 log.debug("caja: {} RETIRADA", o.referencia)
-                ResumenCaja(retiradas = if (escrita) 1 else 0)
+                ResumenCaja(retiradas = if (escrita) 1 else 0, sustituidas = if (sustituida) 1 else 0)
             }
             is ResultadoCaja.Conflicto -> {
                 // an alta caja holds otherwise (a PAGADA it replaces, another debt): CONFLICTO, never retried. a retiro
@@ -434,5 +446,8 @@ class EnvioACaja(
 
     private companion object {
         val log = LoggerFactory.getLogger(EnvioACaja::class.java)
+
+        // the estado of an orden de cobro its sistema de origen withdrew (caja-backend's OrdenDeCobro)
+        const val ANULADA_EN_CAJA = "ANULADA"
     }
 }

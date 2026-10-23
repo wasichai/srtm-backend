@@ -47,6 +47,26 @@ class Pagadas(
     // which of these ordenes are paid
     suspend fun deOrdenes(ids: Collection<String>): List<OrdenPagada> = pagadas("orden", ids)
 
+    // Ruling 28: which of these ordenes a pago of caja came for (a PAGO_REGISTRADO not annulled), applied or kept a
+    // cuenta: a PAGADA_EN_CAJA among them is paid only if Pagadas says so
+    suspend fun conPago(ids: Collection<String>): Set<String> {
+        if (ids.isEmpty()) return emptySet()
+        val organizacion = organizacionConCaja() ?: return emptySet()
+        val (d, p) = tablasDePago(organizacion) ?: return emptySet()
+        return db
+            .sql(
+                "SELECT DISTINCT d.${d.columna("orden")} AS orden FROM ${d.tabla} d JOIN ${p.tabla} p ON p.id = d.${d.columna("pago")} " +
+                    "WHERE d.${d.columna("orden")} IN (:ids) AND p.${p.columna("tipo")} = :registrado AND ${noAnulado(p)}"
+            ).bind("ids", ids.distinct().map(UUID::fromString))
+            .bind("registrado", TipoPagoCaja.PAGO_REGISTRADO)
+            .bind("anulado", TipoPagoCaja.PAGO_ANULADO)
+            .map { row, _ -> row.get("orden", UUID::class.java)!!.toString() }
+            .all()
+            .asFlow()
+            .toList()
+            .toSet()
+    }
+
     // the cuotas de arbitrio of the contribuyentes paid: cuota id -> recibo
     suspend fun cuotasArbitrio(contribuyentes: Collection<String>): Map<String, String> =
         deContribuyentes(contribuyentes).filter { it.cuotaArbitrio != null }.associate { it.cuotaArbitrio!! to it.recibo }

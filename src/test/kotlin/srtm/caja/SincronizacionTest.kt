@@ -196,12 +196,62 @@ class SincronizacionTest {
         }
     }
 
+    // Ruling 27: an ERROR already tried may be in caja (a NoContesta exhausted): a new version waits for it like for an
+    // orden POR_ENVIAR tried, or caja would hold two of the cuota (the new one without sustituye_a)
     @Test
-    fun errorYOtraVersionSustituyeALaEnviada() {
+    fun errorIntentadoDifiereLaRanura() {
         val v1 = actual(EstadoOrdenCaja.ENVIADA)
         val v2 = actual(EstadoOrdenCaja.ERROR, version = 2, sustituyeA = v1.referencia, intentos = 20)
         val d = deseada(version = 3)
-        assertEquals(Plan(listOf(Alta(d, v1.referencia)), emptyList(), emptyList()), planificar(listOf(d), listOf(v1, v2)))
+        assertEquals(Plan(emptyList(), emptyList(), emptyList(), 1), planificar(listOf(d), listOf(v1, v2)))
+        val sola = actual(EstadoOrdenCaja.ERROR, intentos = 20)
+        assertEquals(Plan(emptyList(), emptyList(), emptyList(), 1), planificar(listOf(deseada(version = 2)), listOf(sola)))
+    }
+
+    // Ruling 28: a PAGADA_EN_CAJA holds its ranura only while no pago of caja came for it. once one came (a cuenta:
+    // caja refused the retiro, the cuota was gone), the debt that reappears is a new alta
+    @Test
+    fun pagadaEnCajaConPagoNoRetieneLaRanura() {
+        val pagada = actual(EstadoOrdenCaja.PAGADA_EN_CAJA)
+        val d = deseada(version = 2)
+
+        assertEquals(Plan(emptyList(), emptyList(), emptyList()), planificar(listOf(d), listOf(pagada)))
+        assertEquals(Plan(listOf(Alta(d, null)), emptyList(), emptyList()), planificar(listOf(d), listOf(pagada), conPago = setOf(pagada.id!!)))
+    }
+
+    // Ruling 27: a sincronización a pedido sends again the ERROR whose referencia srtm still wants, and withdraws the
+    // other ERROR (caja may hold them, and they would hold their ranura for ever): nothing for a ranura paid, nor for
+    // what is not ERROR
+    @Test
+    fun aPedidoLosErroresVuelvenALaCola() {
+        val deseadaOtra = deseada(ranura = "ARB|p|s|2026|2|1")
+        val sigue = actual(EstadoOrdenCaja.ERROR, intentos = 20)
+        val vieja = actual(EstadoOrdenCaja.ERROR, ranura = deseadaOtra.ranura, version = 0, intentos = 3)
+        val sinDeuda = actual(EstadoOrdenCaja.ERROR, ranura = "ARB|p|s|2026|3|1", intentos = 1)
+        val pagada = actual(EstadoOrdenCaja.ERROR, ranura = "ARB|p|s|2026|4|1", intentos = 2)
+        val enCaja = actual(EstadoOrdenCaja.PAGADA_EN_CAJA, ranura = "ARB|p|s|2026|7|1")
+        val otras =
+            listOf(
+                actual(EstadoOrdenCaja.ENVIADA, ranura = "ARB|p|s|2026|5|1"),
+                actual(EstadoOrdenCaja.CONFLICTO, ranura = "ARB|p|s|2026|6|1"),
+                enCaja,
+                actual(EstadoOrdenCaja.ERROR, ranura = enCaja.ranura!!, version = 2, intentos = 1)
+            )
+
+        val r =
+            reintentosAPedido(
+                listOf(deseada(), deseadaOtra, deseada(ranura = pagada.ranura!!, pagada = true)),
+                listOf(sigue, vieja, sinDeuda, pagada) + otras
+            )
+
+        assertEquals(
+            mapOf(
+                UUID.fromString(sigue.id) to EstadoOrdenCaja.POR_ENVIAR,
+                UUID.fromString(vieja.id) to EstadoOrdenCaja.POR_RETIRAR,
+                UUID.fromString(sinDeuda.id) to EstadoOrdenCaja.POR_RETIRAR
+            ),
+            r
+        )
     }
 
     @Test

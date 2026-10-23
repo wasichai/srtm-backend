@@ -77,6 +77,42 @@ class VigenciaApiTest : ConPagosApiTest() {
         assertTrue(nuevo["vigente"].asBoolean(), nuevo.toString())
     }
 
+    // Ruling 26: the alta timed out but caja took it, and asks before it collects: the orden, POR_ENVIAR already tried,
+    // is vigente. a «no» would have caja withdraw it, and srtm's retry would end in CONFLICTO
+    @Test
+    fun `porEnviarYaIntentadaEsVigente`() {
+        val e = Escenario()
+        val cuota = lista(tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))) { it }[0]
+        retraso = { if (it.referencia == referencia(cuota)) 2500L else 0L }
+        enviar(e.contribuyente, e.anio)
+        val orden = registrosDe(e.contribuyente).single { it["referencia"].asString() == referencia(cuota) }
+        assertEquals(EstadoOrdenCaja.POR_ENVIAR, orden["estado"].asString(), orden.toString())
+        assertEquals(1, orden["intentos"].asInt(), orden.toString())
+
+        val o = una(referencia(cuota), importe(cuota["monto"]))
+
+        assertTrue(o["vigente"].asBoolean(), o.toString())
+        assertTrue(o["motivo"].isNull, o.toString())
+    }
+
+    // Ruling 26, extended: caja asks for an orden srtm left in ERROR after its tries ran out (caja took it, its answers
+    // were lost): caja holds it, so it is vigente, as the pagos take it
+    @Test
+    fun `errorYaIntentadoEsVigente`() {
+        val e = Escenario()
+        val cuota = lista(tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))) { it }[0]
+        respuesta = { if (it.alta && it.referencia == referencia(cuota)) 503 to "{}" else null }
+        enviar(e.contribuyente, e.anio)
+        vueltas()
+        val orden = registrosDe(e.contribuyente).single { it["referencia"].asString() == referencia(cuota) }
+        assertEquals(EstadoOrdenCaja.ERROR, orden["estado"].asString(), orden.toString())
+
+        val o = una(referencia(cuota), importe(cuota["monto"]))
+
+        assertTrue(o["vigente"].asBoolean(), o.toString())
+        assertTrue(o["motivo"].isNull, o.toString())
+    }
+
     @Test
     fun `importeDistintoDevuelveElDeSrtm`() {
         val e = Escenario()

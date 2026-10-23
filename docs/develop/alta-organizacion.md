@@ -182,10 +182,10 @@ curl -X POST "$SRTM/api/service-accounts" -H "Authorization: Bearer $TOKEN" -H '
 | Todas las órdenes se aplican | 200 `{"aplicado":true,"a_cuenta":false,"motivo":null}` |
 | Alguna va a cuenta: otro importe, sustituida, ya no vigente, ya pagada o desconocida | 202 `{"aplicado":false,"a_cuenta":true,"motivo":"…"}` |
 | `pagoId` repetido | 409, con el mismo cuerpo de la primera vez |
-| `PAGO_ANULADO` | 200, con el `a_cuenta` del pago original |
+| `PAGO_ANULADO` | 200 `{"aplicado":true,"a_cuenta":false,"motivo":null}`, aunque el pago original haya ido a cuenta: una anulación no es un pago |
 | `PAGO_ANULADO` cuyo original srtm no tiene | 503 `{"motivo":"no conozco el pago original"}` |
 | Cuerpo ilegible | 400, y caja lo deja `MUERTO` |
-| Sin token o con el token vencido | 401. Sin el rol, 403. Caja reintenta los dos |
+| Sin token o con el token vencido | 401. Sin el rol, o con el token de una persona (aunque sea la administradora), 403. Caja reintenta los dos |
 
 **La conciliación y la vigencia (#166, #168):** con la misma cuenta, el mismo rol y la misma `url`, caja pregunta
 también por el día y por las órdenes (solo lectura: `pago_caja` y `orden_caja`, que el rol ya tiene).

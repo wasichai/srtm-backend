@@ -261,6 +261,21 @@ class CajaApiTest : ConCajaApiTest() {
         assertTrue(altasDe(documentoDe(e.contribuyente)).all { it.cuerpo["observacion"] == "Emisión masiva ${e.anio}" })
     }
 
+    // the masiva with enviar_a_caja writes ordenes and cuotas de predial as its caller: who may launch it but not
+    // create those is refused at once, not in each lote
+    @Test
+    fun `emisionACajaSinPermisoDeOrdenesEs403`() {
+        val sin =
+            funcionario(
+                listOf(permiso(null, "READ"), permiso(EMISION_MASIVA, "CREATE"), permiso(EMISION_MASIVA, "UPDATE"), permiso(EMISION_LOTE, "CREATE"))
+            )
+
+        val (estado, cuerpo) = exchange("POST", "/api/srtm/emisiones", mapOf("anio" to 2026, "formato" to "PDF", "enviar_a_caja" to true), sin)
+
+        assertEquals(HttpStatus.FORBIDDEN, estado, cuerpo)
+        assertTrue(tree(cuerpo)["detail"].asString().contains(ObjetosCaja.ORDEN_CAJA), cuerpo)
+    }
+
     // a timeout leaves v2 POR_ENVIAR while caja holds it: a v3 waits for it (no alta, no cancel), and caja never holds
     // two ordenes of one cuota
     @Test
@@ -357,6 +372,23 @@ class CajaApiTest : ConCajaApiTest() {
         assertTrue(r.drop(4).all { o.getValue(it)["estado"].asString() == EstadoOrdenCaja.ENVIADA })
     }
 
+    // Ruling 26: caja answers an alta it already withdrew (a retry after a timeout, its vigencia said no) with 200 and
+    // estado ANULADA: the orden is not in caja to collect, so it is CONFLICTO with why, never ENVIADA
+    @Test
+    fun `altaAnuladaEnCajaEsConflicto`() {
+        val e = Escenario()
+        val r = lista(tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))) { "ARB-${it["clave"].asString()}" }
+        respuesta = { if (it.alta && it.referencia == r[0]) 200 to """{"orden_id":"${UUID.randomUUID()}","estado":"ANULADA"}""" else null }
+
+        val resumen = enviar(e.contribuyente, e.anio)
+
+        val o = ordenes(e.contribuyente, e.anio).getValue(r[0])
+        assertEquals(EstadoOrdenCaja.CONFLICTO, o["estado"].asString(), o.toString())
+        assertEquals("caja-backend tiene la orden ANULADA", o["ultimo_error"].asString())
+        assertEquals(1, resumen["conflictos"].asInt(), resumen.toString())
+        assertEquals(23, resumen["enviadas"].asInt(), resumen.toString())
+    }
+
     // srtm.caja.intentos=3: the third try caja does not answer is ERROR, and it is not tried again
     @Test
     fun `intentosAgotadosEsError`() {
@@ -372,6 +404,80 @@ class CajaApiTest : ConCajaApiTest() {
         assertEquals(List(24) { EstadoOrdenCaja.ERROR }, o.map { it["estado"].asString() })
         assertTrue(o.all { it["intentos"].asInt() == 3 && it["ultimo_error"].asString().contains("503") }, o.first().toString())
         assertTrue(altasDe(documento).groupBy { it.referencia }.values.all { it.size == 3 })
+    }
+
+    // Ruling 27: ERROR is not for ever. the POST a pedido queues again the ordenes in ERROR srtm still wants, as tried
+    // (caja may hold them), and sends them now
+    @Test
+    fun `errorDeseadoVuelveAEnviarseAPedido`() {
+        val e = Escenario()
+        send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED)
+        val documento = documentoDe(e.contribuyente)
+        respuesta = { if (it.alta && it.cuerpo["pagador_documento"] == documento) 503 to "{}" else null }
+        enviar(e.contribuyente, e.anio)
+        vueltas()
+        assertEquals(List(24) { EstadoOrdenCaja.ERROR }, registrosDe(e.contribuyente).map { it["estado"].asString() })
+        respuesta = { null }
+        PEDIDOS.clear()
+
+        val resumen = enviar(e.contribuyente, e.anio)
+
+        assertEquals(24, resumen["enviadas"].asInt(), resumen.toString())
+        assertEquals(0, resumen["encoladas"].asInt(), resumen.toString())
+        val o = registrosDe(e.contribuyente)
+        assertEquals(List(24) { EstadoOrdenCaja.ENVIADA }, o.map { it["estado"].asString() })
+        assertTrue(o.all { it["intentos"].asInt() == 4 }, o.first().toString())
+        // the same orden, once each: no new version
+        assertEquals(24, altasDe(documento).map { it.referencia }.toSet().size)
+        assertEquals(24, altasDe(documento).size)
+    }
+
+    // R31: v2 (sustituye_a v1) ran out of tries, but caja did create it, so caja's v1 is already replaced. the POST
+    // withdraws v2 (it is not v3, the debt now) and caja answers 200 ANULADA: v1 went with it, and v3 goes without
+    // sustituye_a (caja would refuse to replace v1 twice)
+    @Test
+    fun `retiroDeUnaSustitutaQueCajaTeniaRetiraLaSustituida`() {
+        val (v1, v3) = sustitutaEnError { null }
+
+        val despues = ordenes(sus.contribuyente, sus.anio)
+        assertEquals(List(4) { EstadoOrdenCaja.RETIRADA }, v1.map { despues.getValue(it)["estado"].asString() })
+        assertEquals(List(4) { EstadoOrdenCaja.ENVIADA }, v3.map { despues.getValue(it)["estado"].asString() })
+        assertTrue(v3.all { r -> "sustituye_a" !in PEDIDOS.last { it.alta && it.referencia == r }.cuerpo })
+    }
+
+    // R31: v2 never reached caja (the retiro answers 404): v1 is still caja's, and v3 replaces it
+    @Test
+    fun `retiroDeUnaSustitutaQueCajaNoTeniaDejaLaSustituida`() {
+        val (v1, v3) = sustitutaEnError { if (!it.alta && it.referencia.endsWith("-v2")) 404 to """{"detail":"no existe"}""" else null }
+
+        val despues = ordenes(sus.contribuyente, sus.anio)
+        assertEquals(v1, v3.map { r -> PEDIDOS.last { it.alta && it.referencia == r }.cuerpo["sustituye_a"] })
+        assertEquals(List(4) { EstadoOrdenCaja.ENVIADA }, v3.map { despues.getValue(it)["estado"].asString() })
+        assertEquals(List(4) { EstadoOrdenCaja.RETIRADA }, v1.map { despues.getValue(it)["estado"].asString() })
+    }
+
+    private lateinit var sus: Escenario
+
+    // v1 sent, v2 (sustituye_a v1) ERROR after its tries, the debt now v3; then the POST (which withdraws v2, caja
+    // answering as `retiro` says) and another one (which sends v3). the referencias of v1 and of v3
+    private fun sustitutaEnError(retiro: (Pedido) -> Pair<Int, String>?): Pair<List<String>, List<String>> {
+        sus = Escenario()
+        val dj = conPredial(sus)!!
+        enviar(sus.contribuyente, sus.anio)
+        val v = { n: Int -> (1..4).map { "PREDIAL-${sus.contribuyente}-${sus.anio}-C$it-v$n" } }
+        respuesta = { if (it.alta && it.cuerpo["sustituye_a"] != null) 503 to "{}" else null }
+        cambiarAutoavaluo(dj, 80000)
+        vueltas()
+        assertTrue(v(2).all { ordenes(sus.contribuyente, sus.anio).getValue(it)["estado"].asString() == EstadoOrdenCaja.ERROR })
+        respuesta = retiro
+        cambiarAutoavaluo(dj, 90000)
+        assertTrue(PEDIDOS.none { it.referencia in v(3) })
+
+        enviar(sus.contribuyente, sus.anio)
+        assertTrue(v(2).all { ordenes(sus.contribuyente, sus.anio).getValue(it)["estado"].asString() == EstadoOrdenCaja.RETIRADA })
+        enviar(sus.contribuyente, sus.anio)
+
+        return v(1) to v(3)
     }
 
     // nothing of another class or run is left for this test's group to take: only its emission runs

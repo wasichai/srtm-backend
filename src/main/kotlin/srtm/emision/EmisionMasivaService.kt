@@ -18,7 +18,9 @@ import org.springframework.core.io.Resource
 import org.springframework.http.HttpStatus
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.stereotype.Service
+import srtm.Permisos
 import srtm.caja.CajaService
+import srtm.caja.ObjetosCaja
 import srtm.caja.SIN_CAJA_CONFIGURADA
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
@@ -146,13 +148,15 @@ class EmisionMasivaService(
     private val trabajadores: TrabajadoresEmision,
     private val config: EmisionProperties,
     private val documentos: DocumentosDeEmision,
-    private val caja: CajaService
+    private val caja: CajaService,
+    private val permisos: Permisos
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // `incluir`: the documents of each contribuyente. one that asks for the HLA is refused (422, with what is missing)
     // when the year lacks what every HLA needs, before anything exists. enviarACaja (#163): each lote synchronizes its
-    // contribuyentes with the caja, which the organization must have (409)
+    // contribuyentes with the caja, which the organization must have (409), as the caller: who may not create its
+    // ordenes and cuotas de predial is refused now (403), not in each lote
     suspend fun emitir(
         anio: Int,
         formato: FormatoEmision,
@@ -163,6 +167,10 @@ class EmisionMasivaService(
             ReactiveSecurityContextHolder.getContext().awaitFirstOrNull()?.authentication
                 ?: throw UnauthorizedException("Authentication required")
         val usuario = exigirPermisos()
+        if (enviarACaja) {
+            permisos.exigirCrear(ObjetosCaja.ORDEN_CAJA, "enviar la emisión a caja")
+            permisos.exigirCrear(ObjetosCaja.CUOTA_PREDIAL, "enviar la emisión a caja")
+        }
         if (DocumentoEmision.HLA in incluir) {
             val faltan = documentos.faltanHla(anio)
             if (faltan.isNotEmpty()) throw FaltanParametros(anio, faltan)
