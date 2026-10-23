@@ -95,6 +95,24 @@ class VigenciaApiTest : ConPagosApiTest() {
         assertTrue(o["motivo"].isNull, o.toString())
     }
 
+    // Ruling 26, extended: caja asks for an orden srtm left in ERROR after its tries ran out (caja took it, its answers
+    // were lost): caja holds it, so it is vigente, as the pagos take it
+    @Test
+    fun `errorYaIntentadoEsVigente`() {
+        val e = Escenario()
+        val cuota = lista(tree(send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED))) { it }[0]
+        respuesta = { if (it.alta && it.referencia == referencia(cuota)) 503 to "{}" else null }
+        enviar(e.contribuyente, e.anio)
+        vueltas()
+        val orden = registrosDe(e.contribuyente).single { it["referencia"].asString() == referencia(cuota) }
+        assertEquals(EstadoOrdenCaja.ERROR, orden["estado"].asString(), orden.toString())
+
+        val o = una(referencia(cuota), importe(cuota["monto"]))
+
+        assertTrue(o["vigente"].asBoolean(), o.toString())
+        assertTrue(o["motivo"].isNull, o.toString())
+    }
+
     @Test
     fun `importeDistintoDevuelveElDeSrtm`() {
         val e = Escenario()
