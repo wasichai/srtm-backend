@@ -90,6 +90,18 @@ class ConciliacionTest {
         assertEquals("todavía no se envió a caja", nunca.motivo)
     }
 
+    // Ruling 28: a PAGADA_EN_CAJA orden whose pago arrived and went a cuenta is no longer paid in caja: it was withdrawn
+    @Test
+    fun `una pagada en caja cuyo pago fue a cuenta es retirada`() {
+        val enCaja = OrdenCaja(importe = BigDecimal("12.5"), estado = EstadoOrdenCaja.PAGADA_EN_CAJA)
+
+        val conPago = VigenciaDeOrdenes.decidir("R", enCaja, true, null, null, null, conPago = true)
+
+        assertFalse(conPago.vigente)
+        assertEquals("retirada", conPago.motivo)
+        assertEquals("ya pagada en caja", VigenciaDeOrdenes.decidir("R", enCaja, true, null, null, null, conPago = false).motivo)
+    }
+
     @Test
     fun `el cuerpo de vigencia lleva las cuatro claves y el importe nulo`() {
         val j = JsonMapper.builder().build().readTree(VigenciaDeOrdenes.cuerpo(listOf(VigenciaDeOrden("R", false, null, "no existe"))))

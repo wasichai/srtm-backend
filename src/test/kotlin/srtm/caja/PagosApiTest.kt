@@ -164,6 +164,51 @@ class PagosApiTest : ConPagosApiTest() {
         assertEquals(EstadoOrdenCaja.RETIRADA, ordenes(e.contribuyente, e.anio).getValue(v1)["estado"].asString())
     }
 
+    // Ruling 28: caja refused the retiro of v1 (paid there: PAGADA_EN_CAJA) and its pago went a cuenta, the cuota being
+    // gone. paid is then only what Pagadas says: GET /caja and the vigencia agree it is not, and once the debt is back
+    // it reaches caja again
+    @Test
+    fun `pagadaEnCajaConPagoACuentaNoRetieneLaRanura`() {
+        val e = Escenario()
+        val dj = conPredial(e)!!
+        enviar(e.contribuyente, e.anio)
+        val v1 = "PREDIAL-${e.contribuyente}-${e.anio}-C1-v1"
+        val importe = importe(ordenes(e.contribuyente, e.anio).getValue(v1)["importe"])
+        respuesta = { if (!it.alta && it.referencia == v1) 409 to """{"detail":"Pagada con el recibo 001-0000123"}""" else null }
+        escribir("POST", "/api/srtm/declaraciones/$dj/anular", mapOf("motivo_anulacion" to "Declarada dos veces"))
+        assertEquals(EstadoOrdenCaja.PAGADA_EN_CAJA, ordenes(e.contribuyente, e.anio).getValue(v1)["estado"].asString())
+        assertTrue(ordenes(e.contribuyente, e.anio).getValue(v1)["pagada"].asBoolean())
+        assertEquals(HttpStatus.ACCEPTED, pagar(registrado(listOf(v1 to importe))).first)
+        respuesta = { null }
+
+        val pagadaAhora = ordenes(e.contribuyente, e.anio).getValue(v1)
+        assertFalse(pagadaAhora["pagada"].asBoolean(), pagadaAhora.toString())
+        val vigencia = vigenciaDe(v1, importe)
+        assertFalse(vigencia["vigente"].asBoolean())
+        assertEquals("retirada", vigencia["motivo"].asString(), vigencia.toString())
+
+        // the debt is back: another declaración, with another autoavalúo (the next revision of each cuota)
+        PEDIDOS.clear()
+        val otro =
+            post(
+                "/api/srtm/predios",
+                mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 125", "tipo_predio" to "PREDIO URBANO")
+            )["id"].asString()
+        post(
+            "/api/srtm/declaraciones",
+            mapOf("contribuyente" to e.contribuyente, "predio" to otro, "anio" to e.anio, "secuencia_uso" to "1", "valor_autoavaluo" to 80000)
+        )
+        enviar(e.contribuyente, e.anio)
+
+        val v2 = "PREDIAL-${e.contribuyente}-${e.anio}-C1-v2"
+        val alta = PEDIDOS.single { it.alta && it.referencia == v2 }
+        assertFalse("sustituye_a" in alta.cuerpo, alta.cuerpo.toString())
+        val despues = ordenes(e.contribuyente, e.anio)
+        assertEquals(EstadoOrdenCaja.ENVIADA, despues.getValue(v2)["estado"].asString())
+        assertFalse(despues.getValue(v2)["pagada"].asBoolean())
+        assertTrue(vigenciaDe(v2, importe(despues.getValue(v2)["importe"]))["vigente"].asBoolean())
+    }
+
     @Test
     fun `registradoRepetidoTrasAnulacionNoRevive`() {
         val e = Escenario()
@@ -323,6 +368,25 @@ class PagosApiTest : ConPagosApiTest() {
     ): JsonNode {
         val fila = lista(matriz(e)["filas"]) { it }.first { it["servicio"]["id"].asString() == cuota["servicio"].asString() }
         return fila["meses"][cuota["periodo"].asInt() - 1]
+    }
+
+    // caja's question of vigencia of one orden: its answer
+    private fun vigenciaDe(
+        referencia: String,
+        importe: String
+    ): JsonNode {
+        val result =
+            client
+                .post()
+                .uri("/api/srtm/caja/ordenes/vigencia")
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue("""{"ordenes":[{"referencia_externa":"$referencia","importe":"$importe"}]}""")
+                .header(HttpHeaders.AUTHORIZATION, caja)
+                .exchange()
+                .expectBody(String::class.java)
+                .returnResult()
+        assertEquals(HttpStatus.OK.value(), result.status.value(), result.responseBody)
+        return tree(result.responseBody!!)["ordenes"][0]
     }
 
     private fun saldo(e: Escenario): BigDecimal = caja(e.contribuyente, e.anio)["saldo_a_favor"].decimalValue()

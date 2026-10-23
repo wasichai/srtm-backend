@@ -84,6 +84,7 @@ class PagosService(
         val vigentes = cuotas.ordenes
         val recibos = pagadas.deOrdenes(ordenes.values.filter { it.id in vigentes }.mapNotNull { it.id }).associate { it.orden to it.recibo }
         val reemplazos = sustitutas(ordenes.values.filter { it.id !in vigentes })
+        val conPago = pagadas.conPago(ordenes.values.filter { it.estado == EstadoOrdenCaja.PAGADA_EN_CAJA }.mapNotNull { it.id })
         val respuestas =
             referencias.map { r ->
                 val orden = ordenes[r]
@@ -94,7 +95,8 @@ class PagosService(
                     vigente,
                     orden?.id?.let(recibos::get),
                     orden?.referencia?.let(reemplazos::get),
-                    orden?.cuotaArbitrio?.let { if (it in cuotas.anuladas) cuotas.anuladas[it] ?: "sin motivo" else null }
+                    orden?.cuotaArbitrio?.let { if (it in cuotas.anuladas) cuotas.anuladas[it] ?: "sin motivo" else null },
+                    orden?.id in conPago
                 )
             }
         return RespuestaACaja(HttpStatus.OK, VigenciaDeOrdenes.cuerpo(respuestas))

@@ -208,6 +208,17 @@ class SincronizacionTest {
         assertEquals(Plan(emptyList(), emptyList(), emptyList(), 1), planificar(listOf(deseada(version = 2)), listOf(sola)))
     }
 
+    // Ruling 28: a PAGADA_EN_CAJA holds its ranura only while no pago of caja came for it. once one came (a cuenta:
+    // caja refused the retiro, the cuota was gone), the debt that reappears is a new alta
+    @Test
+    fun pagadaEnCajaConPagoNoRetieneLaRanura() {
+        val pagada = actual(EstadoOrdenCaja.PAGADA_EN_CAJA)
+        val d = deseada(version = 2)
+
+        assertEquals(Plan(emptyList(), emptyList(), emptyList()), planificar(listOf(d), listOf(pagada)))
+        assertEquals(Plan(listOf(Alta(d, null)), emptyList(), emptyList()), planificar(listOf(d), listOf(pagada), conPago = setOf(pagada.id!!)))
+    }
+
     // Ruling 27: a sincronización a pedido sends again the ERROR whose referencia srtm still wants, and withdraws the
     // other ERROR (caja may hold them, and they would hold their ranura for ever): nothing for a ranura paid, nor for
     // what is not ERROR

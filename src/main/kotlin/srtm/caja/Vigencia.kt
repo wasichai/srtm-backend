@@ -45,14 +45,16 @@ object VigenciaDeOrdenes {
     // an orden srtm collects: the one that exists in the organization, was sent (ENVIADA, or POR_ENVIAR already tried:
     // caja asking about it proves it holds it, and the pagos take it as vigente too), is still its cuota's (not
     // annulled, not replaced) and was not paid in caja. otherwise the motivo says why (the cuota's first: an orden srtm
-    // already withdrew still says why). importe: srtm's
+    // already withdrew still says why). importe: srtm's. conPago: a pago of caja came for it (Ruling 28): a
+    // PAGADA_EN_CAJA whose pago went a cuenta is not paid, srtm withdrew it
     fun decidir(
         referencia: String,
         orden: OrdenCaja?,
         cuotaVigente: Boolean,
         recibo: String?,
         sustituta: String?,
-        anulacion: String?
+        anulacion: String?,
+        conPago: Boolean = false
     ): VigenciaDeOrden {
         if (orden == null) return VigenciaDeOrden(referencia, false, null, "no existe")
         val importe = orden.importe?.setScale(2, RoundingMode.HALF_UP)?.toPlainString()
@@ -63,8 +65,8 @@ object VigenciaDeOrdenes {
                 !cuotaVigente -> "la cuota ya no se cobra"
                 // the recibo first: a PAGADA_EN_CAJA orden whose pago srtm already has names it
                 recibo != null -> "ya pagada con el recibo $recibo"
-                orden.estado == EstadoOrdenCaja.PAGADA_EN_CAJA -> "ya pagada en caja"
-                orden.estado in RETIRADAS_POR_SRTM -> "retirada"
+                orden.estado == EstadoOrdenCaja.PAGADA_EN_CAJA && !conPago -> "ya pagada en caja"
+                orden.estado in RETIRADAS_POR_SRTM || orden.estado == EstadoOrdenCaja.PAGADA_EN_CAJA -> "retirada"
                 orden.estado != EstadoOrdenCaja.ENVIADA && !intentada(orden) -> "todavía no se envió a caja"
                 else -> null
             }

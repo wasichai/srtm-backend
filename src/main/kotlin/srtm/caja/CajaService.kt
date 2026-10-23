@@ -332,7 +332,7 @@ class CajaService(
     }
 
     // GET /caja: the contribuyente's ordenes of the year, each paid when a pago of caja was applied to it (or caja said
-    // so to its retiro), and its saldo a favor
+    // so to its retiro, while its pago has not come: Ruling 28), and its saldo a favor
     suspend fun estado(
         contribuyente: UUID,
         anio: Int
@@ -340,8 +340,10 @@ class CajaService(
         cajaDelLlamante() ?: throw ConflictException(SIN_CAJA_CONFIGURADA)
         registros.get(CONTRIBUYENTE, Contribuyente::class.java, contribuyente)
         val pagadasAqui = pagadas.deContribuyentes(listOf("$contribuyente")).map { it.orden }.toSet()
+        val suyas = ordenes(contribuyente, anio)
+        val conPago = conPago(suyas)
         val ordenes =
-            ordenes(contribuyente, anio).sortedWith(compareBy({ it.ranura }, { it.referencia })).map {
+            suyas.sortedWith(compareBy({ it.ranura }, { it.referencia })).map {
                 OrdenEnCaja(
                     it.id,
                     it.referencia,
@@ -350,8 +352,8 @@ class CajaService(
                     it.importe,
                     it.concepto,
                     it.estado,
-                    // PAGADA_EN_CAJA too: caja refused its retiro because it is paid there, whether or not its pago arrived
-                    it.estado == EstadoOrdenCaja.PAGADA_EN_CAJA || it.id in pagadasAqui,
+                    // PAGADA_EN_CAJA too: caja refused its retiro because it is paid there, until its pago arrives
+                    (it.estado == EstadoOrdenCaja.PAGADA_EN_CAJA && it.id !in conPago) || it.id in pagadasAqui,
                     it.ultimoError,
                     it.enviadaEn,
                     it.retiradaEn
@@ -379,8 +381,9 @@ class CajaService(
         val deseadas =
             deseadasPredial(id, anio, suyas.mapNotNull { it.cuotaPredial }.toSet()) +
                 deseadasArbitrio(id, anio, suyas.mapNotNull { it.cuotaArbitrio }.toSet())
-        val actuales = if (aPedido) reintentar(leidas, reintentosAPedido(deseadas, leidas), motivoDeRetiro) else leidas
-        val plan = planificar(deseadas, actuales)
+        val conPago = conPago(leidas)
+        val actuales = if (aPedido) reintentar(leidas, reintentosAPedido(deseadas, leidas, conPago), motivoDeRetiro) else leidas
+        val plan = planificar(deseadas, actuales, conPago)
         val tabla = if (plan.cancelar.isEmpty() && plan.retiros.isEmpty()) null else tabla()
         val ranuraDe = actuales.filter { it.id != null }.associate { UUID.fromString(it.id) to it.ranura }
         val (canceladas, tomadas) = plan.cancelar.partition { cancelar(tabla!!, it, motivoDeRetiro) }
@@ -522,6 +525,10 @@ class CajaService(
             )
         }
     }
+
+    // which PAGADA_EN_CAJA among these a pago of caja came for (Ruling 28): nothing read when there is none
+    private suspend fun conPago(ordenes: List<OrdenCaja>): Set<String> =
+        pagadas.conPago(ordenes.filter { it.estado == EstadoOrdenCaja.PAGADA_EN_CAJA }.mapNotNull { it.id })
 
     private suspend fun ordenes(
         contribuyente: UUID,
