@@ -586,9 +586,10 @@ Todo el predio se graba junto o no se graba nada. Al grabar la declaración, el 
 cuotas se redeterminaron, o por qué no se pudo. Un predio sin cuotas del año no se determina por esto: para eso está
 la determinación del año (<<determinacion-masiva>>).
 
-WARNING: El {sigla} no registra pagos. Una cuota que el contribuyente *ya pagó* también se anula y se escribe de
-nuevo si su mes cambia, aunque la caja la haya cobrado. Antes de corregir la declaración de un predio con meses
-pagados, coordine con la caja la devolución o la compensación de la diferencia.
+WARNING: Una cuota *pagada en caja* no se redetermina: queda como se pagó, y el aviso cuenta cuántas cuotas pagadas
+habrían cambiado. La diferencia no se calcula sola. Antes de corregir la declaración de un predio con cuotas pagadas,
+coordine con la caja la devolución o la compensación de la diferencia. Una cuota pagada en caja tampoco se puede
+anular.
 
 Casos especiales::
 * *La declaración se graba, pero el aviso dice que no se pudieron redeterminar los arbitrios: …*: falta un dato (por

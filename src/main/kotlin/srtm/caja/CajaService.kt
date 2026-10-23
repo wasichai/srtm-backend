@@ -93,7 +93,7 @@ data class OrdenEnCaja(
     val retiradaEn: Instant?
 )
 
-// saldo_a_favor: what caja collected over the debt (0 until the pagos arrive)
+// saldo_a_favor: what caja collected that srtm could not apply to a debt (#165, Pagadas.saldoAFavor)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class EstadoCaja(
     val ordenes: List<OrdenEnCaja>,
@@ -103,27 +103,42 @@ data class EstadoCaja(
 )
 
 // a cuota of the liquidación and the cuota_predial that stands for it: the vigente one (the highest revision of its
-// numero) while its monto is the same, else the next revision, still to write (escrita null)
+// numero) while its monto is the same, else the next revision, still to write (escrita null). pagada: its vigente one
+// was paid in caja, and stands whatever the liquidación says now
 data class PredialDeseada(
     val cuota: Cuota,
     val revision: Int,
-    val escrita: CuotaPredial?
+    val escrita: CuotaPredial?,
+    val pagada: Boolean = false
 )
 
-// D4: the cuotas with something to collect (monto > 0), each by its vigente cuota_predial or its next revision
+// the vigente cuota_predial of each numero: its highest revision
+fun vigentesPredial(escritas: List<CuotaPredial>): Map<Int, CuotaPredial> =
+    escritas.filter { it.numero != null && it.revision != null }.groupBy { it.numero!! }.mapValues { (_, cs) -> cs.maxBy { it.revision!! } }
+
+// D4: the cuotas with something to collect (monto > 0), each by its vigente cuota_predial or its next revision. D7: a
+// numero whose vigente cuota_predial is among `pagadas` (paid in caja) keeps it, with its monto, even when the
+// liquidación no longer has that cuota: a paid cuota never gets a new revision
 fun prediales(
     cuotas: List<Cuota>,
-    escritas: List<CuotaPredial>
+    escritas: List<CuotaPredial>,
+    pagadas: Set<String> = emptySet()
 ): List<PredialDeseada> {
-    val vigentes = escritas.filter { it.numero != null && it.revision != null }.groupBy { it.numero!! }.mapValues { (_, cs) -> cs.maxBy { it.revision!! } }
-    return cuotas.filter { it.monto.signum() > 0 }.map { cuota ->
-        val vigente = vigentes[cuota.numero]
-        if (vigente != null && vigente.monto?.compareTo(cuota.monto) == 0) {
-            PredialDeseada(cuota, vigente.revision!!, vigente)
-        } else {
-            PredialDeseada(cuota, (vigente?.revision ?: 0) + 1, null)
+    val vigentes = vigentesPredial(escritas)
+    val pagados =
+        vigentes.values
+            .filter { it.id in pagadas && it.monto != null && it.vencimiento != null }
+            .associate { it.numero!! to PredialDeseada(Cuota(it.numero, it.monto!!, it.vencimiento!!), it.revision!!, it, pagada = true) }
+    val porCobrar =
+        cuotas.filter { it.monto.signum() > 0 && it.numero !in pagados }.map { cuota ->
+            val vigente = vigentes[cuota.numero]
+            if (vigente != null && vigente.monto?.compareTo(cuota.monto) == 0) {
+                PredialDeseada(cuota, vigente.revision!!, vigente)
+            } else {
+                PredialDeseada(cuota, (vigente?.revision ?: 0) + 1, null)
+            }
         }
-    }
+    return (porCobrar + pagados.values).sortedBy { it.cuota.numero }
 }
 
 // D5: what caja shows of each orden
@@ -174,6 +189,7 @@ class CajaService(
     private val tablas: TablasCore,
     private val db: DatabaseClient,
     private val envio: EnvioACaja,
+    private val pagadas: Pagadas,
     transacciones: ReactiveTransactionManager
 ) {
     private val transaccion = TransactionalOperator.create(transacciones)
@@ -276,6 +292,30 @@ class CajaService(
         }
     }
 
+    // #165: ordenes caja holds as PENDIENTE again (its PAGO_ANULADO returned them) whose debt srtm no longer has:
+    // queued as retiros, by compare-and-set from what they were (ENVIADA, or PAGADA_EN_CAJA after a retiro caja
+    // refused), with a try count of their own, and sent now for the plazo; the rest is the loop's
+    suspend fun retirarDevueltas(ids: List<UUID>): ResumenCaja {
+        if (ids.isEmpty()) return ResumenCaja()
+        val t = tabla()
+        val movidas =
+            ids.filter { id ->
+                db
+                    .sql(
+                        "UPDATE ${t.tabla} SET ${t.columna("estado")} = :por_retirar, ${t.columna("motivo")} = :motivo, ${t.columna("intentos")} = 0, " +
+                            "${t.columna("ultimo_error")} = NULL, updated_at = now() WHERE id = :id AND ${t.columna("estado")} IN (:enviada, :pagada)"
+                    ).bind("por_retirar", EstadoOrdenCaja.POR_RETIRAR)
+                    .bind("motivo", MOTIVO_SIN_DEUDA)
+                    .bind("id", id)
+                    .bind("enviada", EstadoOrdenCaja.ENVIADA)
+                    .bind("pagada", EstadoOrdenCaja.PAGADA_EN_CAJA)
+                    .fetch()
+                    .awaitRowsUpdated() > 0
+            }
+        if (movidas.isEmpty()) return ResumenCaja()
+        return envio.enviar(movidas, config.plazoEnLinea)
+    }
+
     // a caja configured twice is none for the hooks: nothing is sent
     private suspend fun hayCaja(): Boolean =
         try {
@@ -289,13 +329,15 @@ class CajaService(
         return ResumenCaja(error = (e as? WasichaiException)?.message ?: "No se pudo sincronizar con caja")
     }
 
-    // GET /caja: the contribuyente's ordenes of the year
+    // GET /caja: the contribuyente's ordenes of the year, each paid when a pago of caja was applied to it (or caja said
+    // so to its retiro), and its saldo a favor
     suspend fun estado(
         contribuyente: UUID,
         anio: Int
     ): EstadoCaja {
         cajaDelLlamante() ?: throw ConflictException(SIN_CAJA_CONFIGURADA)
         registros.get(CONTRIBUYENTE, Contribuyente::class.java, contribuyente)
+        val pagadasAqui = pagadas.deContribuyentes(listOf("$contribuyente")).map { it.orden }.toSet()
         val ordenes =
             ordenes(contribuyente, anio).sortedWith(compareBy({ it.ranura }, { it.referencia })).map {
                 OrdenEnCaja(
@@ -306,13 +348,14 @@ class CajaService(
                     it.importe,
                     it.concepto,
                     it.estado,
-                    it.estado == EstadoOrdenCaja.PAGADA_EN_CAJA,
+                    // PAGADA_EN_CAJA too: caja refused its retiro because it is paid there, whether or not its pago arrived
+                    it.estado == EstadoOrdenCaja.PAGADA_EN_CAJA || it.id in pagadasAqui,
                     it.ultimoError,
                     it.enviadaEn,
                     it.retiradaEn
                 )
             }
-        return EstadoCaja(ordenes, BigDecimal.ZERO)
+        return EstadoCaja(ordenes, pagadas.saldoAFavor("$contribuyente"))
     }
 
     // inside the transaction: the plan written. what it did, and the ordenes to send now (the new ones, the retiros,
@@ -328,7 +371,14 @@ class CajaService(
         val persona = registros.get(CONTRIBUYENTE, Contribuyente::class.java, id)
         if (persona.tipoDocumento == SIN_DOCUMENTO) return ResumenCaja(sinDocumento = 1) to emptyList()
         val actuales = ordenes(id, anio)
-        val plan = planificar(deseadasPredial(id, anio) + deseadasArbitrio(id, anio), actuales)
+        // under the contribuyente's lock, as a pago that arrives (PagosService): a cuota paid is no alta nor retiro
+        val suyas = pagadas.deContribuyentes(listOf("$id"))
+        val plan =
+            planificar(
+                deseadasPredial(id, anio, suyas.mapNotNull { it.cuotaPredial }.toSet()) +
+                    deseadasArbitrio(id, anio, suyas.mapNotNull { it.cuotaArbitrio }.toSet()),
+                actuales
+            )
         val tabla = if (plan.cancelar.isEmpty() && plan.retiros.isEmpty()) null else tabla()
         val ranuraDe = actuales.filter { it.id != null }.associate { UUID.fromString(it.id) to it.ranura }
         val (canceladas, tomadas) = plan.cancelar.partition { cancelar(tabla!!, it, motivoDeRetiro) }
@@ -385,16 +435,19 @@ class CajaService(
     }
 
     // D4: the liquidación's cuotas with something to collect, each by its cuota_predial (written when its monto
-    // changed). a liquidación that lacks a parámetro has none
+    // changed). a liquidación that lacks a parámetro has none. D7: the cuotas_predial among `pagadas` (paid in caja)
+    // stand as they were paid, with or without a liquidación
     private suspend fun deseadasPredial(
         id: UUID,
-        anio: Int
+        anio: Int,
+        pagadas: Set<String>
     ): List<OrdenDeseada> {
         val liquidacion = liquidaciones.determinar(id, anio).liquidacion
-        if (liquidacion.faltan.isNotEmpty()) return emptyList()
+        if (liquidacion.faltan.isNotEmpty() && pagadas.isEmpty()) return emptyList()
+        val cuotas = if (liquidacion.faltan.isEmpty()) liquidacion.cuotas else emptyList()
         val escritas = registros.all(ObjetosCaja.CUOTA_PREDIAL, CuotaPredial::class.java, filters = mapOf("contribuyente" to "$id", "anio" to "$anio"))
         val hoy = LocalDate.now(LIMA)
-        return prediales(liquidacion.cuotas, escritas).map { p ->
+        return prediales(cuotas, escritas, pagadas).map { p ->
             val n = p.cuota.numero
             val cuota =
                 p.escrita ?: registros.create(
@@ -424,16 +477,17 @@ class CajaService(
                 detalle = null,
                 cuotaArbitrio = null,
                 cuotaPredial = cuota.id?.let(UUID::fromString),
-                pagada = false
+                pagada = p.pagada
             )
         }
     }
 
     // the contribuyente's vigentes cuotas de arbitrio of the year with something to collect. vigente is read over each
-    // predio's year: a correction may have charged the month to someone else
+    // predio's year: a correction may have charged the month to someone else. pagadas: the ones paid in caja
     private suspend fun deseadasArbitrio(
         id: UUID,
-        anio: Int
+        anio: Int,
+        pagadas: Set<String>
     ): List<OrdenDeseada> {
         val suyas = registros.all(CUOTA_ARBITRIO, CuotaArbitrio::class.java, filters = mapOf("contribuyente" to "$id", "anio" to "$anio"))
         if (suyas.isEmpty()) return emptyList()
@@ -462,7 +516,7 @@ class CajaService(
                 detalle = codigos[q.predio],
                 cuotaArbitrio = UUID.fromString(q.id),
                 cuotaPredial = null,
-                pagada = false
+                pagada = q.id in pagadas
             )
         }
     }

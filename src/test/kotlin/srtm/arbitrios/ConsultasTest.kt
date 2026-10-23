@@ -2,6 +2,7 @@ package srtm.arbitrios
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import srtm.impuesto.ParametroTributario
 import srtm.rentas.ANULADA
@@ -102,6 +103,17 @@ class ConsultasTest {
         // formula does not repeat the monto (Calculo.formula)
         assertEquals(1, enero.desglose.size)
         assertEquals("8.50 S/ por predio", enero.desglose[0].formula)
+    }
+
+    // #165: a month whose every cuota was paid in caja says so
+    @Test
+    fun `a cell whose cuotas were paid in caja is pagada`() {
+        val todas = guardadas(hoy, Arbitrios.determinar(contexto, datos(emptyList()), "Determinación de prueba", hoy).cuotas)
+        val enero = todas.first { it.periodo == 1 }
+        val m = Consultas.matriz(contexto, datos(todas), personas, hoy, pagadas = setOf(enero.id!!))
+        val fila = m.filas.first { it.servicio.id == enero.servicio }
+        assertTrue(fila.meses[0]!!.pagada)
+        assertEquals(List(11) { false }, fila.meses.drop(1).map { it!!.pagada })
     }
 
     @Test

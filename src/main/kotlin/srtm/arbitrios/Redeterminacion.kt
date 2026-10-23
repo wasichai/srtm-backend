@@ -9,13 +9,15 @@ import java.time.LocalDate
 // it: the twelve months computed again with the declaraciones as they are now (completa), and compared with the
 // vigente cuotas (comparar). a month whose cuota comes out the same is not touched; one that changed is annulled and
 // written again as the next version of its clave; one without a cuota that now has one is written; one no longer
-// charged (its titular gone) is annulled. srtm has no payments: a cuota already paid is annulled all the same
-// (docs/manuales/usuario/arbitrios-emision.adoc, redeterminar). ArbitriosService.redeterminarPredio reads and writes
+// charged (its titular gone) is annulled. a cuota paid in caja (#165, D7) is neither annulled nor written again: it
+// stays as it was paid, and is counted (by its servicio, month and secuencia: another secuencia is another cuota). ArbitriosService.redeterminarPredio reads and writes
 object Redeterminacion {
-    // what a redeterminación writes and annuls: never a cuota that comes out the same
+    // what a redeterminación writes and annuls: never a cuota that comes out the same. pagadas: the cuotas paid in
+    // caja it would have changed, left as they are
     data class Cambios(
         val escribir: List<CuotaArbitrio>,
-        val anular: List<CuotaArbitrio>
+        val anular: List<CuotaArbitrio>,
+        val pagadas: Int = 0
     )
 
     // Arbitrios.determinar with every cuota of the year counted as annulled: no month is skipped for having one, each
@@ -33,20 +35,27 @@ object Redeterminacion {
     }
 
     // the vigente cuotas of a predio's year (Arbitrios.vigentes) against the ones computed now, by servicio, month and
-    // secuencia. a cuota without secuencia (one PU per predio, before #84) is the lowest one's of its month
+    // secuencia. a cuota without secuencia (one PU per predio, before #84) is the lowest one's of its month. pagadas:
+    // the ids of the vigentes paid in caja: their cuota (servicio, month and secuencia) is not touched
     fun comparar(
         vigentes: List<CuotaArbitrio>,
-        calculadas: List<CuotaArbitrio>
+        calculadas: List<CuotaArbitrio>,
+        pagadas: Set<String> = emptySet()
     ): Cambios {
         val menores =
             calculadas
                 .groupBy { it.servicio to it.periodo }
                 .mapValues { (_, cs) -> cs.minOf { secuenciaUso(it.secuenciaUso) } }
-        val antes = vigentes.associateBy { llave(it, menores[it.servicio to it.periodo] ?: secuenciaUso(null)) }
-        val ahora = calculadas.associateBy { llave(it, secuenciaUso(it.secuenciaUso)) }
-        val escribir = calculadas.filter { q -> antes[llave(q, secuenciaUso(q.secuenciaUso))]?.let { igual(it, q) } != true }
-        val anular = vigentes.filter { q -> ahora[llave(q, menores[q.servicio to q.periodo] ?: secuenciaUso(null))]?.let { igual(q, it) } != true }
-        return Cambios(escribir, anular)
+        val deAntes = { q: CuotaArbitrio -> llave(q, menores[q.servicio to q.periodo] ?: secuenciaUso(null)) }
+        val deAhora = { q: CuotaArbitrio -> llave(q, secuenciaUso(q.secuenciaUso)) }
+        val antes = vigentes.associateBy(deAntes)
+        val ahora = calculadas.associateBy(deAhora)
+        val escribir = calculadas.filter { q -> antes[deAhora(q)]?.let { igual(it, q) } != true }
+        val anular = vigentes.filter { q -> ahora[deAntes(q)]?.let { igual(q, it) } != true }
+        val pagados = vigentes.filter { it.id != null && it.id in pagadas }.map(deAntes).toSet()
+        if (pagados.isEmpty()) return Cambios(escribir, anular)
+        val tocados = (anular.map(deAntes) + escribir.map(deAhora)).toSet()
+        return Cambios(escribir.filter { deAhora(it) !in pagados }, anular.filter { deAntes(it) !in pagados }, pagados.count { it in tocados })
     }
 
     // whether a declaración's change (null: one created, or deleted) touches what the arbitrios read: who covers

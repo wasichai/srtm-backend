@@ -83,3 +83,40 @@ data class CuotaPredial(
     val clave: String? = null,
     val contribuyente: String? = null
 )
+
+// #165: a pago or an anulación of a pago caja told srtm of (PagosService). respuesta: the exact body srtm answered,
+// repeated by the 409 of the same pagoId
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class PagoCaja(
+    val id: String? = null,
+    val pagoId: String? = null,
+    val tipo: String? = null,
+    val reciboNumero: String? = null,
+    val reciboSerie: String? = null,
+    val fechaPago: LocalDate? = null,
+    val cajero: String? = null,
+    val formaPago: String? = null,
+    val pagadorDocumento: String? = null,
+    val pagadorNombre: String? = null,
+    val total: BigDecimal? = null,
+    val pagoOriginal: String? = null,
+    val motivo: String? = null,
+    val aplicado: Boolean? = null,
+    val aCuenta: Boolean? = null,
+    val respuesta: String? = null,
+    val contribuyente: String? = null
+)
+
+// one orden a pago covers, applied to its cuota or kept a cuenta. clave: pago_id|referencia
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class PagoCajaDetalle(
+    val id: String? = null,
+    val referencia: String? = null,
+    val importe: BigDecimal? = null,
+    val aplicado: Boolean? = null,
+    val motivo: String? = null,
+    val clave: String? = null,
+    val pago: String? = null,
+    val orden: String? = null,
+    val contribuyente: String? = null
+)

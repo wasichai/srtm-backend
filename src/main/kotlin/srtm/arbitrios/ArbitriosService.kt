@@ -8,9 +8,12 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.ReactiveTransactionManager
 import org.springframework.transaction.reactive.TransactionalOperator
 import org.springframework.transaction.reactive.executeAndAwait
+import srtm.Candado
+import srtm.Candados
 import srtm.Observacion
 import srtm.caja.CajaService
 import srtm.caja.CambioDeDeuda
+import srtm.caja.Pagadas
 import srtm.impuesto.ParametrosTributarios
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
@@ -76,6 +79,8 @@ class ArbitriosService(
     private val metadata: MetadataService,
     private val currentUser: CurrentUser,
     private val caja: CajaService,
+    private val pagadas: Pagadas,
+    private val candados: Candados,
     transacciones: ReactiveTransactionManager
 ) {
     private val transaccion = TransactionalOperator.create(transacciones)
@@ -192,7 +197,8 @@ class ArbitriosService(
         }
 
     // POST /arbitrios/cuotas/{id}/anulacion: the cuota stops counting, and the next determination of its predio writes
-    // it again with the next version of its clave. a cuota is annulled once (409); motivo and observación say why (400)
+    // it again with the next version of its clave. a cuota is annulled once (409); motivo and observación say why (400).
+    // a cuota paid in caja is not annulled (409, #165): its pago would be left without its debt
     suspend fun anular(
         id: UUID,
         pedido: PedidoAnulacion
@@ -208,21 +214,28 @@ class ArbitriosService(
         val cuota = registros.get(CUOTA_ARBITRIO, CuotaArbitrio::class.java, id)
         val anulacion =
             try {
-                registros.create(
-                    ANULACION_CUOTA_ARBITRIO,
-                    AnulacionCuotaArbitrio::class.java,
-                    Records.attributes(
-                        AnulacionCuotaArbitrio(
-                            cuota = cuota.id,
-                            predio = cuota.predio,
-                            anio = cuota.anio,
-                            motivo = motivo,
-                            observacion = observacion,
-                            fecha = LocalDate.now(),
-                            clave = cuota.id
+                // whether it was paid, read under its contribuyente's lock and written in the same transaction: a pago
+                // of caja does not commit in between (Candados, the caja's locks)
+                transaccion.executeAndAwait {
+                    val suyo = listOfNotNull(cuota.contribuyente)
+                    bloquearEnCaja(suyo)
+                    pagadas.cuotasArbitrio(suyo)[cuota.id]?.let { throw ConflictException("la cuota ya se pagó en caja (recibo $it)") }
+                    registros.create(
+                        ANULACION_CUOTA_ARBITRIO,
+                        AnulacionCuotaArbitrio::class.java,
+                        Records.attributes(
+                            AnulacionCuotaArbitrio(
+                                cuota = cuota.id,
+                                predio = cuota.predio,
+                                anio = cuota.anio,
+                                motivo = motivo,
+                                observacion = observacion,
+                                fecha = LocalDate.now(),
+                                clave = cuota.id
+                            )
                         )
                     )
-                )
+                }
             } catch (_: DuplicateKeyException) {
                 throw ConflictException("La cuota ya está anulada")
             }
@@ -297,28 +310,40 @@ class ArbitriosService(
         val hoy = LocalDate.now()
         val d = Redeterminacion.completa(contexto, datos, observacion, hoy)
         if (d.faltan.isNotEmpty()) throw FaltanArbitrios(anio, d.faltan, d.detalle)
-        val cambios = Redeterminacion.comparar(vigentes, d.cuotas)
-        if (cambios.escribir.isEmpty() && cambios.anular.isEmpty()) return ResultadoRedeterminacion()
-        exigirRedeterminar()
-        val anulaciones =
-            cambios.anular.map {
-                Records.attributes(
-                    AnulacionCuotaArbitrio(
-                        cuota = it.id,
-                        predio = it.predio,
-                        anio = it.anio,
-                        motivo = REDETERMINACION,
-                        observacion = observacion,
-                        fecha = hoy,
-                        clave = it.id
+        // #165: the cuotas paid in caja stay as they were paid. what is paid is read under the locks of the vigentes'
+        // contribuyentes, the ones a pago of caja takes, and the cuotas are written in the same transaction: no pago
+        // commits between the read and the write (Candados, the caja's locks)
+        val contribuyentes = vigentes.mapNotNull { it.contribuyente }.distinct().sorted()
+        return transaccion.executeAndAwait {
+            bloquearEnCaja(contribuyentes)
+            val cambios = Redeterminacion.comparar(vigentes, d.cuotas, pagadas.cuotasArbitrio(contribuyentes).keys)
+            if (cambios.escribir.isEmpty() && cambios.anular.isEmpty()) return@executeAndAwait ResultadoRedeterminacion(pagadas = cambios.pagadas)
+            exigirRedeterminar()
+            val anulaciones =
+                cambios.anular.map {
+                    Records.attributes(
+                        AnulacionCuotaArbitrio(
+                            cuota = it.id,
+                            predio = it.predio,
+                            anio = it.anio,
+                            motivo = REDETERMINACION,
+                            observacion = observacion,
+                            fecha = hoy,
+                            clave = it.id
+                        )
                     )
-                )
-            }
-        transaccion.executeAndAwait {
+                }
             registros.createAll(ANULACION_CUOTA_ARBITRIO, AnulacionCuotaArbitrio::class.java, anulaciones)
             registros.createAll(CUOTA_ARBITRIO, CuotaArbitrio::class.java, cambios.escribir.map(Records::attributes))
+            ResultadoRedeterminacion(cambios.escribir.size, cambios.anular.size, pagadas = cambios.pagadas)
         }
-        return ResultadoRedeterminacion(cambios.escribir.size, cambios.anular.size)
+    }
+
+    // inside a transaction: the caja's locks of these contribuyentes, in their order (Candados). an organization
+    // without caja has no pagos, and takes none
+    private suspend fun bloquearEnCaja(contribuyentes: List<String>) {
+        if (pagadas.organizacionConCaja() == null) return
+        for (c in contribuyentes.distinct().sorted()) candados.bloquearEnOrganizacion(Candado.CAJA_CONTRIBUYENTE, c)
     }
 
     // GET /predios/{id}/arbitrios
@@ -330,7 +355,7 @@ class ArbitriosService(
         val contexto = contexto(anio)
         val datos = delPredio(predio, anio)
         val personas = personas(datos.declaraciones.mapNotNull { it.contribuyente } + datos.existentes.mapNotNull { it.contribuyente })
-        return Consultas.matriz(contexto, datos, personas, LocalDate.now())
+        return Consultas.matriz(contexto, datos, personas, LocalDate.now(), pagadas = pagadasDe(datos))
     }
 
     // GET /contribuyentes/{id}/arbitrios: the predios of its declarations of the year and those it has cuotas of
@@ -346,7 +371,7 @@ class ArbitriosService(
             prediosDe(id, anio, conCuotas = true).map { predio ->
                 val datos = delPredio(predio, anio)
                 val personas = personas(datos.declaraciones.mapNotNull { it.contribuyente } + datos.existentes.mapNotNull { it.contribuyente })
-                Consultas.matriz(contexto, datos, personas, hoy, soloDe = id.toString())
+                Consultas.matriz(contexto, datos, personas, hoy, soloDe = id.toString(), pagadas = pagadasDe(datos))
             }
         return ArbitriosContribuyente(
             anio,
@@ -429,6 +454,10 @@ class ArbitriosService(
         if (cuotas.isEmpty()) return
         caja.despuesDeEscribir(enLinea) { CambioDeDeuda(motivo, porAnio(cuotas)) }
     }
+
+    // #165: the ids of the predio's cuotas paid in caja
+    private suspend fun pagadasDe(datos: PredioArbitrios): Set<String> =
+        pagadas.cuotasArbitrio(datos.existentes.mapNotNull { it.contribuyente }.distinct()).keys
 
     private fun porAnio(cuotas: List<CuotaArbitrio>): Map<Int, Set<UUID>> =
         cuotas

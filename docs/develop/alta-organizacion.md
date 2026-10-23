@@ -131,6 +131,62 @@ curl "$SRTM/api/srtm/brecha/2026/panel" -H "Authorization: Bearer $TOKEN"
 
 Sin ordenanza ni servicios de arbitrios del año, la corrida termina con «Δ arbitrios no calculado», como se espera.
 
+## 8. caja: los pagos (#165)
+
+El buzón de caja-backend entrega cada pago con `POST {url}/pagos`, y srtm lo recibe en `POST /api/srtm/caja/pagos`.
+Caja entra como una **cuenta de servicio de srtm** (wasichai ADR-043), y la organización sale de su token. Los pasos
+van como administrador de la organización, en el Core de srtm.
+
+**El rol `CAJA`:** crea y lee `pago_caja` y `pago_caja_detalle`, y lee lo que la imputación consulta.
+
+```bash
+curl -X POST "$SRTM/api/roles" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name": "CAJA", "label": "Caja (buzón de pagos)"}'
+curl -X PUT "$SRTM/api/roles/CAJA/permissions" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"permissions": [
+  {"objectName": "pago_caja", "action": "CREATE"}, {"objectName": "pago_caja", "action": "READ"},
+  {"objectName": "pago_caja_detalle", "action": "CREATE"}, {"objectName": "pago_caja_detalle", "action": "READ"},
+  {"objectName": "orden_caja", "action": "READ"}, {"objectName": "cuota_arbitrio", "action": "READ"},
+  {"objectName": "anulacion_cuota_arbitrio", "action": "READ"}, {"objectName": "cuota_predial", "action": "READ"},
+  {"objectName": "contribuyente", "action": "READ"}]}'
+```
+
+**La cuenta de servicio `caja`:**
+
+```bash
+curl -X POST "$SRTM/api/service-accounts" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name": "caja", "roles": ["CAJA"]}'
+```
+
+- **El secreto:** la respuesta trae `clientId` y `clientSecret`, y el secreto se muestra **una sola vez**. La salida se
+  redirige a un archivo con `chmod 600`, como la de `crear_cuenta_srtm.py`.
+- **Si se filtra:** `POST /api/service-accounts/{id}/secret` lo rota. Los tokens ya emitidos viven 15 minutos.
+
+**En caja-backend**, el destino `rentas` usa esa cuenta en vez de un `token` fijo (caja-backend#51):
+
+| Propiedad | Variable | Valor |
+|---|---|---|
+| `caja.buzon.destinos.rentas.url` | `CAJA_BUZON_DESTINOS_RENTAS_URL` | `https://<srtm>/api/srtm/caja` |
+| `caja.buzon.destinos.rentas.token-url` | `CAJA_BUZON_DESTINOS_RENTAS_TOKENURL` | `https://<srtm>/api/auth/token` |
+| `caja.buzon.destinos.rentas.client-id` | `CAJA_BUZON_DESTINOS_RENTAS_CLIENTID` | el `clientId` |
+| `caja.buzon.destinos.rentas.client-secret` | `CAJA_BUZON_DESTINOS_RENTAS_CLIENTSECRET` | el `clientSecret` |
+
+- **El sentido contrario:** srtm manda las órdenes a caja con `SRTM_CAJA_ORGANIZACIONES_<CLAVE>_URL`, `_CLIENT_ID` y
+  `_CLIENT_SECRET`. Esa es la cuenta de servicio de caja-backend.
+- **Sin esa entrada:** srtm contesta **503** a los pagos de la organización. Caja los reintenta y no los da por
+  entregados.
+
+**Qué contesta srtm:**
+
+| Caso | Respuesta |
+|---|---|
+| Todas las órdenes se aplican | 200 `{"aplicado":true,"a_cuenta":false,"motivo":null}` |
+| Alguna va a cuenta: otro importe, sustituida, ya no vigente, ya pagada o desconocida | 202 `{"aplicado":false,"a_cuenta":true,"motivo":"…"}` |
+| `pagoId` repetido | 409, con el mismo cuerpo de la primera vez |
+| `PAGO_ANULADO` | 200, con el `a_cuenta` del pago original |
+| `PAGO_ANULADO` cuyo original srtm no tiene | 503 `{"motivo":"no conozco el pago original"}` |
+| Cuerpo ilegible | 400, y caja lo deja `MUERTO` |
+| Sin token o con el token vencido | 401. Sin el rol, 403. Caja reintenta los dos |
+
 ## Registro de Ica (2026-10-20)
 
 **Dev:**
