@@ -66,7 +66,7 @@ object VigenciaDeOrdenes {
                 // the recibo first: a PAGADA_EN_CAJA orden whose pago srtm already has names it
                 recibo != null -> "ya pagada con el recibo $recibo"
                 orden.estado == EstadoOrdenCaja.PAGADA_EN_CAJA && !conPago -> "ya pagada en caja"
-                orden.estado in RETIRADAS_POR_SRTM || orden.estado == EstadoOrdenCaja.PAGADA_EN_CAJA -> "retirada"
+                orden.estado in RETIRADAS_POR_SRTM || orden.estado == EstadoOrdenCaja.PAGADA_EN_CAJA || retiroEnError(orden) -> "retirada"
                 orden.estado != EstadoOrdenCaja.ENVIADA && !intentada(orden) && !errorIntentado(orden) -> "todavía no se envió a caja"
                 else -> null
             }
@@ -92,8 +92,14 @@ object VigenciaDeOrdenes {
     // withdrawn: here it has its own motivo)
     private val RETIRADAS_POR_SRTM = setOf(EstadoOrdenCaja.POR_RETIRAR, EstadoOrdenCaja.RETIRADA, EstadoOrdenCaja.CANCELADA)
 
-    // Ruling 26: an ERROR already tried (a NoContesta exhausted) may be in caja, as an orden POR_ENVIAR tried
-    private fun errorIntentado(o: OrdenCaja) = o.estado == EstadoOrdenCaja.ERROR && (o.intentos ?: 0) > 0
+    // Ruling 26: an alta in ERROR already tried (a NoContesta exhausted) may be in caja, as an orden POR_ENVIAR tried.
+    // an alta never had caja's yes: an orden caja took (orden_id, enviada_en) that is ERROR now was being withdrawn
+    private fun errorIntentado(o: OrdenCaja) = o.estado == EstadoOrdenCaja.ERROR && (o.intentos ?: 0) > 0 && !fueEnviada(o)
+
+    // a retiro that ran out of tries: srtm withdraws it, caja does not collect it
+    private fun retiroEnError(o: OrdenCaja) = o.estado == EstadoOrdenCaja.ERROR && fueEnviada(o)
+
+    private fun fueEnviada(o: OrdenCaja) = o.enviadaEn != null || o.ordenId != null
 
     private fun invalida(
         campo: String,

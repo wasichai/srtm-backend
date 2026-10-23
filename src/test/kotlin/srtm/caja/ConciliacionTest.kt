@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test
 import tools.jackson.databind.json.JsonMapper
 import wasichai.core.common.ValidationException
 import java.math.BigDecimal
+import java.time.Instant
 import java.time.LocalDate
 
 // the pure rules of caja's conciliación (#166) and of its vigencia (#168)
@@ -88,6 +89,19 @@ class ConciliacionTest {
         val nunca = VigenciaDeOrdenes.decidir("R", intentada.copy(intentos = 0), true, null, null, null)
         assertFalse(nunca.vigente)
         assertEquals("todavía no se envió a caja", nunca.motivo)
+    }
+
+    // Ruling 26 for ERROR: only an alta that ran out of tries (never ENVIADA) may be caja's to collect. a retiro that
+    // ran out of them (it had been sent: enviada_en) is srtm withdrawing it: not vigente
+    @Test
+    fun `un error ya intentado es vigente solo si fue un alta`() {
+        val alta = OrdenCaja(importe = BigDecimal("12.5"), estado = EstadoOrdenCaja.ERROR, intentos = 20)
+        val retiro = alta.copy(enviadaEn = Instant.parse("2026-10-22T15:04:05Z"), ordenId = "o-1")
+
+        assertTrue(VigenciaDeOrdenes.decidir("R", alta, true, null, null, null).vigente)
+        val r = VigenciaDeOrdenes.decidir("R", retiro, true, null, null, null)
+        assertFalse(r.vigente)
+        assertEquals("retirada", r.motivo)
     }
 
     // Ruling 28: a PAGADA_EN_CAJA orden whose pago arrived and went a cuenta is no longer paid in caja: it was withdrawn
