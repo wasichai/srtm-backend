@@ -30,14 +30,16 @@ class PagosApiTest : ConPagosApiTest() {
     fun `pagoNormalAplicaYLaCuotaQuedaPagada`() {
         val e = Escenario()
         val cuota = determinadaYEnviada(e)
+        val pago = registrado(listOf(referencia(cuota) to importe(cuota["monto"])))
 
-        val (estado, cuerpo) = pagar(registrado(listOf(referencia(cuota) to importe(cuota["monto"]))))
+        val (estado, cuerpo) = pagar(pago)
 
         assertEquals(HttpStatus.OK, estado, cuerpo)
         assertEquals(APLICADO, cuerpo)
         assertTrue(celda(e, cuota)["pagada"].asBoolean())
         val o = ordenes(e.contribuyente, e.anio).getValue(referencia(cuota))
         assertTrue(o["pagada"].asBoolean(), o.toString())
+        assertEquals(tree(pago.json)["recibo"]["numero"].asString(), o["recibo"].asString(), o.toString())
         assertEquals(0, saldo(e).compareTo(BigDecimal.ZERO))
         // the other months are still debt
         assertEquals(1, lista(matriz(e)["filas"]) { f -> lista(f["meses"]) { it["pagada"].asBoolean() }.count { it } }.sum())
@@ -118,7 +120,9 @@ class PagosApiTest : ConPagosApiTest() {
         assertEquals(HttpStatus.OK, estado, cuerpo)
         assertEquals(APLICADO, cuerpo)
         assertFalse(celda(e, cuota)["pagada"].asBoolean())
-        assertFalse(ordenes(e.contribuyente, e.anio).getValue(referencia(cuota))["pagada"].asBoolean())
+        val o = ordenes(e.contribuyente, e.anio).getValue(referencia(cuota))
+        assertFalse(o["pagada"].asBoolean())
+        assertTrue(o["recibo"].isNull, o.toString())
     }
 
     // #175 (Ruling 36): C1-v1 was paid, then redetermined (D7 keeps it as it was paid), then its recibo annulled.

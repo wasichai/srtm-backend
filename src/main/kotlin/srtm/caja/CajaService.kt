@@ -77,7 +77,8 @@ data class CambioDeDeuda(
     val contribuyentes: Map<Int, Set<UUID>>
 )
 
-// an orden of the contribuyente as GET /caja shows it
+// an orden of the contribuyente as GET /caja shows it. recibo: serie-numero of the pago of caja applied to it, not
+// annulled (#175), else null (also a PAGADA_EN_CAJA whose pago has not come)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class OrdenEnCaja(
     val id: String?,
@@ -88,6 +89,7 @@ data class OrdenEnCaja(
     val concepto: String?,
     val estado: String?,
     val pagada: Boolean,
+    val recibo: String?,
     val ultimoError: String?,
     val enviadaEn: Instant?,
     val retiradaEn: Instant?
@@ -342,7 +344,7 @@ class CajaService(
     ): EstadoCaja {
         cajaDelLlamante() ?: throw ConflictException(SIN_CAJA_CONFIGURADA)
         registros.get(CONTRIBUYENTE, Contribuyente::class.java, contribuyente)
-        val pagadasAqui = pagadas.deContribuyentes(listOf("$contribuyente")).map { it.orden }.toSet()
+        val recibos = pagadas.deContribuyentes(listOf("$contribuyente")).associate { it.orden to it.recibo }
         val suyas = ordenes(contribuyente, anio)
         val conPago = conPago(suyas)
         val ordenes =
@@ -356,7 +358,8 @@ class CajaService(
                     it.concepto,
                     it.estado,
                     // PAGADA_EN_CAJA too: caja refused its retiro because it is paid there, until its pago arrives
-                    (it.estado == EstadoOrdenCaja.PAGADA_EN_CAJA && it.id !in conPago) || it.id in pagadasAqui,
+                    (it.estado == EstadoOrdenCaja.PAGADA_EN_CAJA && it.id !in conPago) || it.id in recibos,
+                    recibos[it.id],
                     it.ultimoError,
                     it.enviadaEn,
                     it.retiradaEn
