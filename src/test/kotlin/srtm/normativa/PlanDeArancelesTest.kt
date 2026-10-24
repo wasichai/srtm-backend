@@ -33,6 +33,8 @@ class PlanDeArancelesTest {
         assertTrue("otra" !in filas[0].valores)
         assertNull(filas[1].valores["cod_via"])
         assertThrows(ValidationException::class.java) { CsvDeAranceles.leer("id_aranc,valor_m2\nA-01,1") }
+        val vacio = assertThrows(ValidationException::class.java) { CsvDeAranceles.leer("# nada\n") }
+        assertEquals("El CSV no tiene cabecera: id_aranc,anio,valor_m2,...", vacio.message)
         assertThrows(ValidationException::class.java) { CsvDeAranceles.leer("id_aranc,anio,valor_m2\nA-01,2026,1,de más") }
     }
 
@@ -135,6 +137,16 @@ class PlanDeArancelesTest {
         val plan = planear(csv)
         assertEquals(1500, plan.crear.size)
         assertEquals(0, plan.rechazos.size)
+    }
+
+    @Test
+    fun `a lote that fails after others were written says the write is partial and that running it again is safe`() {
+        val e = PlanDeAranceles.parcial(escritos = 3, lotes = 15, filas = 300, causa = "se cortó la conexión")
+        assertEquals(
+            "La importación quedó a medias: se escribieron 3 de 15 lotes (300 filas) antes de un error (se cortó la conexión). " +
+                "Vuelva a importar el mismo archivo: es idempotente, lo escrito se salta y se completa lo que falta",
+            e.message
+        )
     }
 
     private fun arancel(

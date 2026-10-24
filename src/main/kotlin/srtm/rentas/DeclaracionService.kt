@@ -203,10 +203,11 @@ class DeclaracionService(
         val seUne = grupoDe(next) != grupoDe(stored)
         val otros = titulares(next).filter { it.id != id.toString() }
         val grupo = condominioCon(next, otros, seUne)
+        val pisaPadron = pisaArancelDePadron(id, next.idAranc)
         registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(grupo.first()))
         guardarDerivados(grupo.drop(1), otros)
         if (seUne) recalcularResto(stored)
-        marcarOrigenModificado(id)
+        marcarOrigenModificado(id, pisaPadron)
         val recalculo = recalcular(id)
         if (!seUne) replicarPredio(next, otros)
         return recalculo.despues.also { despuesDeCambiar(stored, it) }
@@ -224,9 +225,21 @@ class DeclaracionService(
             val cambios = delPredioCambiado(origen, otro, manual)
             if (cambios.isEmpty()) continue
             val otroId = UUID.fromString(otro.id)
+            val pisaPadron = "id_aranc" in cambios && pisaArancelDePadron(otroId, origen.idAranc)
             registros.replace(DECLARACION, Declaracion::class.java, otroId, campos.filterKeys { it in cambios })
-            escrita(otroId)
+            escrita(otroId, pisaPadron)
         }
+    }
+
+    // #188: a write that names a tramo de vía (idAranc) where the stored declaración had none and an external padrón's
+    // arancel: recalcular replaces that arancel with Normativa's, and once id_aranc is stored padronExterno no longer
+    // sees it. read before the write, for marcarOrigenModificado
+    private suspend fun pisaArancelDePadron(
+        id: UUID,
+        idAranc: String?
+    ): Boolean {
+        if (idAranc.isNullOrBlank()) return false
+        return ARANCEL in padronExterno(registros.get(DECLARACION, Map::class.java, id))
     }
 
     // a frontis principal the body does not send is the stored one: srtm-ui before #156 never sends it, and 0 clears it.

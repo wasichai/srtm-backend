@@ -34,6 +34,7 @@ import wasichai.core.identity.CurrentUser
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 
 // Normativa's aranceles (#188): the double signature over arancel, as NormativaService's over the parámetros. an
 // arancel is registered POR_VERIFICAR by the user (transcribio), corrected or deleted while so, verified by another
@@ -74,11 +75,16 @@ class ArancelesService(
         return PageResponse(pagina.content.map(::conEstado), pagina.page, pagina.size, pagina.totalElements, pagina.totalPages)
     }
 
-    // the arancel the DJ reads: the VIGENTE one of id_aranc in anio, or null
+    // the arancel the DJ reads: the VIGENTE one of id_aranc in anio, or null. Normativa keeps one VIGENTE per clave, but
+    // the importers' door (a VIGENTE insert by /api/objects) may let in a second: then the one of the lowest id, always
+    // the same, so a DJ does not flip between them from one recalculation to the next
     suspend fun vigente(
         idAranc: String,
         anio: Int
-    ): Arancel? = deLaClave(claveDeArancel(idAranc, anio)).firstOrNull { it.rige() }
+    ): Arancel? =
+        deLaClave(claveDeArancel(idAranc, anio))
+            .filter { it.rige() }
+            .minByOrNull { it.id.orEmpty() }
 
     // the arancel a DJ names (DeclaracionService): its VIGENTE one in the DJ's year, or a 400 on id_aranc
     suspend fun deLaDeclaracion(
@@ -127,13 +133,18 @@ class ArancelesService(
         val cambios = DatosDeArancel.de(cuerpo)
         val usuario = firma()
         return transaccion.executeAndAwait {
-            val antes = DatosDeArancel.validar(DatosDeArancel.atributos(leer(id)) + cambios)
-            val bloqueadas = listOf(leer(id).clave.orEmpty(), antes.clave.orEmpty()).distinct().sorted()
+            val leido = porVerificar(id, "se corrige")
+            val antes = DatosDeArancel.validar(DatosDeArancel.atributos(leido) + cambios)
+            // every lock of the transaction at once, sorted (the one order every path takes them in)
+            val bloqueadas = listOf(leido.clave.orEmpty(), antes.clave.orEmpty()).distinct().sorted()
             bloqueadas.forEach { bloquear(it) }
-            // read again under the locks: still POR_VERIFICAR, and its clave one of them
+            // read again under the locks: still POR_VERIFICAR, and with the same clave. one another correction moved
+            // meanwhile would need a lock out of order: a 409, to try again, never a lock taken late
             val guardado = porVerificar(id, "se corrige")
+            if (guardado.clave != leido.clave) {
+                throw ConflictException("El arancel cambió de clave mientras se corregía (${leido.clave} → ${guardado.clave}): vuelva a intentarlo")
+            }
             val a = DatosDeArancel.validar(DatosDeArancel.atributos(guardado) + cambios)
-            (listOf(guardado.clave.orEmpty(), a.clave.orEmpty()) - bloqueadas.toSet()).sorted().forEach { bloquear(it) }
             sinOtroConSuClave(a, guardado.id)
             conEstado(registros.replace(ARANCEL, Arancel::class.java, id, DatosDeArancel.atributos(a) + (TRANSCRIBIO to usuario)))
         }
@@ -204,9 +215,9 @@ class ArancelesService(
     // lote. the whole file is planned first (its rechazos, the claves it repeats); then each lote of the rows to write
     // (LOTE) is planned again in its own transaction, under the locks of its claves (sorted), against what is stored of
     // them now, and written, CONCURRENCIA lotes at a time: their claves are disjoint (the file repeats none), so no
-    // lote waits on another. a lote that fails leaves the others that finished written: the importación is
-    // idempotent, run it again. a Perené or Ica tariff (~1 500 rows) is some fifteen lotes, and no transaction holds
-    // them all
+    // lote waits on another. a lote that fails leaves the others that finished written, and the 409 says so
+    // (PlanDeAranceles.parcial): the importación is idempotent, run it again. a Perené or Ica tariff (~1 500 rows) is
+    // some fifteen lotes, and no transaction holds them all
     suspend fun importar(
         csv: String,
         dryRun: Boolean
@@ -219,23 +230,34 @@ class ArancelesService(
         if (dryRun) return resultado(true, plan.crear, plan.actualizar, plan.iguales, plan.rechazos)
         val clavePorFila = (plan.crear + plan.actualizar).associate { it.fila to it.arancel.clave.orEmpty() }
         val enCurso = Semaphore(CONCURRENCIA)
+        val porLote = filas.filter { it.linea in clavePorFila }.chunked(LOTE)
+        val escritos = AtomicInteger()
+        val filasEscritas = AtomicInteger()
         val lotes =
-            coroutineScope {
-                filas
-                    .filter { it.linea in clavePorFila }
-                    .chunked(LOTE)
-                    .map { lote ->
-                        async {
-                            enCurso.withPermit {
-                                transaccion.executeAndAwait {
-                                    val claves = lote.map { clavePorFila.getValue(it.linea) }.distinct().sorted()
-                                    claves.forEach { bloquear(it) }
-                                    val guardados = registros.donde(ARANCEL, Arancel::class.java, listOf(unoDe(CLAVE, claves)))
-                                    PlanDeAranceles.planear(lote, guardados, usuario).also { escribir(it) }
+            try {
+                coroutineScope {
+                    porLote
+                        .map { lote ->
+                            async {
+                                enCurso.withPermit {
+                                    transaccion
+                                        .executeAndAwait {
+                                            val claves = lote.map { clavePorFila.getValue(it.linea) }.distinct().sorted()
+                                            claves.forEach { bloquear(it) }
+                                            val guardados = registros.donde(ARANCEL, Arancel::class.java, listOf(unoDe(CLAVE, claves)))
+                                            PlanDeAranceles.planear(lote, guardados, usuario).also { escribir(it) }
+                                        }.also {
+                                            escritos.incrementAndGet()
+                                            filasEscritas.addAndGet(lote.size)
+                                        }
                                 }
                             }
-                        }
-                    }.awaitAll()
+                        }.awaitAll()
+                }
+            } catch (e: Exception) {
+                // nothing written: the error as it is. some lotes in: say so, and that running it again is safe
+                if (escritos.get() == 0) throw e
+                throw PlanDeAranceles.parcial(escritos.get(), porLote.size, filasEscritas.get(), e.message ?: e.javaClass.simpleName)
             }
         return resultado(
             false,

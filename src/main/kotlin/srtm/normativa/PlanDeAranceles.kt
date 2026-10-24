@@ -4,6 +4,7 @@ import srtm.Violaciones
 import srtm.leerRegistro
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
+import wasichai.core.common.ConflictException
 import wasichai.core.common.FieldViolation
 import wasichai.core.common.ValidationException
 import java.math.BigDecimal
@@ -77,7 +78,7 @@ object DatosDeArancel {
 object CsvDeAranceles {
     val COLUMNAS = CamposArancel.DATOS + listOf(CamposParametro.TRANSCRIBIO, CamposParametro.VERIFICO)
 
-    fun leer(texto: String): List<FilaCsv> = Csv.leer(texto, COLUMNAS, listOf("id_aranc", "anio", "valor_m2"))
+    fun leer(texto: String): List<FilaCsv> = Csv.leer(texto, COLUMNAS, listOf("id_aranc", "anio", "valor_m2"), "id_aranc,anio,valor_m2")
 }
 
 // an arancel the importación writes: a new one (id null) or a POR_VERIFICAR one it corrects, with the estado it leaves
@@ -165,6 +166,18 @@ object PlanDeAranceles {
         }
         return PlanDeArancel(crear, actualizar, iguales, rechazos)
     }
+
+    // the 409 of an importación that failed after `escritos` of its `lotes` were written (`filas` rows): what is in
+    // stays, and the same file run again skips it and writes the rest
+    fun parcial(
+        escritos: Int,
+        lotes: Int,
+        filas: Int,
+        causa: String
+    ) = ConflictException(
+        "La importación quedó a medias: se escribieron $escritos de $lotes lotes ($filas filas) antes de un error ($causa). " +
+            "Vuelva a importar el mismo archivo: es idempotente, lo escrito se salta y se completa lo que falta"
+    )
 }
 
 // the 200 of an importación of aranceles: what it writes (or would, with dry_run), what was already as the csv says,

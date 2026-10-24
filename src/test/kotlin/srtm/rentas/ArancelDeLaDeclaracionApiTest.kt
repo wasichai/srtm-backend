@@ -68,6 +68,21 @@ class ArancelDeLaDeclaracionApiTest : SrtmApiTest() {
     }
 
     @Test
+    fun `an external padrons arancel that id_aranc replaces marks the valuation as modified`() {
+        val t = tramo()
+        importarAranceles("$t,2026,22,ANA,BETO")
+        val id = declarar()["id"].asString()
+        val registro = "/api/objects/$DECLARACION/records/$id"
+        val atributos = fields(tree(send("GET", registro, null, HttpStatus.OK))["attributes"])
+        // the padrón's only value is its arancel
+        send("PUT", registro, mapOf("attributes" to atributos + ("arancel" to BigDecimal("35.50"))), HttpStatus.OK)
+        put("/api/srtm/declaraciones/$id", fields(declaracion(id)) + ("id_aranc" to t))
+        assertArancel("22", id)
+        val origen = tree(send("GET", "/api/srtm/declaraciones/$id/valuacion-origen", null, HttpStatus.OK))
+        assertEquals(true, origen["modificada"].asBoolean(), origen.toString())
+    }
+
+    @Test
     fun `the rectificatoria and the copy to another year take id_aranc - the copy keeps the number without an arancel that year`() {
         val t = tramo()
         importarAranceles("$t,2026,30,ANA,BETO")

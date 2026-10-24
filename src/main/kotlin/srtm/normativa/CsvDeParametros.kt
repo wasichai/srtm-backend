@@ -14,18 +14,20 @@ data class FilaCsv(
 object CsvDeParametros {
     val COLUMNAS = CamposParametro.DATOS + listOf(CamposParametro.TRANSCRIBIO, CamposParametro.VERIFICO)
 
-    fun leer(texto: String): List<FilaCsv> = Csv.leer(texto, COLUMNAS, listOf("tipo", "vigencia_desde"))
+    fun leer(texto: String): List<FilaCsv> = Csv.leer(texto, COLUMNAS, listOf("tipo", "vigencia_desde"), "tipo,clave,vigencia_desde")
 }
 
 // the csv of an importación of normativa (parámetros, aranceles): the lines that start with '#' are comments, the
-// first other line is the header, and only its known columns are read (`columnas`; `requeridas` must be there). a cell
+// first other line is the header, and only its known columns are read (`columnas`; `requeridas` must be there;
+// `cabecera`, how the 400 of a file without one starts it). a cell
 // between quotes may hold commas, and "" is a quote in it. a cell does not span lines. a malformed file is a 400 and
 // nothing of it is read
 object Csv {
     fun leer(
         texto: String,
         columnasConocidas: List<String>,
-        requeridas: List<String>
+        requeridas: List<String>,
+        cabecera: String
     ): List<FilaCsv> {
         val lineas =
             texto
@@ -33,7 +35,7 @@ object Csv {
                 .lines()
                 .mapIndexed { i, linea -> i + 1 to linea.removeSuffix("\r") }
                 .filter { (_, linea) -> linea.isNotBlank() && !linea.startsWith("#") }
-        val (lineaCabecera, cabecera) = lineas.firstOrNull() ?: throw malo("El CSV no tiene cabecera: ${requeridas.joinToString(",")},...")
+        val (lineaCabecera, cabecera) = lineas.firstOrNull() ?: throw malo("El CSV no tiene cabecera: $cabecera,...")
         val columnas = celdas(cabecera, lineaCabecera).map { it.trim() }
         val faltan = requeridas.filter { it !in columnas }
         if (faltan.isNotEmpty()) throw malo("La cabecera del CSV no tiene ${faltan.joinToString(", ")} (línea $lineaCabecera)")

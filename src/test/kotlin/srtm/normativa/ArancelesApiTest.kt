@@ -140,12 +140,9 @@ class ArancelesApiTest : ConNormativaApiTest() {
     fun `fifteen hundred rows go in by lotes`() {
         val t = tramo()
         val csv = "id_aranc,anio,valor_m2,transcribio,verifico\n" + (1..1500).joinToString("\n") { "$t-$it,2026,$it.5,ANA,BETO" }
-        val inicio = System.nanoTime()
         val (estado, r) = importar(csv, false, base = ARANCELES)
-        val segundos = (System.nanoTime() - inicio) / 1e9
         assertEquals(HttpStatus.OK, estado, r.toString())
         assertEquals(1500, r!!["crear"].size())
-        println("importar 1500 aranceles: $segundos s")
         assertEquals(1500, pagina("q=$t-&size=1")["totalElements"].asInt())
         assertEquals(1500, importar(csv, true, base = ARANCELES).second!!["iguales"].asInt())
     }
