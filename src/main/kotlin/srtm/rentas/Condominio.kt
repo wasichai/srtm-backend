@@ -136,8 +136,9 @@ fun delPredioCambiado(
 
 private fun porValor(valor: Any?) = if (valor is BigDecimal) valor.stripTrailingZeros() else valor
 
-// the valuation an external padrón (Ica) brings (model/model.json), which the dtos do not know: a condómino's copy
-// takes it from the stored records, and GET /declaraciones/{id}/valuacion-origen reads it there (ValuacionOrigen)
+// the valuation an external padrón (Ica) brings (model/model.json), which the dtos do not write (Declaracion carries
+// its arancel read-only, #195): a condómino's copy takes it from the stored records, and
+// GET /declaraciones/{id}/valuacion-origen reads it there (ValuacionOrigen)
 val PADRON_EXTERNO_DECLARACION = listOf("arancel", "valor_terreno", "valor_construccion", "valor_otras_instalaciones")
 val PADRON_EXTERNO_NIVEL = listOf("clasificacion", "valor_unitario", "incremento", "porcentaje_depreciacion", "valor_total")
 

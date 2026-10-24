@@ -280,6 +280,19 @@ valuación del padrón externo); esta queda SUSTITUIDA, de solo lectura. Devuelv
 |200; 201; 204.
 |===
 
+[[ref-api-arancel-dj]]
+*El arancel de la DJ.* La DJ se responde con `id_aranc` (el tramo de vía que nombra) y `arancel` (`number` o
+`null`), el valor por m² que guarda. Lo traen todas las respuestas que llevan la DJ: su ficha
+(`GET /declaraciones/{id}`, la presentación y la rectificatoria), las listas de `/contribuyentes/{id}/declaraciones` y
+`/predios/{id}/declaraciones`, el alta, la edición, la anulación, el recálculo y el condómino.
+
+* *Con `id_aranc`:* es el `valor_m2` del arancel `VIGENTE` de ese tramo en el año de la DJ (<<ref-api-aranceles>>),
+  que el servicio escribe en cada escritura y en «Recalcular». Sin uno `VIGENTE`, queda el que ya tenía.
+* *Sin `id_aranc`:* es el del padrón externo, o `null` si no lo hay.
+* *Solo lectura.* Un `arancel` en el cuerpo del alta, la edición o la presentación se ignora, con `id_aranc` o sin
+  él. Así, leer la DJ y reenviarla, con o sin `arancel`, no lo borra ni lo pisa. Un usuario sin permiso de lectura
+  sobre el campo lo recibe `null`.
+
 [[ref-api-redeterminacion]]
 Una escritura de la DJ o de sus listas que cambia lo que leen los arbitrios redetermina el año de su predio, si ya
 tiene cuotas. Cambian lo que leen: el alta, la anulación, la rectificación o la baja; el uso, el área construida, la
