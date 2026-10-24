@@ -259,16 +259,16 @@ class ClienteCatastro(
     }
 
     override suspend fun guardarArancel(a: ArancelCatastral): CopiaDeArancel {
-        val que = "el arancel ${a.clave}"
+        val que = "del arancel ${a.clave}"
         val guardado = arancelDeCatastro(a.clave)
         val cuerpo = DECIMALES.writeValueAsString(mapOf("attributes" to a.atributos()))
         if (guardado == null) {
-            autorizado("el alta de $que") { token -> escribir(client.post().uri(registros()), token, cuerpo) }
+            autorizado("el alta $que") { token -> escribir(client.post().uri(registros()), token, cuerpo) }
             return CopiaDeArancel.CREADO
         }
         if (mismoArancel(a, guardado.path("attributes"))) return CopiaDeArancel.IGUAL
         val id = guardado.path("id").asString()
-        autorizado("el cambio de $que") { token -> escribir(client.put().uri(registros(id)), token, cuerpo) }
+        autorizado("el cambio $que") { token -> escribir(client.put().uri(registros(id)), token, cuerpo) }
         return CopiaDeArancel.ACTUALIZADO
     }
 
@@ -374,7 +374,7 @@ class ClienteCatastro(
                 if (e.statusCode == HttpStatus.UNAUTHORIZED && intento == 0) {
                     servicio.olvidar()
                 } else {
-                    throw CatastroException("catastro-backend respondió ${e.statusCode.value()} a $que")
+                    throw CatastroException("catastro-backend respondió ${e.statusCode.value()} ${a(que)}")
                 }
             } catch (e: Exception) {
                 throw CatastroException("catastro-backend no respondió $que: ${e.javaClass.simpleName}")
@@ -382,6 +382,9 @@ class ClienteCatastro(
         }
         throw CatastroException("catastro-backend rechazó el token de la cuenta de servicio")
     }
+
+    // "a" before what was asked, as Spanish contracts it: al alta, a las valuaciones
+    private fun a(que: String): String = if (que.startsWith("el ")) "al ${que.removePrefix("el ")}" else "a $que"
 
     // the cached token while it has more than a minute left; else a new one
     private suspend fun token(): String =

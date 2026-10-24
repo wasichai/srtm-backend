@@ -609,8 +609,12 @@ firma y sus estados: <<ref-permisos-aranceles>>. Un arancel se responde con sus 
 responde `VIGENTE`. `clave` es `id_aranc|anio` y la pone el servicio.
 
 *Copia a catastro.* srtm es dueño de los aranceles y catastro-backend guarda una copia de los `VIGENTE`, con la que
-valúa. Después de verificar, anular o importar (sin `dry_run`), srtm copia cada clave tocada tal como quedó: su
-`VIGENTE` se crea o se reemplaza en catastro, y si no queda ninguno, se borra de catastro. Escribe en el objeto
+valúa. Después de verificar, anular o importar (sin `dry_run`), srtm copia cada clave tocada tal como está en ese
+momento: su `VIGENTE` se crea o se reemplaza en catastro, y si no queda ninguno, se borra de catastro. Cada copia toma
+el candado de la clave (el mismo que los actos sobre ella), así que las copias y los actos de una clave van uno tras
+otro y la última copia que llega a catastro es la del estado actual de srtm; espera a catastro 90 s como máximo.
+Verificar y anular dejan `sincronizado_en` vacío en la misma escritura: si la copia no llega a correr, el arancel
+queda pendiente para `sincronizar`. Escribe en el objeto
 `arancel` del Core de catastro (`/api/objects/arancel/records`) con la cuenta de servicio de la brecha, cuyo rol
 `SRTM_LECTOR` escribe `arancel` (catastro-backend #19). La copia corre después de guardar, fuera de esa transacción:
 si catastro falla, la verificación, la anulación o la importación quedan igual. El resultado queda en el arancel:
@@ -675,7 +679,8 @@ recoge `sincronizar`).
 se reemplaza en catastro; sin ninguno, se borra. Un `POR_VERIFICAR` no se copia nunca. Sin catastro configurado no
 copia nada.
 |200 `{sincronizados: n, errores: [{id, clave, error}]}` (`{0, []}` sin catastro); 403 sin actualización sobre
-`arancel`; 422 `anio` fuera de 1900..2100 u otro parámetro.
+`arancel`; 409 si dos entradas de `srtm.catastro.organizaciones` nombran a la organización (verificar, anular e
+importar responden entonces `sincronizacion: null`); 422 `anio` fuera de 1900..2100 u otro parámetro.
 |===
 
 [[ref-api-pide]]
