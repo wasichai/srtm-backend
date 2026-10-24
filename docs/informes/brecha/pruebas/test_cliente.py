@@ -101,6 +101,16 @@ class PaginasTests(unittest.TestCase):
         self.assertEqual(cliente.ultima_pagina.get("version"), "valuacion-v3")
         self.assertEqual(cliente.ultima_pagina.get("region"), "COSTA")
 
+    def test_paginas_con_size_fuera_de_rango_es_422(self):
+        # contratos.md §2: titulares/valuaciones paginan con size 1..500, con los mismos errores (422)
+        servidor = CatastroFalso({}, [], [], [])
+        try:
+            with self.assertRaises(ErrorApi) as contexto:
+                list(_cliente(servidor).paginas("/api/catastro/titulares", 501))
+        finally:
+            servidor.cerrar()
+        self.assertEqual(contexto.exception.estado, 422)
+
 
 class FeedTests(unittest.TestCase):
     def test_feed_sigue_hayMas(self):
@@ -122,6 +132,16 @@ class FeedTests(unittest.TestCase):
         try:
             with self.assertRaises(ErrorApi) as contexto:
                 _cliente(servidor).get("/api/catastro/cambios", desde="", size=200)
+        finally:
+            servidor.cerrar()
+        self.assertEqual(contexto.exception.estado, 422)
+
+    def test_feed_con_size_fuera_de_rango_es_422(self):
+        # contratos.md §3: cambios pagina con size 1..500
+        servidor = CatastroFalso({}, [], [], [])
+        try:
+            with self.assertRaises(ErrorApi) as contexto:
+                list(_cliente(servidor).feed("/api/catastro/cambios", 0))
         finally:
             servidor.cerrar()
         self.assertEqual(contexto.exception.estado, 422)

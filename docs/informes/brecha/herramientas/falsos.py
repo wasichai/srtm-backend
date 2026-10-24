@@ -43,6 +43,35 @@ def _cursor(indice):
     return base64.b64encode(str(indice).encode("ascii")).decode("ascii")
 
 
+class _ErrorParametro(Exception):
+    """Internal signal: a page/size parameter failed contratos.md's bound -> the route answers 422 with this
+    message (never raised past the module: every caller below catches it)."""
+
+
+def _entero(params, clave, por_omision):
+    valor = params.get(clave, por_omision)
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        raise _ErrorParametro(f"{clave} inválido: {valor!r}") from None
+
+
+def _tamano(params, por_omision, maximo=500):
+    """contratos.md §2/§3: size 1..maximo (titulares/valuaciones 500, cambios 200 by default)."""
+    size = _entero(params, "size", por_omision)
+    if not 1 <= size <= maximo:
+        raise _ErrorParametro(f"size debe estar entre 1 y {maximo} (llegó {size})")
+    return size
+
+
+def _pagina_y_tamano(params, tamano_por_omision, tamano_maximo=500):
+    """The page/size preamble shared by valuaciones and titulares (contratos.md §2: page >= 0, size 1..500)."""
+    page = _entero(params, "page", 0)
+    if page < 0:
+        raise _ErrorParametro(f"page inválido: {page}")
+    return page, _tamano(params, tamano_por_omision, tamano_maximo)
+
+
 class _Manejador(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass  # keep test output quiet, like fake_core.py
@@ -223,8 +252,10 @@ class CatastroFalso(ServidorFalso):
 
     def _valuaciones_pagina(self, query):
         params = _parsear_query(query)
-        page = int(params.get("page", 0))
-        size = int(params.get("size", 500))
+        try:
+            page, size = _pagina_y_tamano(params, tamano_por_omision=500)
+        except _ErrorParametro as e:
+            return 422, {"detail": str(e)}
         items = self._valuaciones[page * size : (page + 1) * size]
         if self.sin_llaves_nuevas:
             items = [{k: v for k, v in item.items() if k not in _LLAVES_NUEVAS_VALUACION} for item in items]
@@ -241,8 +272,10 @@ class CatastroFalso(ServidorFalso):
         if self.sin_titulares:
             return 404, {"detail": "titulares no disponible"}
         params = _parsear_query(query)
-        page = int(params.get("page", 0))
-        size = int(params.get("size", 500))
+        try:
+            page, size = _pagina_y_tamano(params, tamano_por_omision=500)
+        except _ErrorParametro as e:
+            return 422, {"detail": str(e)}
         items = self._titulares[page * size : (page + 1) * size]
         return 200, {"page": page, "size": size, "total": len(self._titulares), "items": items}
 
@@ -252,7 +285,10 @@ class CatastroFalso(ServidorFalso):
         if self.sin_cambios:
             return 404, {"detail": "cambios no disponible"}
         params = _parsear_query(query)
-        size = int(params.get("size", 200))
+        try:
+            size = _tamano(params, por_omision=200)
+        except _ErrorParametro as e:
+            return 422, {"detail": str(e)}
         desde = params.get("desde")
         if desde == "":
             return 422, {"detail": "desde no puede estar vacío: omítalo para empezar desde el principio"}
