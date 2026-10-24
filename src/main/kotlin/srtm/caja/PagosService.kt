@@ -5,6 +5,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -255,12 +256,12 @@ class PagosService(
                     .groupBy { it.contribuyente!! to it.anio!! }
             val porEnviar = mutableListOf<UUID>()
             for ((creador, suyos) in grupos.entries.groupBy({ it.value.last().creadoPor }, { it })) {
-                val autenticacion = creador?.let { identidad.de(it) }
-                if (autenticacion == null) {
-                    log.warn("caja: tras un pago anulado, {} contribuyentes sin sincronizar: su creador no existe o está deshabilitado", suyos.size)
-                    continue
-                }
                 try {
+                    val autenticacion = creador?.let { identidad.de(it) }
+                    if (autenticacion == null) {
+                        log.warn("caja: tras un pago anulado, {} contribuyentes sin sincronizar: su creador no existe o está deshabilitado", suyos.size)
+                        continue
+                    }
                     withContext(ReactiveSecurityContextHolder.withAuthentication(autenticacion).asCoroutineContext()) {
                         porEnviar += seguir(suyos.flatMap { g -> g.value.map { it.id.toString() } }, suyos.map { it.key })
                     }
@@ -290,6 +291,9 @@ class PagosService(
         val porAnio = contribuyentes.groupBy({ it.second }, { it.first }).mapValues { it.value.toSet() }
         return retiros + caja.planificarSiEnviados(porAnio, MOTIVO_PAGO_ANULADO).second
     }
+
+    // the tests': until every follow-up launched so far is over
+    internal suspend fun esperarSeguidas() = seguidas.coroutineContext[Job]!!.children.forEach { it.join() }
 
     @PreDestroy
     fun detener() = seguidas.cancel()

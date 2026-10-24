@@ -1,7 +1,10 @@
 package srtm.caja
 
+import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -21,6 +24,13 @@ abstract class ConPagosApiTest : ConCajaApiTest() {
     fun comoLaCuentaDeCaja() {
         caja = tokenDeCaja()
     }
+
+    @Autowired
+    lateinit var pagos: PagosService
+
+    // a PAGO_ANULADO's follow-up runs off its request: none is left to land in the next test's PEDIDOS
+    @AfterEach
+    fun sinSeguidasPendientes() = runBlocking { pagos.esperarSeguidas() }
 
     // the escenario's year determined and sent to caja: its cuotas, and the first one
     protected fun cuotasEnviadas(e: Escenario): List<JsonNode> {
