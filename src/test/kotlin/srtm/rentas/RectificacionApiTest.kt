@@ -1,6 +1,7 @@
 package srtm.rentas
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
@@ -217,7 +218,7 @@ class RectificacionApiTest : SrtmApiTest() {
 
     // #180: what the padrón brought of a nivel, which its dto does not carry, is the same nivel's in the same year
     @Test
-    fun `a rectificatoria keeps every padron field of its niveles, and a nivel without them copies as before`() {
+    fun `a rectificatoria keeps every padron field of its niveles and their valuation, a nivel without them as before`() {
         val id = declarar(inscribir(), predio())["id"].asString()
         val conPadron = post("/api/srtm/declaraciones/$id/niveles", NIVEL)
         post("/api/srtm/declaraciones/$id/niveles", NIVEL + ("numero_piso" to 2))
@@ -231,12 +232,22 @@ class RectificacionApiTest : SrtmApiTest() {
         assertPadron(emptyMap(), niveles.getValue(2)["id"].asString())
         // the source keeps its own
         assertPadron(NIVEL_COMPLETO, conPadron["id"].asString())
+
+        // and the copy carries that valuation as the source does: shown, marked on an edit, its year kept
+        val origen = valuacionOrigen(nueva)
+        assertEquals(1, origen["niveles"].size(), origen.toString())
+        assertEquals(NIVEL_COMPLETO.size, origen["niveles"][niveles.getValue(1)["id"].asString()].size(), origen.toString())
+        assertFalse(origen["modificada"].asBoolean(), origen.toString())
+        val otro = niveles.getValue(2)
+        put("/api/srtm/niveles/${otro["id"].asString()}", fields(otro) + ("area_construida" to 150))
+        assertTrue(valuacionOrigen(nueva)["modificada"].asBoolean())
+        rejected("PUT", "/api/srtm/declaraciones/$nueva", fields(declaracion(nueva)) + ("anio" to 2027), "anio")
     }
 
     // a copy to another year keeps the clasificación, an insumo of the construction; the valuation figures are of the
     // source's year
     @Test
-    fun `another year declared from a DJ keeps its niveles' clasificacion, not the padron's figures`() {
+    fun `another year declared from a DJ keeps its niveles' clasificacion, not the padron's figures nor a valuation`() {
         val contribuyente = inscribir()
         val predio = predio()
         val id = declarar(contribuyente, predio, "anio" to 2025)["id"].asString()
@@ -255,6 +266,16 @@ class RectificacionApiTest : SrtmApiTest() {
         assertPadron(mapOf("clasificacion" to NIVEL_COMPLETO.getValue("clasificacion")), niveles.getValue(1)["id"].asString())
         assertPadron(emptyMap(), niveles.getValue(2)["id"].asString())
         assertPadron(NIVEL_COMPLETO, conPadron["id"].asString())
+
+        // a clasificación alone is no valuation: none shown, an edit does not mark it, its year changes
+        val origen = valuacionOrigen(nueva)
+        assertEquals(0, origen["niveles"].size(), origen.toString())
+        assertEquals(0, origen["declaracion"].size(), origen.toString())
+        val clasificado = niveles.getValue(1)
+        put("/api/srtm/niveles/${clasificado["id"].asString()}", fields(clasificado) + ("area_construida" to 150))
+        assertFalse(valuacionOrigen(nueva)["modificada"].asBoolean())
+        assertEquals(2027, put("/api/srtm/declaraciones/$nueva", fields(declaracion(nueva)) + ("anio" to 2027))["anio"].asInt())
+        assertPadron(mapOf("clasificacion" to NIVEL_COMPLETO.getValue("clasificacion")), clasificado["id"].asString())
     }
 
     @Test

@@ -71,8 +71,8 @@ class DeclaracionService(
         val niveles =
             listas
                 .listar(NIVEL_CONSTRUCCION, Map::class.java, PARENT, id)
+                .filter(::conValuacionDelPadron)
                 .associate { it["id"].toString() to conValor(it, PADRON_EXTERNO_NIVEL) }
-                .filterValues { it.isNotEmpty() }
         return ValuacionOrigen(
             predio = conValor(predio, PADRON_EXTERNO_PREDIO),
             declaracion = padronExterno(declaracion),
@@ -461,7 +461,7 @@ class DeclaracionService(
         val conOrigen =
             quitado ||
                 padronExterno(declaracion).isNotEmpty() ||
-                listas.listar(NIVEL_CONSTRUCCION, Map::class.java, PARENT, id).any { conValor(it, PADRON_EXTERNO_NIVEL).isNotEmpty() }
+                listas.listar(NIVEL_CONSTRUCCION, Map::class.java, PARENT, id).any(::conValuacionDelPadron)
         if (conOrigen) registros.replace(DECLARACION, Map::class.java, id, mapOf(ORIGEN_MODIFICADO to true))
     }
 
@@ -669,7 +669,7 @@ class DeclaracionService(
     private fun conValorDeOrigen(
         objectName: String,
         registro: Map<*, *>
-    ) = objectName == NIVEL_CONSTRUCCION && conValor(registro, PADRON_EXTERNO_NIVEL).isNotEmpty()
+    ) = objectName == NIVEL_CONSTRUCCION && conValuacionDelPadron(registro)
 
     // #157: a row written in `declaracion` is the same row in the other vigente declaraciones of its condominio, so
     // each one gets the same write: `escribir` makes it there, on its pareja (null: it has none). the group is read

@@ -506,7 +506,8 @@ data class ValuacionOrigenPredio(
 
 // GET /declaraciones/{id}/valuacion-origen: what an external padrón (Ica) brought to the declaración, its predio and its
 // niveles (PADRON_EXTERNO_*), read from the stored records because the dtos do not carry it. only the fields with a
-// value: a block without any is {}, and a nivel without any is not in niveles (keyed by the nivel's id). read-only:
+// value: a block without any is {}, and a nivel without a valuation (VALUACION_PADRON_NIVEL: a clasificación alone is
+// none, #180) is not in niveles (keyed by the nivel's id). read-only:
 // it does not change the impuesto, which comes from valor_autoavaluo. modificada: the declaración, or its niveles, obras
 // or frentes, changed after it was imported (origen_modificado; empty is false)
 data class ValuacionOrigen(
