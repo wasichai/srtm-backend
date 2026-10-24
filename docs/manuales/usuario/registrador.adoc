@@ -968,7 +968,9 @@ image::{capturas}/usuario/registrador/dj-caracteristicas.png[Secciones Caracter�
   del cálculo.
 * *Autoavalúo por revisar*: si el catastro no pudo valuar la declaración (le falta un dato o un parámetro, o no
   respondió), el sistema conserva el autoavalúo anterior y lo marca con el motivo. Complete lo que falta, o pulse
-  btn:[Recalcular] cuando el catastro ya responda.
+  btn:[Recalcular] cuando el catastro ya responda. Una DJ de un predio rústico queda *por revisar* con el motivo
+  PREDIO_RUSTICO: el catastro todavía no tiene los aranceles rústicos (por hectárea) y no la valúa; se conserva el
+  autoavalúo declarado.
 * *Valor de condominio* y *Valor afecto* los calcula el sistema al grabar (<<dj-conceptos>>): lo que escriba en esos
   dos campos se reemplaza.
 * La *Deducción* tampoco se calcula: escriba el monto que corresponde a la condición del predio (por ejemplo, la de
@@ -1012,7 +1014,8 @@ Tenga en cuenta que el monto del padrón es fijo: no se vuelve a depreciar en lo
 
 // fin de los pasos
 Si el catastro no puede valuarla, el diálogo dice *El catastro no valuó la declaración* y por qué: falta el arancel,
-no hay tablas del año, o no conoce una obra, una clasificación o un estado de conservación. Una obra cuya
+no hay tablas del año, no conoce una obra, una clasificación o un estado de conservación, o el predio es rústico
+(motivo `PREDIO_RUSTICO`): el catastro todavía no tiene los aranceles rústicos (por hectárea). Una obra cuya
 *Categoría* no es una partida del instructivo (por ejemplo, una traída de un padrón externo) no se valúa: el aviso la
 nombra con su tipo y su categoría, para que la corrija (<<proc-obra>>). Si la municipalidad no tiene catastro, el
 botón está deshabilitado y dice *La municipalidad no tiene catastro configurado*.

@@ -1905,6 +1905,10 @@ su `valor_autoavaluo` ([Valores derivados de la DJ](#valores-derivados-de-la-dj)
   toma el de su ficha por `codigo_municipal`, que es el `codigo` del predio, la misma llave de la brecha (`FICHA`).
 - **Uso:** la DJ guarda los nombres de clase, sub clase y uso; se manda el `codigo` de `uso_predio` que les corresponde.
   Si no hay uno solo, va `null` y el catastro responde su motivo.
+- **Tipo de predio (#209):** el `tipo_predio` del predio (nunca el de la DJ, que no lo tiene) va como `tipoPredio`
+  (`PREDIO RUSTICO` → `RUSTICO`, `PREDIO URBANO` → `URBANO`; otro valor, o ninguno, `null`, como siempre urbano).
+  Un predio rústico responde `motivo = "PREDIO_RUSTICO"` y sin `autoavaluo`: el catastro todavía no tiene los
+  aranceles rústicos (por hectárea). La DJ queda *por revisar* con ese motivo y conserva el autoavalúo declarado.
 - **Niveles:** `piso` es el número (`1`), `S1` un sótano, `M1` un mezanine y `AZ` la azotea. `estado_conservacion`,
   `muros_columnas`, `techos` y `puertas_ventanas` van como `estado`, `muros`, `techos` y `puertas`. La `clasificacion`
   es la del nivel o, si no tiene, la de la DJ (las dos vienen del padrón externo). El área común no se valúa.
