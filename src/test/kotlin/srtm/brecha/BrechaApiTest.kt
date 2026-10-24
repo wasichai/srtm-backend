@@ -75,7 +75,8 @@ class BrechaApiTest : SrtmApiTest() {
         contribuyente: String,
         predio: String,
         autoavaluo: String,
-        anio: Int = 2026
+        anio: Int = 2026,
+        delPadron: Map<String, Any?> = emptyMap()
     ): JsonNode {
         val id =
             post(
@@ -85,7 +86,8 @@ class BrechaApiTest : SrtmApiTest() {
             )["id"].asString()
         val guardada = tree(send("GET", "/api/objects/declaracion_predial/records/$id", null, HttpStatus.OK, org))["attributes"]
         val valores =
-            mapOf("valor_autoavaluo" to BigDecimal(autoavaluo), "valor_condominio" to BigDecimal(autoavaluo), "valor_afecto" to BigDecimal(autoavaluo))
+            mapOf("valor_autoavaluo" to BigDecimal(autoavaluo), "valor_condominio" to BigDecimal(autoavaluo), "valor_afecto" to BigDecimal(autoavaluo)) +
+                delPadron
         return tree(send("PUT", "/api/objects/declaracion_predial/records/$id", mapOf("attributes" to fields(guardada) + valores), HttpStatus.OK, org))
     }
 
@@ -192,6 +194,23 @@ class BrechaApiTest : SrtmApiTest() {
         assertEquals(-75.22, feature["geometry"]["coordinates"][0][0][0].asDouble(), 1e-6)
 
         assertEquals(1, tree(send("GET", "/api/srtm/brecha/corridas?anio=2026", null, HttpStatus.OK, org)).size())
+    }
+
+    // #208: the ficha surveys no obras; the DJ's come from the external padrón's otras instalaciones, read off the records
+    @Test
+    fun `a ficha without obras takes the DJ's obras del padron, and the row keeps them`() {
+        val org = organizacion()
+        val sufijo = uniqueDocumento()
+        declarar(org, contribuyente(org), predio(org, "O-$sufijo"), "100000.00", anio = 2024, delPadron = mapOf("valor_otras_instalaciones" to 10000))
+        ITEMS.set(listOf(item("O-$sufijo", "90000.00")))
+
+        val corrida = corrida(org, 2024)
+        assertEquals(TERMINADA, corrida["estado"].asString(), corrida.toString())
+        assertTrue("1 predios sin obras en la ficha: se sumaron S/ 10000.00 de obras de sus DJ" in corrida["mensaje"].asString(), corrida.toString())
+        val fila = tree(send("GET", "/api/srtm/brecha/2024/predios", null, HttpStatus.OK, org))["content"].single()
+        assertEquals("COINCIDE", fila["categoria"].asString())
+        assertEquals(BigDecimal("100000.00"), dec(fila["autoavaluoCatastro"]))
+        assertEquals(BigDecimal("10000.00"), dec(fila["obrasDj"]))
     }
 
     @Test

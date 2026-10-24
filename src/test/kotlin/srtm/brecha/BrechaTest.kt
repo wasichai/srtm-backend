@@ -512,6 +512,66 @@ class BrechaTest {
         )
     }
 
+    // #208: a ficha without obras takes the DJ's obras on the catastro side
+
+    private val sinObras = item(municipal = "01-01-0001", autoavaluo = "90000.00").copy(obras = BigDecimal("0.00"))
+
+    private fun medirObras(
+        item: ValuacionCatastral,
+        obrasDelPadron: Map<String, BigDecimal>,
+        vararg ds: Declaracion
+    ) = Brecha.medir(anio, listOf(item), padron(*ds).copy(obrasDelPadron = obrasDelPadron), parametros, null, hoy)
+
+    @Test
+    fun `a ficha without obras takes the DJ's obras del padron on the catastro side`() {
+        val m = medirObras(sinObras, mapOf("d1" to BigDecimal("10000.00")), dj("d1", "a", "p1", "100000.00"))
+        val fila = m.filas.single { it.predio == "p1" }
+        assertEquals(BigDecimal("100000.00"), fila.autoavaluoCatastro)
+        assertEquals(BigDecimal("10000.00"), fila.obrasDj)
+        assertEquals(Categoria.COINCIDE.name, fila.categoria)
+        assertEquals(BigDecimal("0.00"), fila.deltaAutoavaluo)
+        // the impuesto sees the same value
+        assertEquals(BigDecimal("0.00"), fila.deltaImpuesto)
+    }
+
+    @Test
+    fun `with its obras valued, the DJ's valor_obras is what is added`() {
+        val m = medirObras(sinObras, mapOf("d1" to BigDecimal("10000.00")), dj("d1", "a", "p1", "100000.00").copy(valorObras = BigDecimal("8000.00")))
+        val fila = m.filas.single { it.predio == "p1" }
+        assertEquals(BigDecimal("8000.00"), fila.obrasDj)
+        assertEquals(BigDecimal("98000.00"), fila.autoavaluoCatastro)
+    }
+
+    @Test
+    fun `a ficha with obras adds nothing`() {
+        val conObras = sinObras.copy(obras = BigDecimal("5000.00"))
+        val m = medirObras(conObras, mapOf("d1" to BigDecimal("10000.00")), dj("d1", "a", "p1", "100000.00"))
+        val fila = m.filas.single { it.predio == "p1" }
+        assertEquals(BigDecimal("90000.00"), fila.autoavaluoCatastro)
+        assertNull(fila.obrasDj)
+        assertTrue(m.avisos.none { "obras" in it }, m.avisos.toString())
+    }
+
+    @Test
+    fun `condominos add the DJ's obras once per secuencia`() {
+        val d1 = dj("d1", "a", "p1", "100000.00", porcentaje = "50")
+        val d2 = dj("d2", "b", "p1", "100000.00", porcentaje = "50")
+        val padron = mapOf("d1" to BigDecimal("10000.00"), "d2" to BigDecimal("10000.00"))
+        val fila = medirObras(sinObras, padron, d1, d2).filas.single { it.predio == "p1" }
+        assertEquals(BigDecimal("10000.00"), fila.obrasDj)
+        assertEquals(BigDecimal("100000.00"), fila.autoavaluoCatastro)
+        // another secuencia adds its own; nothing to add is null
+        val otra = dj("d3", "a", "p1", "30000.00", secuencia = "2").copy(valorObras = BigDecimal("3000.00"))
+        assertEquals(BigDecimal("13000.00"), Brecha.obrasDeLaDj(listOf(d1, d2, otra), padron))
+        assertNull(Brecha.obrasDeLaDj(listOf(d1, d2), emptyMap()))
+    }
+
+    @Test
+    fun `the corrida counts the predios whose obras came from the DJ`() {
+        val m = medirObras(sinObras, mapOf("d1" to BigDecimal("10000.00")), dj("d1", "a", "p1", "100000.00"))
+        assertTrue("1 predios sin obras en la ficha: se sumaron S/ 10000.00 de obras de sus DJ" in m.avisos, m.avisos.toString())
+    }
+
     @Test
     fun `without the year's parameters there is no row, and faltan names them`() {
         val m = Brecha.medir(2099, listOf(item(municipal = "01-01-0001")), padron(dj("1", "a", "p1", "1.00").copy(anio = 2099)), parametros, null, hoy)

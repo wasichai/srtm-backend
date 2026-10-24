@@ -845,6 +845,16 @@ secuencia de uso, una vez).
 | `SOBREVALUADO` | Autoavalúo catastral < declarado × 0.95. |
 | `COINCIDE` | Dentro de ±5 %, ambos extremos incluidos (D10). |
 
+**Obras de la DJ** (#208). La ficha catastral no levanta obras complementarias, y la brecha contaría su falta como
+diferencia. Si un ítem valorizado cruza con un predio del padrón y trae `obras` vacío o 0, el lado catastro suma a su
+autoavalúo y a sus `obras` las obras de las DJ vigentes del predio: el `valor_obras` de cada DJ (las obras que valuó
+el catastro, con las del padrón de origen si se sumaron: ver [Valores derivados de la DJ](#valores-derivados-de-la-dj))
+o, si la DJ no se recalculó desde entonces y lo tiene vacío, el `valor_otras_instalaciones` del padrón externo. Cuentan
+una vez por secuencia de uso, el mayor de sus titulares (como el autoavalúo de `totalesDePredio`): cada condómino
+declara el monto entero. Se suma antes de categorizar y de liquidar, así el impuesto ve el mismo valor. Lo sumado
+queda en `obras_dj` de la fila (`obrasDj` en `/predios`) y la corrida lo cuenta en `mensaje` («1 predios sin obras en
+la ficha: se sumaron S/ 10000.00 de obras de sus DJ»). Una ficha con obras no suma nada.
+
 **Impuesto.** Por cada contribuyente con DJ vigente del año:
 - el valor catastral de cada predio cruzado y valorizado se reparte entre sus secuencias de uso según el autoavalúo
   declarado de cada una; si todas declaran 0, según su área construida; si tampoco, en partes iguales (D12), al
