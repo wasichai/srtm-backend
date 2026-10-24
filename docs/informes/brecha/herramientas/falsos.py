@@ -157,6 +157,17 @@ class ServidorFalso:
         return autorizacion.removeprefix("Bearer ") in self._tokens_validos
 
 
+def _valor(fila, clave):
+    """A filter's value for `clave`: wasichai's records are `{"id", "attributes": {...}}` (task 3's sinteticos.py
+    builds them that way), so an equality filter on `clave` has to look inside `attributes` first; falling back
+    to the row's own top level keeps working for a flat fixture that has no "attributes" at all (task 2's
+    tests)."""
+    atributos = fila.get("attributes")
+    if atributos is not None and clave in atributos:
+        return atributos[clave]
+    return fila.get(clave)
+
+
 class _Registros:
     """Serves GET /api/objects/{obj}/records for both fakes below: equality filters, size<=200, no OFFSET
     paging (`page` > 0 is rejected: ADR-036 is a keyset pass, never one), `nextCursor` as the base64 of the next
@@ -189,7 +200,7 @@ class _Registros:
         params.pop("sort", None)
         params.pop("dir", None)
         params.pop("count", None)
-        filas = [f for f in self._tablas[objeto] if all(str(f.get(clave)) == valor for clave, valor in params.items())]
+        filas = [f for f in self._tablas[objeto] if all(str(_valor(f, clave)) == valor for clave, valor in params.items())]
         inicio = _indice_de(after)
         contenido = filas[inicio : inicio + size]
         fin = inicio + len(contenido)
