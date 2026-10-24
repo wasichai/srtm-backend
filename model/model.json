@@ -336,6 +336,7 @@
     "estado_declaracion": ["VIGENTE", "ANULADA", "SUSTITUIDA"],
     "formato_emision": ["PDF", "ZIP"],
     "estado_emision": ["PENDIENTE", "EN_PROCESO", "ENSAMBLANDO", "TERMINADA", "FALLIDA"],
+    "estado_parametro": ["POR_VERIFICAR", "VIGENTE", "ANULADO"],
     "estado_lote": ["PENDIENTE", "EN_PROCESO", "TERMINADO", "FALLIDO"],
     "familia_infraccion": ["ADMINISTRATIVA"],
     "grado_reincidencia": ["PRIMERA", "SEGUNDA", "TERCERA_O_MAS"],
@@ -860,7 +861,7 @@
       "name": "parametro_tributario",
       "label": "Parámetro tributario",
       "pluralLabel": "Parámetros tributarios",
-      "description": "Valores normativos verificados (doble firma) del repositorio normativa: UIT, tramos y mínimo del impuesto predial, deducciones (model/data/parametros-predial.csv). Clave natural: tipo, clave y vigencia_desde.",
+      "description": "Valores normativos con doble firma: UIT, tramos y mínimo del impuesto predial, deducciones, tasas y mapeos de arbitrios, plazos y feriados de sanciones, tasas de anuncios. Clave natural: tipo, clave y vigencia_desde. Se administran en Normativa (/api/srtm/normativa): un registro nace POR_VERIFICAR con quien lo transcribió, otra persona lo verifica y pasa a VIGENTE, y un VIGENTE no se edita ni se borra: se anula (ANULADO, con motivo) y se registra el valor correcto. Los cálculos leen solo los VIGENTE; una fila sin estado (anterior al campo) cuenta como VIGENTE.",
       "fields": [
         {"name": "tipo", "label": "Tipo", "type": "TEXT", "required": true, "description": "UIT, TRAMO_PREDIAL, TRAMO_PREDIAL_LIMITE, PREDIAL_MINIMO…"},
         {"name": "clave", "label": "Clave", "type": "TEXT", "description": "El tramo (1, 2, 3); vacía en un tipo de un solo valor, como la UIT."},
@@ -872,7 +873,12 @@
         {"name": "norma", "label": "Norma", "type": "LONG_TEXT", "description": "Documento fuente y artículo."},
         {"name": "fuente", "label": "Fuente", "type": "TEXT", "description": "Archivo del corpus de normativa del que sale la fila."},
         {"name": "transcribio", "label": "Transcribió", "type": "TEXT", "required": true},
-        {"name": "verifico", "label": "Verificó", "type": "TEXT", "required": true}
+        {"name": "verifico", "label": "Verificó", "type": "TEXT", "description": "Vacío mientras está POR_VERIFICAR; distinto de quien transcribió."},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_parametro", "defaultValue": "VIGENTE",
+          "description": "POR_VERIFICAR, VIGENTE o ANULADO. Vacío cuenta como VIGENTE."},
+        {"name": "motivo_anulacion", "label": "Motivo de anulación", "type": "LONG_TEXT"},
+        {"name": "anulado_por", "label": "Anulado por", "type": "TEXT"},
+        {"name": "anulado_en", "label": "Anulado en", "type": "DATETIME"}
       ]
     },
     {

@@ -329,8 +329,9 @@ def changes(stored, wanted):
 
 def plan(records, parametros):
     """(create, update, skipped): the rows Core lacks, (record, row) of the ones that changed, and how many are as
-    the CSV says."""
-    by_key = {key(r["attributes"]): r for r in records}
+    the CSV says. An ANULADO row is history (srtm.normativa): its key is free for the correct value. A VIGENTE row
+    is not edited (Core answers 409): annul it first, in Normativa."""
+    by_key = {key(r["attributes"]): r for r in records if r["attributes"].get("estado") != "ANULADO"}
     create = [p for p in parametros if key(p) not in by_key]
     update = [(by_key[key(p)], p) for p in parametros if key(p) in by_key and changes(by_key[key(p)]["attributes"], p)]
     return create, update, len(parametros) - len(create) - len(update)

@@ -218,12 +218,28 @@ class ShippedModelTests(unittest.TestCase):
         parametro = next(o for o in self.model["objects"] if o["name"] == "parametro_tributario")
         fields = {f["name"]: f for f in parametro["fields"]}
         self.assertEqual(list(fields), ["tipo", "clave", "vigencia_desde", "vigencia_hasta", "valor_numerico", "texto", "norma",
-                                        "fuente", "transcribio", "verifico"])
-        self.assertEqual({n for n, f in fields.items() if f.get("required")}, {"tipo", "vigencia_desde", "transcribio", "verifico"})
+                                        "fuente", "transcribio", "verifico", "estado", "motivo_anulacion", "anulado_por",
+                                        "anulado_en"])
+        # verifico waits empty while the row is POR_VERIFICAR (srtm.normativa: double signature)
+        self.assertEqual({n for n, f in fields.items() if f.get("required")}, {"tipo", "vigencia_desde", "transcribio"})
         self.assertEqual(fields["vigencia_desde"]["type"], "DATE")
         self.assertEqual(fields["vigencia_hasta"]["type"], "DATE")
         self.assertEqual(fields["valor_numerico"]["type"], "DECIMAL")
         self.assertFalse(any(f.get("unique") for f in fields.values()))
+
+    def test_parametro_tributario_has_the_states_of_the_double_signature(self):
+        # srtm.normativa (#187): POR_VERIFICAR -> VIGENTE -> ANULADO. the rows written before the field have none, and
+        # count as VIGENTE; a new one without estado is VIGENTE too (import_parametros.py sends both signatures)
+        fields = self.campos("parametro_tributario")
+        self.assertEqual(self.model["enums"]["estado_parametro"], ["POR_VERIFICAR", "VIGENTE", "ANULADO"])
+        self.assertEqual(fields["estado"]["type"], "ENUM")
+        self.assertEqual(fields["estado"]["enum"], "estado_parametro")
+        self.assertEqual(fields["estado"]["defaultValue"], "VIGENTE")
+        self.assertFalse(fields["estado"].get("required"))
+        self.assertEqual(fields["motivo_anulacion"]["type"], "LONG_TEXT")
+        self.assertEqual(fields["anulado_por"]["type"], "TEXT")
+        self.assertEqual(fields["anulado_en"]["type"], "DATETIME")
+        self.assertIn("POR_VERIFICAR", next(o for o in self.model["objects"] if o["name"] == "parametro_tributario")["description"])
 
     def test_emision_masiva_is_the_job_of_the_contract(self):
         # wasichai/srtm-backend#41: the masiva's job, with the fields of the epic's contract (wasichai/srtm-backend#37).
@@ -490,6 +506,14 @@ class PayloadTests(unittest.TestCase):
         self.assertNotIn("enum", tipo)
         self.assertNotIn("source", tipo)
 
+    def test_a_field_with_a_default_carries_it(self):
+        # core applies it on create to a field the create leaves out (FieldDefaults): parametro_tributario's estado
+        obj = next(o for o in self.model["objects"] if o["name"] == "parametro_tributario")
+        payload = object_payload(self.model, obj)
+        estado = next(f for f in payload["fields"] if f["name"] == "estado")
+        self.assertEqual(estado["defaultValue"], "VIGENTE")
+        self.assertNotIn("defaultValue", next(f for f in payload["fields"] if f["name"] == "tipo"))
+
     def test_relationship_payload_is_many_to_one(self):
         rel = self.model["relationships"][0]
         self.assertEqual(relationship_payload(rel), {
@@ -559,6 +583,16 @@ class ValidationTests(unittest.TestCase):
         self.assertIn("object cuota_arbitrio: index (anio, nope) names 'nope', not a field of the object", cuota([["anio", "nope"]]))
         self.assertIn("object cuota_arbitrio: index (anio, anio) names 'anio' twice", cuota([["anio", "anio"]]))
         self.assertIn("object cuota_arbitrio: index (anio) is repeated", cuota([["anio"], ["anio"]]))
+
+    def test_an_enum_default_is_one_of_its_options(self):
+        def estado(valor):
+            def mutar(m):
+                parametro = next(o for o in m["objects"] if o["name"] == "parametro_tributario")
+                next(f for f in parametro["fields"] if f["name"] == "estado")["defaultValue"] = valor
+            return self.mutate(mutar)
+        self.assertEqual(estado("POR_VERIFICAR"), [])
+        self.assertIn("object parametro_tributario field estado: defaultValue 'OTRO' is not an option of estado_parametro",
+                      estado("OTRO"))
 
     def test_a_file_field_is_checked_as_wasichai_files_does(self):
         def escudo(**cambios):

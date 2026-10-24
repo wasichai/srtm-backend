@@ -114,6 +114,15 @@ class LoadTests(unittest.TestCase):
         self.assertIn("  update UIT 2026-01-01: valor_numerico 5000.00 -> 5500.00", out)
         self.assertIn(f"{OBJECT}: 0 created, 1 updated, 12 skipped", out)
 
+    def test_an_annulled_row_is_not_the_one_the_csv_has(self):
+        # srtm.normativa (#187): an ANULADO row stays as history, and its key is free for the correct value
+        uit = next(p for p in self.parametros if p["tipo"] == "UIT" and p["vigencia_desde"] == "2026-01-01")
+        self.core.add_record(OBJECT, {**uit, "valor_numerico": "5000.00", "estado": "ANULADO", "motivo_anulacion": "cifra mal copiada"})
+        code, out, err = self.run_main()
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.writes().count(("POST", f"/api/objects/{OBJECT}/records")), 13)
+        self.assertIn(f"{OBJECT}: 13 created, 0 updated, 0 skipped", out)
+
     def test_dry_run_reads_core_and_writes_nothing(self):
         code, out, err = self.run_main("--dry-run")
         self.assertEqual(code, 0, err)
