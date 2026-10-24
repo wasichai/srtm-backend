@@ -1601,6 +1601,37 @@ python3 apply.py                                  # 3. quita ANEXO, HABILITACION
   `--password`. Salida: `0` ok, `1` Core rechazó algo (se muestra la clave del registro que actualizaba o el id del que
   borraba).
 
+## Migrar a la normativa con doble firma
+
+Una sola vez por organización, después de `apply.py` (que crea `arancel` y los campos de estado y firmas), y antes de
+usar Normativa (`/api/srtm/normativa`, épica #186):
+
+```bash
+cd model
+python3 apply.py
+python3 migrar_normativa.py --org perene --dry-run \
+  --catastro-core http://localhost:8091 --catastro-email admin@catastro.local --catastro-password …
+python3 migrar_normativa.py --org perene \
+  --catastro-core http://localhost:8091 --catastro-email admin@catastro.local --catastro-password …
+```
+
+- **Parámetros:** cada `parametro_tributario` sin `estado` pasa a `VIGENTE` y nada más cambia. Uno sin sus dos firmas
+  (`verifico` vacío, o la misma persona que `transcribio`) no se toca: se lista «sin doble firma: revisar en
+  Normativa», por su id, tipo, clave y vigencia.
+- **Aranceles** (solo con `--catastro-core`, `--catastro-email` y `--catastro-password`): lee los `arancel` del Core de
+  catastro-backend, que desde ahora es una copia de los de srtm. Cada uno que srtm no tiene (por `clave`, entre los no
+  `ANULADO`) se crea `VIGENTE` con `transcribio` MIGRACION, `verifico` CATASTRO y `fuente` «catastro (migración
+  inicial)». La regla de srtm pide que un arancel nazca sin `sincronizado_en`, así que el script lo crea y después lo
+  marca con un segundo PUT (`sincronizado_en` = ahora: ya está en catastro). Uno igual se salta; uno distinto se lista
+  «distinto en srtm: revisar» y no se toca. Catastro solo se lee.
+- `--org` es el slug (o el id) de la organización de srtm: si el usuario de `--email` es de otra, no se escribe nada.
+- La salida son las cuentas `parametros: vigentes N, sin_doble_firma N` y `aranceles: crear N, iguales N, distintos N`,
+  sin filas del padrón. **Idempotente:** una segunda corrida no escribe nada.
+- Flags: `--dry-run`, `--workers` (escrituras en paralelo, default 4), `--core`, `--email`, `--password`, `--org` y los
+  tres de catastro (también `CATASTRO_CORE`, `CATASTRO_EMAIL` y `CATASTRO_PASSWORD`). Salida: `0` ok, `1` Core rechazó
+  algo, `2` una entrada no sirve (la organización no es `--org`, faltan datos de catastro o un arancel de catastro no
+  tiene `id_aranc`, `anio` o `valor_m2`): no se escribe nada.
+
 ## Modelo
 
 Cuarenta y dos objetos (`model/model.json`):

@@ -64,7 +64,7 @@ class FakeCore:
     def __init__(self, existing_objects=(), existing_relationships=(), fail_on_post_object=None,
                  fail_put=False, fail_put_status=500, login_response=None, fail_on_record=None, existing_fields=None,
                  fail_on_update=None, fail_on_delete=None, object_rules=None, fail_object_put=None, object_meta=None,
-                 conflict_on_update=None):
+                 conflict_on_update=None, organization=None):
         self.existing_objects = set(existing_objects)
         # object name -> its object-level rules ({"indexes", "appendOnly"}), as Core stores them; none by default
         self.object_rules = {n: dict((object_rules or {}).get(n, {})) for n in self.existing_objects}
@@ -82,6 +82,8 @@ class FakeCore:
         self.conflict_on_update = conflict_on_update  # object name -> its record PUTs answer 409 (srtm's ReglaDeNormativa)
         self.fail_on_delete = fail_on_delete  # object name -> its record DELETEs answer 409
         self.records = {}  # object name -> list of {"id", "attributes"}
+        # GET /api/organizations/current: the login's organization
+        self.organization = organization or {"id": "00000000-0000-0000-0000-000000000001", "name": "Perené", "slug": "perene"}
         self.requests = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeCoreHandler)
         self.server.requests = self.requests
@@ -219,6 +221,8 @@ class FakeCore:
             return self._cuis(body)
         if path == CUIS + "/derogacion" and method == "POST":
             return self._derogacion(body)
+        if path == "/api/organizations/current" and method == "GET":
+            return 200, self.organization
         if path == "/api/auth/login" and method == "POST":
             if self.login_response is not None:
                 return 200, self.login_response
