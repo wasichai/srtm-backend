@@ -123,6 +123,84 @@ class ArancelDeLaDeclaracionApiTest : SrtmApiTest() {
         assertArancel("21", otro)
     }
 
+    // #195: every read of the DJ carries the arancel stored, read-only
+    @Test
+    fun `the DJ reads its arancel - with id_aranc the VIGENTE valor_m2, everywhere the DJ is answered`() {
+        val t = tramo()
+        importarAranceles("$t,2026,25.40,ANA,BETO")
+        val contribuyente = inscribir()
+        val predio = predio()
+        val creada = declarar("contribuyente" to contribuyente, "predio" to predio, "id_aranc" to t)
+        val id = creada["id"].asString()
+        assertLeido("25.40", creada)
+        assertLeido("25.40", declaracion(id))
+        assertLeido("25.40", tree(recalcular(id)))
+        assertLeido("25.40", put("/api/srtm/declaraciones/$id", fields(declaracion(id)) + ("uso" to "COMERCIO")))
+        for (lista in listOf("/api/srtm/contribuyentes/$contribuyente/declaraciones", "/api/srtm/predios/$predio/declaraciones")) {
+            val filas = tree(send("GET", "$lista?anio=2026", null, HttpStatus.OK))
+            assertLeido("25.40", filas.single { it["declaracion"]["id"].asString() == id }["declaracion"])
+        }
+        // a new VIGENTE one: the response of Recalcular already has it
+        val vigente = aranceles(t).single()["id"].asString()
+        send("POST", "$ARANCELES/$vigente/anular", mapOf("motivo" to "La cifra se copió mal"), HttpStatus.OK)
+        importarAranceles("$t,2026,26,ANA,BETO")
+        assertLeido("26", tree(recalcular(id)))
+    }
+
+    @Test
+    fun `without id_aranc the DJ reads the padrons arancel - null without one`() {
+        val id = declarar()["id"].asString()
+        assertTrue(declaracion(id)["arancel"].isNull, declaracion(id).toString())
+        padron(id, BigDecimal("35.50"))
+        assertLeido("35.50", declaracion(id))
+    }
+
+    @Test
+    fun `a DJ read and sent back keeps its arancel - with id_aranc or the padrons, with arancel or without it`() {
+        val t = tramo()
+        importarAranceles("$t,2026,25.40,ANA,BETO")
+        val conTramo = declarar("id_aranc" to t)["id"].asString()
+        val delPadron = declarar()["id"].asString()
+        padron(delPadron, BigDecimal("35.50"))
+        for ((id, esperado) in listOf(conTramo to "25.40", delPadron to "35.50")) {
+            val d = fields(declaracion(id))
+            assertLeido(esperado, put("/api/srtm/declaraciones/$id", d))
+            assertArancel(esperado, id)
+            // a PUT without arancel does not clear it
+            assertLeido(esperado, put("/api/srtm/declaraciones/$id", d - "arancel"))
+            assertArancel(esperado, id)
+            // nor does a null one
+            assertLeido(esperado, put("/api/srtm/declaraciones/$id", d + ("arancel" to null)))
+            assertArancel(esperado, id)
+        }
+    }
+
+    @Test
+    fun `an arancel the client sends is ignored - with id_aranc and without it, as before`() {
+        val t = tramo()
+        importarAranceles("$t,2026,25.40,ANA,BETO")
+        val creada = declarar("id_aranc" to t, "arancel" to 99)
+        val id = creada["id"].asString()
+        assertLeido("25.40", creada)
+        assertLeido("25.40", put("/api/srtm/declaraciones/$id", fields(declaracion(id)) + ("arancel" to 99)))
+        assertArancel("25.40", id)
+
+        val sinTramo = declarar("arancel" to 99)
+        assertTrue(sinTramo["arancel"].isNull, sinTramo.toString())
+        val otro = sinTramo["id"].asString()
+        padron(otro, BigDecimal("35.50"))
+        assertLeido("35.50", put("/api/srtm/declaraciones/$otro", fields(declaracion(otro)) + ("arancel" to 99)))
+        assertArancel("35.50", otro)
+
+        val contribuyente = inscribir()
+        val presentada =
+            post(
+                "/api/srtm/contribuyentes/$contribuyente/declaraciones-juradas",
+                mapOf("predio_id" to predio(), "declaracion" to mapOf("anio" to 2026, "uso" to "CASA HABITACIÓN", "id_aranc" to t, "arancel" to 99))
+            )["declaracion"]
+        assertLeido("25.40", presentada)
+    }
+
     // the demo's REGISTRADOR (docs/manuales/demo/perfiles.json, read as it is) reads the aranceles its DJ names
     @Test
     fun `the registrador of the demo profiles names a tramo de via`() {
@@ -171,7 +249,27 @@ class ArancelDeLaDeclaracionApiTest : SrtmApiTest() {
 
     private fun recalcular(id: String) = send("POST", "/api/srtm/declaraciones/$id/recalcular", null, HttpStatus.OK)
 
-    // the arancel stored (the dto does not carry it)
+    // an external padrón's arancel, written by core's api as an import would
+    private fun padron(
+        id: String,
+        arancel: BigDecimal
+    ) {
+        val registro = "/api/objects/$DECLARACION/records/$id"
+        val atributos = fields(tree(send("GET", registro, null, HttpStatus.OK))["attributes"])
+        send("PUT", registro, mapOf("attributes" to atributos + ("arancel" to arancel)), HttpStatus.OK)
+    }
+
+    // the arancel a read of the DJ answers (#195)
+    private fun assertLeido(
+        esperado: String,
+        declaracion: JsonNode
+    ) {
+        val arancel = declaracion["arancel"]
+        assertTrue(arancel != null && !arancel.isNull, "sin arancel en $declaracion")
+        assertEquals(0, BigDecimal(esperado).compareTo(arancel.decimalValue()), "esperado $esperado, leído $arancel")
+    }
+
+    // the arancel stored, read from core
     private fun assertArancel(
         esperado: String,
         id: String

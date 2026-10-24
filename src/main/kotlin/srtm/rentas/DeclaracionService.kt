@@ -204,7 +204,7 @@ class DeclaracionService(
         val otros = titulares(next).filter { it.id != id.toString() }
         val grupo = condominioCon(next, otros, seUne)
         val pisaPadron = pisaArancelDePadron(id, next.idAranc)
-        registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(grupo.first()))
+        registros.replace(DECLARACION, Declaracion::class.java, id, escritura(grupo.first()))
         guardarDerivados(grupo.drop(1), otros)
         if (seUne) recalcularResto(stored)
         marcarOrigenModificado(id, pisaPadron)
@@ -220,7 +220,7 @@ class DeclaracionService(
         condominos: List<Declaracion>
     ) {
         val manual = autoavaluos.manual()
-        val campos = Records.attributes(origen)
+        val campos = escritura(origen)
         for (otro in condominos) {
             val cambios = delPredioCambiado(origen, otro, manual)
             if (cambios.isEmpty()) continue
@@ -255,8 +255,7 @@ class DeclaracionService(
     // (registrar's rule). the condominio is recomputed, not checked: a nivel's write is never refused for the % of an
     // imported condominio. what changed is returned to the hooks that follow (Recalculo)
     suspend fun recalcular(id: UUID): Recalculo {
-        val stored = registros.get(DECLARACION, Declaracion::class.java, id)
-        resolverArancel(id, stored)
+        val stored = resolverArancel(id, registros.get(DECLARACION, Declaracion::class.java, id))
         val totales = Derivados.totales(niveles(id), frentes(id), stored.frontisPrincipal)
         val next = Derivados.aplicar(stored, totales, autoavaluos.deLaDeclaracion(id))
         val otros = if (vigente(stored)) titulares(stored).filter { it.id != stored.id && it.id != stored.sustituye } else emptyList()
@@ -270,17 +269,21 @@ class DeclaracionService(
 
     // #188: the arancel of a DJ that names its tramo de vía is the valor_m2 of that tramo's VIGENTE arancel in its year,
     // written when it differs, before the autoavalúo reads it. none VIGENTE (not yet verified, or annulled without a
-    // replacement): the arancel stored stays, and nothing fails
+    // replacement): the arancel stored stays, and nothing fails. `d` with the arancel it has now
     private suspend fun resolverArancel(
         id: UUID,
         d: Declaracion
-    ) {
-        val idAranc = d.idAranc?.trim()?.ifEmpty { null } ?: return
-        val valor = aranceles.alRecalcular(idAranc, d.anio ?: return)?.valorM2 ?: return
-        if (!iguales(registros.get(DECLARACION, Map::class.java, id)[ARANCEL], valor)) {
-            registros.replace(DECLARACION, Map::class.java, id, mapOf(ARANCEL to valor))
-        }
+    ): Declaracion {
+        val idAranc = d.idAranc?.trim()?.ifEmpty { null } ?: return d
+        val valor = aranceles.alRecalcular(idAranc, d.anio ?: return d)?.valorM2 ?: return d
+        if (iguales(d.arancel, valor)) return d
+        registros.replace(DECLARACION, Map::class.java, id, mapOf(ARANCEL to valor))
+        return d.copy(arancel = valor)
     }
+
+    // #195: a declaración's attributes as a write sends them: without its arancel, which the dto carries read-only.
+    // only resolverArancel, copiarPadronExterno and an external padrón's import write it
+    private fun escritura(d: Declaracion): Map<String, Any?> = Records.attributes(d) - ARANCEL
 
     // the portal's «Recalcular»: a vigente declaración valued again without a change (catastro answers now)
     suspend fun recalcularDeclaracion(id: UUID): Declaracion = recalcular(existe(id)).also { despuesDeCambiar(it.antes, it.despues) }.despues
@@ -312,7 +315,7 @@ class DeclaracionService(
                 )
             }
         try {
-            registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(reemplazada))
+            registros.replace(DECLARACION, Declaracion::class.java, id, escritura(reemplazada))
         } catch (e: Exception) {
             deshacer(creada)
             throw e
@@ -328,7 +331,7 @@ class DeclaracionService(
         body: Anulacion
     ): Declaracion {
         val stored = registros.get(DECLARACION, Declaracion::class.java, id)
-        val saved = registros.replace(DECLARACION, Declaracion::class.java, id, Records.attributes(anulada(stored, body.motivoAnulacion, LocalDate.now())))
+        val saved = registros.replace(DECLARACION, Declaracion::class.java, id, escritura(anulada(stored, body.motivoAnulacion, LocalDate.now())))
         recalcularResto(stored)
         despuesDeCambiar(stored, saved)
         return saved
@@ -864,7 +867,7 @@ class DeclaracionService(
     private suspend fun numerar(declaracion: Declaracion): Declaracion =
         conReintento {
             val numero = (registros.highest(DECLARACION, "numero_declaracion")?.toIntOrNull() ?: 0) + 1
-            registros.create(DECLARACION, Declaracion::class.java, Records.attributes(declaracion.copy(numeroDeclaracion = numero)))
+            registros.create(DECLARACION, Declaracion::class.java, escritura(declaracion.copy(numeroDeclaracion = numero)))
         }
 
     // a numbered insert: when the number was taken meanwhile (the database refuses the duplicate), number it again
