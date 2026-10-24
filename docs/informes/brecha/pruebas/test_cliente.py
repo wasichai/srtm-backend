@@ -113,7 +113,18 @@ class FeedTests(unittest.TestCase):
             servidor.cerrar()
         self.assertEqual(items, cambios)
         self.assertEqual(len(peticiones), 3)
-        self.assertTrue(all("desde=" in ruta for _, ruta, _ in peticiones))
+        self.assertNotIn("desde=", peticiones[0][1])
+        self.assertTrue(all("desde=" in ruta for _, ruta, _ in peticiones[1:]))
+
+    def test_feed_con_desde_vacio_es_422(self):
+        # contratos.md §3: un desde vacío no es "desde el principio", es un cursor inválido
+        servidor = CatastroFalso({}, [], [], [])
+        try:
+            with self.assertRaises(ErrorApi) as contexto:
+                _cliente(servidor).get("/api/catastro/cambios", desde="", size=200)
+        finally:
+            servidor.cerrar()
+        self.assertEqual(contexto.exception.estado, 422)
 
 
 class GetTests(unittest.TestCase):

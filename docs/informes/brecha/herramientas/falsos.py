@@ -28,7 +28,8 @@ _LLAVES_NUEVAS_VALUACION = (
 
 
 def _parsear_query(query):
-    return {clave: valores[0] for clave, valores in urllib.parse.parse_qs(query).items()}
+    # keep_blank_values=True: an explicit desde="" must stay distinguishable from an absent desde (§3's 422)
+    return {clave: valores[0] for clave, valores in urllib.parse.parse_qs(query, keep_blank_values=True).items()}
 
 
 def _indice_de(cursor):
@@ -246,14 +247,24 @@ class CatastroFalso(ServidorFalso):
         return 200, {"page": page, "size": size, "total": len(self._titulares), "items": items}
 
     def _cambios_pagina(self, query):
+        """contratos.md §3: sin `desde`, empieza desde el principio; un `desde` vacío o que no decodifica a un
+        índice es 422 (never silently treated as the start, so a client bug resending "" is caught here)."""
         if self.sin_cambios:
             return 404, {"detail": "cambios no disponible"}
         params = _parsear_query(query)
         size = int(params.get("size", 200))
-        desde = params.get("desde", "")
-        inicio = _indice_de(desde)
+        desde = params.get("desde")
+        if desde == "":
+            return 422, {"detail": "desde no puede estar vacío: omítalo para empezar desde el principio"}
+        if desde is None:
+            inicio = 0
+        else:
+            try:
+                inicio = _indice_de(desde)
+            except ValueError:
+                return 422, {"detail": f"desde inválido: {desde!r}"}
         items = self._cambios[inicio : inicio + size]
         if not items:
-            return 200, {"items": [], "cursor": desde or _cursor(0), "hayMas": False}
+            return 200, {"items": [], "cursor": desde if desde is not None else _cursor(0), "hayMas": False}
         fin = inicio + len(items)
         return 200, {"items": items, "cursor": _cursor(fin), "hayMas": fin < len(self._cambios)}

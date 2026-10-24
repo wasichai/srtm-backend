@@ -79,13 +79,17 @@ class Cliente:
             pagina += 1
 
     def feed(self, ruta, tamano):
-        """Every item of a `desde`/`size` feed (catastro's cambios, contratos.md §3): follows `cursor` as `desde`
-        on every request (starting with "") while `hayMas` is true. A 404 is an ErrorApi."""
-        cursor = ""
+        """Every item of a `desde`/`size` feed (catastro's cambios, contratos.md §3): the first request omits
+        `desde` ("sin desde, empieza desde el principio" - an empty desde is rejected, 422); from the second
+        request on it sends `desde=<cursor>`, following it while `hayMas` is true. A 404 is an ErrorApi."""
+        cursor = None
         while True:
-            datos = self._get(self._con_params(ruta, {"desde": cursor, "size": tamano}), en_404="error")
+            params = {"size": tamano}
+            if cursor is not None:
+                params["desde"] = cursor
+            datos = self._get(self._con_params(ruta, params), en_404="error")
             yield from datos.get("items", [])
-            cursor = datos.get("cursor") or ""
+            cursor = datos.get("cursor")
             if not datos.get("hayMas"):
                 return
 
