@@ -1,15 +1,19 @@
 package srtm.normativa
 
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.ReactiveTransactionManager
 import org.springframework.transaction.reactive.TransactionalOperator
 import org.springframework.transaction.reactive.executeAndAwait
+import srtm.Candado
+import srtm.Candados
 import srtm.Permisos
 import srtm.brecha.ArancelCatastral
 import srtm.brecha.Catastro
@@ -25,6 +29,7 @@ import wasichai.core.common.ConflictException
 import wasichai.core.data.RecordCriterion
 import wasichai.core.identity.CurrentUser
 import wasichai.core.organization.OrganizationRepository
+import java.time.Duration
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
@@ -58,6 +63,7 @@ class SincronizacionAranceles(
     private val currentUser: CurrentUser,
     private val catastros: Catastros,
     private val organizaciones: OrganizationRepository,
+    private val candados: Candados,
     transacciones: ReactiveTransactionManager
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -70,10 +76,11 @@ class SincronizacionAranceles(
     }
 
     // POST /normativa/aranceles/sincronizar: every arancel of the year (any year without it) whose copy is pending, a
-    // VIGENTE or ANULADO one without sincronizado_en or with an error. a POR_VERIFICAR one is never copied
+    // VIGENTE or ANULADO one without sincronizado_en or with an error. a POR_VERIFICAR one is never copied. the explicit
+    // act says why nothing is copied when two entries name the organization: their 409 (Catastros.de)
     suspend fun pendientes(anio: Int?): Sincronizacion {
         permisos.exigirActualizar(ARANCEL, "sincronizar los aranceles con catastro")
-        val catastro = catastro() ?: return Sincronizacion(0, emptyList())
+        val catastro = catastros.delUsuario(currentUser.require(), organizaciones) ?: return Sincronizacion(0, emptyList())
         val pendientes =
             registros.donde(
                 ARANCEL,
@@ -109,34 +116,60 @@ class SincronizacionAranceles(
         return Sincronizacion(marcas.count { it.error == null }, marcas.mapNotNull { m -> m.error?.let { ErrorDeSincronizacion(m.id, m.clave, it) } })
     }
 
-    // the clave as it is now: its VIGENTE one to catastro, or catastro's deleted. marked: the aranceles asked and the
-    // VIGENTE one copied
+    // the clave as it is now, under its lock (Candado.ARANCEL, the one every act on it takes), in one transaction:
+    // its VIGENTE one to catastro, or catastro's deleted, and the marks. so the copies of a clave and its acts run one
+    // after another, and the last copy to reach catastro is of srtm's state when it ran: an older copy that runs after
+    // a newer act pushes that act's state, never its own. the lock and a connection are held while catastro answers,
+    // COPIA_MAXIMA at most (CONCURRENCIA claves at a time). marked: the aranceles asked and the VIGENTE one copied
     private suspend fun copiarClave(
         catastro: Catastro,
         clave: String,
         suyos: List<Arancel>
     ): List<Marca> {
-        val rige =
-            registros
-                .all(ARANCEL, Arancel::class.java, filters = mapOf(CLAVE to clave))
-                .filter { it.rige() }
-                .minByOrNull { it.id.orEmpty() }
-        val error =
-            try {
-                if (rige != null) catastro.guardarArancel(catastral(rige)) else catastro.borrarArancel(clave)
-                null
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: CatastroException) {
-                e.message ?: "catastro-backend no respondió"
-            } catch (e: Exception) {
-                log.warn("normativa: la copia del arancel {} a catastro falló", clave, e)
-                "catastro-backend no respondió: ${e.javaClass.simpleName}"
+        val pedidos = suyos.mapNotNull { it.id }
+        return try {
+            transaccion.executeAndAwait {
+                candados.bloquearEnOrganizacion(Candado.ARANCEL, clave)
+                val rige =
+                    registros
+                        .all(ARANCEL, Arancel::class.java, filters = mapOf(CLAVE to clave))
+                        .filter { it.rige() }
+                        .minByOrNull { it.id.orEmpty() }
+                val error = copia(catastro, clave, rige)
+                (pedidos + listOfNotNull(rige?.id)).distinct().map { marcar(it, clave, error) }
             }
-        return (suyos.mapNotNull { it.id } + listOfNotNull(rige?.id)).distinct().map { marcar(it, clave, error) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // the marks did not commit: each arancel asked keeps its copy pending (sincronizar takes it again)
+            log.warn("normativa: no se guardó el resultado de la copia del arancel {}", clave, e)
+            pedidos.map { Marca(it, clave, "no se guardó el resultado de la copia: ${e.message ?: e.javaClass.simpleName}") }
+        }
     }
 
-    // the result on the arancel itself. a mark that cannot be written is an error of that arancel (its copy is pending)
+    // catastro's arancel of the clave becomes rige (or goes, without one): null, or what failed
+    private suspend fun copia(
+        catastro: Catastro,
+        clave: String,
+        rige: Arancel?
+    ): String? =
+        try {
+            withTimeout(COPIA_MAXIMA.toMillis()) {
+                if (rige != null) catastro.guardarArancel(catastral(rige)) else catastro.borrarArancel(clave)
+            }
+            null
+        } catch (_: TimeoutCancellationException) {
+            "catastro-backend no respondió a tiempo (${COPIA_MAXIMA.seconds} s) la copia del arancel $clave"
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: CatastroException) {
+            e.message ?: "catastro-backend no respondió"
+        } catch (e: Exception) {
+            log.warn("normativa: la copia del arancel {} a catastro falló", clave, e)
+            "catastro-backend no respondió: ${e.javaClass.simpleName}"
+        }
+
+    // the result on the arancel itself, in the copy's transaction
     private suspend fun marcar(
         id: String,
         clave: String,
@@ -148,15 +181,8 @@ class SincronizacionAranceles(
             } else {
                 mapOf(ERROR_SINCRONIZACION to error)
             }
-        return try {
-            transaccion.executeAndAwait { registros.replace(ARANCEL, Arancel::class.java, UUID.fromString(id), cambios) }
-            Marca(id, clave, error)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            log.warn("normativa: no se guardó el resultado de la copia del arancel {} ({})", clave, id, e)
-            Marca(id, clave, error ?: "no se guardó el resultado de la copia: ${e.message ?: e.javaClass.simpleName}")
-        }
+        registros.replace(ARANCEL, Arancel::class.java, UUID.fromString(id), cambios)
+        return Marca(id, clave, error)
     }
 
     private data class Marca(
@@ -166,8 +192,12 @@ class SincronizacionAranceles(
     )
 
     companion object {
-        // claves copied at once, as the importación's lotes
+        // claves copied at once, as the importación's lotes: at most this many connections wait on catastro
         private const val CONCURRENCIA = 4
+
+        // the longest a copy holds its clave's lock and its connection: the GET and the write to catastro (each one
+        // bounded by the account's timeout, 60 s by default, and retried once after a 401)
+        val COPIA_MAXIMA: Duration = Duration.ofSeconds(90)
 
         // the VIGENTE one as catastro keeps it
         fun catastral(a: Arancel): ArancelCatastral {

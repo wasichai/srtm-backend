@@ -53,7 +53,7 @@ class MigrarNormativaTests(unittest.TestCase):
         code, out, _ = self.run_main("--dry-run")
         self.assertEqual(code, 0)
         self.assertIn("parametros: vigentes 1, sin_doble_firma 0", out)
-        self.assertIn("aranceles: crear 1, iguales 0, distintos 0", out)
+        self.assertIn("aranceles: crear 1, iguales 0, distintos 0, por_verificar 0", out)
         self.assertEqual(self.writes(self.srtm), [])
         self.assertEqual(self.writes(self.catastro), [])
 
@@ -88,7 +88,7 @@ class MigrarNormativaTests(unittest.TestCase):
         arancel(self.catastro, "A-02", valor=0, cod_via=None)
         code, out, err = self.run_main("--workers", "2")
         self.assertEqual(code, 0, err)
-        self.assertIn("aranceles: crear 2, iguales 0, distintos 0", out)
+        self.assertIn("aranceles: crear 2, iguales 0, distintos 0, por_verificar 0", out)
         creados = {r["attributes"]["clave"]: r["attributes"] for r in self.srtm.records[mn.ARANCEL]}
         self.assertEqual(set(creados), {"A-01|2061", "A-02|2061"})
         a = creados["A-01|2061"]
@@ -106,19 +106,23 @@ class MigrarNormativaTests(unittest.TestCase):
         self.assertEqual(self.writes(self.catastro), [])
         # idempotent: both equal now
         code, out, _ = self.run_main()
-        self.assertIn("aranceles: crear 0, iguales 2, distintos 0", out)
+        self.assertIn("aranceles: crear 0, iguales 2, distintos 0, por_verificar 0", out)
 
     def test_an_equal_arancel_is_skipped_and_one_that_differs_is_reported(self):
         arancel(self.catastro, "A-01", valor="12.5")
         arancel(self.catastro, "A-02", valor="20.00")
         arancel(self.catastro, "A-03")
+        arancel(self.catastro, "A-04")
         arancel(self.srtm, "A-01", valor="12.50", estado="VIGENTE")
+        # the same data, but still to verify in srtm: not iguales
+        arancel(self.srtm, "A-04", estado="POR_VERIFICAR")
         distinto = arancel(self.srtm, "A-02", valor="21.00", estado="POR_VERIFICAR")
         # an annulled one frees its clave: A-03 is created
         arancel(self.srtm, "A-03", valor="99.00", estado="ANULADO")
         code, out, _ = self.run_main()
         self.assertEqual(code, 0)
-        self.assertIn("aranceles: crear 1, iguales 1, distintos 1", out)
+        self.assertIn("aranceles: crear 1, iguales 1, distintos 1, por_verificar 1", out)
+        self.assertIn("POR_VERIFICAR en srtm: verificar en Normativa: A-04|2061", out)
         self.assertIn("distinto en srtm: revisar: A-02|2061", out)
         self.assertEqual(self.attrs(distinto["id"], mn.ARANCEL)["valor_m2"], "21.00")
         nuevos = [r for r in self.srtm.records[mn.ARANCEL] if r["attributes"].get("transcribio") == "MIGRACION"]
