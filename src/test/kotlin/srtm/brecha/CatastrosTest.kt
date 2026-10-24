@@ -30,6 +30,10 @@ class CatastrosTest {
         ): Valuaciones = Valuaciones(anio, nombre, emptyList())
 
         override suspend fun valuar(insumos: InsumosValuacion): ValuacionDeInsumos = throw UnsupportedOperationException(nombre)
+
+        override suspend fun guardarArancel(a: ArancelCatastral): CopiaDeArancel = throw UnsupportedOperationException(nombre)
+
+        override suspend fun borrarArancel(clave: String): CopiaDeArancel = throw UnsupportedOperationException(nombre)
     }
 
     @Test

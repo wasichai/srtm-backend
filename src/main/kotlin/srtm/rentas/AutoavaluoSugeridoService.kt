@@ -11,6 +11,7 @@ import srtm.brecha.CatastroException
 import srtm.brecha.Catastros
 import srtm.brecha.SIN_CATASTRO_CONFIGURADO
 import srtm.brecha.ValuacionDeInsumos
+import srtm.brecha.delUsuario
 import wasichai.core.common.ConflictException
 import wasichai.core.common.WasichaiException
 import wasichai.core.identity.CurrentUser
@@ -93,12 +94,7 @@ class AutoavaluoSugeridoService(
 
     // the caller's organization's catastro (BrechaService's rule), or null: its slug is read only when some key is a
     // slug, and only when the install has any
-    private suspend fun catastro(): Catastro? {
-        if (!catastros.configurado) return null
-        val usuario = currentUser.require()
-        val slug = if (catastros.necesitaSlug) organizaciones.findById(usuario.organizationId)?.slug else null
-        return catastros.de(usuario.organizationId, slug)
-    }
+    private suspend fun catastro(): Catastro? = catastros.delUsuario(currentUser.require(), organizaciones)
 
     private companion object {
         // the niveles' and obras' field that names their declaración (DeclaracionService's)

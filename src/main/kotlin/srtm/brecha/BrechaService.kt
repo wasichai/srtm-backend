@@ -162,10 +162,8 @@ class BrechaService(
     // the catastro of the caller's organization: a corrida reads its own, never another's (it would measure its padrón
     // against someone else's catastro). an organization without one is refused; its slug is read only when some key is
     // a slug
-    private suspend fun catastroDe(usuario: AuthenticatedUser): Catastro {
-        val slug = if (catastros.necesitaSlug) organizaciones.findById(usuario.organizationId)?.slug else null
-        return catastros.de(usuario.organizationId, slug) ?: throw ConflictException(SIN_CATASTRO_CONFIGURADO)
-    }
+    private suspend fun catastroDe(usuario: AuthenticatedUser): Catastro =
+        catastros.delUsuario(usuario, organizaciones) ?: throw ConflictException(SIN_CATASTRO_CONFIGURADO)
 
     // the corrida a query reads: the one given (404 unless it is of the year), else the latest TERMINADA of the year
     // (404 when there is none)
