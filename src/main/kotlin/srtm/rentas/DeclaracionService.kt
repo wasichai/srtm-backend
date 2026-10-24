@@ -10,6 +10,8 @@ import srtm.arbitrios.CUOTA_ARBITRIO
 import srtm.arbitrios.Redeterminacion
 import srtm.caja.CajaService
 import srtm.caja.CambioDeDeuda
+import srtm.iguales
+import srtm.normativa.ArancelesService
 import srtm.pide.ConsultasReniec
 import wasichai.core.common.ConflictException
 import wasichai.core.common.ValidationException
@@ -47,6 +49,7 @@ class DeclaracionService(
     private val autoavaluos: AutoavaluoSugeridoService,
     private val arbitrios: ArbitriosService,
     private val caja: CajaService,
+    private val aranceles: ArancelesService,
     private val reniec: ConsultasReniec = ConsultasReniec(Duration.ZERO)
 ) {
     suspend fun ficha(id: UUID): DeclaracionJurada {
@@ -72,7 +75,7 @@ class DeclaracionService(
                 .filterValues { it.isNotEmpty() }
         return ValuacionOrigen(
             predio = conValor(predio, PADRON_EXTERNO_PREDIO),
-            declaracion = conValor(declaracion, PADRON_EXTERNO_DECLARACION),
+            declaracion = padronExterno(declaracion),
             niveles = niveles,
             modificada = declaracion[ORIGEN_MODIFICADO] == true
         )
@@ -92,7 +95,7 @@ class DeclaracionService(
         val predioId = UUID.fromString(predio.id)
         val declaracion =
             try {
-                registrar(nueva(delCliente(body.declaracion), contribuyente, predioId))
+                registrar(conArancel(nueva(delCliente(body.declaracion), contribuyente, predioId)))
             } catch (e: Exception) {
                 if (existente == null) registros.delete(PREDIO, predioId)
                 throw e
@@ -133,7 +136,7 @@ class DeclaracionService(
     suspend fun crear(body: Declaracion): Declaracion {
         val contribuyente = body.contribuyente ?: throw ValidationException("Falta el contribuyente", "contribuyente", "es obligatorio")
         val predio = body.predio ?: throw ValidationException("Falta el predio", "predio", "es obligatorio")
-        val creada = registrar(nueva(delCliente(body), UUID.fromString(contribuyente), UUID.fromString(predio)))
+        val creada = registrar(conArancel(nueva(delCliente(body), UUID.fromString(contribuyente), UUID.fromString(predio))))
         return recalcular(UUID.fromString(creada.id)).despues.also { despuesDeCambiar(null, it) }
     }
 
@@ -150,6 +153,19 @@ class DeclaracionService(
             autoavaluoMotivo = null
         )
 
+    // #188: the tramo de vía a client names (id_aranc, blank is none) has a VIGENTE arancel in the DJ's year, or it is a
+    // 400 on id_aranc. `stored`: an edit that keeps its id_aranc and year is not asked again (an arancel annulled
+    // since leaves the DJ as it is). its valor_m2 is written by recalcular, which follows every write
+    private suspend fun conArancel(
+        d: Declaracion,
+        stored: Declaracion? = null
+    ): Declaracion {
+        val idAranc = d.idAranc?.trim()?.ifEmpty { null } ?: return d.copy(idAranc = null)
+        val anio = d.anio
+        if (anio != null && (stored == null || stored.idAranc != idAranc || stored.anio != anio)) aranceles.deLaDeclaracion(idAranc, anio)
+        return d.copy(idAranc = idAranc)
+    }
+
     // a declaración that moves to another predio, year or secuencia joins that condominio and leaves its own. only a
     // vigente one changes, and its estado is anular's and its sustitución rectificar's. a rectificatoria stays in
     // its place, and one with an external padrón's valuation in its year. what it derives is recalcular's: the
@@ -162,22 +178,25 @@ class DeclaracionService(
         val stored = registros.get(DECLARACION, Declaracion::class.java, id)
         modificable(stored)
         val next =
-            body.copy(
-                numeroDeclaracion = stored.numeroDeclaracion,
-                secuenciaUso = secuenciaUso(body.secuenciaUso),
-                motivo = motivoAlEditar(stored.motivo),
-                estado = stored.estado,
-                motivoAnulacion = stored.motivoAnulacion,
-                fechaAnulacion = stored.fechaAnulacion,
-                sustituye = stored.sustituye,
-                fechaSustitucion = stored.fechaSustitucion,
-                frontisPrincipal = frontisAlEditar(body, stored),
-                areaConstruida = stored.areaConstruida,
-                areaComunConstruida = stored.areaComunConstruida,
-                longitudFrente = stored.longitudFrente,
-                valorAutoavaluo = if (autoavaluos.manual()) body.valorAutoavaluo else stored.valorAutoavaluo,
-                autoavaluoPorRevisar = stored.autoavaluoPorRevisar,
-                autoavaluoMotivo = stored.autoavaluoMotivo
+            conArancel(
+                body.copy(
+                    numeroDeclaracion = stored.numeroDeclaracion,
+                    secuenciaUso = secuenciaUso(body.secuenciaUso),
+                    motivo = motivoAlEditar(stored.motivo),
+                    estado = stored.estado,
+                    motivoAnulacion = stored.motivoAnulacion,
+                    fechaAnulacion = stored.fechaAnulacion,
+                    sustituye = stored.sustituye,
+                    fechaSustitucion = stored.fechaSustitucion,
+                    frontisPrincipal = frontisAlEditar(body, stored),
+                    areaConstruida = stored.areaConstruida,
+                    areaComunConstruida = stored.areaComunConstruida,
+                    longitudFrente = stored.longitudFrente,
+                    valorAutoavaluo = if (autoavaluos.manual()) body.valorAutoavaluo else stored.valorAutoavaluo,
+                    autoavaluoPorRevisar = stored.autoavaluoPorRevisar,
+                    autoavaluoMotivo = stored.autoavaluoMotivo
+                ),
+                stored
             )
         enSuLugar(stored, next)
         if (next.anio != stored.anio) conservaAnio(id)
@@ -224,6 +243,7 @@ class DeclaracionService(
     // imported condominio. what changed is returned to the hooks that follow (Recalculo)
     suspend fun recalcular(id: UUID): Recalculo {
         val stored = registros.get(DECLARACION, Declaracion::class.java, id)
+        resolverArancel(id, stored)
         val totales = Derivados.totales(niveles(id), frentes(id), stored.frontisPrincipal)
         val next = Derivados.aplicar(stored, totales, autoavaluos.deLaDeclaracion(id))
         val otros = if (vigente(stored)) titulares(stored).filter { it.id != stored.id && it.id != stored.sustituye } else emptyList()
@@ -233,6 +253,20 @@ class DeclaracionService(
         if (cambiados.isNotEmpty()) registros.replace(DECLARACION, Declaracion::class.java, id, Derivados.campos(despues).filterKeys { it in cambiados })
         guardarDerivados(grupo.drop(1), otros)
         return Recalculo(stored, despues)
+    }
+
+    // #188: the arancel of a DJ that names its tramo de vía is the valor_m2 of that tramo's VIGENTE arancel in its year,
+    // written when it differs, before the autoavalúo reads it. none VIGENTE (not yet verified, or annulled without a
+    // replacement): the arancel stored stays, and nothing fails
+    private suspend fun resolverArancel(
+        id: UUID,
+        d: Declaracion
+    ) {
+        val idAranc = d.idAranc?.trim()?.ifEmpty { null } ?: return
+        val valor = aranceles.alRecalcular(idAranc, d.anio ?: return)?.valorM2 ?: return
+        if (!iguales(registros.get(DECLARACION, Map::class.java, id)[ARANCEL], valor)) {
+            registros.replace(DECLARACION, Map::class.java, id, mapOf(ARANCEL to valor))
+        }
     }
 
     // the portal's «Recalcular»: a vigente declaración valued again without a change (catastro answers now)
@@ -349,6 +383,9 @@ class DeclaracionService(
         val id = UUID.fromString(origen.id)
         val nuevaId = UUID.fromString(creada.id)
         try {
+            // #188: a DJ that names its tramo de vía carries its arancel to the copy, which recalcular resolves again
+            // in the copy's year (and keeps, without a VIGENTE one there)
+            if (!origen.idAranc.isNullOrBlank()) copiarPadronExterno(DECLARACION, id, nuevaId, listOf(ARANCEL))
             transferentes(id).forEach { listas.agregar(TRANSFERENTE, Transferente::class.java, PARENT, nuevaId, it.copy(id = null, declaracion = null)) }
             // nuevo*, not agregar*: a copy is no edit, and it has no valuation de origen to mark
             niveles(id).forEach { nuevoNivel(nuevaId, it.copy(id = null, declaracion = null)) }
@@ -394,7 +431,7 @@ class DeclaracionService(
         if (declaracion[ORIGEN_MODIFICADO] == true) return
         val conOrigen =
             quitado ||
-                conValor(declaracion, PADRON_EXTERNO_DECLARACION).isNotEmpty() ||
+                padronExterno(declaracion).isNotEmpty() ||
                 listas.listar(NIVEL_CONSTRUCCION, Map::class.java, PARENT, id).any { conValor(it, PADRON_EXTERNO_NIVEL).isNotEmpty() }
         if (conOrigen) registros.replace(DECLARACION, Map::class.java, id, mapOf(ORIGEN_MODIFICADO to true))
     }
@@ -903,6 +940,7 @@ class DeclaracionService(
         const val PARENT = "declaracion"
         const val FILA = "fila"
         const val ATTEMPTS = 3
+        const val ARANCEL = "arancel"
         val LISTAS = listOf(TRANSFERENTE, NIVEL_CONSTRUCCION, OBRA_COMPLEMENTARIA, OTRO_FRENTE)
 
         // the lists a write of which marks an external padrón's valuation as modified (marcarOrigenModificado)

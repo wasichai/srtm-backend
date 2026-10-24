@@ -9,6 +9,7 @@ import org.springframework.dao.DataIntegrityViolationException
 import org.springframework.transaction.ReactiveTransactionManager
 import srtm.arbitrios.ArbitriosService
 import srtm.caja.CajaService
+import srtm.normativa.ArancelesService
 import wasichai.core.common.ValidationException
 import wasichai.core.data.RecordService
 import wasichai.core.metadata.MetadataService
@@ -25,7 +26,8 @@ class CodigoPredioTest {
             ContribuyenteService(registros, Listas(registros), Mockito.mock(ReactiveTransactionManager::class.java)),
             Mockito.mock(AutoavaluoSugeridoService::class.java),
             Mockito.mock(ArbitriosService::class.java),
-            Mockito.mock(CajaService::class.java)
+            Mockito.mock(CajaService::class.java),
+            Mockito.mock(ArancelesService::class.java)
         )
 
     private fun registrar(predio: Predio) = runBlocking { service.registrarPredio(predio.copy(direccion = "S/N")) }

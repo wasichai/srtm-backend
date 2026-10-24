@@ -152,7 +152,10 @@ data class Declaracion(
     val frontisPrincipal: BigDecimal? = null,
     val areaComunConstruida: BigDecimal? = null,
     val autoavaluoPorRevisar: Boolean? = null,
-    val autoavaluoMotivo: String? = null
+    val autoavaluoMotivo: String? = null,
+    // #188: the tramo de vía its predio fronts in this DJ. its arancel (not in the dto: PADRON_EXTERNO_DECLARACION) is
+    // then that tramo's VIGENTE valor_m2 in the DJ's year, Normativa's (DeclaracionService.resolverArancel)
+    val idAranc: String? = null
 )
 
 // the contribuyente's children. contribuyente is the parent's id: the path sets it, a body never moves one
