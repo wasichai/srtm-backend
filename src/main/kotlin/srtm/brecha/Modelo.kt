@@ -14,6 +14,10 @@ const val TERMINADA = "TERMINADA"
 const val FALLIDA = "FALLIDA"
 val ACTIVAS = setOf(PENDIENTE, EN_CURSO)
 
+// catastro's motivo for a rústico predio (#209): it has no rústico aranceles (per hectárea) yet, so it never values
+// one, even with a ficha. used by the autoavalúo sugerido and the brecha (task 6)
+const val PREDIO_RUSTICO = "PREDIO_RUSTICO"
+
 // what a catastro item is next to the padrón (D7, D10): never in the padrón (OMISO), a padrón predio the catastro
 // lacks (SIN_CATASTRO), crossed but not valued (SIN_VALOR), or crossed and valued above, below or within ±5 % of its
 // declared autoavalúo

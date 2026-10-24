@@ -162,7 +162,7 @@ class ClienteCatastroTest {
         assertTrue(pedido.endsWith(" Bearer t1"), pedido)
         val cuerpo = JsonMapper.builder().build().readTree(pedido.removePrefix("POST valuacion ").removeSuffix(" Bearer t1"))
         assertEquals(
-            setOf("anio", "areaTerreno", "arancelM2", "uso", "esEdificio", "construcciones", "obras", "codigoMunicipal"),
+            setOf("anio", "areaTerreno", "arancelM2", "uso", "esEdificio", "construcciones", "obras", "codigoMunicipal", "tipoPredio"),
             cuerpo.propertyNames().toSet()
         )
         assertTrue(cuerpo["arancelM2"].isNumber, cuerpo.toString())
@@ -200,6 +200,14 @@ class ClienteCatastroTest {
         val obra = v.detalle!!.obras.single()
         assertEquals(BigDecimal("0.68"), obra.factorOficializacion)
         assertEquals(BigDecimal("8870.61"), obra.valor)
+    }
+
+    @Test
+    fun `a predio rustico sends tipoPredio RUSTICO`() {
+        runBlocking { cliente().valuar(insumos.copy(tipoPredio = "RUSTICO")) }
+
+        val pedido = pedidos.last()
+        assertTrue(pedido.contains("\"tipoPredio\":\"RUSTICO\""), pedido)
     }
 
     @Test

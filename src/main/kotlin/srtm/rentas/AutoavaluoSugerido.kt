@@ -42,9 +42,19 @@ object AutoavaluoSugerido {
             esEdificio = !predio?.edificacion.isNullOrBlank() || pisos.any { it > 1 },
             construcciones = activos.map { construccion(it, declaracion.clasificacion) },
             obras = obras.filter { it.estado != INACTIVO }.map(::obra),
-            codigoMunicipal = predio?.codigo?.trim()?.ifEmpty { null }
+            codigoMunicipal = predio?.codigo?.trim()?.ifEmpty { null },
+            tipoPredio = tipoPredio(predio?.tipoPredio)
         )
     }
+
+    // the predio's tipo_predio (its own only, #209: the declaración has none) as catastro's tipoPredio; anything
+    // else, or none, is null: a predio without it is valued as urbano, as always
+    fun tipoPredio(tipo: String?): String? =
+        when (tipo?.trim()) {
+            "PREDIO RUSTICO" -> "RUSTICO"
+            "PREDIO URBANO" -> "URBANO"
+            else -> null
+        }
 
     // the clasificación of the nivel, else the declaración's (both an external padrón's): the RNT tabla it depreciates
     // with. none: catastro takes the uso's

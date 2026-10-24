@@ -17,7 +17,9 @@ data class InsumosValuacion(
     val construcciones: List<ConstruccionValuacion>,
     val obras: List<ObraValuacion>,
     // the ficha whose arancel catastro takes when arancelM2 is null
-    val codigoMunicipal: String?
+    val codigoMunicipal: String?,
+    // "URBANO" or "RUSTICO" (AutoavaluoSugerido.tipoPredio); null when the predio's own is none of those
+    val tipoPredio: String? = null
 )
 
 // piso: "1", "S1" (sótano), "M1" (mezanine), "AZ" (azotea)

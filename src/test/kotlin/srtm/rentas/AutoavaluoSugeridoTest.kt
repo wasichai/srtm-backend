@@ -190,4 +190,12 @@ class AutoavaluoSugeridoTest {
         assertNull(insumos(declaracion = declaracion.copy(uso = "OTRO")).uso)
         assertNull(insumos(declaracion = declaracion.copy(uso = null)).uso)
     }
+
+    @Test
+    fun `a rustico predio sends RUSTICO, an urbano URBANO, none or another null`() {
+        assertEquals("RUSTICO", insumos(predio = predio.copy(tipoPredio = "PREDIO RUSTICO")).tipoPredio)
+        assertEquals("URBANO", insumos(predio = predio.copy(tipoPredio = "PREDIO URBANO")).tipoPredio)
+        assertNull(insumos(predio = predio.copy(tipoPredio = null)).tipoPredio)
+        assertNull(insumos(predio = null).tipoPredio)
+    }
 }
