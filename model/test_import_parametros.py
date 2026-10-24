@@ -123,6 +123,23 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(self.writes().count(("POST", f"/api/objects/{OBJECT}/records")), 13)
         self.assertIn(f"{OBJECT}: 13 created, 0 updated, 0 skipped", out)
 
+    def test_a_vigente_core_refuses_to_change_is_a_rechazo_and_the_run_goes_on(self):
+        # srtm.normativa (#187): Core answers 409 to a change of a VIGENTE row. it is reported with its key, the other
+        # rows are still written, and the run exits 1 (Core refused something)
+        self.run_main()
+        for anio in ("2025", "2026"):
+            r = next(r for r in self.core.records[OBJECT] if r["attributes"]["tipo"] == "UIT" and r["attributes"]["vigencia_desde"] == f"{anio}-01-01")
+            r["attributes"]["valor_numerico"] = "1.00"
+        self.core.records[OBJECT] = [r for r in self.core.records[OBJECT] if r["attributes"]["tipo"] != "PREDIAL_MINIMO"]
+        self.core.conflict_on_update = OBJECT
+        self.core.requests.clear()
+        code, out, err = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn("rechazo línea 13 UIT 2025-01-01: VIGENTE distinto: anule o cierre primero", err)
+        self.assertIn("rechazo línea 14 UIT 2026-01-01: VIGENTE distinto: anule o cierre primero", err)
+        self.assertEqual(self.writes().count(("POST", f"/api/objects/{OBJECT}/records")), 1)
+        self.assertIn(f"{OBJECT}: 1 created, 0 updated, 10 skipped, 2 rechazados", out)
+
     def test_dry_run_reads_core_and_writes_nothing(self):
         code, out, err = self.run_main("--dry-run")
         self.assertEqual(code, 0, err)

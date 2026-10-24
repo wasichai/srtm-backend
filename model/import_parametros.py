@@ -13,7 +13,8 @@ updated in place; a row the CSV does not have is left alone (a parameter of anot
 script's to delete). Idempotent: a second run writes nothing.
 
 Run: python3 import_parametros.py [--csv <file>] [--dry-run]
-Exit: 0 ok, 1 Core refused something, 2 a row of an ordinance is malformed (nothing is sent).
+Exit: 0 ok, 1 Core refused something (a VIGENTE row it does not change is reported and the others go on), 2 a row
+of an ordinance is malformed (nothing is sent).
 """
 import argparse
 import csv
@@ -33,6 +34,13 @@ from core_client import Client, CoreError  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 OBJECT = "parametro_tributario"
 FIELDS = ("tipo", "clave", "vigencia_desde", "vigencia_hasta", "valor_numerico", "texto", "norma", "fuente", "transcribio", "verifico")
+
+
+def lineas(path):
+    """The line in the file of each of the CSV's rows, as read_parametros reads them: the rechazos name it."""
+    with open(path, encoding="utf-8") as f:
+        datos = [n for n, line in enumerate(f, 1) if not line.startswith("#") and line.strip()]
+    return datos[1:]
 
 
 def read_parametros(path):
@@ -341,9 +349,16 @@ def _label(attributes):
     return " ".join(x for x in key(attributes) if x)
 
 
-def load(client, parametros, dry_run=False):
-    """Creates and updates what differs, printing a line per row it writes. Returns (created, updated, skipped)."""
+# srtm.normativa (#187): Core answers 409 to a change of a VIGENTE row
+RECHAZO_VIGENTE = "VIGENTE distinto: anule o cierre primero"
+
+
+def load(client, parametros, dry_run=False, filas=None):
+    """Creates and updates what differs, printing a line per row it writes. A VIGENTE row Core refuses to change (409)
+    is a rechazo, reported with its line (filas: read_parametros' lines) and key, and the other rows go on. Returns
+    (created, updated, skipped, rechazados)."""
     create, update, skipped = plan(client.list_all(OBJECT), parametros)
+    linea = {id(p): n for p, n in zip(parametros, filas or [])}
     for p in create:
         print(f"  create {_label(p)}: {p.get('valor_numerico', '')}")
     for record, p in update:
@@ -352,13 +367,23 @@ def load(client, parametros, dry_run=False):
             print(f"  update {_label(p)}: {field} {stored.get(field)} -> {p.get(field)}")
     if dry_run:
         print(f"{OBJECT}: {len(create)} to create, {len(update)} to update, {skipped} skipped")
-        return len(create), len(update), skipped
+        return len(create), len(update), skipped, 0
     for p in create:
         client.post(f"/api/objects/{OBJECT}/records", {"attributes": p})
+    updated = rechazados = 0
     for record, p in update:
-        client.put(f"/api/objects/{OBJECT}/records/{record['id']}", {"attributes": p})
-    print(f"{OBJECT}: {len(create)} created, {len(update)} updated, {skipped} skipped", flush=True)
-    return len(create), len(update), skipped
+        try:
+            client.put(f"/api/objects/{OBJECT}/records/{record['id']}", {"attributes": p})
+            updated += 1
+        except CoreError as e:
+            if e.status != 409:
+                raise
+            rechazados += 1
+            donde = f"línea {linea[id(p)]} " if id(p) in linea else ""
+            print(f"rechazo {donde}{_label(p)}: {RECHAZO_VIGENTE}", file=sys.stderr)
+    resumen = f", {rechazados} rechazados" if rechazados else ""
+    print(f"{OBJECT}: {len(create)} created, {updated} updated, {skipped} skipped{resumen}", flush=True)
+    return len(create), updated, skipped, rechazados
 
 
 def _parse_args(argv):
@@ -383,9 +408,11 @@ def main(argv=None):
     client = Client(args.core)
     try:
         client.login(args.email, args.password)
-        load(client, parametros, args.dry_run)
+        rechazados = load(client, parametros, args.dry_run, lineas(args.csv))[3]
     except CoreError as e:
         print(f"error -> {e.status}\n{e.body}", file=sys.stderr)
+        return 1
+    if rechazados:
         return 1
     if args.dry_run:
         print("dry run: nothing written")

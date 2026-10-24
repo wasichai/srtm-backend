@@ -63,7 +63,8 @@ class FakeCore:
 
     def __init__(self, existing_objects=(), existing_relationships=(), fail_on_post_object=None,
                  fail_put=False, fail_put_status=500, login_response=None, fail_on_record=None, existing_fields=None,
-                 fail_on_update=None, fail_on_delete=None, object_rules=None, fail_object_put=None, object_meta=None):
+                 fail_on_update=None, fail_on_delete=None, object_rules=None, fail_object_put=None, object_meta=None,
+                 conflict_on_update=None):
         self.existing_objects = set(existing_objects)
         # object name -> its object-level rules ({"indexes", "appendOnly"}), as Core stores them; none by default
         self.object_rules = {n: dict((object_rules or {}).get(n, {})) for n in self.existing_objects}
@@ -78,6 +79,7 @@ class FakeCore:
         self.login_response = login_response  # override the default {"token": "t"}
         self.fail_on_record = fail_on_record  # object name -> its record POSTs answer 400
         self.fail_on_update = fail_on_update  # object name -> its record PUTs answer 400
+        self.conflict_on_update = conflict_on_update  # object name -> its record PUTs answer 409 (srtm's ReglaDeNormativa)
         self.fail_on_delete = fail_on_delete  # object name -> its record DELETEs answer 409
         self.records = {}  # object name -> list of {"id", "attributes"}
         self.requests = []
@@ -127,6 +129,8 @@ class FakeCore:
         name, record_id = RECORD.match(path).groups()
         if self.fail_on_update == name:
             return 400, {"detail": "Invalid option", "errors": [{"field": "tipo_via", "message": "boom-update"}]}
+        if self.conflict_on_update == name:
+            return 409, {"detail": "Un parámetro VIGENTE no se edita: anúlelo y registre el valor correcto"}
         record = next((r for r in self.records.get(name, []) if r["id"] == record_id), None)
         if record is None:
             return 404, {"detail": "not found"}
