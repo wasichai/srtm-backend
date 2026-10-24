@@ -413,10 +413,17 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(list(predio), ["codigo_catastro", "codigo_predio", "categoria", "sector", "manzana", "lote", "uso",
                                         "autoavaluo_declarado", "autoavaluo_catastro", "delta_autoavaluo", "impuesto_declarado",
                                         "impuesto_catastro", "delta_impuesto", "delta_arbitrios", "estimado", "motivo", "lote_geom",
-                                        "orden"])
+                                        "orden", "obras_dj"])
         self.assertEqual(self.model["enums"]["categoria_brecha"],
                          ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE"])
         self.assertEqual(self.relaciones("brecha_predio"), {"corrida": ("brecha_corrida", True), "predio": ("predio", False)})
+
+    def test_the_dj_keeps_its_obras_and_the_brecha_what_it_added(self):
+        # #208: valor_obras is derived (recalcular writes it); obras_dj records what the brecha added to catastro's side
+        dj = self.campos("declaracion_predial")
+        self.assertEqual(dj["valor_obras"]["type"], "DECIMAL")
+        self.assertFalse(dj["valor_obras"].get("required"))
+        self.assertEqual(self.campos("brecha_predio")["obras_dj"]["type"], "DECIMAL")
 
     def campos(self, objeto):
         return {f["name"]: f for f in next(o for o in self.model["objects"] if o["name"] == objeto)["fields"]}
