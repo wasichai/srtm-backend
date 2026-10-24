@@ -1,6 +1,7 @@
 package srtm.rentas
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpStatus
@@ -10,7 +11,8 @@ import java.time.LocalDate
 
 // #147: a rectificatoria is a new declaración, numbered, with what the one it rectifies declares and its lists; that
 // one stays SUSTITUIDA, read-only and out of every count. another year is declared from the year before (desde). the
-// external padrón's valuation stays where it came: neither copy takes it
+// external padrón's valuation of the declaración stays where it came: neither copy takes it. its niveles' (#180): the
+// rectificatoria keeps it all, another year only the clasificación
 class RectificacionApiTest : SrtmApiTest() {
     @Test
     fun `a rectificatoria is numbered, with the lists and titular's data of the one it replaces, not its padron valuation`() {
@@ -52,10 +54,10 @@ class RectificacionApiTest : SrtmApiTest() {
         assertEquals(transferente["codigo"].asString(), copiado["codigo"].asString())
         assertEquals("43434352", copiado["numero_documento"].asString())
 
-        // the valuation of the padrón stays in the sustituida
+        // the valuation of the padrón's declaración stays in the sustituida; its nivel's goes with the nivel (#180)
         val sinOrigen = valuacionOrigen(nueva)
         assertEquals(0, sinOrigen["declaracion"].size(), sinOrigen.toString())
-        assertEquals(0, sinOrigen["niveles"].size(), sinOrigen.toString())
+        assertEquals(1, sinOrigen["niveles"].size(), sinOrigen.toString())
         assertEquals(DECLARACION_ICA.size, valuacionOrigen(id)["declaracion"].size())
 
         val sustituida = declaracion(id)
@@ -214,6 +216,68 @@ class RectificacionApiTest : SrtmApiTest() {
         assertEquals(antes, lista("/api/srtm/predios/$predio/declaraciones").size)
     }
 
+    // #180: what the padrón brought of a nivel, which its dto does not carry, is the same nivel's in the same year
+    @Test
+    fun `a rectificatoria keeps every padron field of its niveles and their valuation, a nivel without them as before`() {
+        val id = declarar(inscribir(), predio())["id"].asString()
+        val conPadron = post("/api/srtm/declaraciones/$id/niveles", NIVEL)
+        post("/api/srtm/declaraciones/$id/niveles", NIVEL + ("numero_piso" to 2))
+        importar(NIVEL_CONSTRUCCION, conPadron["id"].asString(), NIVEL_COMPLETO)
+
+        val nueva = rectificar(id)["declaracion"]["id"].asString()
+
+        val niveles = lista("/api/srtm/declaraciones/$nueva/niveles").associateBy { it["numero_piso"].asInt() }
+        assertEquals(setOf(1, 2), niveles.keys, niveles.toString())
+        assertPadron(NIVEL_COMPLETO, niveles.getValue(1)["id"].asString())
+        assertPadron(emptyMap(), niveles.getValue(2)["id"].asString())
+        // the source keeps its own
+        assertPadron(NIVEL_COMPLETO, conPadron["id"].asString())
+
+        // and the copy carries that valuation as the source does: shown, marked on an edit, its year kept
+        val origen = valuacionOrigen(nueva)
+        assertEquals(1, origen["niveles"].size(), origen.toString())
+        assertEquals(NIVEL_COMPLETO.size, origen["niveles"][niveles.getValue(1)["id"].asString()].size(), origen.toString())
+        assertFalse(origen["modificada"].asBoolean(), origen.toString())
+        val otro = niveles.getValue(2)
+        put("/api/srtm/niveles/${otro["id"].asString()}", fields(otro) + ("area_construida" to 150))
+        assertTrue(valuacionOrigen(nueva)["modificada"].asBoolean())
+        rejected("PUT", "/api/srtm/declaraciones/$nueva", fields(declaracion(nueva)) + ("anio" to 2027), "anio")
+    }
+
+    // a copy to another year keeps the clasificación, an insumo of the construction; the valuation figures are of the
+    // source's year
+    @Test
+    fun `another year declared from a DJ keeps its niveles' clasificacion, not the padron's figures nor a valuation`() {
+        val contribuyente = inscribir()
+        val predio = predio()
+        val id = declarar(contribuyente, predio, "anio" to 2025)["id"].asString()
+        val conPadron = post("/api/srtm/declaraciones/$id/niveles", NIVEL)
+        post("/api/srtm/declaraciones/$id/niveles", NIVEL + ("numero_piso" to 2))
+        importar(NIVEL_CONSTRUCCION, conPadron["id"].asString(), NIVEL_COMPLETO)
+
+        val nueva =
+            post(
+                "/api/srtm/contribuyentes/$contribuyente/declaraciones-juradas",
+                mapOf("predio_id" to predio, "desde" to id, "declaracion" to mapOf("anio" to 2026))
+            )["declaracion"]["id"].asString()
+
+        val niveles = lista("/api/srtm/declaraciones/$nueva/niveles").associateBy { it["numero_piso"].asInt() }
+        assertEquals(setOf(1, 2), niveles.keys, niveles.toString())
+        assertPadron(mapOf("clasificacion" to NIVEL_COMPLETO.getValue("clasificacion")), niveles.getValue(1)["id"].asString())
+        assertPadron(emptyMap(), niveles.getValue(2)["id"].asString())
+        assertPadron(NIVEL_COMPLETO, conPadron["id"].asString())
+
+        // a clasificación alone is no valuation: none shown, an edit does not mark it, its year changes
+        val origen = valuacionOrigen(nueva)
+        assertEquals(0, origen["niveles"].size(), origen.toString())
+        assertEquals(0, origen["declaracion"].size(), origen.toString())
+        val clasificado = niveles.getValue(1)
+        put("/api/srtm/niveles/${clasificado["id"].asString()}", fields(clasificado) + ("area_construida" to 150))
+        assertFalse(valuacionOrigen(nueva)["modificada"].asBoolean())
+        assertEquals(2027, put("/api/srtm/declaraciones/$nueva", fields(declaracion(nueva)) + ("anio" to 2027))["anio"].asInt())
+        assertPadron(mapOf("clasificacion" to NIVEL_COMPLETO.getValue("clasificacion")), clasificado["id"].asString())
+    }
+
     @Test
     fun `a declaration with an external padron's valuation keeps its year`() {
         val conValuacion = declarar(inscribir(), predio())
@@ -279,6 +343,19 @@ class RectificacionApiTest : SrtmApiTest() {
         send("PUT", "/api/objects/$objeto/records/$id", mapOf("attributes" to fields(registro) + ica), HttpStatus.OK)
     }
 
+    // the stored nivel's PADRON_EXTERNO_NIVEL fields with a value are exactly `esperado`'s (decimals by value)
+    private fun assertPadron(
+        esperado: Map<String, Any>,
+        nivel: String
+    ) {
+        val registro = tree(send("GET", "/api/objects/$NIVEL_CONSTRUCCION/records/$nivel", null, HttpStatus.OK))["attributes"]
+        val presentes = PADRON_EXTERNO_NIVEL.filter { registro[it] != null && !registro[it].isNull && registro[it].asString().isNotBlank() }
+        assertEquals(esperado.keys, presentes.toSet(), registro.toString())
+        for ((campo, valor) in esperado) {
+            if (valor is BigDecimal) assertDecimal(valor.toPlainString(), registro[campo]) else assertEquals(valor, registro[campo].asString(), campo)
+        }
+    }
+
     private fun assertDecimal(
         expected: String,
         actual: JsonNode?
@@ -327,5 +404,15 @@ class RectificacionApiTest : SrtmApiTest() {
             )
         val DECLARACION_ICA = mapOf("arancel" to BigDecimal("35.50"), "valor_terreno" to BigDecimal("7100"))
         val NIVEL_ICA = mapOf("valor_unitario" to BigDecimal("402.08"), "valor_total" to BigDecimal("48250.75"))
+
+        // every PADRON_EXTERNO_NIVEL field, fictitious
+        val NIVEL_COMPLETO =
+            mapOf(
+                "clasificacion" to "CASA HABITACION Y DEPARTAMENTOS PARA VIVIENDA",
+                "valor_unitario" to BigDecimal("402.08"),
+                "incremento" to BigDecimal("20.10"),
+                "porcentaje_depreciacion" to BigDecimal("12"),
+                "valor_total" to BigDecimal("48250.75")
+            )
     }
 }

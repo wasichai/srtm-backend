@@ -12,7 +12,8 @@ const val RECTIFICACION = "RECTIFICACION"
 
 // what a copy takes of a declaración: what it declares and its titular's data (the same contribuyente), not its
 // number, estado, motivo, anulación, sustitución nor presentation (a copy is presented anew). the external padrón's
-// valuation stays in the source (the dto's arancel is read-only, #195: copiar copies it with id_aranc)
+// valuation of the declaración stays in the source (the dto's arancel is read-only, #195: copiar copies it with
+// id_aranc); its niveles' is copied apart (DeclaracionService.nivelesDelPadron)
 fun copiaDe(origen: Declaracion) =
     origen.copy(
         id = null,

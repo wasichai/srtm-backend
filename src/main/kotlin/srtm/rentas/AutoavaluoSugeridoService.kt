@@ -79,7 +79,7 @@ class AutoavaluoSugeridoService(
         val niveles =
             listas.listar(NIVEL_CONSTRUCCION, Map::class.java, PARENT, id).map {
                 val nivel = it as Map<String, Any?>
-                NivelDeValuacion(Records.read(NivelConstruccion::class.java, nivel["id"].toString(), nivel), nivel["clasificacion"]?.toString())
+                NivelDeValuacion(Records.read(NivelConstruccion::class.java, nivel["id"].toString(), nivel), nivel[CLASIFICACION]?.toString())
             }
         val obras = listas.listar(OBRA_COMPLEMENTARIA, ObraComplementaria::class.java, PARENT, id)
         val usos = registros.all(USO_PREDIO, UsoPredio::class.java)

@@ -71,8 +71,8 @@ class DeclaracionService(
         val niveles =
             listas
                 .listar(NIVEL_CONSTRUCCION, Map::class.java, PARENT, id)
+                .filter(::conValuacionDelPadron)
                 .associate { it["id"].toString() to conValor(it, PADRON_EXTERNO_NIVEL) }
-                .filterValues { it.isNotEmpty() }
         return ValuacionOrigen(
             predio = conValor(predio, PADRON_EXTERNO_PREDIO),
             declaracion = padronExterno(declaracion),
@@ -388,8 +388,8 @@ class DeclaracionService(
 
     // a declaración copied with its lists, the same contribuyente's on the same predio: copiaDe with `cambios` over it,
     // numbered as a new one. its transferentes keep their code, its rows their fila. the external padrón's valuation
-    // stays in origen (the condómino's copy takes it: copiarPadronExterno). recomputed once, with all its rows. one that
-    // fails halfway is removed with what it got
+    // of the declaración stays in origen (the condómino's copy takes it: copiarPadronExterno); its niveles' goes as
+    // nivelesDelPadron says. recomputed once, with all its rows. one that fails halfway is removed with what it got
     private suspend fun copiar(
         origen: Declaracion,
         cambios: (Declaracion) -> Declaracion
@@ -404,7 +404,12 @@ class DeclaracionService(
             if (!origen.idAranc.isNullOrBlank()) copiarPadronExterno(DECLARACION, id, nuevaId, listOf(ARANCEL))
             transferentes(id).forEach { listas.agregar(TRANSFERENTE, Transferente::class.java, PARENT, nuevaId, it.copy(id = null, declaracion = null)) }
             // nuevo*, not agregar*: a copy is no edit, and it has no valuation de origen to mark
-            niveles(id).forEach { nuevoNivel(nuevaId, it.copy(id = null, declaracion = null)) }
+            val delPadron = nivelesDelPadron(origen, copia)
+            niveles(id).forEach { nivel ->
+                val nuevo = nuevoNivel(nuevaId, nivel.copy(id = null, declaracion = null))
+                copiarPadronExterno(NIVEL_CONSTRUCCION, UUID.fromString(nivel.id), UUID.fromString(nuevo.id), delPadron)
+            }
+            // an obra's and a frente's dtos carry all their fields: nothing of a padrón is left behind
             obras(id).forEach { nuevaObra(nuevaId, it.copy(id = null, declaracion = null)) }
             frentes(id).forEach { nuevoFrente(nuevaId, it.copy(id = null, declaracion = null)) }
             return recalcular(nuevaId).despues
@@ -413,6 +418,14 @@ class DeclaracionService(
             throw e
         }
     }
+
+    // #180: what an external padrón brought of each nivel, which its dto does not carry. a rectificatoria (the same
+    // year) keeps it all, as a condómino's copy; another year keeps its clasificación (an insumo of the construction,
+    // which the autoavalúo sugerido reads), not the figures of the source year
+    private fun nivelesDelPadron(
+        origen: Declaracion,
+        copia: Declaracion
+    ) = if (copia.anio == origen.anio) PADRON_EXTERNO_NIVEL else listOf(CLASIFICACION)
 
     // a copy that failed: its lists, itself, and what its condominio derived from it
     private suspend fun deshacer(creada: Declaracion) {
@@ -448,7 +461,7 @@ class DeclaracionService(
         val conOrigen =
             quitado ||
                 padronExterno(declaracion).isNotEmpty() ||
-                listas.listar(NIVEL_CONSTRUCCION, Map::class.java, PARENT, id).any { conValor(it, PADRON_EXTERNO_NIVEL).isNotEmpty() }
+                listas.listar(NIVEL_CONSTRUCCION, Map::class.java, PARENT, id).any(::conValuacionDelPadron)
         if (conOrigen) registros.replace(DECLARACION, Map::class.java, id, mapOf(ORIGEN_MODIFICADO to true))
     }
 
@@ -656,7 +669,7 @@ class DeclaracionService(
     private fun conValorDeOrigen(
         objectName: String,
         registro: Map<*, *>
-    ) = objectName == NIVEL_CONSTRUCCION && conValor(registro, PADRON_EXTERNO_NIVEL).isNotEmpty()
+    ) = objectName == NIVEL_CONSTRUCCION && conValuacionDelPadron(registro)
 
     // #157: a row written in `declaracion` is the same row in the other vigente declaraciones of its condominio, so
     // each one gets the same write: `escribir` makes it there, on its pareja (null: it has none). the group is read
