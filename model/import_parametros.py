@@ -349,13 +349,30 @@ def _label(attributes):
     return " ".join(x for x in key(attributes) if x)
 
 
-# srtm.normativa (#187): Core answers 409 to a change of a VIGENTE row
+# srtm.normativa (#187): Core answers 409 to a change of a VIGENTE row, and to the verification of a POR_VERIFICAR one
+# (only Normativa verifies: POST /api/srtm/normativa/parametros/verificar)
 RECHAZO_VIGENTE = "VIGENTE distinto: anule o cierre primero"
+RECHAZO_POR_VERIFICAR = "POR_VERIFICAR: se verifica en Normativa"
+
+
+def _detalle(body):
+    """What Core says of a refusal: its detail, or the body as it came."""
+    return body.get("detail") or body.get("message") or str(body) if isinstance(body, dict) else str(body)
+
+
+def _rechazo(stored, error):
+    """Why Core refused to change a stored row (409), by its estado: an empty one is VIGENTE."""
+    estado = stored.get("estado") or "VIGENTE"
+    if estado == "VIGENTE":
+        return RECHAZO_VIGENTE
+    if estado == "POR_VERIFICAR":
+        return f"{RECHAZO_POR_VERIFICAR} ({_detalle(error.body)})"
+    return f"Core lo rechazó: {_detalle(error.body)}"
 
 
 def load(client, parametros, dry_run=False, filas=None):
-    """Creates and updates what differs, printing a line per row it writes. A VIGENTE row Core refuses to change (409)
-    is a rechazo, reported with its line (filas: read_parametros' lines) and key, and the other rows go on. Returns
+    """Creates and updates what differs, printing a line per row it writes. A row Core refuses to change (409: a
+    VIGENTE one, or a POR_VERIFICAR one the CSV would verify) is a rechazo, reported with its line (filas: read_parametros' lines) and key, and the other rows go on. Returns
     (created, updated, skipped, rechazados)."""
     create, update, skipped = plan(client.list_all(OBJECT), parametros)
     linea = {id(p): n for p, n in zip(parametros, filas or [])}
@@ -380,7 +397,7 @@ def load(client, parametros, dry_run=False, filas=None):
                 raise
             rechazados += 1
             donde = f"línea {linea[id(p)]} " if id(p) in linea else ""
-            print(f"rechazo {donde}{_label(p)}: {RECHAZO_VIGENTE}", file=sys.stderr)
+            print(f"rechazo {donde}{_label(p)}: {_rechazo(record['attributes'], e)}", file=sys.stderr)
     resumen = f", {rechazados} rechazados" if rechazados else ""
     print(f"{OBJECT}: {len(create)} created, {updated} updated, {skipped} skipped{resumen}", flush=True)
     return len(create), updated, skipped, rechazados

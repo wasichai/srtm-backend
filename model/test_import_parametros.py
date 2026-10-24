@@ -140,6 +140,18 @@ class LoadTests(unittest.TestCase):
         self.assertEqual(self.writes().count(("POST", f"/api/objects/{OBJECT}/records")), 1)
         self.assertIn(f"{OBJECT}: 1 created, 0 updated, 10 skipped, 2 rechazados", out)
 
+    def test_a_por_verificar_core_refuses_to_verify_says_so(self):
+        # only Normativa verifies: the 409 of a POR_VERIFICAR row the CSV's two signatures would verify is not «VIGENTE
+        # distinto», it says where it is verified, with Core's detail
+        self.run_main()
+        r = next(r for r in self.core.records[OBJECT] if r["attributes"]["tipo"] == "UIT" and r["attributes"]["vigencia_desde"] == "2026-01-01")
+        r["attributes"].update({"estado": "POR_VERIFICAR", "verifico": None, "valor_numerico": "1.00"})
+        self.core.conflict_on_update = OBJECT
+        code, out, err = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn("rechazo línea 14 UIT 2026-01-01: POR_VERIFICAR: se verifica en Normativa (", err)
+        self.assertNotIn("VIGENTE distinto", err)
+
     def test_dry_run_reads_core_and_writes_nothing(self):
         code, out, err = self.run_main("--dry-run")
         self.assertEqual(code, 0, err)
