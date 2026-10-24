@@ -118,7 +118,7 @@ class SincronizacionApiTest : ConNormativaApiTest() {
         // nothing pending any more
         assertEquals(0, tree(send("POST", "$ARANCELES/sincronizar?anio=$anio", null, HttpStatus.OK, beto))["sincronizados"].asInt())
         // an anio that is no year is a 422, as the page's
-        send("POST", "$ARANCELES/sincronizar?anio=1800", null, HttpStatus.UNPROCESSABLE_ENTITY, beto)
+        send("POST", "$ARANCELES/sincronizar?anio=1800", null, HttpStatus.UNPROCESSABLE_CONTENT, beto)
     }
 
     @Test
