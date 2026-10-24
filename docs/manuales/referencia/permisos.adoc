@@ -148,14 +148,21 @@ API genérica, de `/admin`, de un importador o de un `ADMIN`:
 * un parámetro nace `POR_VERIFICAR`, con quien lo transcribió (`transcribio`) y sin `verifico`; o nace `VIGENTE` con
   las dos firmas de personas distintas (los importadores, con el CSV verificado de normativa);
 * mientras está `POR_VERIFICAR` se corrige o se borra, y ningún cálculo lo lee;
-* pasa a `VIGENTE` solo con la firma de otra persona (`verifico` distinto de `transcribio`, comparando el nombre
-  antes de la coma) y sin otro cambio. Normativa rechaza además la verificación de un parámetro cuya vigencia se
-  solapa con otro `VIGENTE` del mismo tipo y clave;
+* pasa a `VIGENTE` solo por Normativa (`POST /api/srtm/normativa/parametros/verificar`), con la firma de otra persona
+  (`verifico` distinto de `transcribio`, comparando el nombre antes de la coma) y sin otro cambio. Por la API genérica
+  o `/admin` esa transición responde 409 «se verifica en Normativa», también a un `ADMIN`. Normativa rechaza además la
+  verificación de un parámetro cuya vigencia se solapa con otro `VIGENTE` del mismo tipo y clave;
 * un `VIGENTE` no se edita ni se borra: se anula (`ANULADO`, con `motivo_anulacion`, `anulado_por` y `anulado_en`) y
   se registra el valor correcto, que vuelve a pasar por la doble firma. Un `ANULADO` no cambia;
 * la única edición de un `VIGENTE` es *cerrar* su vigencia: poner `vigencia_hasta` a uno que no la tiene, con una
   fecha no anterior a `vigencia_desde`, sin cambiar nada más. Así un valor nuevo del mismo tipo y clave rige después
   de él sin solaparse.
+
+*La puerta de importación.* Un parámetro que nace `VIGENTE` con dos firmas distintas sigue entrando por la API
+genérica: así cargan `import_parametros.py` y los demás importadores el CSV ya verificado del repositorio de
+normativa. Esas firmas vienen del documento y el sistema no las comprueba contra cuentas ni revisa solapamientos; por
+eso esta puerta queda para quien tiene `CREATE` sobre `parametro_tributario`, que entre los perfiles sugeridos son solo
+`{p-normativa}` y `ADMIN`. La doble firma hecha en el sistema, con dos cuentas, es la de Normativa.
 
 Lo demás responde 409, también a un `ADMIN`. Un parámetro sin estado (anterior al campo) cuenta como `VIGENTE`. Con
 permiso de `UPDATE` una persona puede transcribir y verificar, pero nunca lo mismo: la segunda firma tiene que ser de

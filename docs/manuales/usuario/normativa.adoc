@@ -52,6 +52,9 @@ corrige ni se borra.
 . *Verificar.* Otra persona compara el valor con la norma y lo verifica. El parámetro pasa a vigente, con su firma
   (_verificó_). Se pueden verificar varios a la vez; cada uno se acepta o se rechaza con su motivo.
 
+Solo se verifica en Normativa: la consola de administración y la API genérica no dejan pasar un parámetro de por
+verificar a vigente.
+
 El sistema no deja verificar:
 
 * lo que uno mismo transcribió: la segunda firma tiene que ser de otra cuenta;
@@ -94,7 +97,9 @@ Normativa lee un archivo CSV con las columnas de los parámetros: `tipo`, `clave
 con `#` son comentarios.
 
 * Una fila con las dos firmas, de dos personas distintas, entra vigente: es un valor que ya pasó por la doble firma
-  fuera del sistema (el repositorio de normativa).
+  fuera del sistema (el repositorio de normativa). Es la *puerta de importación*: las firmas vienen del documento, el
+  sistema no las compara con cuentas, y por eso solo pueden importar quienes tienen permiso de crear parámetros
+  (el perfil {p-normativa} y el administrador).
 * Una fila con una sola firma, o sin firmas, entra por verificar, a nombre de quien la transcribió o, si no lo dice,
   de quien importa.
 * Una fila que ya está, igual, no se vuelve a cargar. Una que cambia un parámetro por verificar lo corrige. Una que
