@@ -96,6 +96,14 @@ redeterminó. Por eso el perfil `{p-registrador}` sugerido los tiene (<<ref-perm
 |Consultar la brecha +
 `GET /api/srtm/brecha/**`
 |`READ` sobre `brecha_corrida` (y `RecordService` exige `READ` sobre `brecha_predio` al servir las filas).
+
+|Enviar a caja las deudas de un contribuyente +
+`POST /api/srtm/contribuyentes/{id}/caja`
+|`CREATE` sobre `orden_caja`.
+
+|Consultar sus órdenes en caja (pestaña «Caja» de la ficha) +
+`GET /api/srtm/contribuyentes/{id}/caja`
+|`READ` sobre `orden_caja`.
 |===
 
 [[ref-permisos-implicitos]]
@@ -138,6 +146,10 @@ usuario que emite).
 |`READ` sobre `cuota_arbitrio`, `anulacion_cuota_arbitrio`, `servicio_arbitrio`, `ordenanza_arbitrio`,
 `inafectacion_arbitrio`, `zona_arbitrio_ubicacion`, `parametro_tributario` y el padrón; la HLA también sobre
 `municipalidad`.
+
+|Ver qué pagó la caja (la marca «Pagado» en la matriz y la pestaña «Caja»)
+|`READ` sobre `orden_caja`, `pago_caja` y `pago_caja_detalle`. Los escribe solo el servicio, cuando la caja avisa un
+pago o su anulación; ningún perfil los escribe.
 
 |Seguir un trabajo masivo
 |`READ` sobre `emision_masiva` o `determinacion_arbitrio_masiva` (y sus lotes).
@@ -182,14 +194,16 @@ cuenta cada uno, que sirven de punto de partida para los roles reales. *La lista
 |CRUD completo sobre `contribuyente`, `domicilio`, `relacionado`, `medio_contacto`, `sustento`, `predio`,
 `declaracion_predial`, `transferente`, `nivel_construccion`, `obra_complementaria`, `otro_frente` y
 `catastro_fiscal`; `CREATE` sobre `cuota_arbitrio` y `anulacion_cuota_arbitrio`, para que cada cambio de la DJ
-redetermine los arbitrios del año del predio solo. Con ellos también pasa la comprobación de determinar un predio o
+redetermine los arbitrios del año del predio solo; `CREATE` sobre `cuota_predial` y `orden_caja`, para enviar a
+caja. Con ellos también pasa la comprobación de determinar un predio o
 un contribuyente y de anular una cuota (tabla de arriba): es tarea del área de arbitrios, no del registro.
 
 |`{p-arbitrios}`
 |Determinación de arbitrios (por predio, por contribuyente y masiva), anulación de cuotas, HLA y emisión masiva
 de HR, PU y HLA.
 |`CREATE` sobre `cuota_arbitrio`, `anulacion_cuota_arbitrio`, `determinacion_arbitrio_lote` y `emision_lote`;
-CRUD sobre `determinacion_arbitrio_masiva` y `emision_masiva`.
+CRUD sobre `determinacion_arbitrio_masiva` y `emision_masiva`; `CREATE` sobre `cuota_predial` y `orden_caja`, para
+enviar a caja.
 
 |`{p-fiscalizador}`
 |Infracciones: CUIS, notificaciones previas y subsanación, actas y anulación, descargos, resoluciones (y su PDF), su
@@ -202,7 +216,7 @@ notificación, panel.
 
 |`{p-consulta}`
 |Solo lectura del modelo entero, la brecha incluida.
-|Nada: `READ` sobre los 42 objetos.
+|Nada: `READ` sobre los 46 objetos.
 |===
 
 Los cinco perfiles leen `brecha_corrida` y `brecha_predio`: la municipalidad decidió el 19 de octubre de 2026 que
@@ -210,3 +224,7 @@ cualquier usuario consulte la brecha, y wasichai no tiene un permiso para «cual
 cada rol. Solo un rol con los permisos de la tabla de arriba puede lanzar una corrida. La
 configuración de la ordenanza de arbitrios (ordenanza, servicios, inafectaciones, zonas) y los parámetros
 tributarios se cargan con los importadores: ningún perfil sugerido los escribe.
+
+La caja de la municipalidad entra con su propia cuenta de servicio, de rol `CAJA`, que solo recibe los avisos de
+pago y consulta la vigencia de una orden. No es un perfil para personas: se crea al dar de alta la caja
+(`docs/develop/alta-organizacion.md`, §8).
