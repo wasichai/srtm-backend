@@ -1,0 +1,92 @@
+= Manual de normativa: Parámetros tributarios
+Municipalidad Distrital de Perené
+include::../atributos.adoc[]
+:description: Manual de usuario de {producto} ({sigla}) para el perfil {p-normativa}: los parámetros tributarios, sus estados, la doble firma y la importación de un CSV.
+:keywords: srtm, rentas municipales, normativa, parámetros tributarios, UIT, doble firma, verificación, anulación
+
+[abstract]
+Este manual explica qué son los parámetros tributarios de {producto} ({sigla}), por qué estados pasan, cómo se
+registran y se verifican con doble firma, cómo se corrige uno que ya rige y cómo se carga un archivo CSV. Está escrito
+para quien transcribe y verifica los valores de las normas con el perfil {p-normativa}.
+
+[[normativa-que-es]]
+== Qué es Normativa
+
+Los cálculos de {sigla} toman sus cifras de los *parámetros tributarios*: la UIT de cada año, los tramos y el mínimo
+del impuesto predial, las deducciones, las tasas y los mapeos de los arbitrios, los plazos y feriados de las
+infracciones y las tasas de anuncios. Cada parámetro tiene un *tipo* (por ejemplo, `UIT` o `TRAMO_PREDIAL`), una
+*clave* cuando el tipo tiene varios valores (el tramo 1, 2 o 3; un servicio, zona y uso), una *vigencia* (desde y,
+si termina, hasta), su valor y la norma de la que sale.
+
+Normativa es donde esos valores se registran. Cada uno pasa por dos personas: quien lo transcribe de la norma y quien
+comprueba la transcripción. Ningún cálculo usa un valor hasta que la segunda persona lo verifica.
+
+El catálogo de tipos dice, para cada uno, si lleva clave, si su valor es un número o un texto y en qué unidad se
+escribe (soles, %, UIT, días).
+
+[[normativa-estados]]
+== Los estados de un parámetro
+
+.Estados de un parámetro tributario
+[cols="2,5",options="header"]
+|===
+|Estado |Qué significa
+
+|Por verificar (`POR_VERIFICAR`)
+|Lo registró quien lo transcribió. Se puede corregir o borrar. Ningún cálculo lo usa.
+
+|Vigente (`VIGENTE`)
+|Lo verificó otra persona. Es el que usan la liquidación, los arbitrios, las infracciones y los anuncios. No se
+corrige ni se borra.
+
+|Anulado (`ANULADO`)
+|Era vigente y se anuló, con su motivo, quién lo anuló y cuándo. Queda como historia y ningún cálculo lo usa.
+|===
+
+[[normativa-doble-firma]]
+== La doble firma
+
+. *Registrar.* Quien transcribe el valor lo registra con su tipo, su clave, su vigencia, el valor y la norma. El
+  parámetro queda por verificar, firmado por esa cuenta (_transcribió_).
+. *Corregir.* Mientras está por verificar, se corrige. Quien lo corrige pasa a ser quien lo transcribió.
+. *Verificar.* Otra persona compara el valor con la norma y lo verifica. El parámetro pasa a vigente, con su firma
+  (_verificó_). Se pueden verificar varios a la vez; cada uno se acepta o se rechaza con su motivo.
+
+El sistema no deja verificar:
+
+* lo que uno mismo transcribió: la segunda firma tiene que ser de otra cuenta;
+* un parámetro cuya vigencia se cruza con la de otro vigente del mismo tipo y clave. La respuesta nombra el otro
+  parámetro: anúlelo antes, o corrija la vigencia del nuevo.
+
+Tampoco deja registrar dos parámetros del mismo tipo, clave y fecha de inicio, salvo que el primero esté anulado.
+
+[[normativa-anular]]
+== Corregir un valor vigente
+
+Un parámetro vigente no se edita, ni desde Normativa ni desde la consola de administración. Si tiene un error:
+
+. anúlelo, con el motivo (por ejemplo, «la cifra se copió mal de la norma»);
+. registre el valor correcto como un parámetro nuevo;
+. pida a otra persona que lo verifique.
+
+El anulado queda en el historial con su motivo, quién lo anuló y cuándo.
+
+[[normativa-importar]]
+== Importar un CSV
+
+Normativa lee un archivo CSV con las columnas de los parámetros: `tipo`, `clave`, `vigencia_desde`,
+`vigencia_hasta`, `valor_numerico`, `texto`, `norma`, `fuente`, `transcribio` y `verifico`. Las líneas que empiezan
+con `#` son comentarios.
+
+* Una fila con las dos firmas, de dos personas distintas, entra vigente: es un valor que ya pasó por la doble firma
+  fuera del sistema (el repositorio de normativa).
+* Una fila con una sola firma, o sin firmas, entra por verificar, a nombre de quien la transcribió o, si no lo dice,
+  de quien importa.
+* Una fila que ya está, igual, no se vuelve a cargar. Una que cambia un parámetro por verificar lo corrige. Una que
+  cambia un parámetro vigente se rechaza: anúlelo primero.
+
+Antes de cargar, el sistema muestra qué haría (cuántas filas crearía, cuáles corregiría, cuáles ya están y cuáles
+rechaza, con su número de línea y el motivo), sin escribir nada. Solo al confirmar se escribe todo junto.
+
+NOTE: La pantalla de Normativa llega con la próxima versión del portal. Mientras tanto, el administrador usa estas
+mismas acciones por la API (`/api/srtm/normativa`), que se describe en el {m-sistema}.

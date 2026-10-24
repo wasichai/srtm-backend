@@ -540,6 +540,60 @@ cabecera `Idempotency-Key` (hasta 64 caracteres)
 |200.
 |===
 
+[[ref-api-normativa]]
+=== Normativa (`srtm.normativa`)
+
+Base: `/api/srtm/normativa`. Controlador `NormativaController`. La doble firma y sus estados:
+<<ref-permisos-normativa>>. Un parámetro se responde con los campos de `parametro_tributario` (`id`, `tipo`, `clave`,
+`vigencia_desde`, `vigencia_hasta`, `valor_numerico`, `texto`, `norma`, `fuente`, `transcribio`, `verifico`,
+`estado`, `motivo_anulacion`, `anulado_por`, `anulado_en`); un `estado` vacío se responde `VIGENTE`.
+
+[cols="5,6,4",options="header"]
+|===
+|Método y ruta |Qué hace |Respuestas
+
+|`GET /tipos`
+|El catálogo de tipos: `tipo`, `etiqueta`, `usa_clave`, `valor` (`NUMERICO` o `TEXTO`), `unidad`, `modulo`,
+`admite_vacio`.
+|200.
+
+|`GET /parametros?tipo&estado&vigente_en`
+|Los parámetros por tipo, clave y `vigencia_desde` (el más reciente primero). `vigente_en` (AAAA-MM-DD): los que rigen
+ese día, sea cual sea su estado.
+|200; 422 filtro inválido.
+
+|`POST /parametros` +
+`{tipo, clave, vigencia_desde, vigencia_hasta, valor_numerico, texto, norma, fuente}`
+|Registra un parámetro `POR_VERIFICAR`; `transcribio` es el usuario.
+|201; 400 dato inválido o fuera del catálogo; 409 ya hay uno vivo con esa llave.
+
+|`PATCH /parametros/{id}` +
+los datos que cambian
+|Corrige un parámetro `POR_VERIFICAR`; quien corrige pasa a ser `transcribio`.
+|200; 400; 404; 409 no está por verificar.
+
+|`DELETE /parametros/{id}`
+|Borra un parámetro `POR_VERIFICAR`.
+|204; 404; 409.
+
+|`POST /parametros/verificar` +
+`{ids: [...]}`
+|Verifica cada uno: `verifico` es el usuario y pasa a `VIGENTE`. Se rechaza el propio, el que no está por verificar y
+el que se solapa con otro `VIGENTE` del mismo tipo y clave.
+|200 `{verificados: [id], rechazados: [{id, motivo}]}`.
+
+|`POST /parametros/{id}/anular` +
+`{motivo}`
+|Anula un parámetro `VIGENTE`.
+|200; 400 sin motivo; 409 no está vigente.
+
+|`POST /parametros/importar?dry_run=true\|false` +
+cuerpo `text/csv`
+|El CSV con las columnas de `model/data/parametros-predial.csv`. Con las dos firmas entra `VIGENTE`; con una o
+ninguna, `POR_VERIFICAR`. Idempotente por tipo, clave y `vigencia_desde`. Sin `dry_run=false` no escribe nada.
+|200 `{dry_run, crear, actualizar, iguales, rechazos: [{fila, motivo}]}`; 400 CSV mal formado.
+|===
+
 [[ref-api-pide]]
 === Consulta de documentos (`srtm.pide`)
 

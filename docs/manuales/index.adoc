@@ -56,6 +56,13 @@ Consulta de fichas y documentos, y panel de la brecha de recaudación.
 
 xref:usuario/consulta.adoc[HTML] · link:../pdf/usuario/consulta.pdf[PDF]
 ****
+
+.{m-normativa}
+****
+Parámetros tributarios: estados, doble firma, anulación e importación de un CSV.
+
+xref:usuario/normativa.adoc[HTML] · link:../pdf/usuario/normativa.pdf[PDF]
+****
 --
 
 == Administración y operación

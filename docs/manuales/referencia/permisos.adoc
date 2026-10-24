@@ -104,7 +104,55 @@ redeterminó. Por eso el perfil `{p-registrador}` sugerido los tiene (<<ref-perm
 |Consultar sus órdenes en caja (pestaña «Caja» de la ficha) +
 `GET /api/srtm/contribuyentes/{id}/caja`
 |`READ` sobre `orden_caja`.
+
+|Consultar los tipos y los parámetros de Normativa +
+`GET /api/srtm/normativa/tipos`, `GET /api/srtm/normativa/parametros`
+|`READ` sobre `parametro_tributario`.
+
+|Registrar un parámetro (nace por verificar) +
+`POST /api/srtm/normativa/parametros`
+|`CREATE` sobre `parametro_tributario`.
+
+|Corregir un parámetro por verificar +
+`PATCH /api/srtm/normativa/parametros/{id}`
+|`UPDATE` sobre `parametro_tributario`.
+
+|Borrar un parámetro por verificar +
+`DELETE /api/srtm/normativa/parametros/{id}`
+|`DELETE` sobre `parametro_tributario`.
+
+|Verificar parámetros (la segunda firma) +
+`POST /api/srtm/normativa/parametros/verificar`
+|`UPDATE` sobre `parametro_tributario`.
+
+|Anular un parámetro vigente +
+`POST /api/srtm/normativa/parametros/{id}/anular`
+|`UPDATE` sobre `parametro_tributario`.
+
+|Importar parámetros de un CSV +
+`POST /api/srtm/normativa/parametros/importar`
+|`CREATE` y `UPDATE` sobre `parametro_tributario`.
 |===
+
+[[ref-permisos-normativa]]
+==== La doble firma de los parámetros
+
+Un parámetro tributario (`parametro_tributario`) pasa por tres estados: `POR_VERIFICAR`, `VIGENTE` y `ANULADO`. La
+regla de normativa (`srtm.normativa.ReglaDeNormativa`) los hace cumplir en toda escritura, venga de Normativa, de la
+API genérica, de `/admin`, de un importador o de un `ADMIN`:
+
+* un parámetro nace `POR_VERIFICAR`, con quien lo transcribió (`transcribio`) y sin `verifico`; o nace `VIGENTE` con
+  las dos firmas de personas distintas (los importadores, con el CSV verificado de normativa);
+* mientras está `POR_VERIFICAR` se corrige o se borra, y ningún cálculo lo lee;
+* pasa a `VIGENTE` solo con la firma de otra persona (`verifico` distinto de `transcribio`, comparando el nombre
+  antes de la coma) y sin otro cambio. Normativa rechaza además la verificación de un parámetro cuya vigencia se
+  solapa con otro `VIGENTE` del mismo tipo y clave;
+* un `VIGENTE` no se edita ni se borra: se anula (`ANULADO`, con `motivo_anulacion`, `anulado_por` y `anulado_en`) y
+  se registra el valor correcto, que vuelve a pasar por la doble firma. Un `ANULADO` no cambia.
+
+Lo demás responde 409, también a un `ADMIN`. Un parámetro sin estado (anterior al campo) cuenta como `VIGENTE`. Con
+permiso de `UPDATE` una persona puede transcribir y verificar, pero nunca lo mismo: la segunda firma tiene que ser de
+otra cuenta.
 
 [[ref-permisos-implicitos]]
 === Permisos que exigen las lecturas y escrituras
@@ -167,7 +215,8 @@ pago o su anulación; ningún perfil los escribe.
 
 |Cargar datos con los importadores
 |`CREATE` y `UPDATE` sobre los objetos que cada script escribe; `import_cuis.py` pasa por la API de {sigla}
-(`CREATE` sobre `codigo_infraccion`). En la práctica se corren con una cuenta `ADMIN`.
+(`CREATE` sobre `codigo_infraccion`). En la práctica se corren con una cuenta `ADMIN`. `import_parametros.py` sigue
+la doble firma (<<ref-permisos-normativa>>): no corrige un parámetro `VIGENTE` (409), hay que anularlo primero.
 
 |Administrar usuarios y roles
 |`MANAGE_ORGANIZATION`.
@@ -180,7 +229,7 @@ permisos no abre nada; tampoco hace falta darlos.
 [[ref-permisos-perfiles]]
 === Perfiles sugeridos
 
-La instalación no trae más rol que `ADMIN`. La base de demostración de los manuales crea cinco perfiles con una
+La instalación no trae más rol que `ADMIN`. La base de demostración de los manuales crea seis perfiles con una
 cuenta cada uno, que sirven de punto de partida para los roles reales. *La lista canónica de sus permisos es
 `docs/manuales/demo/perfiles.json`*; esta tabla la resume.
 
@@ -217,13 +266,18 @@ notificación, panel.
 |`{p-consulta}`
 |Solo lectura del modelo entero, la brecha incluida.
 |Nada: `READ` sobre los 46 objetos.
+
+|`{p-normativa}`
+|Normativa: registrar, corregir, verificar, anular e importar los parámetros tributarios ({m-normativa}).
+|CRUD sobre `parametro_tributario`. El `DELETE` solo borra lo que está por verificar. La doble firma pide dos cuentas.
 |===
 
-Los cinco perfiles leen `brecha_corrida` y `brecha_predio`: la municipalidad decidió el 19 de octubre de 2026 que
+Los otros cinco perfiles leen `brecha_corrida` y `brecha_predio`: la municipalidad decidió el 19 de octubre de 2026 que
 cualquier usuario consulte la brecha, y wasichai no tiene un permiso para «cualquier usuario autenticado», así que va en
 cada rol. Solo un rol con los permisos de la tabla de arriba puede lanzar una corrida. La
-configuración de la ordenanza de arbitrios (ordenanza, servicios, inafectaciones, zonas) y los parámetros
-tributarios se cargan con los importadores: ningún perfil sugerido los escribe.
+configuración de la ordenanza de arbitrios (ordenanza, servicios, inafectaciones, zonas) se carga con los
+importadores: ningún perfil sugerido la escribe. Los parámetros tributarios los escribe el perfil `{p-normativa}`, con
+doble firma, o los importadores con el CSV ya verificado.
 
 La caja de la municipalidad entra con su propia cuenta de servicio, de rol `CAJA`, que solo recibe los avisos de
 pago y consulta la vigencia de una orden. No es un perfil para personas: se crea al dar de alta la caja

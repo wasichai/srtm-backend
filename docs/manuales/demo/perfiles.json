@@ -569,6 +569,21 @@
           "READ"
         ]
       }
+    },
+    {
+      "rol": "NORMATIVA",
+      "etiqueta": "Normativa",
+      "email": "normativa@demo.srtm.local",
+      "displayName": "Normativa Demo",
+      "_para": "Normativa (#187): registra, corrige, borra (mientras están por verificar), verifica, anula e importa los parámetros tributarios (UIT, tramos, tasas, plazos). La doble firma pide que verifique otra persona: en la demo, otra cuenta NORMATIVA o el administrador.",
+      "permisos": {
+        "parametro_tributario": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ]
+      }
     }
   ]
 }

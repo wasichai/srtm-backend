@@ -78,6 +78,7 @@ def cuerpos(i):
         "cese": ("POST", f"/api/srtm/anuncios/{i['anuncio']}/cese", {"fecha": "2026-10-15", "motivo": "Verificación", "observacion": "Verificación de permisos"}),
         "brecha": ("POST", "/api/srtm/brecha/corridas", {"anio": ANIO}),
         "lote": ("POST", "/api/srtm/catastro", {"codigo_cpu": "VERIF-0001"}),
+        "parametro": ("POST", "/api/srtm/normativa/parametros", {"tipo": "UIT", "vigencia_desde": "2099-01-01", "valor_numerico": 1}),
     }  # fmt: skip
 
 
@@ -113,12 +114,14 @@ def lecturas(i):
              f"/api/srtm/predios/{i['p_acta']}/infracciones",
              f"/api/srtm/contribuyentes/{i['c34']}/anuncios", f"/api/srtm/predios/{i['p1']}/anuncios"]  # fmt: skip
     brecha = [f"/api/srtm/brecha/corridas?anio={ANIO}"]
+    normativa = ["/api/srtm/normativa/tipos", f"/api/srtm/normativa/parametros?vigente_en={ANIO}-01-01"]
     return {
         "REGISTRADOR": padron + catalogos + catastro + documentos + arbitrios + ficha + brecha,
         "ARBITRIOS_EMISION": padron + [r for r in catalogos if "/vias" not in r and "/unidades-urbanas" not in r] + documentos + arbitrios + masivas + brecha,
         "FISCALIZADOR": padron[:12] + infracciones + ["/api/srtm/ubigeos"] + brecha,
         "ANUNCIOS": padron[:12] + anuncios + ["/api/srtm/ubigeos"] + brecha,
-        "CONSULTA": padron + catalogos + catastro + documentos + arbitrios + masivas + infracciones + anuncios + ficha + brecha,
+        "CONSULTA": padron + catalogos + catastro + documentos + arbitrios + masivas + infracciones + anuncios + ficha + brecha + normativa,
+        "NORMATIVA": normativa,
     }
 
 
@@ -139,6 +142,10 @@ PERMITIDAS = {
         ("POST", "/api/srtm/infracciones/notificaciones/{np2}/subsanacion", {"fecha": "2026-09-30", "observacion": "Verificación de permisos"}, (409,)),
         ("POST", "/api/srtm/infracciones/actas/{acta_anulada}/anulacion", {"motivo": "Verificación", "fecha": "2026-08-20", "observacion": "Verificación de permisos"}, (409,)),
     ],
+    # la verificación de un parámetro que no existe: 200, rechazado, no escribe nada
+    "NORMATIVA": [
+        ("POST", "/api/srtm/normativa/parametros/verificar", {"ids": ["00000000-0000-0000-0000-000000000000"]}, (200,)),
+    ],
     "ANUNCIOS": [
         ("POST", "/api/srtm/anuncios/{anuncio_cesado}/cese", {"fecha": "2026-09-30", "motivo": "Verificación", "observacion": "Verificación de permisos"}, (409,)),
     ],
@@ -150,7 +157,8 @@ PROHIBIDOS = {
     "FISCALIZADOR": ["contribuyente", "predio", "determinacion", "emision", "anuncio", "cese", "brecha"],
     "ANUNCIOS": ["contribuyente", "predio", "determinacion", "emision", "acta", "notificacion", "brecha"],
     "CONSULTA": ["contribuyente", "predio", "nivel", "lote", "determinacion", "determinar_predio", "anular_cuota", "emision", "acta",
-                 "notificacion", "anuncio", "cese", "brecha"],
+                 "notificacion", "anuncio", "cese", "brecha", "parametro"],
+    "NORMATIVA": ["contribuyente", "predio", "determinacion", "emision", "acta", "notificacion", "anuncio", "brecha"],
 }  # fmt: skip
 
 

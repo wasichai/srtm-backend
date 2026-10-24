@@ -199,8 +199,10 @@ a|Únicos: `codigo`
 |Objeto y propósito |Campos |Claves, relaciones y reglas
 a|`parametro_tributario` +
 Parámetro tributario. Valores normativos con vigencia y doble firma: UIT, tramos, tasas de arbitrios, plazos, feriados, tasas de anuncios. Clave natural: `tipo`, `clave`, `vigencia_desde`.
-|10 (4)
-a|Sin campos únicos ni relaciones.
+|14 (3)
+a|Sin campos únicos ni relaciones. `estado`: `POR_VERIFICAR`, `VIGENTE` (por omisión; vacío cuenta como tal) o `ANULADO`.
+Un `VIGENTE` no se edita ni se borra, por ninguna puerta: se anula (`motivo_anulacion`, `anulado_por`, `anulado_en`).
+Los cálculos leen solo los `VIGENTE` (<<ref-permisos-normativa>>).
 a|`municipalidad` +
 Municipalidad. Datos de la cabecera de los documentos emitidos; uno por organización.
 |5 (1)
