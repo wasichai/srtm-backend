@@ -70,6 +70,8 @@ class ArancelesService(
                 Arancel::class.java,
                 RecordQuery(
                     page = PageRequest.of(page, size),
+                    // core takes one sort field and breaks its ties by id (ORDER BY id_aranc, id): the pages of one
+                    // id_aranc in several years, or of its ANULADO and VIGENTE ones, neither repeat nor skip
                     sort = CamposArancel.ID_ARANC,
                     filters = anio?.let { mapOf(CamposArancel.ANIO to "$it") }.orEmpty(),
                     criteria = listOfNotNull(q?.let(::empiezaCon), estado?.let(::enEstado))

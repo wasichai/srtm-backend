@@ -142,6 +142,8 @@ class SincronizacionApiTest : ConNormativaApiTest() {
         // the verificación's copy is in catastro's POST, with the clave's lock
         assertTrue(llego.await(30, TimeUnit.SECONDS), "the copy never reached catastro")
         BLOQUEO.set(null)
+        // its permit is the bean's (one Semaphore for every request of the instance), not one of the request's own
+        assertEquals(SincronizacionAranceles.CONCURRENCIA - 1, sincronizacion.enCurso.availablePermits)
         var anulado: JsonNode? = null
         val anular = thread { anulado = tree(send("POST", "$ARANCELES/$id/anular", mapOf("motivo" to "Se anuló a la vez"), HttpStatus.OK, beto)) }
         // the anulación waits on the lock; without it, it would commit and copy (nothing to delete) before the POST lands
@@ -152,6 +154,7 @@ class SincronizacionApiTest : ConNormativaApiTest() {
         anular.join(30_000)
         assertEquals(1, verificado!!["sincronizacion"]["sincronizados"].asInt(), verificado.toString())
         assertEquals(1, anulado!!["sincronizacion"]["sincronizados"].asInt(), anulado.toString())
+        assertEquals(SincronizacionAranceles.CONCURRENCIA, sincronizacion.enCurso.availablePermits)
         // the anulación's copy ran last, on srtm's state: no VIGENTE, nothing in catastro
         assertNull(CATASTRO["$t|$anio"])
         val fila = uno(t, anio)

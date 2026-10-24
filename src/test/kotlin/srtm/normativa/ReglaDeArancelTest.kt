@@ -117,8 +117,17 @@ class ReglaDeArancelTest {
         assertTrue(conflicto(porVerificar, verificado + ("verifico" to "ana")).contains("doble firma"))
         assertTrue(conflicto(porVerificar, verificado + ("valor_m2" to "1")).contains("cambia también: valor_m2"))
         assertTrue(regla.sinLaMarca(ARANCEL, porVerificar, verificado)!!.contains("/api/srtm/normativa/aranceles/verificar"))
-        assertNull(regla.sinLaMarca(ARANCEL, porVerificar, porVerificar + ("valor_m2" to "14.00")))
-        assertNull(regla.sinLaMarca(ARANCEL, fila(VIGENTE), fila(VIGENTE) + ANULADO))
+        // nor registered, nor corrected by the generic api (a transcriber by hand would let its writer verify it)
+        assertTrue(regla.sinLaMarca(ARANCEL, porVerificar, porVerificar + ("valor_m2" to "14.00"))!!.contains("se corrige en Normativa"))
+        assertTrue(regla.sinLaMarca(ARANCEL, porVerificar, porVerificar + ("transcribio" to "OTRA"))!!.contains("se corrige en Normativa"))
+        assertTrue(regla.sinLaMarcaAlInsertar(ARANCEL, POR_VERIFICAR)!!.contains("se registra en Normativa"))
+        assertNull(regla.sinLaMarcaAlInsertar(ARANCEL, VIGENTE))
+        assertNull(regla.sinLaMarca(ARANCEL, porVerificar, porVerificar))
+        // an arancel's estado changes in Normativa alone, which copies it to catastro: not annulled by hand
+        assertTrue(regla.sinLaMarca(ARANCEL, fila(VIGENTE), fila(VIGENTE) + ANULADO)!!.contains("cambia en Normativa"))
+        // its sincronización, and the migration's mark, need no mark
+        assertNull(regla.sinLaMarca(ARANCEL, fila(VIGENTE), fila(VIGENTE) + ("sincronizado_en" to "2026-10-24T10:00:00Z")))
+        assertNull(regla.sinLaMarca(ARANCEL, fila(VIGENTE - "estado"), fila(VIGENTE)))
 
         regla.alBorrar(ARANCEL, porVerificar)
         assertTrue(assertThrows(ConflictException::class.java) { regla.alBorrar(ARANCEL, fila(VIGENTE)) }.message!!.contains("se anula"))

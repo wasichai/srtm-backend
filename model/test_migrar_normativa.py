@@ -35,7 +35,8 @@ class MigrarNormativaTests(unittest.TestCase):
     def run_main(self, *extra, catastro=True):
         argv = ["--core", self.srtm.base_url, "--email", "a", "--password", "b", "--org", "perene", *extra]
         if catastro:
-            argv += ["--catastro-core", self.catastro.base_url, "--catastro-email", "c", "--catastro-password", "d"]
+            argv += ["--catastro-core", self.catastro.base_url, "--catastro-email", "c", "--catastro-password", "d",
+                     "--catastro-org", "catastro-perene"]
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
             code = mn.main(argv)
@@ -141,6 +142,16 @@ class MigrarNormativaTests(unittest.TestCase):
         self.assertIn("no de 'ica'", err)
         code, _, err = self.run_main("--catastro-core", "http://127.0.0.1:1", catastro=False)
         self.assertEqual(code, 2)
+        # catastro hosts several municipalities: its login must be of --catastro-org
+        login = ["--catastro-core", self.catastro.base_url, "--catastro-email", "c", "--catastro-password", "d"]
+        code, _, err = self.run_main(*login, "--catastro-org", "catastro-ica", catastro=False)
+        self.assertEqual(code, 2)
+        self.assertIn("no de 'catastro-ica'", err)
+        self.assertNotIn("inválido", err)
+        self.assertEqual(self.writes(self.srtm), [])
+        code, _, err = self.run_main(*login, catastro=False)
+        self.assertEqual(code, 2)
+        self.assertIn("--catastro-org", err)
 
     def test_a_refusal_of_core_is_exit_1(self):
         self.srtm.stop()

@@ -100,13 +100,18 @@ class ReglaDeNormativaTest {
     }
 
     @Test
-    fun `only srtm verifies - the transition to VIGENTE of a stored row needs the mark, nothing else does`() {
+    fun `only srtm registers, corrects and verifies a POR_VERIFICAR row - nothing else needs the mark`() {
         val antes = fila(*POR_VERIFICAR.toList().toTypedArray())
         val verificado = antes + ("estado" to "VIGENTE") + ("verifico" to "BETO")
         assertTrue(regla.sinLaMarca(PARAMETRO_TRIBUTARIO, antes, verificado)!!.contains("se verifica en Normativa"))
         // core clears a field left out: an estado missing from a PUT is VIGENTE too
         assertTrue(regla.sinLaMarca(PARAMETRO_TRIBUTARIO, antes, verificado + ("estado" to null)) != null)
-        assertEquals(null, regla.sinLaMarca(PARAMETRO_TRIBUTARIO, antes, antes + ("valor_numerico" to "1")))
+        // nor is it corrected nor registered by the generic api: a transcriber by hand would let its writer verify it
+        assertTrue(regla.sinLaMarca(PARAMETRO_TRIBUTARIO, antes, antes + ("valor_numerico" to "1"))!!.contains("se corrige en Normativa"))
+        assertTrue(regla.sinLaMarca(PARAMETRO_TRIBUTARIO, antes, antes + ("transcribio" to "BETO"))!!.contains("se corrige en Normativa"))
+        assertTrue(regla.sinLaMarcaAlInsertar(PARAMETRO_TRIBUTARIO, antes)!!.contains("se registra en Normativa"))
+        assertEquals(null, regla.sinLaMarcaAlInsertar(PARAMETRO_TRIBUTARIO, fila()))
+        assertEquals(null, regla.sinLaMarca(PARAMETRO_TRIBUTARIO, antes, antes))
         assertEquals(null, regla.sinLaMarca(PARAMETRO_TRIBUTARIO, fila(), fila() + ANULACION))
         assertEquals(null, regla.sinLaMarca(PARAMETRO_TRIBUTARIO, fila(), fila()))
     }

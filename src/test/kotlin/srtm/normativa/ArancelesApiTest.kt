@@ -37,20 +37,27 @@ class ArancelesApiTest : ConNormativaApiTest() {
         val id = vigenteArancel(arancel(t))
         // one alive per clave
         assertTrue(tree(send("POST", ARANCELES, arancel(t, "13.00"), HttpStatus.CONFLICT, ana))["detail"].asString().contains("anúlelo"))
-        // a duplicate the importers' door let in: verifying it names the VIGENTE one
+        // the generic api does not register a POR_VERIFICAR one: a transcriber written by hand would verify it
         val atributos = DatosDeArancel.atributos(DatosDeArancel.validar(arancel(t, "13.00")))
+        val aMano = mapOf("attributes" to atributos + mapOf("estado" to "POR_VERIFICAR", "transcribio" to "OTRA"))
+        val sinMarca = tree(send("POST", "/api/objects/$ARANCEL/records", aMano, HttpStatus.CONFLICT))
+        assertTrue(sinMarca["detail"].asString().contains("se registra en Normativa"), sinMarca.toString())
+        // a VIGENTE the importers' door let in after a POR_VERIFICAR of its clave: verifying this one names it
+        val d = tramo()
+        val borrador = post(ARANCELES, arancel(d), ana)["id"].asString()
+        val deD = DatosDeArancel.atributos(DatosDeArancel.validar(arancel(d, "13.00")))
         val colado =
             tree(
                 send(
                     "POST",
                     "/api/objects/$ARANCEL/records",
-                    mapOf("attributes" to atributos + mapOf("estado" to "POR_VERIFICAR", "transcribio" to "OTRA")),
+                    mapOf("attributes" to deD + mapOf("estado" to "VIGENTE", "transcribio" to "OTRA", "verifico" to "OTRO")),
                     HttpStatus.CREATED
                 )
-            )
-        val rechazo = verificarAranceles(listOf(colado["id"].asString()))["rechazados"].single()["motivo"].asString()
-        assertEquals("ya hay un arancel VIGENTE $t 2026 ($id): anúlelo antes", rechazo)
-        send("DELETE", "$ARANCELES/${colado["id"].asString()}", null, HttpStatus.NO_CONTENT, ana)
+            )["id"].asString()
+        val rechazo = verificarAranceles(listOf(borrador))["rechazados"].single()["motivo"].asString()
+        assertEquals("ya hay un arancel VIGENTE $d 2026 ($colado): anúlelo antes", rechazo)
+        send("DELETE", "$ARANCELES/$borrador", null, HttpStatus.NO_CONTENT, ana)
 
         rechazo("POST", "$ARANCELES/$id/anular", mapOf("motivo" to " "), "motivo")
         val anulado = tree(send("POST", "$ARANCELES/$id/anular", mapOf("motivo" to "La cifra se copió mal"), HttpStatus.OK, beto))
@@ -76,6 +83,10 @@ class ArancelesApiTest : ConNormativaApiTest() {
         val generica = tree(send("PUT", registro, mapOf("attributes" to atributos + ("valor_m2" to 99)), HttpStatus.CONFLICT))
         assertTrue(generica["detail"].asString().contains("VIGENTE no se edita"), generica.toString())
         send("DELETE", registro, null, HttpStatus.CONFLICT)
+        // nor annulled: Normativa annuls it and copies the anulación to catastro, which would keep it otherwise
+        val anulacion = mapOf("estado" to "ANULADO", "motivo_anulacion" to "a mano", "anulado_por" to "OTRA", "anulado_en" to "2026-10-24T10:00:00Z")
+        val anulada = tree(send("PUT", registro, mapOf("attributes" to atributos + anulacion), HttpStatus.CONFLICT))
+        assertTrue(anulada["detail"].asString().contains("cambia en Normativa"), anulada.toString())
         // catastro's copy writes back its sincronización, in any estado
         val sincronizado = atributos + mapOf("sincronizado_en" to "2026-10-24T10:00:00Z", "error_sincronizacion" to null)
         send("PUT", registro, mapOf("attributes" to sincronizado), HttpStatus.OK)
@@ -87,6 +98,9 @@ class ArancelesApiTest : ConNormativaApiTest() {
         val suyo = "/api/objects/$ARANCEL/records/$porVerificar"
         val firmado = fields(tree(send("GET", suyo, null, HttpStatus.OK))["attributes"]) + mapOf("estado" to "VIGENTE", "verifico" to "OTRA PERSONA")
         assertTrue(tree(send("PUT", suyo, mapOf("attributes" to firmado), HttpStatus.CONFLICT))["detail"].asString().contains("se verifica en Normativa"))
+        // nor corrected there, its transcriber least of all: whoever wrote it would then verify it in Normativa
+        val otraFirma = fields(tree(send("GET", suyo, null, HttpStatus.OK))["attributes"]) + ("transcribio" to "OTRA PERSONA")
+        assertTrue(tree(send("PUT", suyo, mapOf("attributes" to otraFirma), HttpStatus.CONFLICT))["detail"].asString().contains("se corrige en Normativa"))
 
         // corrected by beto, who transcribes it now; a new tramo is a new clave, which must be free
         val corregido = tree(send("PATCH", "$ARANCELES/$porVerificar", mapOf("valor_m2" to "14.25", "id_aranc" to "$otro-B"), HttpStatus.OK, beto))
@@ -133,6 +147,14 @@ class ArancelesApiTest : ConNormativaApiTest() {
         val distinto = csv.replace("$t-1,2026,12.50", "$t-1,2026,12.60")
         val (_, vigente) = importar(distinto, true, base = ARANCELES)
         assertTrue(vigente!!["rechazos"][0]["motivo"].asString().contains("VIGENTE distinto: anule primero"), vigente.toString())
+        // two signatures on the POR_VERIFICAR ana transcribed would verify it: not by her, who would sign for someone else
+        val firmado =
+            "id_aranc,anio,valor_m2,cod_via,cuadra,lado,norma,fuente,transcribio,verifico\n" +
+                "$t-2,2026,0,V-$t,2,D,Ordenanza ficticia,prueba.csv,CARLA,DORA"
+        val (_, suyo) = importar(firmado, true, base = ARANCELES)
+        assertEquals(listOf(PlanDeImportacion.LO_TRANSCRIBIO_USTED), suyo!!["rechazos"].elementos().map { it["motivo"].asString() })
+        val (_, ajeno) = importar(firmado, true, quien = beto, base = ARANCELES)
+        assertEquals(listOf("VIGENTE"), ajeno!!["actualizar"].elementos().map { it["estado"].asString() })
         assertEquals(HttpStatus.BAD_REQUEST, importar("anio,valor_m2\n2026,1", true, base = ARANCELES).first)
     }
 
@@ -162,6 +184,12 @@ class ArancelesApiTest : ConNormativaApiTest() {
         assertEquals(3, primera["totalElements"].asInt())
         assertEquals(0, primera["page"].asInt())
         assertEquals(2, primera["size"].asInt())
+        // one id_aranc in several years ties on the sort: core breaks the tie by id, so the pages neither repeat nor skip
+        val d = tramo()
+        val delTramo = (2026..2028).map { post(ARANCELES, arancel(d) + ("anio" to it), ana)["id"].asString() }
+        val paginas = (0..2).flatMap { n -> pagina("q=$d&size=1&page=$n")["content"].elementos().map { it["id"].asString() } }
+        assertEquals(delTramo.toSet(), paginas.toSet())
+        assertEquals(3, paginas.size)
         // a part of it, not its start
         assertEquals(0, pagina("q=${t.drop(2)}")["content"].size())
         send("GET", "$ARANCELES?otro=1", null, HttpStatus.UNPROCESSABLE_CONTENT, ana)

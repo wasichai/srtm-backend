@@ -1610,17 +1610,20 @@ usar Normativa (`/api/srtm/normativa`, épica #186):
 cd model
 python3 apply.py
 python3 migrar_normativa.py --org perene --dry-run \
-  --catastro-core http://localhost:8091 --catastro-email admin@catastro.local --catastro-password …
+  --catastro-core http://localhost:8091 --catastro-email admin@catastro.local --catastro-password … \
+  --catastro-org <slug de catastro>
 python3 migrar_normativa.py --org perene \
-  --catastro-core http://localhost:8091 --catastro-email admin@catastro.local --catastro-password …
+  --catastro-core http://localhost:8091 --catastro-email admin@catastro.local --catastro-password … \
+  --catastro-org <slug de catastro>
 ```
 
 - **Parámetros:** cada `parametro_tributario` sin `estado` pasa a `VIGENTE` y nada más cambia. Uno sin sus dos firmas
   (`verifico` vacío, o la misma persona que `transcribio`) no se toca: se lista «sin doble firma: revisar en
   Normativa», por su id, tipo, clave y vigencia.
-- **Aranceles** (solo con `--catastro-core`, `--catastro-email` y `--catastro-password`): lee los `arancel` del Core de
-  catastro-backend, que desde ahora es una copia de los de srtm. Cada uno que srtm no tiene (por `clave`, entre los no
-  `ANULADO`) se crea `VIGENTE` con `transcribio` MIGRACION, `verifico` CATASTRO y `fuente` «catastro (migración
+- **Aranceles** (solo con `--catastro-core`, `--catastro-email`, `--catastro-password` y `--catastro-org`): comprueba
+  que el usuario de catastro sea de `--catastro-org` (catastro-backend aloja varias municipalidades; si no, sale con 2
+  sin escribir nada) y lee los `arancel` del Core de catastro-backend, que desde ahora es una copia de los de srtm.
+  Cada uno que srtm no tiene (por `clave`, entre los no `ANULADO`) se crea `VIGENTE` con `transcribio` MIGRACION, `verifico` CATASTRO y `fuente` «catastro (migración
   inicial)». La regla de srtm pide que un arancel nazca sin `sincronizado_en`, así que el script lo crea y después lo
   marca con un segundo PUT (`sincronizado_en` = ahora: ya está en catastro). Uno igual y `VIGENTE` se salta; uno
   distinto se lista «distinto en srtm: revisar», y uno igual pero `POR_VERIFICAR` en srtm, «POR_VERIFICAR en srtm:

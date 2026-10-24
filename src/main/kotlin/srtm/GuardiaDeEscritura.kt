@@ -15,6 +15,7 @@ import wasichai.core.data.RecordWriteGuard
 // relation targets (D29). this one asks each object's ReglaDeEscritura:
 // - an insert holds its invariants, whoever sends it (400); one of an object soloDesdeElServicio without the mark
 //   EscrituraDeSrtm is a 403 before anything is written (the platform and automations carry no mark either);
+//   one the rule says needs the mark (sinLaMarcaAlInsertar: a POR_VERIFICAR parámetro or arancel) is a 409 without it;
 // - an update is what the rule allows (by default nothing: 409), and with the mark when soloDesdeElServicio, or when
 //   the rule says that change needs it (sinLaMarca: a parámetro is verified only by Normativa);
 // - a delete is what the rule allows (by default nothing: 409); a state transition is a 409, always.
@@ -39,6 +40,9 @@ class GuardiaDeEscritura(
         when (change.kind) {
             RecordChangeKind.CREATED -> {
                 exigirLaMarca(regla, "CREATE", change)
+                if (currentCoroutineContext()[EscrituraDeSrtm.Clave] == null) {
+                    regla.sinLaMarcaAlInsertar(objeto, change.attributes.orEmpty())?.let { throw ConflictException(it) }
+                }
                 regla.alInsertar(objeto, change.attributes.orEmpty())
             }
             // the rule compares the whole row: core's update replaces every field it is given, and one missing from

@@ -64,8 +64,8 @@ sealed interface Firmas {
 // - a row signed by two different people (transcribio, verifico) enters VIGENTE; one with transcribio alone or no
 //   signature POR_VERIFICAR, transcribed by the csv's or by the user; verifico without transcribio does not fit;
 // - idempotent by tipo, clave and vigencia_desde over the rows not ANULADO: the same data is skipped; other data on a
-//   POR_VERIFICAR row corrects it (and verifies it, with two signatures); on a VIGENTE one it is a rechazo, annul
-//   it first;
+//   POR_VERIFICAR row corrects it (and verifies it, with two signatures, unless the user transcribed the stored row:
+//   a rechazo, as verifying it in Normativa would be); on a VIGENTE one it is a rechazo, annul it first;
 // - a new VIGENTE row that overlaps another VIGENTE of its tipo and clave (stored, or earlier in the file) is a
 //   rechazo, as verifying it would be.
 // a rechazo leaves the other rows alone
@@ -134,6 +134,10 @@ object PlanDeImportacion {
                 iguales++
                 continue
             }
+            if (estado == EstadoParametro.VIGENTE && firmante(guardado.transcribio) == firmante(usuario)) {
+                motivo(LO_TRANSCRIBIO_USTED)
+                continue
+            }
             val otro = if (estado == EstadoParametro.VIGENTE) solapado(p, vigentes) else null
             if (otro != null) {
                 motivo(seSolapaCon(otro))
@@ -144,6 +148,10 @@ object PlanDeImportacion {
         }
         return Plan(crear, actualizar, iguales, rechazos)
     }
+
+    // the rechazo of a row that would verify a POR_VERIFICAR one the importing user transcribed: the CSV's verifico
+    // would sign for someone who never acted
+    const val LO_TRANSCRIBIO_USTED = "lo transcribió usted: verifíquelo otra persona en Normativa"
 
     private fun solapado(
         p: ParametroTributario,
