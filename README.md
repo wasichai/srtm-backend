@@ -1622,11 +1622,13 @@ python3 migrar_normativa.py --org perene \
   catastro-backend, que desde ahora es una copia de los de srtm. Cada uno que srtm no tiene (por `clave`, entre los no
   `ANULADO`) se crea `VIGENTE` con `transcribio` MIGRACION, `verifico` CATASTRO y `fuente` «catastro (migración
   inicial)». La regla de srtm pide que un arancel nazca sin `sincronizado_en`, así que el script lo crea y después lo
-  marca con un segundo PUT (`sincronizado_en` = ahora: ya está en catastro). Uno igual se salta; uno distinto se lista
-  «distinto en srtm: revisar» y no se toca. Catastro solo se lee.
+  marca con un segundo PUT (`sincronizado_en` = ahora: ya está en catastro). Uno igual y `VIGENTE` se salta; uno
+  distinto se lista «distinto en srtm: revisar», y uno igual pero `POR_VERIFICAR` en srtm, «POR_VERIFICAR en srtm:
+  verificar en Normativa» (la DJ no lo lee hasta que se verifique). Ninguno de los dos se toca. Catastro solo se lee.
 - `--org` es el slug (o el id) de la organización de srtm: si el usuario de `--email` es de otra, no se escribe nada.
-- La salida son las cuentas `parametros: vigentes N, sin_doble_firma N` y `aranceles: crear N, iguales N, distintos N`,
-  sin filas del padrón. **Idempotente:** una segunda corrida no escribe nada.
+- La salida son las cuentas `parametros: vigentes N, sin_doble_firma N` y
+  `aranceles: crear N, iguales N, distintos N, por_verificar N`, sin filas del padrón. **Idempotente:** una segunda
+  corrida no escribe nada.
 - Flags: `--dry-run`, `--workers` (escrituras en paralelo, default 4), `--core`, `--email`, `--password`, `--org` y los
   tres de catastro (también `CATASTRO_CORE`, `CATASTRO_EMAIL` y `CATASTRO_PASSWORD`). Salida: `0` ok, `1` Core rechazó
   algo, `2` una entrada no sirve (la organización no es `--org`, faltan datos de catastro o un arancel de catastro no

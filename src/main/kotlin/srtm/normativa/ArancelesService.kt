@@ -186,7 +186,7 @@ class ArancelesService(
         deLaClave(a.clave.orEmpty()).firstOrNull { it.id != a.id && it.rige() }?.let {
             throw ConflictException("ya hay un arancel VIGENTE ${it.nombre()} (${it.id}): anúlelo antes")
         }
-        return registros.replace(ARANCEL, Arancel::class.java, id, mapOf(ESTADO to VIGENTE, VERIFICO to usuario))
+        return registros.replace(ARANCEL, Arancel::class.java, id, mapOf(ESTADO to VIGENTE, VERIFICO to usuario, CamposArancel.SINCRONIZADO_EN to null))
     }
 
     // a VIGENTE arancel is ANULADO: its motivo, the user and now. the correct value is registered as a new one. catastro
@@ -212,7 +212,9 @@ class ArancelesService(
                         ESTADO to ANULADO,
                         MOTIVO_ANULACION to motivo,
                         ANULADO_POR to usuario,
-                        ANULADO_EN to OffsetDateTime.now(ZoneOffset.UTC).toString()
+                        ANULADO_EN to OffsetDateTime.now(ZoneOffset.UTC).toString(),
+                        // what catastro holds changes: pending until its copy runs (sincronizar takes it if it never does)
+                        CamposArancel.SINCRONIZADO_EN to null
                     )
                 )
             }

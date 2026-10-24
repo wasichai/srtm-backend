@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
@@ -19,14 +20,21 @@ import java.net.InetSocketAddress
 import java.net.URLDecoder
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.thread
 
 // Normativa's copy of the aranceles to catastro (#189) over http, against a stub of catastro's core (the jdk's http
 // server: its records of arancel in memory, by GET ?clave=, POST, PUT and DELETE, as the service account), never a real
 // catastro. the organization of SLUG has it (srtm.catastro.organizaciones); the other normativa tests' organization has
 // none. each test takes a year of its own (anio()) and tramos of its own: FICTITIOUS figures
 class SincronizacionApiTest : ConNormativaApiTest() {
+    @Autowired
+    private lateinit var sincronizacion: SincronizacionAranceles
+
     // the normativa organization without catastro, and its clerks
     private lateinit var sinCatastro: Triple<String, String, String>
 
@@ -119,6 +127,96 @@ class SincronizacionApiTest : ConNormativaApiTest() {
         assertEquals(0, tree(send("POST", "$ARANCELES/sincronizar?anio=$anio", null, HttpStatus.OK, beto))["sincronizados"].asInt())
         // an anio that is no year is a 422, as the page's
         send("POST", "$ARANCELES/sincronizar?anio=1800", null, HttpStatus.UNPROCESSABLE_CONTENT, beto)
+    }
+
+    @Test
+    fun `a copy that waits on catastro holds the clave - an anulacion meanwhile ends with catastro as srtm`() {
+        val anio = anio()
+        val t = tramo()
+        val id = post(ARANCELES, arancel(t, anio), ana)["id"].asString()
+        val llego = CountDownLatch(1)
+        val sigue = CountDownLatch(1)
+        BLOQUEO.set(llego to sigue)
+        var verificado: JsonNode? = null
+        val verificar = thread { verificado = verificarAranceles(listOf(id)) }
+        // the verificación's copy is in catastro's POST, with the clave's lock
+        assertTrue(llego.await(30, TimeUnit.SECONDS), "the copy never reached catastro")
+        BLOQUEO.set(null)
+        var anulado: JsonNode? = null
+        val anular = thread { anulado = tree(send("POST", "$ARANCELES/$id/anular", mapOf("motivo" to "Se anuló a la vez"), HttpStatus.OK, beto)) }
+        // the anulación waits on the lock; without it, it would commit and copy (nothing to delete) before the POST lands
+        anular.join(1500)
+        assertTrue(anular.isAlive, "the anulación did not wait for the copy of its clave")
+        sigue.countDown()
+        verificar.join(30_000)
+        anular.join(30_000)
+        assertEquals(1, verificado!!["sincronizacion"]["sincronizados"].asInt(), verificado.toString())
+        assertEquals(1, anulado!!["sincronizacion"]["sincronizados"].asInt(), anulado.toString())
+        // the anulación's copy ran last, on srtm's state: no VIGENTE, nothing in catastro
+        assertNull(CATASTRO["$t|$anio"])
+        val fila = uno(t, anio)
+        assertEquals("ANULADO", fila["estado"].asString())
+        assertFalse(fila["sincronizado_en"].isNull, fila.toString())
+    }
+
+    @Test
+    fun `an older copy that runs after a newer act pushes the newer state`() {
+        val anio = anio()
+        val t = tramo()
+        val id = post(ARANCELES, arancel(t, anio), ana)["id"].asString()
+        CAIDO.set(true)
+        // verified while catastro is down: its copy failed, then it is annulled, and that copy fails too
+        verificarAranceles(listOf(id))
+        val vigente = tree(send("GET", "$ARANCELES?q=$t&anio=$anio", null, HttpStatus.OK, ana))["content"].single()
+        send("POST", "$ARANCELES/$id/anular", mapOf("motivo" to "prueba"), HttpStatus.OK, beto)
+        CAIDO.set(false)
+        // the verificación's copy, late, with what it saw then (VIGENTE): it reads the clave again and deletes
+        CATASTRO["$t|$anio"] = mapOf("clave" to "$t|$anio")
+        IDS["$t|$anio"] = UUID.randomUUID().toString()
+        val antes = json.convertValue(vigente, Arancel::class.java)
+        assertEquals("VIGENTE", antes.estado)
+        val copia = comoAdmin { sincronizacion.despuesDe(listOf(antes)) }!!
+        assertEquals(1, copia.sincronizados)
+        assertNull(CATASTRO["$t|$anio"])
+    }
+
+    @Test
+    fun `an anulacion whose copy fails is pending, and sincronizar deletes it in catastro`() {
+        val anio = anio()
+        val t = tramo()
+        val id = vigenteArancel(arancel(t, anio))
+        assertFalse(uno(t, anio)["sincronizado_en"].isNull)
+        CAIDO.set(true)
+        val anulado = tree(send("POST", "$ARANCELES/$id/anular", mapOf("motivo" to "prueba"), HttpStatus.OK, beto))
+        assertEquals(1, anulado["sincronizacion"]["errores"].size(), anulado.toString())
+        // the anulación cleared sincronizado_en in its own write: pending even if its copy had never run
+        assertTrue(anulado["sincronizado_en"].isNull, anulado.toString())
+        assertTrue(CATASTRO.containsKey("$t|$anio"))
+        CAIDO.set(false)
+        assertEquals(1, tree(send("POST", "$ARANCELES/sincronizar?anio=$anio", null, HttpStatus.OK, beto))["sincronizados"].asInt())
+        assertNull(CATASTRO["$t|$anio"])
+    }
+
+    @Test
+    fun `annulling one of two VIGENTE of a clave copies the other`() {
+        val anio = anio()
+        val t = tramo()
+        val id = vigenteArancel(arancel(t, anio))
+        // a second VIGENTE by the importers' door (/api/objects, two signatures): not copied
+        val atributos = DatosDeArancel.atributos(DatosDeArancel.validar(arancel(t, anio, "13.00")))
+        val otro =
+            post(
+                "/api/objects/$ARANCEL/records",
+                mapOf("attributes" to atributos + mapOf("estado" to "VIGENTE", "transcribio" to "OTRA", "verifico" to "OTRO"))
+            )["id"]
+                .asString()
+        val anulado = tree(send("POST", "$ARANCELES/$id/anular", mapOf("motivo" to "duplicado"), HttpStatus.OK, beto))
+        // the anulado and the VIGENTE left, both marked
+        assertEquals(2, anulado["sincronizacion"]["sincronizados"].asInt(), anulado.toString())
+        assertEquals(0, BigDecimal(CATASTRO.getValue("$t|$anio")["valor_m2"].toString()).compareTo(BigDecimal("13.00")))
+        val queda = tree(send("GET", "$ARANCELES?q=$t&anio=$anio&estado=VIGENTE", null, HttpStatus.OK, ana))["content"].single()
+        assertEquals(otro, queda["id"].asString())
+        assertFalse(queda["sincronizado_en"].isNull, queda.toString())
     }
 
     @Test
@@ -217,6 +315,9 @@ class SincronizacionApiTest : ConNormativaApiTest() {
         private val CATASTRO = ConcurrentHashMap<String, Map<String, Any?>>()
         private val IDS = ConcurrentHashMap<String, String>()
         private val CAIDO = AtomicBoolean(false)
+
+        // while set, a POST or PUT says it arrived (first) and waits (second) before writing
+        private val BLOQUEO = AtomicReference<Pair<CountDownLatch, CountDownLatch>?>(null)
         private val TOKENS = AtomicInteger()
         private val JSON = JsonMapper.builder().build()
 
@@ -241,6 +342,12 @@ class SincronizacionApiTest : ConNormativaApiTest() {
                     .removePrefix("/")
 
             fun atributos() = (JSON.readValue(cuerpo, Map::class.java) as Map<String, Any?>)["attributes"] as Map<String, Any?>
+            if (ex.requestMethod in setOf("POST", "PUT")) {
+                BLOQUEO.get()?.let { (llego, sigue) ->
+                    llego.countDown()
+                    sigue.await(30, TimeUnit.SECONDS)
+                }
+            }
             when (ex.requestMethod) {
                 "GET" -> {
                     val clave =

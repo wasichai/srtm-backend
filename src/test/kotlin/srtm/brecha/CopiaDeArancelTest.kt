@@ -158,6 +158,17 @@ class CopiaDeArancelTest {
     }
 
     @Test
+    fun `the error names the act as spanish contracts it`() {
+        server.removeContext("/api/objects/arancel/records")
+        server.createContext("/api/objects/arancel/records") { ex ->
+            ex.requestBody.readAllBytes()
+            if (ex.requestMethod == "GET") responder(ex, 200, """{"content":[]}""") else responder(ex, 409, "{}")
+        }
+        val e = assertThrows(CatastroException::class.java) { runBlocking { cliente().guardarArancel(a01) } }
+        assertEquals("catastro-backend respondió 409 al alta del arancel A-01|2026", e.message)
+    }
+
+    @Test
     fun `a 401 renews the token once`() {
         val c = cliente()
         runBlocking { c.guardarArancel(a01) }
@@ -171,7 +182,7 @@ class CopiaDeArancelTest {
         estadoForzado = 403
         val e = assertThrows(CatastroException::class.java) { runBlocking { cliente().guardarArancel(a01) } }
         assertTrue(e.message!!.contains("403"), e.message)
-        assertTrue(e.message!!.contains("A-01|2026"), e.message)
+        assertTrue(e.message!!.contains("403 a la búsqueda del arancel A-01|2026"), e.message)
         assertFalse(e.message!!.contains("secreto"))
     }
 }
