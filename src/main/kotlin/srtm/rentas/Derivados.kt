@@ -1,5 +1,6 @@
 package srtm.rentas
 
+import srtm.brecha.DetalleObraValuacion
 import srtm.brecha.ValuacionDeInsumos
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -12,11 +13,15 @@ data class TotalesDeLaDeclaracion(
     val longitudFrente: BigDecimal?
 )
 
-// the autoavalúo a write leaves: catastro's value, the stored one marked with why catastro gave none, or the user's
-// (the organization has no catastro: nothing is marked nor overwritten)
+// #208: the row of the valuation's detail that is the external padrón's otras instalaciones
+const val OBRAS_DEL_PADRON = "Obras del padrón de origen"
+
+// the autoavalúo a write leaves: catastro's value (and its obras), the stored one marked with why catastro gave none,
+// or the user's (the organization has no catastro: nothing is marked nor overwritten)
 sealed interface Autoavaluo {
     data class Valuado(
-        val valor: BigDecimal
+        val valor: BigDecimal,
+        val obras: BigDecimal? = null
     ) : Autoavaluo
 
     data class PorRevisar(
@@ -54,10 +59,41 @@ object Derivados {
         )
     }
 
-    // catastro's answer: its autoavalúo, else its motivo (its llave when it has no text)
+    // catastro's answer: its autoavalúo and obras, else its motivo (its llave when it has no text)
     fun autoavaluo(v: ValuacionDeInsumos): Autoavaluo =
-        v.autoavaluo?.let { Autoavaluo.Valuado(it) }
+        v.autoavaluo?.let { Autoavaluo.Valuado(it, v.obras) }
             ?: Autoavaluo.PorRevisar(v.motivo?.ifBlank { null } ?: v.llave?.ifBlank { null } ?: "El catastro no valuó la declaración")
+
+    // #208: while the declaración has no active obra, catastro's valuation adds the external padrón's otras
+    // instalaciones as one more obra of its detail. the amount is fixed: it is not depreciated again in later years.
+    // not valued, or no amount: catastro's answer as it is
+    fun conObrasDelPadron(
+        v: ValuacionDeInsumos,
+        obras: List<ObraComplementaria>,
+        valorOtrasInstalaciones: BigDecimal?
+    ): ValuacionDeInsumos {
+        val autoavaluo = v.autoavaluo ?: return v
+        val monto = valorOtrasInstalaciones?.takeIf { it.signum() > 0 } ?: return v
+        if (obras.any { it.estado != INACTIVO }) return v
+        val fila =
+            DetalleObraValuacion(
+                codigoVu = null,
+                cantidad = null,
+                valorUnitario = null,
+                factorOficializacion = null,
+                tablaDepreciacion = null,
+                antiguedad = null,
+                porcentajeDepreciacion = null,
+                valor = monto,
+                descripcion = OBRAS_DEL_PADRON
+            )
+        return v.copy(
+            autoavaluo = autoavaluo + monto,
+            obras = (v.obras ?: BigDecimal.ZERO) + monto,
+            obrasPadronOrigen = monto,
+            detalle = v.detalle?.let { it.copy(obras = it.obras + fila) }
+        )
+    }
 
     fun noResponde(mensaje: String?) = Autoavaluo.PorRevisar("El catastro no respondió: ${mensaje ?: "sin detalle"}")
 
@@ -69,7 +105,8 @@ object Derivados {
     ): Declaracion {
         val conTotales = d.copy(areaConstruida = t.areaConstruida, areaComunConstruida = t.areaComunConstruida, longitudFrente = t.longitudFrente)
         return when (autoavaluo) {
-            is Autoavaluo.Valuado -> conTotales.copy(valorAutoavaluo = autoavaluo.valor, autoavaluoPorRevisar = null, autoavaluoMotivo = null)
+            is Autoavaluo.Valuado ->
+                conTotales.copy(valorAutoavaluo = autoavaluo.valor, valorObras = autoavaluo.obras, autoavaluoPorRevisar = null, autoavaluoMotivo = null)
             is Autoavaluo.PorRevisar -> conTotales.copy(autoavaluoPorRevisar = true, autoavaluoMotivo = autoavaluo.motivo)
             Autoavaluo.Manual -> conTotales
         }
@@ -82,6 +119,7 @@ object Derivados {
             "area_comun_construida" to d.areaComunConstruida,
             "longitud_frente" to d.longitudFrente,
             "valor_autoavaluo" to d.valorAutoavaluo,
+            "valor_obras" to d.valorObras,
             "autoavaluo_por_revisar" to d.autoavaluoPorRevisar,
             "autoavaluo_motivo" to d.autoavaluoMotivo,
             "condicion_propiedad" to d.condicionPropiedad,

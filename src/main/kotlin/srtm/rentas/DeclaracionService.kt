@@ -149,6 +149,7 @@ class DeclaracionService(
             areaComunConstruida = null,
             longitudFrente = null,
             valorAutoavaluo = if (autoavaluos.manual()) d.valorAutoavaluo else null,
+            valorObras = null,
             autoavaluoPorRevisar = null,
             autoavaluoMotivo = null
         )
@@ -193,6 +194,7 @@ class DeclaracionService(
                     areaComunConstruida = stored.areaComunConstruida,
                     longitudFrente = stored.longitudFrente,
                     valorAutoavaluo = if (autoavaluos.manual()) body.valorAutoavaluo else stored.valorAutoavaluo,
+                    valorObras = stored.valorObras,
                     autoavaluoPorRevisar = stored.autoavaluoPorRevisar,
                     autoavaluoMotivo = stored.autoavaluoMotivo
                 ),

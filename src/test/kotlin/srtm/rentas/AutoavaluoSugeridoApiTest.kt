@@ -33,8 +33,12 @@ class AutoavaluoSugeridoApiTest : SrtmApiTest() {
             suyo.also { organizacionDelCatastro = it }
         }
 
-    // a declaración of 2026 with two niveles (one inactive) and an obra, its arancel as an external padrón brings it
-    private fun declaracion(org: String): String {
+    // a declaración of 2026 with two niveles (one inactive) and an obra (none: `obra` false), its arancel as an
+    // external padrón brings it
+    private fun declaracion(
+        org: String,
+        obra: Boolean = true
+    ): String {
         val codigo = "AS-${uniqueDocumento()}"
         val predio = post("/api/srtm/predios", mapOf("codigo" to codigo, "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO"), org)
         val contribuyente = post("/api/srtm/contribuyentes", personaNatural(uniqueDocumento()), org)["id"].asString()
@@ -55,16 +59,19 @@ class AutoavaluoSugeridoApiTest : SrtmApiTest() {
             )["id"].asString()
         post("/api/srtm/declaraciones/$id/niveles", NIVEL, org)
         post("/api/srtm/declaraciones/$id/niveles", NIVEL + mapOf("numero_piso" to 2, "estado" to "INACTIVO"), org)
-        post("/api/srtm/declaraciones/$id/obras", OBRA, org)
-        val guardada = tree(send("GET", "/api/objects/declaracion_predial/records/$id", null, HttpStatus.OK, org))["attributes"]
-        send(
-            "PUT",
-            "/api/objects/declaracion_predial/records/$id",
-            mapOf("attributes" to fields(guardada) + ("arancel" to BigDecimal("45.50"))),
-            HttpStatus.OK,
-            org
-        )
+        if (obra) post("/api/srtm/declaraciones/$id/obras", OBRA, org)
+        delPadron(id, org, "arancel" to BigDecimal("45.50"))
         return id
+    }
+
+    // what an external padrón brings of the declaración, through the generic record PUT
+    private fun delPadron(
+        id: String,
+        org: String,
+        campo: Pair<String, Any>
+    ) {
+        val guardada = tree(send("GET", "/api/objects/declaracion_predial/records/$id", null, HttpStatus.OK, org))["attributes"]
+        send("PUT", "/api/objects/declaracion_predial/records/$id", mapOf("attributes" to fields(guardada) + campo), HttpStatus.OK, org)
     }
 
     private fun sugerido(
@@ -113,6 +120,32 @@ class AutoavaluoSugeridoApiTest : SrtmApiTest() {
         val despues = tree(send("GET", "/api/srtm/declaraciones/$id", null, HttpStatus.OK, org))
         assertEquals(antes["actualizado"], despues["actualizado"])
         assertEquals(antes["declaracion"], despues["declaracion"])
+    }
+
+    // #208
+    @Test
+    fun `the padron's otras instalaciones add to catastro's valuation until the DJ declares an obra`() {
+        val org = organizacion()
+        RESPUESTA.set(200 to VALUADA)
+        val id = declaracion(org, obra = false)
+        delPadron(id, org, "valor_otras_instalaciones" to 1200)
+
+        val v = sugerido(id, org)
+
+        assertEquals(0, BigDecimal("97952.21").compareTo(v["autoavaluo"].decimalValue()), v.toString())
+        assertEquals(0, BigDecimal("10070.61").compareTo(v["obras"].decimalValue()), v.toString())
+        assertEquals(0, BigDecimal("1200").compareTo(v["obras_padron_origen"].decimalValue()), v.toString())
+        val fila = v["detalle"]["obras"].last()
+        assertEquals("Obras del padrón de origen", fila["descripcion"].asString(), v.toString())
+        assertTrue(fila["codigo_vu"].isNull, v.toString())
+        assertEquals(0, BigDecimal("1200").compareTo(fila["valor"].decimalValue()), v.toString())
+
+        post("/api/srtm/declaraciones/$id/obras", OBRA, org)
+        val conObra = sugerido(id, org)
+
+        assertEquals(0, BigDecimal("96752.21").compareTo(conObra["autoavaluo"].decimalValue()), conObra.toString())
+        assertTrue(conObra["obras_padron_origen"].isNull, conObra.toString())
+        assertEquals(1, conObra["detalle"]["obras"].size(), conObra.toString())
     }
 
     @Test

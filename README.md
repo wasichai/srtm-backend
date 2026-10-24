@@ -1856,7 +1856,7 @@ su `valor_autoavaluo` ([Valores derivados de la DJ](#valores-derivados-de-la-dj)
 ```
 { "anio": 2026, "version": "valuacion-v2", "region": "SELVA", "codigo_municipal": "01-01-0006", "arancel_m2": 45.5,
   "origen_arancel": "CUERPO", "terreno": 9100.0, "construccion": 78781.6, "obras": 8870.61, "autoavaluo": 96752.21,
-  "motivo": null, "llave": null,
+  "motivo": null, "llave": null, "obras_padron_origen": null,
   "detalle": { "pisos": [ { "piso": "1", "seccion": null, "area_construida": 100, "valor_unitario": 829.28, "incremento": 0.0,
                             "tabla_depreciacion": "01", "antiguedad": 10, "porcentaje_depreciacion": 5,
                             "valor_unitario_depreciado": 787.816, "valor": 78781.6 } ],
@@ -1875,8 +1875,15 @@ su `valor_autoavaluo` ([Valores derivados de la DJ](#valores-derivados-de-la-dj)
 - **Obras:** `codigoVu` = `tipo_obra|n`, donde `n` es el número con que empieza la `categoria` (`3. MURO DE …`).
   Sin número, va `null` y el catastro nombra la obra que no valúa. `cantidad` es el total metrado (cantidad × metrado),
   en la unidad de la partida.
+- **Obras del padrón de origen (#208):** si la DJ no tiene ninguna obra activa (ninguna, o todas `INACTIVO`) y el
+  padrón externo trajo `valor_otras_instalaciones` mayor que 0, srtm suma ese monto al `autoavaluo` y a las `obras`
+  que valuó el catastro, y lo pone en `obras_padron_origen`. En el desglose es una fila más de `detalle.obras`, con
+  `codigo_vu = null`, `valor` = el monto y `descripcion = "Obras del padrón de origen"` (las filas del catastro traen
+  `descripcion = null`). Se deja de sumar en cuanto la DJ declara una obra activa: sus obras las valúa el catastro.
+  Si el catastro no da valor, no se suma nada.
+  Límite: el monto del padrón es fijo: no se vuelve a depreciar en los años siguientes.
 - **Edificio** (el 5 % desde el 5.° piso): si el predio tiene `edificacion` o hay un nivel PISO por encima del primero.
-- Sin valor, `terreno`, `construccion`, `obras`, `autoavaluo` y `detalle` son `null`, y `motivo` y `llave` dicen por
+- Sin valor, `terreno`, `construccion`, `obras`, `autoavaluo`, `obras_padron_origen` y `detalle` son `null`, y `motivo` y `llave` dicen por
   qué (`ARANCEL_FALTANTE`, `PARAMETRO_FALTANTE:PORCENTAJE_ACTUALIZACION:2027`…).
 - 404 si la DJ no existe o es de otra organización, 409 `SIN_CATASTRO_CONFIGURADO` si la organización no tiene catastro
   y 502 si el catastro no responde o rechaza el pedido.
@@ -1893,7 +1900,10 @@ frentes (`DeclaracionService.recalcular`, `Derivados.kt`):
   los otros frentes activos (la base `FRONTIS_ML` de los arbitrios). Sin ningún frontis, `null`.
 - **Autoavalúo:** lo valúa el catastro de la organización, con el motor del [autoavalúo sugerido](#autoavalúo-sugerido).
   - Si da valor, `valor_autoavaluo` es ese valor y se limpian `autoavaluo_por_revisar` y `autoavaluo_motivo`.
-  - Si no da valor, se conserva el autoavalúo anterior y se marca `autoavaluo_por_revisar = true`. `autoavaluo_motivo`
+  - `valor_obras` (#208) son las `obras` de esa valuación, con las del padrón de origen si se sumaron (mientras la DJ
+    no declare obras activas, ver el [autoavalúo sugerido](#autoavalúo-sugerido)).
+    Límite: el monto del padrón es fijo: no se vuelve a depreciar en los años siguientes.
+  - Si no da valor, se conservan el autoavalúo y el `valor_obras` anteriores y se marca `autoavaluo_por_revisar = true`. `autoavaluo_motivo`
     dice por qué: el `motivo` del catastro (o su `llave`), o `El catastro no respondió: …` si respondió con error. La
     escritura no se rechaza.
   - **Sin catastro configurado** (el 409 del sugerido), el autoavalúo es manual: lo escribe el usuario, como antes, y
@@ -1917,7 +1927,7 @@ frentes (`DeclaracionService.recalcular`, `Derivados.kt`):
 - **Una sola vez:** la rectificatoria, la DJ desde la anterior y el condómino nuevo copian todas sus filas y recalculan
   al final (una sola valuación).
 - **Lo que manda el portal:** en el alta y en la edición se ignoran `area_construida`, `area_comun_construida`,
-  `longitud_frente`, `autoavaluo_por_revisar` y `autoavaluo_motivo`, y también `valor_autoavaluo` mientras haya
+  `longitud_frente`, `valor_obras`, `autoavaluo_por_revisar` y `autoavaluo_motivo`, y también `valor_autoavaluo` mientras haya
   catastro. Un cliente anterior a #156 que manda `longitud_frente` sin `frontis_principal` en el alta declara con él el
   frontis principal. En la edición, un `frontis_principal` que no llega conserva el guardado (se borra mandando `0`) y,
   si la DJ no tiene ninguno (no la alcanzó `migrar_derivados.py`), se toma el `longitud_frente` que llega.

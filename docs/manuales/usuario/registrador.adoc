@@ -995,6 +995,12 @@ el cálculo se hace solo al pulsarlo.
 Es el mismo cálculo con el que el sistema fija el *Autoavalúo* cada vez que se graba la declaración: el diálogo
 muestra cómo se llegó a ese valor, piso por piso y obra por obra.
 
+Si la declaración no tiene ninguna obra activa y el padrón de origen trajo un valor de otras instalaciones, el sistema
+suma ese monto a las *Obras complementarias* y al *Autoavalúo*, y el diálogo muestra la fila *Obras del padrón de
+origen* en el desglose de obras. En cuanto registre una obra activa en la declaración (<<proc-obra>>), el monto deja
+de sumarse y las obras las valúa el catastro.
+Tenga en cuenta que el monto del padrón es fijo: no se vuelve a depreciar en los años siguientes.
+
 . Pulse btn:[Calcular autoavalúo sugerido]. Se abre el diálogo *Autoavalúo sugerido*, con el año, la región, la
   *Versión de las tablas*, el arancel (de la declaración o de la ficha catastral), el *Terreno*, la *Construcción*,
   las *Obras complementarias* y el *Autoavalúo*; debajo, el desglose por piso y por obra.
