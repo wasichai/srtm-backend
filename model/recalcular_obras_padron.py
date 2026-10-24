@@ -57,8 +57,8 @@ def clasificar(guardado, sugerido):
 
 def resumen(filas):
     """con_obras (every DJ read), valuadas (catastro answered), cambian, suma_delta (of the ones that cambian) and
-    a_un_sol (those among them whose delta is at least a whole sol, not just rounding dust), and sin_valor, a
-    Counter of catastro's motivo for the ones it did not value."""
+    a_un_sol (of the valuadas, how many the motor reproduces within ±S/ 1 of the guardado: s10.md's own check of
+    the motor against the SAT), and sin_valor, a Counter of catastro's motivo for the ones it did not value."""
     valuadas = cambian = a_un_sol = 0
     suma_delta = Decimal("0.00")
     sin_valor = Counter()
@@ -68,12 +68,12 @@ def resumen(filas):
             sin_valor[fila.get("motivo")] += 1
             continue
         valuadas += 1
+        delta = _decimal(fila["sugerido"]) - _decimal(fila["valor_autoavaluo"])
+        if abs(delta) <= UN_SOL:
+            a_un_sol += 1
         if clasificacion == "cambia":
             cambian += 1
-            delta = _decimal(fila["sugerido"]) - _decimal(fila["valor_autoavaluo"])
             suma_delta += delta
-            if abs(delta) >= UN_SOL:
-                a_un_sol += 1
     return {"con_obras": len(filas), "valuadas": valuadas, "cambian": cambian, "suma_delta": suma_delta,
             "a_un_sol": a_un_sol, "sin_valor": sin_valor}
 
@@ -193,7 +193,7 @@ def main(argv=None):
 
     write_report(args.report, filas)
     print(f"con_obras: {resultado['con_obras']}, valuadas: {resultado['valuadas']}, cambian: {resultado['cambian']}, "
-          f"suma_delta: S/ {resultado['suma_delta']}, a_un_sol: {resultado['a_un_sol']}")
+          f"suma_delta: S/ {resultado['suma_delta']}, a_un_sol: {resultado['a_un_sol']} (a ±S/ 1 del guardado)")
     sin_valor = resultado["con_obras"] - resultado["valuadas"]
     if sin_valor:
         print(f"sin_valor: {sin_valor}")

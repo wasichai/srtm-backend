@@ -1447,8 +1447,9 @@ python3 -I recalcular_obras_padron.py --core <url> --anio 2026             # rec
 - Clasifica cada una: `cambia` (|sugerido − guardado| ≥ 0.01), `igual` o `sin_valor` (catastro no la valuó; el
   motivo queda en el reporte).
 - Con `--dry-run` no llama a `/recalcular`; sin él, lo llama solo para las que cambian.
-- Imprime el resumen (`con_obras`, `valuadas`, `cambian`, `suma_delta`, `a_un_sol` — las que cambian en al menos un
-  sol entero, no solo un redondeo — y `sin_valor` por motivo) y escribe `--report` (default
+- Imprime el resumen (`con_obras`, `valuadas`, `cambian`, `suma_delta`, `a_un_sol` — de las valuadas, cuántas
+  reproduce el motor a ±S/ 1 del valor guardado, el mismo cotejo contra el SAT del plan — y `sin_valor` por motivo)
+  y escribe `--report` (default
   `model/reports/obras_padron.csv`), un CSV con `declaracion, valor_autoavaluo, sugerido, delta, motivo`: solo ids y
   montos, sin nombres ni documentos.
 - Sale con `0`, o `1` si Core rechaza algo. **Nunca contra un Core real sin que lo pida quien controla el despliegue:**

@@ -36,6 +36,17 @@ class PureTests(unittest.TestCase):
         self.assertEqual(resultado["a_un_sol"], 1)
         self.assertEqual(resultado["sin_valor"], {"ARANCEL_FALTANTE": 1})
 
+    def test_a_un_sol_is_the_boundary_of_reproducing_the_guardado(self):
+        # a_un_sol counts the valuadas within ±S/ 1 of the guardado, not only the ones that "cambian": the boundary
+        # itself (delta 1.00) counts, one cent past it (1.01) does not
+        filas = [
+            {"valor_autoavaluo": "100.00", "sugerido": "101.00", "motivo": None},  # delta 1.00: counts
+            {"valor_autoavaluo": "100.00", "sugerido": "101.01", "motivo": None},  # delta 1.01: does not
+        ]
+        resultado = rop.resumen(filas)
+        self.assertEqual(resultado["cambian"], 2)
+        self.assertEqual(resultado["a_un_sol"], 1)
+
 
 class RecalcularTestCase(unittest.TestCase):
     def setUp(self):
@@ -85,7 +96,8 @@ class MainTests(RecalcularTestCase):
         self.assertEqual(code, 0, err)
         self.assertEqual(len(self.gets()), 1)
         self.assertEqual(self.posts(), [])
-        self.assertIn("con_obras: 1, valuadas: 1, cambian: 1, suma_delta: S/ 1.50, a_un_sol: 1", out)
+        # delta 1.50 is past the ±S/ 1 boundary: a_un_sol is 0, not 1
+        self.assertIn("con_obras: 1, valuadas: 1, cambian: 1, suma_delta: S/ 1.50, a_un_sol: 0 (a ±S/ 1 del guardado)", out)
 
     def test_without_dry_run_only_the_changed_are_recalculated(self):
         cambia = self.declaracion("100.00", "50.00")
