@@ -1429,6 +1429,31 @@ Con el extracto de 2026-10 (7 829 filas del padrón y 3 762 de construcciones), 
 unidades urbanas, 1 458 contribuyentes, 7 521 predios, 7 829 declaraciones y 3 758 niveles, con 4 filas rechazadas. El
 extracto es parte de un padrón de unas 32 000 filas: hasta tener el completo, la brecha de Ica infla los OMISOS.
 
+### Recalcular con las obras del padrón
+
+Las DJ importadas de Ica no tienen obras complementarias propias: su `valor_otras_instalaciones` es un monto fijo del
+padrón. Mientras no se recalculen, `Derivados.conObrasDelPadron` lo suma al autoavalúo que valúa catastro (#208); una
+vez recalculadas (`POST /declaraciones/{id}/recalcular`), si catastro ya valúa sus propias obras,
+`valor_autoavaluo` (y `valor_obras`) puede cambiar. `recalcular_obras_padron.py` mide ese cambio antes de aplicarlo:
+
+```bash
+cd model
+python3 -I recalcular_obras_padron.py --core <url> --anio 2026 --dry-run   # lee el sugerido de cada DJ, no escribe
+python3 -I recalcular_obras_padron.py --core <url> --anio 2026             # recalcula las que cambian
+```
+
+- Lee `GET /api/srtm/declaraciones/{id}/autoavaluo-sugerido` de cada DJ **vigente** (estado vacío o VIGENTE) con
+  `valor_otras_instalaciones > 0`, en paralelo (`--workers`, default 4).
+- Clasifica cada una: `cambia` (|sugerido − guardado| ≥ 0.01), `igual` o `sin_valor` (catastro no la valuó; el
+  motivo queda en el reporte).
+- Con `--dry-run` no llama a `/recalcular`; sin él, lo llama solo para las que cambian.
+- Imprime el resumen (`con_obras`, `valuadas`, `cambian`, `suma_delta`, `a_un_sol` — las que cambian en al menos un
+  sol entero, no solo un redondeo — y `sin_valor` por motivo) y escribe `--report` (default
+  `model/reports/obras_padron.csv`), un CSV con `declaracion, valor_autoavaluo, sugerido, delta, motivo`: solo ids y
+  montos, sin nombres ni documentos.
+- Sale con `0`, o `1` si Core rechaza algo. **Nunca contra un Core real sin que lo pida quien controla el despliegue:**
+  el dry-run en dev lo corre el controlador de la épica, con el OK dado.
+
 ## Normalizar el padrón importado
 
 Un padrón importado antes de que `import_predios.py` separara los tipos se normaliza en Core, sin volver a importar:
