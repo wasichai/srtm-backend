@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.0.0](https://github.com/wasichai/srtm-backend/compare/v1.0.0...v2.0.0) (2026-10-24)
+
+
+### Features
+
+* **normativa:** aranceles con doble firma e id_aranc en la DJ ([#188](https://github.com/wasichai/srtm-backend/issues/188)) ([#193](https://github.com/wasichai/srtm-backend/issues/193)) ([07693c2](https://github.com/wasichai/srtm-backend/commit/07693c2402193ce40edeb87747ac3f29bf20594e))
+* **normativa:** copia de los aranceles a catastro y migración ([#189](https://github.com/wasichai/srtm-backend/issues/189)) ([#194](https://github.com/wasichai/srtm-backend/issues/194)) ([b53f3e2](https://github.com/wasichai/srtm-backend/commit/b53f3e25d59d1fd279bddd5192f5f5d298678502))
+* **normativa:** la DJ expone el arancel guardado, de solo lectura ([#195](https://github.com/wasichai/srtm-backend/issues/195)) ([#197](https://github.com/wasichai/srtm-backend/issues/197)) ([8855253](https://github.com/wasichai/srtm-backend/commit/8855253b20ec7b5d11a3cf5d0e7eb6cefd404c52))
+* **normativa:** parámetros con doble firma ([#187](https://github.com/wasichai/srtm-backend/issues/187)) ([#190](https://github.com/wasichai/srtm-backend/issues/190)) ([36f553a](https://github.com/wasichai/srtm-backend/commit/36f553ab03bf65bb640daf06a83ce897bd201486))
+
+
+### Bug Fixes
+
+* **normativa:** la copia a catastro va bajo el candado de la clave ([#189](https://github.com/wasichai/srtm-backend/issues/189)) ([#196](https://github.com/wasichai/srtm-backend/issues/196)) ([3d147e4](https://github.com/wasichai/srtm-backend/commit/3d147e40d0b3cc2d3bb355041e29ddfa0363c329))
+* **normativa:** la doble firma no se salta por la importación ni por la API genérica ([#198](https://github.com/wasichai/srtm-backend/issues/198)) ([6f8bd4e](https://github.com/wasichai/srtm-backend/commit/6f8bd4e71ec865b4bc15ff826087fcbaa99dc9c6))
+* **rentas:** la copia de una DJ conserva lo que el padrón trajo de sus niveles ([#199](https://github.com/wasichai/srtm-backend/issues/199)) ([93a51fb](https://github.com/wasichai/srtm-backend/commit/93a51fb6372a8f165609723d43f7bb6ef20214dc))
+
 ## [1.0.0](https://github.com/wasichai/srtm-backend/compare/v0.9.0...v1.0.0) (2026-10-24)
 
 
