@@ -1,11 +1,11 @@
-# Corte analítico: una foto fechada y seudonimizada de srtm y catastro, lista para armar un DuckDB y Metabase.
-# Se corre desde docs/informes/brecha.
+# Corte analítico: a dated, pseudonymized snapshot of srtm and catastro, ready to build a DuckDB and Metabase.
+# Runs from docs/informes/brecha.
 #
-#   make venv       crea .venv e instala requirements.txt (se salta si ya está al día)
-#   make pruebas    corre las pruebas unitarias
+#   make venv       creates .venv and installs requirements.txt (skipped if already up to date)
+#   make pruebas    runs the unit tests
 #
-# Requisitos: Python 3.11+. Las dependencias (duckdb, pyarrow) van fijas en requirements.txt, instaladas en .venv;
-# nada se instala fuera de ella.
+# Requirements: Python 3.11+. The dependencies (duckdb, pyarrow) are pinned in requirements.txt, installed in
+# .venv; nothing is installed outside it.
 
 PYTHON ?= python3
 VPY := .venv/bin/python -I

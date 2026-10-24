@@ -1,7 +1,7 @@
-"""Normalización y seudonimización de números de documento (contexto.md: HMAC-SHA256, sin el tipo de documento).
+"""Normalization and pseudonymization of document numbers (contexto.md: HMAC-SHA256, without the document type).
 
-El HMAC se calcula sobre el número normalizado, nunca sobre el documento crudo ni junto con su tipo: srtm y catastro
-escriben el tipo distinto, y #204 ya compara documentos sin ceros a la izquierda.
+The HMAC is computed over the normalized number, never over the raw document or together with its type: srtm and
+catastro write the type differently, and #204 already compares documents without leading zeros.
 """
 
 import hashlib
@@ -38,5 +38,5 @@ def seudonimo(clave, numero):
 
 
 def huella_clave(clave):
-    # una huella corta de la clave para el manifiesto: ve si dos cortes comparten clave, sin exponerla
+    # a short fingerprint of the key for the manifest: shows whether two cortes share a key, without exposing it
     return hashlib.sha256(b"srtm-analitica-clave:" + clave).hexdigest()[:12]

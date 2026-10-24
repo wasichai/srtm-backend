@@ -1,8 +1,8 @@
-"""Lo que comparten los scripts del corte: parámetros, fechas, la carpeta del corte y el archivo de secretos.
+"""What the corte scripts share: parameters, dates, the corte folder, and the secrets file.
 
-Un corte es una carpeta FUERA del repositorio (contexto.md: URLs, credenciales y la clave HMAC van en
-~/.config/srtm-analitica/<org>.env, no en parametros.json). Las rutas del repositorio solo sirven para rechazar una
-carpeta de corte que caería dentro de él.
+A corte is a folder OUTSIDE the repository (contexto.md: URLs, credentials and the HMAC key go in
+~/.config/srtm-analitica/<org>.env, not in parametros.json). The repository's own path only matters to reject a
+corte folder that would fall inside it.
 """
 
 import hashlib
@@ -17,7 +17,7 @@ REPO = INFORME.parent.parent.parent
 
 _ORG = re.compile(r"^[a-z][a-z0-9-]{1,30}$")
 
-# nombres de las claves del archivo <org>.env; sus valores nunca van en un mensaje de error
+# names of the keys in the <org>.env file; their values never go into an error message
 REQUERIDOS = (
     "SRTM_URL",
     "SRTM_CLIENT_ID",
@@ -30,7 +30,7 @@ REQUERIDOS = (
 
 
 class ErrorCorte(Exception):
-    """Un error del corte con un mensaje seguro de imprimir (nunca un secreto)."""
+    """A corte-level error with a message that's safe to print (never a secret)."""
 
 
 def parametros():
@@ -58,7 +58,7 @@ def validar_fecha(texto, hoy):
 
 
 def carpeta_corte(base, org, fecha, reemplazar=False):
-    # una carpeta dentro del repositorio publicaría el corte (y sus documentos seudonimizados) en el commit
+    # a folder inside the repository would publish the corte (and its pseudonymized documents) in the commit
     base_resuelta = base.resolve()
     if base_resuelta == REPO or REPO in base_resuelta.parents:
         raise ErrorCorte(f"la carpeta del corte no puede estar dentro del repositorio: {base}")
@@ -69,7 +69,7 @@ def carpeta_corte(base, org, fecha, reemplazar=False):
 
 
 def leer_secretos(ruta):
-    # el archivo trae credenciales en claro: un modo con permisos de grupo u otros se rechaza sin leerlo
+    # the file carries credentials in the clear: a mode with group or other permissions is rejected unread
     modo = ruta.stat().st_mode
     if modo & 0o077:
         raise ErrorCorte(f"permisos demasiado abiertos en {ruta}: debe ser 0600 (chmod 600 {ruta})")

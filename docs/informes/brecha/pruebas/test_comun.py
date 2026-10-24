@@ -65,7 +65,7 @@ class CarpetaCorteTests(unittest.TestCase):
             (carpeta / "archivo").write_text("x", encoding="utf-8")
             with self.assertRaises(ErrorCorte):
                 carpeta_corte(base, "perene", fecha)
-            # reemplazar=True acepta la carpeta existente y no la toca
+            # reemplazar=True accepts the existing folder and leaves it untouched
             self.assertEqual(carpeta_corte(base, "perene", fecha, reemplazar=True), carpeta)
 
     def test_carpeta_devuelve_base_org_fecha_sin_crearla(self):
