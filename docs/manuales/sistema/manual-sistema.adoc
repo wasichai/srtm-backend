@@ -804,8 +804,8 @@ el campo `predio.condicion` (y su columna).
 
 |`migrar_normativa.py --org <slug>`
 |Una vez, para la doble firma de Normativa: los parámetros sin estado pasan a `VIGENTE` (los que no tienen dos firmas
-se listan para revisarlos en Normativa) y, con `--catastro-core`, `--catastro-email` y `--catastro-password`, los
-aranceles de catastro-backend entran a srtm `VIGENTE` (firmas MIGRACION y CATASTRO) y marcados como sincronizados.
+se listan para revisarlos en Normativa) y, con `--catastro-core`, `--catastro-email`, `--catastro-password` y
+`--catastro-org` (la organización del usuario de catastro, que se comprueba), los aranceles de catastro-backend entran a srtm `VIGENTE` (firmas MIGRACION y CATASTRO) y marcados como sincronizados.
 Orden: `apply.py`, el script con `--dry-run` y el script sin él. No tiene `--report`: solo imprime cuentas.
 |===
 

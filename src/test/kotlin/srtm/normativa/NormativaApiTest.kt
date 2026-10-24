@@ -55,6 +55,12 @@ class NormativaApiTest : ConNormativaApiTest() {
         val firmado = fields(tree(send("GET", suyo, null, HttpStatus.OK))["attributes"]) + mapOf("estado" to "VIGENTE", "verifico" to "OTRA PERSONA")
         val sinMarca = tree(send("PUT", suyo, mapOf("attributes" to firmado), HttpStatus.CONFLICT))
         assertTrue(sinMarca["detail"].asString().contains("se verifica en Normativa"), sinMarca.toString())
+        // nor corrected there, its transcriber least of all (its writer would then verify it), nor registered there
+        val otraFirma = fields(tree(send("GET", suyo, null, HttpStatus.OK))["attributes"]) + ("transcribio" to "OTRA PERSONA")
+        assertTrue(tree(send("PUT", suyo, mapOf("attributes" to otraFirma), HttpStatus.CONFLICT))["detail"].asString().contains("se corrige en Normativa"))
+        val aMano = uit(anio()) + mapOf("estado" to "POR_VERIFICAR", "transcribio" to "OTRA PERSONA")
+        val alta = tree(send("POST", "/api/objects/$PARAMETRO_TRIBUTARIO/records", mapOf("attributes" to aMano), HttpStatus.CONFLICT))
+        assertTrue(alta["detail"].asString().contains("se registra en Normativa"), alta.toString())
 
         val borrador = registrar(uit(anio()))["id"].asString()
         val corregido = tree(send("PATCH", "$PARAMETROS/$borrador", parche, HttpStatus.OK, beto))
@@ -193,6 +199,14 @@ class NormativaApiTest : ConNormativaApiTest() {
         val (_, otra) = importar(csv, dryRun = false)
         assertEquals(3, otra!!["iguales"].asInt())
         assertEquals(0, otra["crear"].size() + otra["actualizar"].size())
+        // two signatures on the POR_VERIFICAR ana transcribed would verify it: not by her, who would sign for someone else
+        val firmado =
+            "tipo,clave,vigencia_desde,vigencia_hasta,valor_numerico,texto,norma,fuente,transcribio,verifico\n" +
+                "PLAZO,DESCARGO_PAPELETA,$y-01-01,$y-12-31,5,DIAS_HABILES,Ordenanza ficticia,prueba,CARLA,DORA"
+        val (_, suyo) = importar(firmado, dryRun = true)
+        assertEquals(listOf(PlanDeImportacion.LO_TRANSCRIBIO_USTED), suyo!!["rechazos"].elementos().map { it["motivo"].asString() })
+        val (_, ajeno) = importar(firmado, dryRun = true, quien = beto)
+        assertEquals(listOf("VIGENTE"), ajeno!!["actualizar"].elementos().map { it["estado"].asString() })
         // a malformed file: nothing
         assertEquals(HttpStatus.BAD_REQUEST, importar("clave\nX", dryRun = false).first)
     }

@@ -4,7 +4,7 @@
 1. Parámetros: each parametro_tributario without estado (loaded before the field) becomes VIGENTE, and nothing else
    changes. One without its two signatures (verifico empty, or the same person as transcribio) is left alone and
    reported "sin doble firma: revisar en Normativa".
-2. Aranceles, only with --catastro-core: catastro-backend's aranceles (its object arancel, the copy it values with)
+2. Aranceles, only with --catastro-core (and its login, of --catastro-org): catastro-backend's aranceles (its object arancel, the copy it values with)
    come into srtm, which owns them from now on. Each one srtm lacks (by clave, among the aranceles not ANULADO) is
    created VIGENTE, signed transcribio MIGRACION and verifico CATASTRO, fuente "catastro (migración inicial)", and
    then marked sincronizado_en now: it is in catastro already. srtm's rule wants a new arancel without sincronizado_en,
@@ -17,10 +17,10 @@ Reads everything first, then writes, --workers at a time. Idempotent: a second r
 the records to review by their id and key, never a row of the padrón.
 
 Run: python3 migrar_normativa.py --org <slug> [--dry-run]
-         [--catastro-core URL --catastro-email E --catastro-password P]
+         [--catastro-core URL --catastro-email E --catastro-password P --catastro-org <slug>]
 Order: apply.py, then migrar_normativa.py --dry-run, then without --dry-run.
-Exit: 0 ok, 1 Core refused something, 2 an input is invalid (the organization is not --org, catastro's options are
-incomplete, an arancel of catastro lacks its data): nothing is written.
+Exit: 0 ok, 1 Core refused something, 2 an input is invalid (srtm's login is not of --org, catastro's not of
+--catastro-org, catastro's options are incomplete, an arancel of catastro lacks its data): nothing is written.
 """
 import argparse
 import os
@@ -168,6 +168,11 @@ def crear_aranceles(client, aranceles, workers, ahora=None):
     return done
 
 
+def _es_de(organizacion, org):
+    """The login's organization (GET /api/organizations/current) is org, by its slug or its id, in any case."""
+    return org.strip().lower() in {str(organizacion.get("slug") or "").lower(), str(organizacion.get("id") or "").lower()}
+
+
 def _parse_args(argv):
     p = argparse.ArgumentParser(description="Pass srtm's parámetros to VIGENTE and bring catastro's aranceles into srtm's Normativa.")
     p.add_argument("--core", default=os.environ.get("WASICHAI_CORE", "http://localhost:8090"))
@@ -179,6 +184,8 @@ def _parse_args(argv):
     p.add_argument("--catastro-core", default=os.environ.get("CATASTRO_CORE"), help="catastro-backend's url: its aranceles")
     p.add_argument("--catastro-email", default=os.environ.get("CATASTRO_EMAIL"))
     p.add_argument("--catastro-password", default=os.environ.get("CATASTRO_PASSWORD"))
+    p.add_argument("--catastro-org", default=os.environ.get("CATASTRO_ORG"),
+                   help="the organization of catastro-backend (its slug or id): its login must be of it")
     return p.parse_args(argv)
 
 
@@ -188,16 +195,17 @@ def main(argv=None):
     if args.workers < 1:
         print("error: --workers es 1 o más", file=sys.stderr)
         return 2
-    con_catastro = any([args.catastro_core, args.catastro_email, args.catastro_password])
-    if con_catastro and not all([args.catastro_core, args.catastro_email, args.catastro_password]):
-        print("error: los aranceles piden --catastro-core, --catastro-email y --catastro-password", file=sys.stderr)
+    opciones = [args.catastro_core, args.catastro_email, args.catastro_password, args.catastro_org]
+    con_catastro = any(opciones)
+    if con_catastro and not all(opciones):
+        print("error: los aranceles piden --catastro-core, --catastro-email, --catastro-password y --catastro-org", file=sys.stderr)
         return 2
 
     client = Client(args.core)
     try:
         client.login(args.email, args.password)
         organizacion = client.get("/api/organizations/current") or {}
-        if args.org.strip().lower() not in {str(organizacion.get("slug") or "").lower(), str(organizacion.get("id") or "").lower()}:
+        if not _es_de(organizacion, args.org):
             print(f"error: el usuario es de la organización {organizacion.get('slug')!r}, no de {args.org!r}: no se escribe nada",
                   file=sys.stderr)
             return 2
@@ -206,9 +214,17 @@ def main(argv=None):
         if con_catastro:
             catastro = Client(args.catastro_core)
             catastro.login(args.catastro_email, args.catastro_password)
+            # catastro-backend hosts several municipalities: the wrong login would bring another one's aranceles VIGENTE
+            del_catastro = catastro.get("/api/organizations/current") or {}
+            if not _es_de(del_catastro, args.catastro_org):
+                print(f"error: el usuario de catastro es de la organización {del_catastro.get('slug')!r}, no de "
+                      f"{args.catastro_org!r}: no se escribe nada", file=sys.stderr)
+                return 2
             crear, iguales, distintos, por_verificar, invalidos = plan_aranceles(catastro.list_all(ARANCEL), client.list_all(ARANCEL))
 
         print(f"organización: {organizacion.get('slug')}")
+        if con_catastro:
+            print(f"organización de catastro: {del_catastro.get('slug')}")
         print(f"parametros: vigentes {len(updates)}, sin_doble_firma {len(sin_doble_firma)}")
         for record in sin_doble_firma:
             a = record["attributes"]

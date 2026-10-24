@@ -101,7 +101,8 @@ data class PlanDeArancel(
 
 // what an importación of aranceles writes (#188), as a parámetros' one (PlanDeImportacion): the signatures (Firmas),
 // idempotent by clave over the aranceles not ANULADO (the same data is skipped; other data on a POR_VERIFICAR one
-// corrects it, and verifies it with two signatures; on a VIGENTE one it is a rechazo, annul it first), and a clave
+// corrects it, and verifies it with two signatures unless the user transcribed it; on a VIGENTE one it is a rechazo,
+// annul it first), and a clave
 // repeated in the file is a rechazo. an arancel is of one year: no overlaps. a rechazo leaves the other rows alone
 object PlanDeAranceles {
     fun planear(
@@ -161,6 +162,10 @@ object PlanDeAranceles {
             }
             if (cambios.isEmpty() && estado == EstadoParametro.POR_VERIFICAR && firmante(guardado.transcribio) == firmante(transcribio)) {
                 iguales++
+                continue
+            }
+            if (estado == EstadoParametro.VIGENTE && firmante(guardado.transcribio) == firmante(usuario)) {
+                motivo(PlanDeImportacion.LO_TRANSCRIBIO_USTED)
                 continue
             }
             actualizar += escritura.copy(id = guardado.id)

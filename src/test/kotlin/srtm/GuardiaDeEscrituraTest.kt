@@ -164,10 +164,20 @@ class GuardiaDeEscrituraTest {
         assertTrue(e.message.contains("se verifica en Normativa"), e.message)
         runBlocking {
             withContext(EscrituraDeSrtm) { guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.UPDATED, verificado, borrador)) }
-            // the importers' door stays open: an insert with two signatures, and a correction of a POR_VERIFICAR
+            // the importers' door stays open: an insert with two signatures
             guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.CREATED, verificado))
-            guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.UPDATED, borrador + ("valor_numerico" to "5600"), borrador))
+            // with the mark a POR_VERIFICAR one is registered and corrected
+            withContext(EscrituraDeSrtm) {
+                guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.CREATED, borrador))
+                guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.UPDATED, borrador + ("valor_numerico" to "5600"), borrador))
+            }
         }
+        // without it, neither: a transcriber written by hand would let its writer verify it in Normativa
+        val alta = falla<ConflictException> { guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.CREATED, borrador)) }
+        assertTrue(alta.message.contains("se registra en Normativa"), alta.message)
+        val otraFirma = borrador + ("transcribio" to "BETO")
+        val correccion = falla<ConflictException> { guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.UPDATED, otraFirma, borrador)) }
+        assertTrue(correccion.message.contains("se corrige en Normativa"), correccion.message)
     }
 
     @Test

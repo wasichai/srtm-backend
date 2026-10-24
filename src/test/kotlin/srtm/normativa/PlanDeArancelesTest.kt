@@ -131,6 +131,27 @@ class PlanDeArancelesTest {
         assertNull(plan.crear.single().id)
     }
 
+    // the user who transcribed a POR_VERIFICAR arancel does not verify it by a csv's two signatures, as in Normativa
+    @Test
+    fun `two signatures on a POR_VERIFICAR arancel the user transcribed are a rechazo - a correction is not`() {
+        val suyo = arancel("b", "A-02", "8", EstadoParametro.POR_VERIFICAR).copy(transcribio = "Carla@SRTM.test")
+        val ajeno = arancel("e", "A-05", "3", EstadoParametro.POR_VERIFICAR)
+        val plan =
+            planear(
+                """
+                id_aranc,anio,valor_m2,cod_via,transcribio,verifico
+                A-02,2026,8,V-001,ANA,BETO
+                A-05,2026,3,V-001,ANA,BETO
+                """.trimIndent(),
+                listOf(suyo, ajeno)
+            )
+        assertEquals(listOf(RechazoDeFila(2, PlanDeImportacion.LO_TRANSCRIBIO_USTED)), plan.rechazos)
+        assertEquals(listOf("e" to EstadoParametro.VIGENTE), plan.actualizar.map { it.id to it.estado })
+        val correccion = planear("id_aranc,anio,valor_m2,cod_via\nA-02,2026,8.5,V-001", listOf(suyo))
+        assertEquals(listOf("b" to EstadoParametro.POR_VERIFICAR), correccion.actualizar.map { it.id to it.estado })
+        assertEquals(emptyList<RechazoDeFila>(), correccion.rechazos)
+    }
+
     @Test
     fun `fifteen hundred rows are planned at once`() {
         val csv = "id_aranc,anio,valor_m2,transcribio,verifico\n" + (1..1500).joinToString("\n") { "T-$it,2026,$it.25,ANA,BETO" }

@@ -42,6 +42,12 @@ interface ReglaDeEscritura {
         nuevo: Map<String, Any?>
     ): String? = null
 
+    // the same for an insert: one alInsertar allows that only srtm's own api makes. asked before alInsertar
+    fun sinLaMarcaAlInsertar(
+        objeto: String,
+        attrs: Map<String, Any?>
+    ): String? = null
+
     // a delete of a stored record (`guardado`: its every field, as alActualizar gets them). by default nothing of a
     // rule is ever deleted: 409
     fun alBorrar(

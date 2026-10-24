@@ -55,7 +55,7 @@ data class ErrorDeSincronizacion(
 // is deleted. it runs after the write of Normativa is committed, outside its transaction: catastro failing never undoes
 // a verificación, an anulación or an importación. the result is written on each arancel (Registros.replace, which the
 // rule lets through in any estado): sincronizado_en now and no error, or the error and sincronizado_en as it was. an
-// organization without its catastro copies nothing and fails nothing (null). claves CONCURRENCIA at a time
+// organization without its catastro copies nothing and fails nothing (null). CONCURRENCIA claves at a time, in all
 @Service
 class SincronizacionAranceles(
     private val registros: Registros,
@@ -68,6 +68,11 @@ class SincronizacionAranceles(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val transaccion = TransactionalOperator.create(transacciones)
+
+    // the copies in course, of every request of this instance: each holds a connection of the shared pool and its
+    // clave's lock while catastro answers (COPIA_MAXIMA at most), so a catastro that hangs holds CONCURRENCIA of them,
+    // however many verify, annul, import or synchronize at once. no caller holds a permit while it waits for another
+    internal val enCurso = Semaphore(CONCURRENCIA)
 
     // after a verificación, anulación or importación: the claves of these aranceles. null without catastro
     suspend fun despuesDe(aranceles: Collection<Arancel>): Sincronizacion? {
@@ -104,7 +109,6 @@ class SincronizacionAranceles(
         catastro: Catastro,
         aranceles: Collection<Arancel>
     ): Sincronizacion {
-        val enCurso = Semaphore(CONCURRENCIA)
         val marcas =
             coroutineScope {
                 aranceles
@@ -192,8 +196,9 @@ class SincronizacionAranceles(
     )
 
     companion object {
-        // claves copied at once, as the importación's lotes: at most this many connections wait on catastro
-        private const val CONCURRENCIA = 4
+        // claves copied at once by the instance (enCurso), as the importación's lotes: at most this many connections wait on
+        // catastro
+        internal const val CONCURRENCIA = 4
 
         // the longest a copy holds its clave's lock and its connection: the GET and the write to catastro (each one
         // bounded by the account's timeout, 60 s by default, and retried once after a 401)

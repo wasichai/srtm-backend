@@ -53,8 +53,8 @@ corrige ni se borra.
 . *Verificar.* Otra persona compara el valor con la norma y lo verifica. El parámetro pasa a vigente, con su firma
   (_verificó_). Se pueden verificar varios a la vez; cada uno se acepta o se rechaza con su motivo.
 
-Solo se verifica en Normativa: la consola de administración y la API genérica no dejan pasar un parámetro de por
-verificar a vigente.
+Un parámetro por verificar se registra, se corrige y se verifica solo en Normativa: la consola de administración y la
+API genérica no dejan crear uno por verificar, ni cambiarlo, ni pasarlo a vigente.
 
 El sistema no deja verificar:
 
@@ -103,7 +103,9 @@ con `#` son comentarios.
   (el perfil {p-normativa} y el administrador).
 * Una fila con una sola firma, o sin firmas, entra por verificar, a nombre de quien la transcribió o, si no lo dice,
   de quien importa.
-* Una fila que ya está, igual, no se vuelve a cargar. Una que cambia un parámetro por verificar lo corrige. Una que
+* Una fila que ya está, igual, no se vuelve a cargar. Una que cambia un parámetro por verificar lo corrige, y si trae
+  las dos firmas lo deja vigente. Pero si ese parámetro lo transcribió usted, la fila se rechaza («lo transcribió
+  usted: verifíquelo otra persona en Normativa»): no se da por verificado lo propio con una firma ajena. Una fila que
   cambia un parámetro vigente se rechaza: anúlelo o cierre su vigencia primero.
 
 Antes de cargar, el sistema muestra qué haría (cuántas filas crearía, cuáles corregiría, cuáles ya están y cuáles
@@ -137,7 +139,8 @@ arancel de la declaración es el valor por m² del arancel vigente de ese tramo 
 *Importar aranceles.* El CSV lleva las columnas `id_aranc`, `anio`, `valor_m2`, `cod_via`, `cuadra`, `lado`, `norma`,
 `fuente`, `transcribio` y `verifico`, con las mismas reglas que el de parámetros (<<normativa-importar>>): con las dos
 firmas entra vigente; con una o ninguna, por verificar; una fila igual no se vuelve a cargar; una que cambia un
-arancel por verificar lo corrige, y una que cambia uno vigente se rechaza («VIGENTE distinto: anule primero»). Un
+arancel por verificar lo corrige (con las dos firmas lo deja vigente, salvo que lo haya transcrito usted), y una que
+cambia uno vigente se rechaza («VIGENTE distinto: anule primero»). Un
 archivo con los aranceles de todo el distrito (unas 1 500 filas) se escribe por partes: si la carga se corta, vuelva
 a importarlo y se completa lo que falta.
 
@@ -155,5 +158,18 @@ El botón btn:[Sincronizar con catastro] vuelve a intentar las copias pendientes
 cuántas quedaron bien y cuáles fallaron. Si la municipalidad no tiene catastro configurado, no se copia nada y la
 columna queda en pendiente, sin error.
 
-NOTE: La pantalla de Normativa llega con la próxima versión del portal. Mientras tanto, el administrador usa estas
-mismas acciones por la API (`/api/srtm/normativa`), que se describe en el {m-sistema}.
+Un arancel se anula solo en Normativa, que quita la copia del catastro. La consola de administración no cambia el
+estado de un arancel.
+
+[[normativa-pantalla]]
+== La pantalla de Normativa
+
+La pantalla de Normativa del portal tiene dos pestañas, cada una para quien puede consultar sus datos:
+
+* *Parámetros*: la lista de los parámetros tributarios, con su estado, y las acciones de registrar, corregir, borrar,
+  verificar, anular, cerrar la vigencia e importar un CSV;
+* *Aranceles*: la lista de los aranceles, que se busca por tramo o vía y se filtra por año y por estado, con las
+  mismas acciones (sin cerrar), la columna _Catastro_ (<<normativa-catastro>>) y el botón btn:[Sincronizar con
+  catastro].
+
+Las mismas acciones están en la API (`/api/srtm/normativa`), que se describe en el {m-sistema}.

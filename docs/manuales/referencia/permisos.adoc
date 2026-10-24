@@ -179,7 +179,11 @@ API genérica, de `/admin`, de un importador o de un `ADMIN`:
 
 * un parámetro nace `POR_VERIFICAR`, con quien lo transcribió (`transcribio`) y sin `verifico`; o nace `VIGENTE` con
   las dos firmas de personas distintas (los importadores, con el CSV verificado de normativa);
-* mientras está `POR_VERIFICAR` se corrige o se borra, y ningún cálculo lo lee;
+* mientras está `POR_VERIFICAR` se corrige o se borra, y ningún cálculo lo lee. Nace y se corrige solo por Normativa,
+  que lo firma con la cuenta de quien lo registra o lo corrige: por la API genérica o `/admin` el alta de uno
+  `POR_VERIFICAR` responde 409 «se registra en Normativa», y cualquier cambio de uno guardado 409 «se corrige en
+  Normativa», también a un `ADMIN`. Si no, quien escribiera a mano otro `transcribio` podría verificarlo después él
+  mismo. Borrarlo sí se puede por cualquier puerta;
 * pasa a `VIGENTE` solo por Normativa (`POST /api/srtm/normativa/parametros/verificar`), con la firma de otra persona
   (`verifico` distinto de `transcribio`, comparando el nombre antes de la coma) y sin otro cambio. Por la API genérica
   o `/admin` esa transición responde 409 «se verifica en Normativa», también a un `ADMIN`. Normativa rechaza además la
@@ -195,6 +199,11 @@ genérica: así cargan `import_parametros.py` y los demás importadores el CSV y
 normativa. Esas firmas vienen del documento y el sistema no las comprueba contra cuentas ni revisa solapamientos; por
 eso esta puerta queda para quien tiene `CREATE` sobre `parametro_tributario`, que entre los perfiles sugeridos son solo
 `{p-normativa}` y `ADMIN`. La doble firma hecha en el sistema, con dos cuentas, es la de Normativa.
+
+La importación de Normativa (`POST /api/srtm/normativa/parametros/importar`) también corrige un `POR_VERIFICAR`
+guardado, y una fila con las dos firmas lo deja `VIGENTE`. Pero si ese `POR_VERIFICAR` lo transcribió quien importa
+(mismo nombre antes de la coma, sin distinguir mayúsculas), la fila se rechaza: «lo transcribió usted: verifíquelo otra
+persona en Normativa». Si no, quien transcribió el valor lo daría por verificado con una firma ajena.
 
 Lo demás responde 409, también a un `ADMIN`. Un parámetro sin estado (anterior al campo) cuenta como `VIGENTE`. Con
 permiso de `UPDATE` una persona puede transcribir y verificar, pero nunca lo mismo: la segunda firma tiene que ser de
@@ -212,6 +221,9 @@ su regla (`srtm.normativa.ReglaDeArancel`) en toda escritura y los mismos estado
   o junto con una transición, pero un arancel nuevo nace sin ellos;
 * la puerta de importación es la misma: un arancel que nace `VIGENTE` con dos firmas distintas entra por la API
   genérica, para quien tiene `CREATE` sobre `arancel` (`{p-normativa}` y `ADMIN`).
+* su estado cambia solo en Normativa (verificar, anular), que copia el cambio a catastro: por la API genérica o
+  `/admin` un cambio de `estado` responde 409 «cambia en Normativa», también a un `ADMIN`. Si no, un arancel anulado a
+  mano seguiría en catastro, que valúa con él, y en srtm se vería sincronizado;
 
 *La copia a catastro.* Verificar, anular, importar y sincronizar copian el `VIGENTE` de cada clave al objeto
 `arancel` de catastro-backend (o lo borran allí si ya no hay uno). En srtm basta el permiso del acto (`UPDATE` sobre

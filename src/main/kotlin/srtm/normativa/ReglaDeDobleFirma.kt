@@ -22,7 +22,8 @@ import wasichai.core.common.ConflictException
 // - a VIGENTE record is not edited (but by editarVigente): it is annulled (motivo, who and when, nothing else) and the
 //   correct value registered;
 // - an ANULADO record does not change.
-// - POR_VERIFICAR -> VIGENTE of a stored record only with srtm's mark (sinLaMarca): only Normativa verifies.
+// - a POR_VERIFICAR record is born and changes only with srtm's mark (sinLaMarcaAlInsertar, sinLaMarca): only
+//   Normativa registers, corrects and verifies it.
 // a stored record without estado is VIGENTE. a write that changes nothing passes, and so does one that changes only
 // `libres` (fields any estado may change: the sincronización of an arancel)
 abstract class ReglaDeDobleFirma(
@@ -82,19 +83,36 @@ abstract class ReglaDeDobleFirma(
         v.lanzar("El $nombre")
     }
 
-    // verifying a stored record is Normativa's alone (the user's signature, the other records of its key). the
-    // importers' door stays the insert of a VIGENTE record with the document's two signatures
+    // a POR_VERIFICAR record is Normativa's alone: it registers it signed by the user, corrects it signing it with who
+    // corrects it, and verifies it with the user's signature against the other records of its key. so without the mark
+    // no POR_VERIFICAR record is born nor changes (a transcriber written by hand would let its writer verify it): the
+    // importers' door stays the insert of a VIGENTE record with the document's two signatures. it is still deleted
+    override fun sinLaMarcaAlInsertar(
+        objeto: String,
+        attrs: Map<String, Any?>
+    ): String? =
+        if (EstadoParametro.de(attrs[ESTADO]) == POR_VERIFICAR) {
+            "Un $nombre POR_VERIFICAR se registra en Normativa (POST /api/srtm/normativa/$ruta), con la firma de quien lo " +
+                "transcribe: por la API genérica solo entra VIGENTE, con las dos firmas del documento"
+        } else {
+            null
+        }
+
     override fun sinLaMarca(
         objeto: String,
         guardado: Map<String, Any?>,
         nuevo: Map<String, Any?>
-    ): String? =
-        if (EstadoParametro.de(guardado[ESTADO]) == POR_VERIFICAR && EstadoParametro.de(nuevo[ESTADO]) == VIGENTE) {
+    ): String? {
+        if (EstadoParametro.de(guardado[ESTADO]) != POR_VERIFICAR) return null
+        if ((guardado.keys + nuevo.keys).all { iguales(guardado[it], nuevo[it]) }) return null
+        return if (EstadoParametro.de(nuevo[ESTADO]) == VIGENTE) {
             "Un $nombre POR_VERIFICAR se verifica en Normativa (POST /api/srtm/normativa/$ruta/verificar), con la firma de " +
                 "quien verifica: no por la API genérica"
         } else {
-            null
+            "Un $nombre POR_VERIFICAR se corrige en Normativa (PATCH /api/srtm/normativa/$ruta/{id}), con la firma de quien " +
+                "lo corrige: no por la API genérica"
         }
+    }
 
     override fun alActualizar(
         objeto: String,

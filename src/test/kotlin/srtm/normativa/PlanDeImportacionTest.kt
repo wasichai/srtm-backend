@@ -136,6 +136,27 @@ class PlanDeImportacionTest {
         )
     }
 
+    // the user who transcribed a POR_VERIFICAR row does not verify it by a csv's two signatures, as in Normativa
+    @Test
+    fun `two signatures on a POR_VERIFICAR row the user transcribed are a rechazo - a correction is not`() {
+        val suyo = uit("b", 2098, "9100", EstadoParametro.POR_VERIFICAR).copy(transcribio = "Carla@SRTM.test, 2098-01-02")
+        val ajeno = uit("c", 2099, "9200", EstadoParametro.POR_VERIFICAR)
+        val plan =
+            planear(
+                """
+                tipo,clave,vigencia_desde,vigencia_hasta,valor_numerico,transcribio,verifico
+                UIT,,2098-01-01,2098-12-31,9100,ANA,BETO
+                UIT,,2099-01-01,2099-12-31,9200,ANA,BETO
+                """.trimIndent(),
+                listOf(suyo, ajeno)
+            )
+        assertEquals(listOf(RechazoDeFila(2, PlanDeImportacion.LO_TRANSCRIBIO_USTED)), plan.rechazos)
+        assertEquals(listOf("c" to EstadoParametro.VIGENTE), plan.actualizar.map { it.id to it.estado })
+        val correccion = planear("tipo,vigencia_desde,vigencia_hasta,valor_numerico\nUIT,2098-01-01,2098-12-31,9150", listOf(suyo))
+        assertEquals(listOf("b" to EstadoParametro.POR_VERIFICAR), correccion.actualizar.map { it.id to it.estado })
+        assertEquals(emptyList<RechazoDeFila>(), correccion.rechazos)
+    }
+
     @Test
     fun `a malformed file is a 400`() {
         assertThrows(ValidationException::class.java) { planear("clave\nX") }
