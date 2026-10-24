@@ -9,24 +9,33 @@ data class FilaCsv(
     val valores: Map<String, String?>
 )
 
-// the csv of POST /normativa/parametros/importar, as model/import_parametros.py reads model/data/parametros-predial.csv:
-// the lines that start with '#' are comments, the first other line is the header, and only its known columns are read
-// (COLUMNAS; tipo and vigencia_desde are required). a cell between quotes may hold commas, and "" is a quote in it. a
-// cell does not span lines. a malformed file is a 400 and nothing of it is read
+// the csv of POST /normativa/parametros/importar, as model/import_parametros.py reads model/data/parametros-predial.csv
+// (Csv: tipo and vigencia_desde are required)
 object CsvDeParametros {
     val COLUMNAS = CamposParametro.DATOS + listOf(CamposParametro.TRANSCRIBIO, CamposParametro.VERIFICO)
-    private val REQUERIDAS = listOf("tipo", "vigencia_desde")
 
-    fun leer(texto: String): List<FilaCsv> {
+    fun leer(texto: String): List<FilaCsv> = Csv.leer(texto, COLUMNAS, listOf("tipo", "vigencia_desde"))
+}
+
+// the csv of an importación of normativa (parámetros, aranceles): the lines that start with '#' are comments, the
+// first other line is the header, and only its known columns are read (`columnas`; `requeridas` must be there). a cell
+// between quotes may hold commas, and "" is a quote in it. a cell does not span lines. a malformed file is a 400 and
+// nothing of it is read
+object Csv {
+    fun leer(
+        texto: String,
+        columnasConocidas: List<String>,
+        requeridas: List<String>
+    ): List<FilaCsv> {
         val lineas =
             texto
-                .removePrefix("﻿")
+                .removePrefix("\uFEFF")
                 .lines()
                 .mapIndexed { i, linea -> i + 1 to linea.removeSuffix("\r") }
                 .filter { (_, linea) -> linea.isNotBlank() && !linea.startsWith("#") }
-        val (lineaCabecera, cabecera) = lineas.firstOrNull() ?: throw malo("El CSV no tiene cabecera: tipo,clave,vigencia_desde,...")
+        val (lineaCabecera, cabecera) = lineas.firstOrNull() ?: throw malo("El CSV no tiene cabecera: ${requeridas.joinToString(",")},...")
         val columnas = celdas(cabecera, lineaCabecera).map { it.trim() }
-        val faltan = REQUERIDAS.filter { it !in columnas }
+        val faltan = requeridas.filter { it !in columnas }
         if (faltan.isNotEmpty()) throw malo("La cabecera del CSV no tiene ${faltan.joinToString(", ")} (línea $lineaCabecera)")
         return lineas.drop(1).map { (numero, linea) ->
             val valores = celdas(linea, numero)
@@ -35,7 +44,7 @@ object CsvDeParametros {
                 numero,
                 columnas
                     .zip(valores + List(columnas.size - valores.size) { "" })
-                    .filter { (columna, _) -> columna in COLUMNAS }
+                    .filter { (columna, _) -> columna in columnasConocidas }
                     .associate { (columna, valor) -> columna to valor.trim().ifEmpty { null } }
             )
         }
