@@ -9,7 +9,9 @@
    created VIGENTE, signed transcribio MIGRACION and verifico CATASTRO, fuente "catastro (migración inicial)", and
    then marked sincronizado_en now: it is in catastro already. srtm's rule wants a new arancel without sincronizado_en,
    so the mark is a second write (a PUT of the same fields plus sincronizado_en), which the rule lets through in any
-   estado. One equal in srtm is skipped; one that differs is reported "distinto en srtm: revisar" and left alone.
+   estado. One equal and VIGENTE in srtm is skipped; one that differs is reported "distinto en srtm: revisar", and one
+   equal but POR_VERIFICAR in srtm "POR_VERIFICAR en srtm: verificar en Normativa" (the DJ does not read it until it
+   is verified); both are left alone.
 
 Reads everything first, then writes, --workers at a time. Idempotent: a second run writes nothing. Prints counts and
 the records to review by their id and key, never a row of the padrón.
@@ -99,16 +101,16 @@ def arancel(attributes):
 
 
 def plan_aranceles(de_catastro, de_srtm):
-    """catastro's and srtm's aranceles -> what to create in srtm, how many are equal, the claves that differ and the
-    invalid ones of catastro ((its id, motivo))."""
+    """catastro's and srtm's aranceles -> what to create in srtm, how many are equal (and VIGENTE), the claves that
+    differ, the claves equal in srtm but POR_VERIFICAR there, and the invalid ones of catastro ((its id, motivo))."""
     vivos = {}
     for record in de_srtm:
         if (record["attributes"].get("estado") or "").strip() == ANULADO:
             continue
         datos = arancel(record["attributes"])
         if isinstance(datos, dict):
-            vivos.setdefault(datos["clave"], datos)
-    crear, distintos, invalidos, vistas = [], [], [], set()
+            vivos.setdefault(datos["clave"], {**datos, "estado": (record["attributes"].get("estado") or "").strip() or VIGENTE})
+    crear, distintos, por_verificar, invalidos, vistas = [], [], [], [], set()
     iguales = 0
     for record in de_catastro:
         datos = arancel(record["attributes"])
@@ -122,11 +124,14 @@ def plan_aranceles(de_catastro, de_srtm):
         suyo = vivos.get(datos["clave"])
         if suyo is None:
             crear.append(datos)
-        elif all(suyo[c] == datos[c] for c in DATOS):
-            iguales += 1
-        else:
+        elif not all(suyo[c] == datos[c] for c in DATOS):
             distintos.append(datos["clave"])
-    return crear, iguales, distintos, invalidos
+        elif suyo["estado"] != VIGENTE:
+            # the same data, still to verify in srtm: the DJ does not read it until someone does
+            por_verificar.append(datos["clave"])
+        else:
+            iguales += 1
+    return crear, iguales, distintos, por_verificar, invalidos
 
 
 def _atributos(datos):
@@ -197,11 +202,11 @@ def main(argv=None):
                   file=sys.stderr)
             return 2
         updates, sin_doble_firma = plan_parametros(client.list_all(PARAMETRO))
-        crear, iguales, distintos, invalidos = [], 0, [], []
+        crear, iguales, distintos, por_verificar, invalidos = [], 0, [], [], []
         if con_catastro:
             catastro = Client(args.catastro_core)
             catastro.login(args.catastro_email, args.catastro_password)
-            crear, iguales, distintos, invalidos = plan_aranceles(catastro.list_all(ARANCEL), client.list_all(ARANCEL))
+            crear, iguales, distintos, por_verificar, invalidos = plan_aranceles(catastro.list_all(ARANCEL), client.list_all(ARANCEL))
 
         print(f"organización: {organizacion.get('slug')}")
         print(f"parametros: vigentes {len(updates)}, sin_doble_firma {len(sin_doble_firma)}")
@@ -210,9 +215,11 @@ def main(argv=None):
             print(f"  sin doble firma: revisar en Normativa: {record['id']} {a.get('tipo')} {a.get('clave') or ''} "
                   f"{a.get('vigencia_desde')}".rstrip())
         if con_catastro:
-            print(f"aranceles: crear {len(crear)}, iguales {iguales}, distintos {len(distintos)}")
+            print(f"aranceles: crear {len(crear)}, iguales {iguales}, distintos {len(distintos)}, por_verificar {len(por_verificar)}")
             for clave in distintos:
                 print(f"  distinto en srtm: revisar: {clave}")
+            for clave in por_verificar:
+                print(f"  POR_VERIFICAR en srtm: verificar en Normativa: {clave}")
         else:
             print("aranceles: sin --catastro-core, no se leen")
         if invalidos:
