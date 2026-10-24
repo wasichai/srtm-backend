@@ -136,6 +136,34 @@ redeterminó. Por eso el perfil `{p-registrador}` sugerido los tiene (<<ref-perm
 |Importar parámetros de un CSV +
 `POST /api/srtm/normativa/parametros/importar`
 |`CREATE` y `UPDATE` sobre `parametro_tributario`.
+
+|Consultar los aranceles +
+`GET /api/srtm/normativa/aranceles`
+|`READ` sobre `arancel`. Lo leen también los perfiles que editan la DJ: su combobox de tramo de vía.
+
+|Registrar un arancel (nace por verificar) +
+`POST /api/srtm/normativa/aranceles`
+|`CREATE` sobre `arancel`.
+
+|Corregir un arancel por verificar +
+`PATCH /api/srtm/normativa/aranceles/{id}`
+|`UPDATE` sobre `arancel`.
+
+|Borrar un arancel por verificar +
+`DELETE /api/srtm/normativa/aranceles/{id}`
+|`DELETE` sobre `arancel`.
+
+|Verificar aranceles (la segunda firma) +
+`POST /api/srtm/normativa/aranceles/verificar`
+|`UPDATE` sobre `arancel`.
+
+|Anular un arancel vigente +
+`POST /api/srtm/normativa/aranceles/{id}/anular`
+|`UPDATE` sobre `arancel`.
+
+|Importar aranceles de un CSV +
+`POST /api/srtm/normativa/aranceles/importar`
+|`CREATE` y `UPDATE` sobre `arancel`.
 |===
 
 [[ref-permisos-normativa]]
@@ -168,6 +196,22 @@ Lo demás responde 409, también a un `ADMIN`. Un parámetro sin estado (anterio
 permiso de `UPDATE` una persona puede transcribir y verificar, pero nunca lo mismo: la segunda firma tiene que ser de
 otra cuenta.
 
+[[ref-permisos-aranceles]]
+*Los aranceles.* Un arancel (`arancel`, el valor por m² de un tramo de vía en un año) sigue la misma doble firma, con
+su regla (`srtm.normativa.ReglaDeArancel`) en toda escritura y los mismos estados. Sus diferencias:
+
+* su clave es `id_aranc|anio` y la pone el servicio; solo hay uno vivo (no `ANULADO`) por clave. Normativa responde
+  409 al registrar o corregir uno con la clave de otro vivo, y rechaza verificar uno si ya hay otro `VIGENTE` con ella;
+* `valor_m2` no es negativo (un 0 es un valor);
+* un `VIGENTE` no tiene edición: un arancel es de un año, no hay vigencia que cerrar;
+* `sincronizado_en` y `error_sincronizacion` (la copia que guarda catastro-backend) cambian en cualquier estado, solos
+  o junto con una transición, pero un arancel nuevo nace sin ellos;
+* la puerta de importación es la misma: un arancel que nace `VIGENTE` con dos firmas distintas entra por la API
+  genérica, para quien tiene `CREATE` sobre `arancel` (`{p-normativa}` y `ADMIN`).
+
+La DJ lee solo los `VIGENTE`: una DJ que nombra su tramo de vía (`id_aranc`) toma el `valor_m2` del arancel `VIGENTE`
+de ese tramo en su año (`READ` sobre `arancel`, que tienen los perfiles sugeridos que editan la DJ).
+
 [[ref-permisos-implicitos]]
 === Permisos que exigen las lecturas y escrituras
 
@@ -192,7 +236,8 @@ cuenta sus declaraciones y cuotas antes (`READ` sobre `declaracion_predial` y `c
 
 |Presentar, editar o anular una DJ; agregar un condómino
 |`CREATE` y `UPDATE` sobre `declaracion_predial` (el condominio recalcula las DJ del grupo); `CREATE` sobre `predio`
-si la DJ registra uno; las listas de la DJ con sus propias acciones.
+si la DJ registra uno; las listas de la DJ con sus propias acciones. `READ` sobre `arancel` si la DJ nombra su tramo
+de vía (`id_aranc`): sin él, nombrarlo es un 403, y un recálculo deja el arancel como está.
 
 |Catastro fiscal en el portal
 |`READ`, `CREATE` o `UPDATE` sobre `catastro_fiscal`.
@@ -281,19 +326,21 @@ notificación, panel.
 
 |`{p-consulta}`
 |Solo lectura del modelo entero, la brecha incluida.
-|Nada: `READ` sobre los 46 objetos.
+|Nada: `READ` sobre los 47 objetos.
 
 |`{p-normativa}`
-|Normativa: registrar, corregir, verificar, anular e importar los parámetros tributarios ({m-normativa}).
-|CRUD sobre `parametro_tributario`. El `DELETE` solo borra lo que está por verificar. La doble firma pide dos cuentas.
+|Normativa: registrar, corregir, verificar, anular e importar los parámetros tributarios y los aranceles
+({m-normativa}).
+|CRUD sobre `parametro_tributario` y `arancel`. El `DELETE` solo borra lo que está por verificar. La doble firma pide
+dos cuentas.
 |===
 
 Los otros cinco perfiles leen `brecha_corrida` y `brecha_predio`: la municipalidad decidió el 19 de octubre de 2026 que
 cualquier usuario consulte la brecha, y wasichai no tiene un permiso para «cualquier usuario autenticado», así que va en
 cada rol. Solo un rol con los permisos de la tabla de arriba puede lanzar una corrida. La
 configuración de la ordenanza de arbitrios (ordenanza, servicios, inafectaciones, zonas) se carga con los
-importadores: ningún perfil sugerido la escribe. Los parámetros tributarios los escribe el perfil `{p-normativa}`, con
-doble firma, o los importadores con el CSV ya verificado.
+importadores: ningún perfil sugerido la escribe. Los parámetros tributarios y los aranceles los escribe el perfil
+`{p-normativa}`, con doble firma, o los importadores con el CSV ya verificado. Los demás perfiles leen `arancel`.
 
 La caja de la municipalidad entra con su propia cuenta de servicio, de rol `CAJA`, que solo recibe los avisos de
 pago y consulta la vigencia de una orden. No es un perfil para personas: se crea al dar de alta la caja

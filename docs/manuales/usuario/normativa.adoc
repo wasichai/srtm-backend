@@ -1,13 +1,14 @@
-= Manual de normativa: Parámetros tributarios
+= Manual de normativa: Parámetros tributarios y aranceles
 Municipalidad Distrital de Perené
 include::../atributos.adoc[]
-:description: Manual de usuario de {producto} ({sigla}) para el perfil {p-normativa}: los parámetros tributarios, sus estados, la doble firma y la importación de un CSV.
-:keywords: srtm, rentas municipales, normativa, parámetros tributarios, UIT, doble firma, verificación, anulación
+:description: Manual de usuario de {producto} ({sigla}) para el perfil {p-normativa}: los parámetros tributarios y los aranceles, sus estados, la doble firma y la importación de un CSV.
+:keywords: srtm, rentas municipales, normativa, parámetros tributarios, UIT, aranceles, doble firma, verificación, anulación
 
 [abstract]
 Este manual explica qué son los parámetros tributarios de {producto} ({sigla}), por qué estados pasan, cómo se
-registran y se verifican con doble firma, cómo se corrige uno que ya rige y cómo se carga un archivo CSV. Está escrito
-para quien transcribe y verifica los valores de las normas con el perfil {p-normativa}.
+registran y se verifican con doble firma, cómo se corrige uno que ya rige y cómo se carga un archivo CSV; y lo mismo de
+los aranceles de los tramos de vía. Está escrito para quien transcribe y verifica los valores de las normas con el
+perfil {p-normativa}.
 
 [[normativa-que-es]]
 == Qué es Normativa
@@ -107,6 +108,38 @@ con `#` son comentarios.
 
 Antes de cargar, el sistema muestra qué haría (cuántas filas crearía, cuáles corregiría, cuáles ya están y cuáles
 rechaza, con su número de línea y el motivo), sin escribir nada. Solo al confirmar se escribe todo junto.
+
+[[normativa-aranceles]]
+== Aranceles
+
+Un *arancel* es el valor por m² del terreno de un tramo de vía en un año: el que fija la norma de valores
+arancelarios. Cada arancel tiene su tramo (`id_aranc`), su año (`anio`), su *valor por m²* (`valor_m2`, en soles; un 0
+es un valor) y, si se conocen, la vía (`cod_via`), la cuadra y el lado, con la norma de la que sale. {sigla} es dueño
+de los aranceles; el catastro de la municipalidad guarda una copia con la que valúa.
+
+Los aranceles pasan por los mismos estados y la misma doble firma que los parámetros (<<normativa-estados>>,
+<<normativa-doble-firma>>): se registran por verificar, otra persona los verifica y quedan vigentes; uno vigente no se
+corrige ni se borra: se anula, con su motivo, y se registra el valor correcto (<<normativa-anular>>). Las diferencias:
+
+* hay un solo arancel vivo (por verificar o vigente) por tramo y año. No se registra otro del mismo tramo y año hasta
+  anular el primero, y no se verifica uno si ya hay otro vigente de ese tramo y año;
+* un arancel es de un año: no hay vigencia que cerrar;
+* la lista se busca por el comienzo del tramo o del código de vía, y se filtra por año y por estado.
+
+La declaración jurada nombra el tramo de vía al que da frente el predio (_Identificador de arancel_). Con él, el
+arancel de la declaración es el valor por m² del arancel vigente de ese tramo en el año de la declaración:
+
+* si el tramo no tiene un arancel vigente ese año, la declaración no se graba con ese tramo;
+* si el arancel se verifica después, o se anula y se registra otro, btn:[Recalcular] en la declaración toma el valor
+  nuevo;
+* si se anula sin registrar otro, la declaración conserva el valor que tenía.
+
+*Importar aranceles.* El CSV lleva las columnas `id_aranc`, `anio`, `valor_m2`, `cod_via`, `cuadra`, `lado`, `norma`,
+`fuente`, `transcribio` y `verifico`, con las mismas reglas que el de parámetros (<<normativa-importar>>): con las dos
+firmas entra vigente; con una o ninguna, por verificar; una fila igual no se vuelve a cargar; una que cambia un
+arancel por verificar lo corrige, y una que cambia uno vigente se rechaza («VIGENTE distinto: anule primero»). Un
+archivo con los aranceles de todo el distrito (unas 1 500 filas) se escribe por partes: si la carga se corta, vuelva
+a importarlo y se completa lo que falta.
 
 NOTE: La pantalla de Normativa llega con la próxima versión del portal. Mientras tanto, el administrador usa estas
 mismas acciones por la API (`/api/srtm/normativa`), que se describe en el {m-sistema}.

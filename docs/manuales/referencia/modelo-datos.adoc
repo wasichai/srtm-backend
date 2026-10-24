@@ -94,7 +94,9 @@ Declaración predial. Lo que un contribuyente declara sobre un predio en un año
 |42 (2)
 a|Únicos: `numero_declaracion` +
 `contribuyente` → `contribuyente` +
-`predio` → `predio`
+`predio` → `predio` +
+`id_aranc`: el tramo de vía del predio; si está, `arancel` es el `valor_m2` del `arancel` `VIGENTE` de ese tramo en
+el año de la DJ (<<ref-permisos-aranceles>>).
 |===
 
 [[ref-modelo-registro]]
@@ -203,6 +205,12 @@ Parámetro tributario. Valores normativos con vigencia y doble firma: UIT, tramo
 a|Sin campos únicos ni relaciones. `estado`: `POR_VERIFICAR`, `VIGENTE` (por omisión; vacío cuenta como tal) o `ANULADO`.
 Un `VIGENTE` no se edita ni se borra, por ninguna puerta: se anula (`motivo_anulacion`, `anulado_por`, `anulado_en`).
 Los cálculos leen solo los `VIGENTE` (<<ref-permisos-normativa>>).
+a|`arancel` +
+Arancel. El valor por m² del tramo de vía (`id_aranc`) en un año, con doble firma. {sigla} es su dueño y catastro-backend guarda una copia (`sincronizado_en`, `error_sincronizacion`).
+|17 (5)
+a|Sin campos únicos ni relaciones. `clave` (`id_aranc\|anio`) la pone el servicio: uno vivo (no `ANULADO`) por clave. Índice (id_aranc, anio).
+`estado` como en `parametro_tributario`; un `VIGENTE` no se edita (salvo la sincronización): se anula.
+La DJ lee solo los `VIGENTE` (<<ref-permisos-aranceles>>).
 a|`municipalidad` +
 Municipalidad. Datos de la cabecera de los documentos emitidos; uno por organización.
 |5 (1)
