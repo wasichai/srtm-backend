@@ -998,6 +998,8 @@ muestra cómo se llegó a ese valor, piso por piso y obra por obra.
 . Pulse btn:[Calcular autoavalúo sugerido]. Se abre el diálogo *Autoavalúo sugerido*, con el año, la región, la
   *Versión de las tablas*, el arancel (de la declaración o de la ficha catastral), el *Terreno*, la *Construcción*,
   las *Obras complementarias* y el *Autoavalúo*; debajo, el desglose por piso y por obra.
+  El arancel de la declaración es el de su tramo de vía cuando la declaración lo nombra (`id_aranc`): el valor por m²
+  del arancel vigente de ese tramo en el año de la declaración, que se registra en Normativa ({m-normativa}).
 . Si el valor corresponde, pulse btn:[Usar este valor]: queda en *Autoavalúo (S/)*, pendiente de guardar. Si no,
   pulse btn:[Cerrar].
 . Pulse btn:[Guardar].

@@ -31,6 +31,35 @@ data class Plan(
     val rechazos: List<RechazoDeFila>
 )
 
+// the signatures of a csv row: two different people (transcribio, verifico) are VIGENTE; transcribio alone or no
+// signature POR_VERIFICAR, transcribed by the csv's or by the user; verifico without transcribio does not fit
+sealed interface Firmas {
+    data class Bien(
+        val estado: String,
+        val transcribio: String,
+        val verifico: String?
+    ) : Firmas
+
+    data class Mal(
+        val motivo: String
+    ) : Firmas
+
+    companion object {
+        fun de(
+            fila: FilaCsv,
+            usuario: String
+        ): Firmas {
+            val transcribio = fila.valores[CamposParametro.TRANSCRIBIO]
+            val verifico = fila.valores[CamposParametro.VERIFICO]
+            return when {
+                transcribio == null && verifico != null -> Mal("trae verifico sin transcribio: la doble firma necesita quién transcribió")
+                transcribio != null && verifico != null && firmante(transcribio) == firmante(verifico) -> Mal("transcribio y verifico son la misma persona")
+                else -> Bien(if (verifico != null) EstadoParametro.VIGENTE else EstadoParametro.POR_VERIFICAR, transcribio ?: usuario, verifico)
+            }
+        }
+    }
+}
+
 // what an importación writes, from the csv and the organization's rows (#187), as model/import_parametros.py does it:
 // - a row signed by two different people (transcribio, verifico) enters VIGENTE; one with transcribio alone or no
 //   signature POR_VERIFICAR, transcribed by the csv's or by the user; verifico without transcribio does not fit;
@@ -66,24 +95,21 @@ object PlanDeImportacion {
                     motivo(e.violations.joinToString("; ") { "${it.field} ${it.message}" }.ifEmpty { e.message })
                     continue
                 }
-            val transcribio = fila.valores[CamposParametro.TRANSCRIBIO]
-            val verifico = fila.valores[CamposParametro.VERIFICO]
-            if (transcribio == null && verifico != null) {
-                motivo("trae verifico sin transcribio: la doble firma necesita quién transcribió")
-                continue
-            }
-            if (transcribio != null && verifico != null && firmante(transcribio) == firmante(verifico)) {
-                motivo("transcribio y verifico son la misma persona")
-                continue
-            }
-            val estado = if (verifico != null) EstadoParametro.VIGENTE else EstadoParametro.POR_VERIFICAR
+            val (estado, transcribio, verifico) =
+                when (val firmas = Firmas.de(fila, usuario)) {
+                    is Firmas.Mal -> {
+                        motivo(firmas.motivo)
+                        continue
+                    }
+                    is Firmas.Bien -> firmas
+                }
             val llave = llaveDe(p)
             vistas[llave]?.let {
                 motivo("repite la llave (tipo, clave, vigencia_desde) de la línea $it")
                 continue
             }
             vistas[llave] = fila.linea
-            val escritura = Escritura(fila.linea, null, p, estado, transcribio ?: usuario, verifico)
+            val escritura = Escritura(fila.linea, null, p, estado, transcribio, verifico)
             val guardado = porLlave[llave]
             if (guardado == null) {
                 val otro = if (estado == EstadoParametro.VIGENTE) solapado(p, vigentes) else null

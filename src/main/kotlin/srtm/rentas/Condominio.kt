@@ -96,7 +96,8 @@ fun delPredio(origen: Declaracion) =
         frontisPrincipal = origen.frontisPrincipal,
         areaComunConstruida = origen.areaComunConstruida,
         autoavaluoPorRevisar = origen.autoavaluoPorRevisar,
-        autoavaluoMotivo = origen.autoavaluoMotivo
+        autoavaluoMotivo = origen.autoavaluoMotivo,
+        idAranc = origen.idAranc
     )
 
 // #157: what the condóminos share of the predio, by its model names: delPredio's fields but the condominio's own
@@ -118,7 +119,8 @@ private fun compartido(
         "clase_uso" to d.claseUso,
         "sub_clase_uso" to d.subClaseUso,
         "area_comun_terreno" to d.areaComunTerreno,
-        "frontis_principal" to d.frontisPrincipal
+        "frontis_principal" to d.frontisPrincipal,
+        "id_aranc" to d.idAranc
     ) + if (autoavaluoManual) mapOf("valor_autoavaluo" to d.valorAutoavaluo) else emptyMap()
 
 // what `otro` must change to declare the predio as `origen` does (compartido), compared by value: 200 and 200.00
@@ -138,6 +140,13 @@ private fun porValor(valor: Any?) = if (valor is BigDecimal) valor.stripTrailing
 // takes it from the stored records, and GET /declaraciones/{id}/valuacion-origen reads it there (ValuacionOrigen)
 val PADRON_EXTERNO_DECLARACION = listOf("arancel", "valor_terreno", "valor_construccion", "valor_otras_instalaciones")
 val PADRON_EXTERNO_NIVEL = listOf("clasificacion", "valor_unitario", "incremento", "porcentaje_depreciacion", "valor_total")
+
+// of a stored declaración, the external padrón's valuation it has (conValor): its arancel is no padrón's when it names
+// its tramo de vía (id_aranc, #188): Normativa's, derived
+fun padronExterno(declaracion: Map<*, *>): Map<String, Any> {
+    val valores = conValor(declaracion, PADRON_EXTERNO_DECLARACION)
+    return if (declaracion["id_aranc"]?.toString().isNullOrBlank()) valores else valores - "arancel"
+}
 
 // the declaración's mark that it changed after that valuation was imported (DeclaracionService.marcarOrigenModificado)
 const val ORIGEN_MODIFICADO = "origen_modificado"

@@ -50,7 +50,12 @@ enum class Candado(
 
     // the parámetros of one tipo and clave (organización|tipo|clave, see bloquearEnOrganizacion): registering one and
     // verifying one read the others first, and two verifications never leave two VIGENTE rows that overlap
-    PARAMETRO_TRIBUTARIO(0x5352_000A)
+    PARAMETRO_TRIBUTARIO(0x5352_000A),
+
+    // the aranceles of one clave (organización|id_aranc|anio, see bloquearEnOrganizacion): registering, correcting,
+    // verifying, annulling, deleting and importing one read the others of its clave first, so two never leave two
+    // alive (or two VIGENTE) with it. an importación takes those of its rows, sorted, lote by lote
+    ARANCEL(0x5352_000B)
 }
 
 // postgres' transaction advisory locks, by kind and key (caja-backend's Candados). wasichai has no row lock nor

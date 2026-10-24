@@ -24,7 +24,6 @@ import srtm.rentas.Registros
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import wasichai.core.common.ConflictException
-import wasichai.core.common.NotFoundException
 import wasichai.core.common.ValidationException
 import wasichai.core.identity.CurrentUser
 import java.time.LocalDate
@@ -145,27 +144,8 @@ class NormativaService(
     // vigencia it shares a day with. the user signs it (verifico) and it is VIGENTE
     suspend fun verificar(pedido: PedidoVerificacion): ResultadoVerificacion {
         permisos.exigirActualizar(PARAMETRO_TRIBUTARIO, "verificar parámetros")
-        val ids =
-            pedido.ids
-                .orEmpty()
-                .map { it.trim() }
-                .distinct()
-        if (ids.isEmpty()) throw ValidationException("No hay qué verificar", "ids", "es obligatorio: los ids de los parámetros")
         val usuario = firma()
-        val verificados = mutableListOf<String>()
-        val rechazados = mutableListOf<RechazoDeVerificacion>()
-        for (texto in ids) {
-            try {
-                val id = runCatching { UUID.fromString(texto) }.getOrNull() ?: throw ConflictException("no es un id")
-                transaccion.executeAndAwait { verificarUno(id, usuario) }
-                verificados += texto
-            } catch (e: ConflictException) {
-                rechazados += RechazoDeVerificacion(texto, e.message ?: "no se verifica")
-            } catch (_: NotFoundException) {
-                rechazados += RechazoDeVerificacion(texto, "no existe")
-            }
-        }
-        return ResultadoVerificacion(verificados, rechazados)
+        return verificarCada(pedido, "parámetros") { id -> transaccion.executeAndAwait { verificarUno(id, usuario) } }
     }
 
     private suspend fun verificarUno(
@@ -315,6 +295,5 @@ class NormativaService(
         throw ConflictException("Ya hay un parámetro $estado con esa llave, ${nombreDe(otro)} (${otro.id}): $que")
     }
 
-    // who signs: a person by their email, a service account by its name
-    private suspend fun firma(): String = currentUser.require().let { it.serviceAccount ?: it.email }
+    private suspend fun firma(): String = currentUser.firma()
 }

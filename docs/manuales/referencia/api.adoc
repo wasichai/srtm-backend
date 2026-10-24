@@ -599,6 +599,61 @@ ninguna, `POR_VERIFICAR`. Idempotente por tipo, clave y `vigencia_desde`. Sin `d
 |200 `{dry_run, crear, actualizar, iguales, rechazos: [{fila, motivo}]}`; 400 CSV mal formado.
 |===
 
+[[ref-api-aranceles]]
+==== Aranceles
+
+Base: `/api/srtm/normativa/aranceles`. Controlador `ArancelesController`, con los permisos de `arancel`. La doble
+firma y sus estados: <<ref-permisos-aranceles>>. Un arancel se responde con sus campos (`id`, `clave`, `id_aranc`,
+`anio`, `valor_m2`, `cod_via`, `cuadra`, `lado`, `norma`, `fuente`, `transcribio`, `verifico`, `estado`,
+`motivo_anulacion`, `anulado_por`, `anulado_en`, `sincronizado_en`, `error_sincronizacion`); un `estado` vacío se
+responde `VIGENTE`. `clave` es `id_aranc|anio` y la pone el servicio.
+
+[cols="5,6,4",options="header"]
+|===
+|Método y ruta |Qué hace |Respuestas
+
+|`GET /?anio&q&estado&page&size`
+|Una página por `id_aranc`. `q`: el comienzo de `id_aranc` o de `cod_via`, sin distinguir mayúsculas. `size` por
+omisión 20.
+|200 `{content, page, size, totalElements, totalPages}`; 422 filtro inválido.
+
+|`POST /` +
+`{id_aranc, anio, valor_m2, cod_via, cuadra, lado, norma, fuente}`
+|Registra un arancel `POR_VERIFICAR`; `transcribio` es el usuario.
+|201; 400 dato inválido (o una clave ajena: estado, firmas, clave); 409 ya hay uno vivo con esa clave.
+
+|`PATCH /{id}` +
+los datos que cambian
+|Corrige un arancel `POR_VERIFICAR`; quien corrige pasa a ser `transcribio`. Un `id_aranc` o `anio` nuevo recalcula
+la clave, que tiene que estar libre.
+|200; 400; 404; 409 no está por verificar o la clave es de otro vivo.
+
+|`DELETE /{id}`
+|Borra un arancel `POR_VERIFICAR`.
+|204; 404; 409.
+
+|`POST /verificar` +
+`{ids: [...]}`
+|Verifica cada uno: `verifico` es el usuario y pasa a `VIGENTE`. Se rechaza el propio, el que no está por verificar y
+el de una clave que ya tiene otro `VIGENTE` («ya hay un arancel VIGENTE <id_aranc> <anio> (id): anúlelo antes»).
+|200 `{verificados: [id], rechazados: [{id, motivo}]}`.
+
+|`POST /{id}/anular` +
+`{motivo}`
+|Anula un arancel `VIGENTE`.
+|200; 400 sin motivo; 409 no está vigente.
+
+|`POST /importar?dry_run=true\|false` +
+cuerpo `text/csv`
+|Las columnas `id_aranc,anio,valor_m2,cod_via,cuadra,lado,norma,fuente,transcribio,verifico` (las líneas `#` son
+comentarios). Con las dos firmas entra `VIGENTE`; con una o ninguna, `POR_VERIFICAR`. Idempotente por clave sobre los
+no `ANULADO`: igual se salta, un `POR_VERIFICAR` distinto se corrige, un `VIGENTE` distinto es un rechazo («VIGENTE
+distinto: anule primero»). Sin `dry_run=false` no escribe nada. Escribe en lotes de 100 filas, cada uno en su
+transacción, cuatro a la vez: un lote que falla deja escritos los que terminaron; correrlo otra vez completa el resto.
+|200 `{dry_run, crear, actualizar, iguales, rechazos: [{fila, motivo}]}`, con cada fila de `crear` y `actualizar`
+`{fila, id, id_aranc, anio, valor_m2, cod_via, cuadra, lado, estado}`; 400 CSV mal formado.
+|===
+
 [[ref-api-pide]]
 === Consulta de documentos (`srtm.pide`)
 

@@ -28,6 +28,9 @@ DERIVADOS = {
     "otro_frente": {"fila": "UUID"},
 }
 
+# what came after the derivados, at the end of the declaración: normativa's tramo de vía (#188)
+DESPUES_DE_DERIVADOS = {"id_aranc"}
+
 # object -> (its fields in order, the required ones, the unique ones)
 OBJETOS = {
     "codigo_infraccion": (
@@ -108,7 +111,7 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 46)
+        self.assertEqual(len(names), 47)
         self.assertEqual(len(self.model["relationships"]), 52)
 
     def test_the_municipalidad_holds_the_documents_header(self):
@@ -165,7 +168,7 @@ class ShippedModelTests(unittest.TestCase):
         self.assertIn("RECTIFICACION", self.model["enums"]["motivo_declaracion"])
         self.assertFalse(any(fields[f].get("required") for f in ("sustituye", "fecha_sustitucion")))
         # at the end: apply.py adds them after the rest on a Core that has it. only the derivados (#156) come after
-        nombres = [f["name"] for f in declaracion["fields"] if f["name"] not in DERIVADOS["declaracion_predial"]]
+        nombres = [f["name"] for f in declaracion["fields"] if f["name"] not in set(DERIVADOS["declaracion_predial"]) | DESPUES_DE_DERIVADOS]
         self.assertEqual(nombres[-2:], ["sustituye", "fecha_sustitucion"])
 
     def test_the_derivados_fields_are_optional_and_at_the_end(self):
@@ -173,7 +176,7 @@ class ShippedModelTests(unittest.TestCase):
         # at the end of each object, after everything else, and optional: the imported records have none of them
         for objeto, campos in DERIVADOS.items():
             with self.subTest(objeto=objeto):
-                ultimos = list(self.campos(objeto).values())[-len(campos):]
+                ultimos = [f for f in self.campos(objeto).values() if f["name"] not in DESPUES_DE_DERIVADOS][-len(campos):]
                 self.assertEqual([(f["name"], f["type"]) for f in ultimos], list(campos.items()))
                 self.assertFalse(any(f.get("required") or f.get("unique") for f in ultimos))
                 self.assertTrue(all(f.get("label") and f.get("description") for f in ultimos))
@@ -198,7 +201,7 @@ class ShippedModelTests(unittest.TestCase):
         }
         # what came after them, at the end too: the rectificatoria's (#147) and the derivados (#156)
         despues = {objeto: set(campos) for objeto, campos in DERIVADOS.items()}
-        despues["declaracion_predial"] |= {"sustituye", "fecha_sustitucion"}
+        despues["declaracion_predial"] |= {"sustituye", "fecha_sustitucion"} | DESPUES_DE_DERIVADOS
         for objeto, campos in nuevos.items():
             with self.subTest(objeto=objeto):
                 antes = [f for f in self.campos(objeto).values() if f["name"] not in despues.get(objeto, set())]
@@ -240,6 +243,40 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(fields["anulado_por"]["type"], "TEXT")
         self.assertEqual(fields["anulado_en"]["type"], "DATETIME")
         self.assertIn("POR_VERIFICAR", next(o for o in self.model["objects"] if o["name"] == "parametro_tributario")["description"])
+
+    def test_arancel_is_normativas_with_the_double_signature(self):
+        # srtm.normativa (#188): the valor arancelario of a tramo de vía in a year. srtm owns it and catastro-backend
+        # copies it (sincronizado_en, error_sincronizacion). clave is id_aranc|anio, not unique: an ANULADO keeps it
+        names = [o["name"] for o in self.model["objects"]]
+        self.assertEqual(names[-1], "arancel")
+        arancel = next(o for o in self.model["objects"] if o["name"] == "arancel")
+        self.assertEqual((arancel["label"], arancel["pluralLabel"]), ("Arancel", "Aranceles"))
+        for palabra in ("catastro", "POR_VERIFICAR", "doble firma"):
+            self.assertIn(palabra, arancel["description"])
+        self.assertEqual(arancel["indexes"], [["id_aranc", "anio"]])
+        fields = self.campos("arancel")
+        self.assertEqual(list(fields), ["clave", "id_aranc", "anio", "valor_m2", "cod_via", "cuadra", "lado", "norma", "fuente",
+                                        "transcribio", "verifico", "estado", "motivo_anulacion", "anulado_por", "anulado_en",
+                                        "sincronizado_en", "error_sincronizacion"])
+        self.assertEqual({n for n, f in fields.items() if f.get("required")}, {"clave", "id_aranc", "anio", "valor_m2", "transcribio"})
+        self.assertFalse(any(f.get("unique") for f in fields.values()))
+        parametro = self.campos("parametro_tributario")
+        for campo in ("norma", "fuente", "transcribio", "verifico", "estado", "motivo_anulacion", "anulado_por", "anulado_en"):
+            self.assertEqual({k: v for k, v in fields[campo].items() if k != "description"},
+                             {k: v for k, v in parametro[campo].items() if k != "description"}, campo)
+        self.assertEqual({n: fields[n]["type"] for n in ("clave", "id_aranc", "anio", "valor_m2", "cod_via", "cuadra", "lado",
+                                                         "sincronizado_en", "error_sincronizacion")},
+                         {"clave": "TEXT", "id_aranc": "TEXT", "anio": "INTEGER", "valor_m2": "DECIMAL", "cod_via": "TEXT",
+                          "cuadra": "TEXT", "lado": "TEXT", "sincronizado_en": "DATETIME", "error_sincronizacion": "LONG_TEXT"})
+        self.assertFalse([r for r in self.model["relationships"] if "arancel" in (r["source"], r["target"])])
+
+    def test_the_declaracion_names_its_tramo_de_via(self):
+        # #188: the arancel the DJ takes (DeclaracionService): optional, at the very end (after the derivados)
+        declaracion = self.campos("declaracion_predial")
+        ultimo = list(declaracion.values())[-1]
+        self.assertEqual((ultimo["name"], ultimo["type"], ultimo["label"]), ("id_aranc", "TEXT", "Identificador de arancel"))
+        self.assertFalse(ultimo.get("required") or ultimo.get("unique"))
+        self.assertIn("arancel", ultimo["description"])
 
     def test_emision_masiva_is_the_job_of_the_contract(self):
         # wasichai/srtm-backend#41: the masiva's job, with the fields of the epic's contract (wasichai/srtm-backend#37).

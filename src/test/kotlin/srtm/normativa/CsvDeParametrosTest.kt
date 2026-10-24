@@ -44,7 +44,8 @@ class CsvDeParametrosTest {
     @Test
     fun `without tipo or vigencia_desde in the header, or with a row longer than it, nothing is read`() {
         assertThrows(ValidationException::class.java) { CsvDeParametros.leer("clave,vigencia_desde\nX,2026-01-01") }
-        assertThrows(ValidationException::class.java) { CsvDeParametros.leer("# solo comentarios\n") }
+        val vacio = assertThrows(ValidationException::class.java) { CsvDeParametros.leer("# solo comentarios\n") }
+        assertEquals("El CSV no tiene cabecera: tipo,clave,vigencia_desde,...", vacio.message)
         val e = assertThrows(ValidationException::class.java) { CsvDeParametros.leer("tipo,vigencia_desde\nUIT,2026-01-01,de más") }
         assertTrue(e.message!!.contains("2"), e.message)
         assertThrows(ValidationException::class.java) { CsvDeParametros.leer("tipo,vigencia_desde\n\"UIT,2026-01-01") }

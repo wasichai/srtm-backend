@@ -59,7 +59,7 @@ xref:usuario/consulta.adoc[HTML] · link:../pdf/usuario/consulta.pdf[PDF]
 
 .{m-normativa}
 ****
-Parámetros tributarios: estados, doble firma, anulación e importación de un CSV.
+Parámetros tributarios y aranceles: estados, doble firma, anulación e importación de un CSV.
 
 xref:usuario/normativa.adoc[HTML] · link:../pdf/usuario/normativa.pdf[PDF]
 ****

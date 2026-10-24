@@ -542,7 +542,9 @@
         {"name": "autoavaluo_por_revisar", "label": "Autoavalúo por revisar", "type": "BOOLEAN",
           "description": "El catastro no valuó la DJ en su último cambio: valor_autoavaluo es el anterior. Vacío cuenta como no."},
         {"name": "autoavaluo_motivo", "label": "Motivo del autoavalúo por revisar", "type": "TEXT",
-          "description": "Por qué el catastro no valuó la DJ (su motivo, o que no respondió)."}
+          "description": "Por qué el catastro no valuó la DJ (su motivo, o que no respondió)."},
+        {"name": "id_aranc", "label": "Identificador de arancel", "type": "TEXT",
+          "description": "El tramo de vía al que da frente el predio en esta DJ. Si está, arancel se deriva: el valor_m2 del arancel VIGENTE de ese tramo en el año de la DJ (Normativa)."}
       ]
     },
     {
@@ -1457,6 +1459,37 @@
         {"name": "aplicado", "label": "Aplicado", "type": "BOOLEAN"},
         {"name": "motivo", "label": "Motivo", "type": "TEXT"},
         {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true, "description": "pago_id|referencia: una sola fila por pago y orden."}
+      ]
+    },
+    {
+      "name": "arancel",
+      "label": "Arancel",
+      "pluralLabel": "Aranceles",
+      "description": "El valor arancelario del tramo de vía (S/ por m²) en un año. srtm es su dueño y catastro-backend guarda una copia con la que valúa (sincronizado_en, error_sincronizacion). Se administra en Normativa (/api/srtm/normativa/aranceles) con doble firma: nace POR_VERIFICAR con quien lo transcribió, otra persona lo verifica y pasa a VIGENTE, y un VIGENTE no se edita ni se borra: se anula (ANULADO, con motivo) y se registra el valor correcto. Uno vivo (no ANULADO) por id_aranc y año, que garantiza la clave. La DJ lee solo los VIGENTE.",
+      "indexes": [["id_aranc", "anio"]],
+      "fields": [
+        {"name": "clave", "label": "Clave", "type": "TEXT", "required": true,
+          "description": "id_aranc|anio, la pone el servicio: wasichai no tiene únicos compuestos. No es única: un ANULADO la conserva."},
+        {"name": "id_aranc", "label": "Identificador de arancel", "type": "TEXT", "required": true},
+        {"name": "anio", "label": "Año", "type": "INTEGER", "required": true},
+        {"name": "valor_m2", "label": "Valor por m² (S/)", "type": "DECIMAL", "required": true,
+          "description": "No es negativo. 0 se carga tal cual, como en catastro."},
+        {"name": "cod_via", "label": "Código de vía", "type": "TEXT"},
+        {"name": "cuadra", "label": "Cuadra", "type": "TEXT"},
+        {"name": "lado", "label": "Lado", "type": "TEXT"},
+        {"name": "norma", "label": "Norma", "type": "LONG_TEXT", "description": "Documento fuente y artículo."},
+        {"name": "fuente", "label": "Fuente", "type": "TEXT", "description": "Archivo del corpus de normativa del que sale la fila."},
+        {"name": "transcribio", "label": "Transcribió", "type": "TEXT", "required": true},
+        {"name": "verifico", "label": "Verificó", "type": "TEXT", "description": "Vacío mientras está POR_VERIFICAR; distinto de quien transcribió."},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_parametro", "defaultValue": "VIGENTE",
+          "description": "POR_VERIFICAR, VIGENTE o ANULADO. Vacío cuenta como VIGENTE."},
+        {"name": "motivo_anulacion", "label": "Motivo de anulación", "type": "LONG_TEXT"},
+        {"name": "anulado_por", "label": "Anulado por", "type": "TEXT"},
+        {"name": "anulado_en", "label": "Anulado en", "type": "DATETIME"},
+        {"name": "sincronizado_en", "label": "Sincronizado en", "type": "DATETIME",
+          "description": "Cuándo catastro-backend recibió la última versión. Cambia en cualquier estado."},
+        {"name": "error_sincronizacion", "label": "Error de sincronización", "type": "LONG_TEXT",
+          "description": "Por qué falló la última copia a catastro-backend. Cambia en cualquier estado."}
       ]
     }
   ],
