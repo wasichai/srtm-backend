@@ -1,5 +1,6 @@
 package srtm.normativa
 
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
@@ -11,7 +12,7 @@ import java.util.Base64
 import java.util.concurrent.atomic.AtomicInteger
 
 // what Normativa's api tests share (#187): an organization of their own (no other test's parámetros overlap theirs),
-// with two clerks of the NORMATIVA profile (READ, CREATE, UPDATE and DELETE on parametro_tributario) for the double
+// with two clerks of the NORMATIVA profile (READ, CREATE, UPDATE and DELETE on parametro_tributario and arancel) for the double
 // signature: ana transcribes and beto verifies. each test takes years of its own (anio()): FICTITIOUS figures
 abstract class ConNormativaApiTest : SrtmApiTest() {
     protected lateinit var ana: String
@@ -25,8 +26,8 @@ abstract class ConNormativaApiTest : SrtmApiTest() {
         beto = b
     }
 
-    // docs/manuales/demo/perfiles.json's NORMATIVA
-    protected val normativa get() = listOf("READ", "CREATE", "UPDATE", "DELETE").map { permiso(PARAMETRO_TRIBUTARIO, it) }
+    // docs/manuales/demo/perfiles.json's NORMATIVA: the parámetros and the aranceles
+    protected val normativa get() = listOf(PARAMETRO_TRIBUTARIO, ARANCEL).flatMap { o -> listOf("READ", "CREATE", "UPDATE", "DELETE").map { permiso(o, it) } }
 
     // a year no other test of the organization uses (a declaración of it is liquidated: before 2100, as LiquidacionApiTest's)
     protected fun anio(): Int = ANIOS.getAndIncrement()
@@ -77,13 +78,14 @@ abstract class ConNormativaApiTest : SrtmApiTest() {
             .asSequence()
             .toList()
 
-    // the csv as the body (text/csv): status and body
+    // the csv as the body (text/csv) of `base`/importar: status and body
     protected fun importar(
         csv: String,
         dryRun: Boolean?,
-        quien: String = ana
+        quien: String = ana,
+        base: String = PARAMETROS
     ): Pair<HttpStatus, JsonNode?> {
-        val uri = "$PARAMETROS/importar" + (dryRun?.let { "?dry_run=$it" } ?: "")
+        val uri = "$base/importar" + (dryRun?.let { "?dry_run=$it" } ?: "")
         val result =
             client
                 .post()
@@ -95,6 +97,24 @@ abstract class ConNormativaApiTest : SrtmApiTest() {
                 .expectBody(String::class.java)
                 .returnResult()
         return HttpStatus.valueOf(result.status.value()) to result.responseBody?.let(::tree)
+    }
+
+    // a 409's detail, as ana
+    protected fun conflicto(
+        metodo: String,
+        ruta: String,
+        cuerpo: Map<String, Any?>?
+    ): String = tree(send(metodo, ruta, cuerpo, HttpStatus.CONFLICT, ana))["detail"].asString()
+
+    // a 400 that names `campo`, as ana
+    protected fun rechazo(
+        metodo: String,
+        ruta: String,
+        cuerpo: Map<String, Any?>,
+        campo: String
+    ) {
+        val problema = tree(send(metodo, ruta, cuerpo, HttpStatus.BAD_REQUEST, ana))
+        assertTrue(problema["errors"].elementos().any { it["field"].asString() == campo }, problema.toString())
     }
 
     // a json array's elements

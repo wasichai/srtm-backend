@@ -238,22 +238,4 @@ class NormativaApiTest : ConNormativaApiTest() {
         contribuyente: String,
         anio: Int
     ): JsonNode = tree(send("GET", "/api/srtm/contribuyentes/$contribuyente/liquidacion?anio=$anio", null, HttpStatus.OK))
-
-    // a 409's detail, as ana
-    private fun conflicto(
-        metodo: String,
-        ruta: String,
-        cuerpo: Map<String, Any?>?
-    ): String = tree(send(metodo, ruta, cuerpo, HttpStatus.CONFLICT, ana))["detail"].asString()
-
-    // a 400 that names `campo`, as ana
-    private fun rechazo(
-        metodo: String,
-        ruta: String,
-        cuerpo: Map<String, Any?>,
-        campo: String
-    ) {
-        val problema = tree(send(metodo, ruta, cuerpo, HttpStatus.BAD_REQUEST, ana))
-        assertTrue(problema["errors"].elementos().any { it["field"].asString() == campo }, problema.toString())
-    }
 }
