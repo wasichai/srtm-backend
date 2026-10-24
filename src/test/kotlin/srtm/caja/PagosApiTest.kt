@@ -1,5 +1,6 @@
 package srtm.caja
 
+import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -168,9 +169,10 @@ class PagosApiTest : ConPagosApiTest() {
         assertFalse(vigenciaDe(v1, importeViejo)["vigente"].asBoolean())
         assertTrue(vigenciaDe(v2, importeNuevo)["vigente"].asBoolean())
 
+        runBlocking { pagos.esperarSeguidas() }
         PEDIDOS.clear()
         assertEquals(HttpStatus.CONFLICT to APLICADO, pagar(anulacion))
-        Thread.sleep(2000)
+        runBlocking { pagos.esperarSeguidas() }
         assertTrue(PEDIDOS.isEmpty(), PEDIDOS.map { it.referencia }.toString())
     }
 
