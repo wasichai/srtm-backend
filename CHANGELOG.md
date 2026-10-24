@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.0](https://github.com/wasichai/srtm-backend/compare/v1.0.0...v2.0.0) (2026-10-24)
+
+
+### Features
+
+* **normativa:** aranceles con doble firma e id_aranc en la DJ ([#188](https://github.com/wasichai/srtm-backend/issues/188)) ([#193](https://github.com/wasichai/srtm-backend/issues/193)) ([07693c2](https://github.com/wasichai/srtm-backend/commit/07693c2402193ce40edeb87747ac3f29bf20594e))
+* **normativa:** copia de los aranceles a catastro y migración ([#189](https://github.com/wasichai/srtm-backend/issues/189)) ([#194](https://github.com/wasichai/srtm-backend/issues/194)) ([b53f3e2](https://github.com/wasichai/srtm-backend/commit/b53f3e25d59d1fd279bddd5192f5f5d298678502))
+* **normativa:** parámetros con doble firma ([#187](https://github.com/wasichai/srtm-backend/issues/187)) ([#190](https://github.com/wasichai/srtm-backend/issues/190)) ([36f553a](https://github.com/wasichai/srtm-backend/commit/36f553ab03bf65bb640daf06a83ce897bd201486))
+
 ## [1.0.0](https://github.com/wasichai/srtm-backend/compare/v0.9.0...v1.0.0) (2026-10-24)
 
 
