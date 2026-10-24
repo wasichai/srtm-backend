@@ -147,6 +147,29 @@ class GuardiaDeEscrituraTest {
         falla<ConflictException> { guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.DELETED, before = parametro - "estado")) }
     }
 
+    // #187: a parámetro is verified only by srtm (Normativa); the generic api's PUT POR_VERIFICAR -> VIGENTE is a 409
+    @Test
+    fun `a parámetro becomes VIGENTE only with the mark`() {
+        val borrador =
+            mapOf(
+                "tipo" to "UIT",
+                "vigencia_desde" to "2026-01-01",
+                "valor_numerico" to "5500.00",
+                "transcribio" to "ANA",
+                "verifico" to null,
+                "estado" to "POR_VERIFICAR"
+            )
+        val verificado = borrador + ("estado" to "VIGENTE") + ("verifico" to "BETO")
+        val e = falla<ConflictException> { guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.UPDATED, verificado, borrador)) }
+        assertTrue(e.message.contains("se verifica en Normativa"), e.message)
+        runBlocking {
+            withContext(EscrituraDeSrtm) { guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.UPDATED, verificado, borrador)) }
+            // the importers' door stays open: an insert with two signatures, and a correction of a POR_VERIFICAR
+            guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.CREATED, verificado))
+            guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.UPDATED, borrador + ("valor_numerico" to "5600"), borrador))
+        }
+    }
+
     @Test
     fun `what has no rule passes without the mark`() {
         runBlocking {

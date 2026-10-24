@@ -49,6 +49,13 @@ class NormativaApiTest : ConNormativaApiTest() {
         assertTrue(generica["detail"].asString().contains("VIGENTE no se edita"), generica.toString())
         send("DELETE", registro, null, HttpStatus.CONFLICT)
 
+        // only Normativa verifies: the generic api's POR_VERIFICAR -> VIGENTE is a 409, even with another signature
+        val porVerificar = registrar(uit(anio()))["id"].asString()
+        val suyo = "/api/objects/$PARAMETRO_TRIBUTARIO/records/$porVerificar"
+        val firmado = fields(tree(send("GET", suyo, null, HttpStatus.OK))["attributes"]) + mapOf("estado" to "VIGENTE", "verifico" to "OTRA PERSONA")
+        val sinMarca = tree(send("PUT", suyo, mapOf("attributes" to firmado), HttpStatus.CONFLICT))
+        assertTrue(sinMarca["detail"].asString().contains("se verifica en Normativa"), sinMarca.toString())
+
         val borrador = registrar(uit(anio()))["id"].asString()
         val corregido = tree(send("PATCH", "$PARAMETROS/$borrador", parche, HttpStatus.OK, beto))
         assertEquals(BigDecimal("9999.00"), corregido["valor_numerico"].decimalValue().setScale(2))

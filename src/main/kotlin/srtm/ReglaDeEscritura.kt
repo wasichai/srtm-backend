@@ -34,6 +34,14 @@ interface ReglaDeEscritura {
         nuevo: Map<String, Any?>
     ): Unit = throw noSeCambia(objeto)
 
+    // a change alActualizar allows that only srtm's own api makes (with the mark EscrituraDeSrtm), even when the object
+    // is not soloDesdeElServicio: the 409's message, or null when the change needs no mark. asked before alActualizar
+    fun sinLaMarca(
+        objeto: String,
+        guardado: Map<String, Any?>,
+        nuevo: Map<String, Any?>
+    ): String? = null
+
     // a delete of a stored record (`guardado`: its every field, as alActualizar gets them). by default nothing of a
     // rule is ever deleted: 409
     fun alBorrar(

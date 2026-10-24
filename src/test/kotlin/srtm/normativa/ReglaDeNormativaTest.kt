@@ -100,6 +100,18 @@ class ReglaDeNormativaTest {
     }
 
     @Test
+    fun `only srtm verifies - the transition to VIGENTE of a stored row needs the mark, nothing else does`() {
+        val antes = fila(*POR_VERIFICAR.toList().toTypedArray())
+        val verificado = antes + ("estado" to "VIGENTE") + ("verifico" to "BETO")
+        assertTrue(regla.sinLaMarca(PARAMETRO_TRIBUTARIO, antes, verificado)!!.contains("se verifica en Normativa"))
+        // core clears a field left out: an estado missing from a PUT is VIGENTE too
+        assertTrue(regla.sinLaMarca(PARAMETRO_TRIBUTARIO, antes, verificado + ("estado" to null)) != null)
+        assertEquals(null, regla.sinLaMarca(PARAMETRO_TRIBUTARIO, antes, antes + ("valor_numerico" to "1")))
+        assertEquals(null, regla.sinLaMarca(PARAMETRO_TRIBUTARIO, fila(), fila() + ANULACION))
+        assertEquals(null, regla.sinLaMarca(PARAMETRO_TRIBUTARIO, fila(), fila()))
+    }
+
+    @Test
     fun `a VIGENTE row is not edited - it is annulled with its motivo, who and when, and nothing else`() {
         val antes = fila()
         val msg = conflicto(antes, antes + ("valor_numerico" to "5000.00"))

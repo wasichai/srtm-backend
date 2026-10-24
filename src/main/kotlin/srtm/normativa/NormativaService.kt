@@ -134,6 +134,8 @@ class NormativaService(
     suspend fun borrar(id: UUID) {
         permisos.exigirBorrar(PARAMETRO_TRIBUTARIO, "borrar un parámetro")
         transaccion.executeAndAwait {
+            // under the lock a verificación takes: the row read again is still POR_VERIFICAR, or nothing is deleted
+            bloquear(leer(id))
             porVerificar(id, "se borra")
             registros.delete(PARAMETRO_TRIBUTARIO, id)
         }

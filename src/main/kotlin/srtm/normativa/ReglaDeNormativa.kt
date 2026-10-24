@@ -25,6 +25,7 @@ import wasichai.core.common.ConflictException
 //   else; it is deleted, not annulled;
 // - a VIGENTE row is not edited: it is annulled (motivo, who and when, nothing else) and the correct value registered;
 // - an ANULADO row does not change.
+// - POR_VERIFICAR -> VIGENTE of a stored row only with srtm's mark (sinLaMarca): only Normativa verifies.
 // a stored row without estado (before the field, until the migration) is VIGENTE. a write that changes nothing passes
 @Component
 class ReglaDeNormativa : ReglaDeEscritura {
@@ -54,6 +55,20 @@ class ReglaDeNormativa : ReglaDeEscritura {
         if (estado != ANULADO) ANULACION.filter { lleno(attrs[it]) }.forEach { v.mal(it, "solo lo tiene un parámetro anulado") }
         v.lanzar("El parámetro")
     }
+
+    // verifying a stored row is Normativa's alone (NormativaService.verificar: the user's signature, the overlaps). the
+    // importers' door stays the insert of a VIGENTE row with the document's two signatures
+    override fun sinLaMarca(
+        objeto: String,
+        guardado: Map<String, Any?>,
+        nuevo: Map<String, Any?>
+    ): String? =
+        if (EstadoParametro.de(guardado[ESTADO]) == POR_VERIFICAR && EstadoParametro.de(nuevo[ESTADO]) == VIGENTE) {
+            "Un parámetro POR_VERIFICAR se verifica en Normativa (POST /api/srtm/normativa/parametros/verificar), con la firma de " +
+                "quien verifica: no por la API genérica"
+        } else {
+            null
+        }
 
     override fun alActualizar(
         objeto: String,
