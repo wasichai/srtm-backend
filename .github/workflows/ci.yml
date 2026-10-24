@@ -77,6 +77,19 @@ jobs:
       - run: python3 apply.py --validate-only
       - run: python3 -m unittest -v
 
+  brecha:
+    name: Corte analítico (python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: docs/informes/brecha
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 --version
+      - run: make venv
+      - run: make pruebas
+
   format:
     name: Format (prettier)
     runs-on: ubuntu-latest
