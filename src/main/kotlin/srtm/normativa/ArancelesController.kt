@@ -53,13 +53,24 @@ class ArancelesController(
     @PostMapping("/verificar")
     suspend fun verificar(
         @RequestBody pedido: PedidoVerificacion
-    ): ResultadoVerificacion = aranceles.verificar(pedido)
+    ): ResultadoVerificacionAranceles = aranceles.verificar(pedido)
 
     @PostMapping("/{id}/anular")
     suspend fun anular(
         @PathVariable id: UUID,
         @RequestBody pedido: PedidoAnulacion
-    ): Arancel = aranceles.anular(id, pedido)
+    ): ArancelAnulado = aranceles.anular(id, pedido)
+
+    // the copies to catastro still pending or failed (#189), of the year or of every year: always a 200 with how many
+    // were synchronized and each error
+    @PostMapping("/sincronizar")
+    suspend fun sincronizar(
+        @RequestParam params: Map<String, String>
+    ): Sincronizacion {
+        Filtros.soloConoce(params, "anio")
+        val anio = Filtros.texto(params, "anio")?.let { Filtros.entero(params, "anio", 0, 1900..2100) }
+        return aranceles.sincronizar(anio)
+    }
 
     // the csv itself is the body (Content-Type text/csv). without dry_run=false nothing is written: what it would do
     @PostMapping("/importar", consumes = ["text/csv", "text/plain"])

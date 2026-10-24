@@ -19,6 +19,8 @@ import tools.jackson.databind.DeserializationFeature
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 import wasichai.core.common.ConflictException
+import wasichai.core.identity.AuthenticatedUser
+import wasichai.core.organization.OrganizationRepository
 import java.math.BigDecimal
 import java.time.Duration
 import java.time.Instant
@@ -99,7 +101,41 @@ interface Catastro {
 
     // a declaración's autoavalúo sugerido (#149): nothing is stored on either side
     suspend fun valuar(insumos: InsumosValuacion): ValuacionDeInsumos
+
+    // Normativa's copy (#189): catastro's arancel of a.clave becomes a. created when it lacks one, replaced when its
+    // differs, left alone when it is the same
+    suspend fun guardarArancel(a: ArancelCatastral): CopiaDeArancel
+
+    // catastro's arancel of the clave is deleted; none is no error
+    suspend fun borrarArancel(clave: String): CopiaDeArancel
 }
+
+// an arancel as catastro-backend keeps it (its object arancel, catastro-backend's model.json): srtm's VIGENTE one,
+// without its estado nor its signatures. clave is id_aranc|anio, unique in catastro
+data class ArancelCatastral(
+    val clave: String,
+    val idAranc: String,
+    val anio: Int,
+    val valorM2: BigDecimal,
+    val codVia: String? = null,
+    val cuadra: String? = null,
+    val lado: String? = null
+) {
+    // the attributes of a write: every field, an empty one null (core's update replaces them all)
+    fun atributos(): Map<String, Any?> =
+        mapOf(
+            "clave" to clave,
+            "id_aranc" to idAranc,
+            "anio" to anio,
+            "valor_m2" to valorM2,
+            "cod_via" to codVia?.trim()?.ifEmpty { null },
+            "cuadra" to cuadra?.trim()?.ifEmpty { null },
+            "lado" to lado?.trim()?.ifEmpty { null }
+        )
+}
+
+// what a copy did in catastro
+enum class CopiaDeArancel { CREADO, ACTUALIZADO, IGUAL, BORRADO, NO_ESTABA }
 
 // catastro could not answer: the corrida fails with this message (never the secret nor a token)
 class CatastroException(
@@ -126,6 +162,18 @@ class Catastros(
     ): Catastro? = registro.de(id, slug)
 }
 
+// the caller's organization's catastro, or null when it has none (or the install none): its slug is read only when
+// some key is a slug. named twice: 409 (Catastros.de). the brecha refuses a null, the autoavalúo sugerido and Normativa's
+// copy skip it
+suspend fun Catastros.delUsuario(
+    usuario: AuthenticatedUser,
+    organizaciones: OrganizationRepository
+): Catastro? {
+    if (!configurado) return null
+    val slug = if (necesitaSlug) organizaciones.findById(usuario.organizationId)?.slug else null
+    return de(usuario.organizationId, slug)
+}
+
 const val NO_CONFIGURADO =
     "Catastro no configurado: srtm.catastro necesita enabled y, por organización, url, client-id y client-secret " +
         "(SRTM_CATASTRO_ENABLED; SRTM_CATASTRO_ORGANIZACIONES_<ORGANIZACION>_URL, _CLIENT_ID y _CLIENT_SECRET)"
@@ -143,7 +191,8 @@ fun dosCatastros(claves: Collection<String>) =
 // ?anio&page&size=500 page after page until total is read (or a page comes short). an item's lote is its code, and
 // loteGeom its geometry (GeoJSON in EPSG:4326, or null). a service account that may not read any of catastro's four
 // objects gets a 403 for the whole request: the corrida fails with it. valuar: POST {url}/api/catastro/valuacion with
-// the insumos, as the same account
+// the insumos, as the same account. Normativa's copy of the aranceles (#189) writes catastro's object arancel by core's
+// rest, {url}/api/objects/arancel/records, as the same account (catastro-backend#19 lets its role write it)
 class ClienteCatastro(
     private val cuenta: CuentaCatastro,
     private val ahora: () -> Instant = Instant::now
@@ -209,6 +258,78 @@ class ClienteCatastro(
         return valuacion(DECIMALES.readTree(respuesta.orEmpty()))
     }
 
+    override suspend fun guardarArancel(a: ArancelCatastral): CopiaDeArancel {
+        val que = "el arancel ${a.clave}"
+        val guardado = arancelDeCatastro(a.clave)
+        val cuerpo = DECIMALES.writeValueAsString(mapOf("attributes" to a.atributos()))
+        if (guardado == null) {
+            autorizado("el alta de $que") { token -> escribir(client.post().uri(registros()), token, cuerpo) }
+            return CopiaDeArancel.CREADO
+        }
+        if (mismoArancel(a, guardado.path("attributes"))) return CopiaDeArancel.IGUAL
+        val id = guardado.path("id").asString()
+        autorizado("el cambio de $que") { token -> escribir(client.put().uri(registros(id)), token, cuerpo) }
+        return CopiaDeArancel.ACTUALIZADO
+    }
+
+    override suspend fun borrarArancel(clave: String): CopiaDeArancel {
+        val guardado = arancelDeCatastro(clave) ?: return CopiaDeArancel.NO_ESTABA
+        val id = guardado.path("id").asString()
+        autorizado("el borrado del arancel $clave") { token ->
+            client
+                .delete()
+                .uri(registros(id))
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $token")
+                .retrieve()
+                .bodyToMono(String::class.java)
+        }
+        return CopiaDeArancel.BORRADO
+    }
+
+    // catastro's record of the clave ({id, attributes}), or null: GET /api/objects/arancel/records?clave= (core's
+    // equality filter; the clave is unique there)
+    private suspend fun arancelDeCatastro(clave: String): JsonNode? {
+        val uri =
+            UriComponentsBuilder
+                .fromUriString(cuenta.url.trimEnd('/'))
+                .path(REGISTROS_ARANCEL)
+                .queryParam("clave", "{clave}")
+                .queryParam("size", 2)
+                .encode()
+                .buildAndExpand(clave)
+                .toUri()
+        val body =
+            autorizado("la búsqueda del arancel $clave") { token ->
+                client
+                    .get()
+                    .uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer $token")
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(String::class.java)
+            }
+        return DECIMALES
+            .readTree(body.orEmpty())
+            .path("content")
+            .values()
+            .firstOrNull { it.path("attributes").path("clave").texto() == clave }
+    }
+
+    private fun registros(id: String? = null): String = cuenta.url.trimEnd('/') + REGISTROS_ARANCEL + (id?.let { "/$it" } ?: "")
+
+    private fun escribir(
+        pedido: WebClient.RequestBodySpec,
+        token: String,
+        cuerpo: String
+    ): Mono<String> =
+        pedido
+            .header(HttpHeaders.AUTHORIZATION, "Bearer $token")
+            .contentType(MediaType.APPLICATION_JSON)
+            .accept(MediaType.APPLICATION_JSON)
+            .bodyValue(cuerpo)
+            .retrieve()
+            .bodyToMono(String::class.java)
+
     // one page as its service account
     private suspend fun pagina(
         anio: Int,
@@ -272,6 +393,7 @@ class ClienteCatastro(
 
     companion object {
         const val TAMANIO_PAGINA = 500
+        private const val REGISTROS_ARANCEL = "/api/objects/arancel/records"
         val TIMEOUT: Duration = Duration.ofSeconds(60)
         private const val TAMANIO_MAXIMO = 32 * 1024 * 1024
         private val JSON = JsonMapper.builder().build()
@@ -301,6 +423,18 @@ class ClienteCatastro(
                 llave = n.path("llave").texto(),
                 loteGeom = geometria
             )
+        }
+
+        // catastro's arancel says what a does: a number by its value, an empty text as null
+        fun mismoArancel(
+            a: ArancelCatastral,
+            guardado: JsonNode
+        ): Boolean {
+            val esperado = a.atributos()
+            return guardado.path("id_aranc").texto() == a.idAranc &&
+                guardado.path("anio").let { it.isNumber && it.asLong() == a.anio.toLong() || it.texto() == a.anio.toString() } &&
+                guardado.path("valor_m2").decimal()?.compareTo(a.valorM2) == 0 &&
+                listOf("cod_via", "cuadra", "lado").all { guardado.path(it).texto() == esperado[it] }
         }
 
         // POST /valuacion's answer (catastro-backend#17): every key is there, null when not valued

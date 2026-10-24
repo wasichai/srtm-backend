@@ -141,5 +141,19 @@ arancel por verificar lo corrige, y una que cambia uno vigente se rechaza («VIG
 archivo con los aranceles de todo el distrito (unas 1 500 filas) se escribe por partes: si la carga se corta, vuelva
 a importarlo y se completa lo que falta.
 
+[[normativa-catastro]]
+*La copia en catastro.* Cada vez que un arancel queda vigente (al verificarlo o al importarlo con las dos firmas), {sigla}
+lo copia al catastro, y cuando se anula, lo quita de allí (o deja el otro vigente de ese tramo y año, si lo hay). Si el
+catastro no responde, la verificación, la anulación o la importación quedan hechas igual: solo la copia queda pendiente.
+La columna _Catastro_ de la lista dice cómo está cada arancel:
+
+* *sincronizado*: el catastro tiene la copia, con la fecha y hora de la última;
+* *error*: la última copia falló, con el mensaje del catastro;
+* *pendiente*: todavía no se copió (los aranceles por verificar no se copian nunca: solo se copian los vigentes).
+
+El botón btn:[Sincronizar con catastro] vuelve a intentar las copias pendientes o con error del año que se mira y dice
+cuántas quedaron bien y cuáles fallaron. Si la municipalidad no tiene catastro configurado, no se copia nada y la
+columna queda en pendiente, sin error.
+
 NOTE: La pantalla de Normativa llega con la próxima versión del portal. Mientras tanto, el administrador usa estas
 mismas acciones por la API (`/api/srtm/normativa`), que se describe en el {m-sistema}.

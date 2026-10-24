@@ -608,6 +608,18 @@ firma y sus estados: <<ref-permisos-aranceles>>. Un arancel se responde con sus 
 `motivo_anulacion`, `anulado_por`, `anulado_en`, `sincronizado_en`, `error_sincronizacion`); un `estado` vacío se
 responde `VIGENTE`. `clave` es `id_aranc|anio` y la pone el servicio.
 
+*Copia a catastro.* srtm es dueño de los aranceles y catastro-backend guarda una copia de los `VIGENTE`, con la que
+valúa. Después de verificar, anular o importar (sin `dry_run`), srtm copia cada clave tocada tal como quedó: su
+`VIGENTE` se crea o se reemplaza en catastro, y si no queda ninguno, se borra de catastro. Escribe en el objeto
+`arancel` del Core de catastro (`/api/objects/arancel/records`) con la cuenta de servicio de la brecha, cuyo rol
+`SRTM_LECTOR` escribe `arancel` (catastro-backend #19). La copia corre después de guardar, fuera de esa transacción:
+si catastro falla, la verificación, la anulación o la importación quedan igual. El resultado queda en el arancel:
+`sincronizado_en` (la hora de la última copia buena; `error_sincronizacion` vacío) o `error_sincronizacion` (el
+mensaje de catastro, nunca un token ni un secreto; `sincronizado_en` no cambia). Las respuestas de verificar, anular e
+importar agregan el campo `sincronizacion`:
+`{sincronizados: n, errores: [{id, clave, error}]}`. Es `null` si la organización no tiene catastro configurado (no se
+copia nada y no hay error) y en un `dry_run`.
+
 [cols="5,6,4",options="header"]
 |===
 |Método y ruta |Qué hace |Respuestas
@@ -636,12 +648,12 @@ la clave, que tiene que estar libre.
 `{ids: [...]}`
 |Verifica cada uno: `verifico` es el usuario y pasa a `VIGENTE`. Se rechaza el propio, el que no está por verificar y
 el de una clave que ya tiene otro `VIGENTE` («ya hay un arancel VIGENTE <id_aranc> <anio> (id): anúlelo antes»).
-|200 `{verificados: [id], rechazados: [{id, motivo}]}`.
+|200 `{verificados: [id], rechazados: [{id, motivo}], sincronizacion}`.
 
 |`POST /{id}/anular` +
 `{motivo}`
-|Anula un arancel `VIGENTE`.
-|200; 400 sin motivo; 409 no está vigente.
+|Anula un arancel `VIGENTE`. Catastro pierde su copia (o toma el otro `VIGENTE` de la clave, si lo hay).
+|200: el arancel, leído después de la copia, con `sincronizacion`; 400 sin motivo; 409 no está vigente.
 
 |`POST /importar?dry_run=true\|false` +
 cuerpo `text/csv`
@@ -650,8 +662,20 @@ comentarios). Con las dos firmas entra `VIGENTE`; con una o ninguna, `POR_VERIFI
 no `ANULADO`: igual se salta, un `POR_VERIFICAR` distinto se corrige, un `VIGENTE` distinto es un rechazo («VIGENTE
 distinto: anule primero»). Sin `dry_run=false` no escribe nada. Escribe en lotes de 100 filas, cada uno en su
 transacción, cuatro a la vez: un lote que falla deja escritos los que terminaron; correrlo otra vez completa el resto.
-|200 `{dry_run, crear, actualizar, iguales, rechazos: [{fila, motivo}]}`, con cada fila de `crear` y `actualizar`
-`{fila, id, id_aranc, anio, valor_m2, cod_via, cuadra, lado, estado}`; 400 CSV mal formado.
+Las filas que quedan `VIGENTE` se copian a catastro, cuatro claves a la vez.
+|200 `{dry_run, crear, actualizar, iguales, rechazos: [{fila, motivo}], sincronizacion}`, con cada fila de `crear` y
+`actualizar` `{fila, id, id_aranc, anio, valor_m2, cod_via, cuadra, lado, estado}`; 400 CSV mal formado; 409
+«La importación quedó a medias: se escribieron N de M lotes (F filas) antes de un error (…)» si falla un lote cuando
+otros ya se escribieron: el mismo archivo otra vez salta lo escrito y completa lo que falta (lo escrito sin copiar lo
+recoge `sincronizar`).
+
+|`POST /sincronizar?anio`
+|Reintenta la copia a catastro de todo arancel del año (de todos los años, sin `anio`) que está pendiente: `VIGENTE` o
+`ANULADO` sin `sincronizado_en` o con `error_sincronizacion`. Cada clave se copia como está: su `VIGENTE` se crea o
+se reemplaza en catastro; sin ninguno, se borra. Un `POR_VERIFICAR` no se copia nunca. Sin catastro configurado no
+copia nada.
+|200 `{sincronizados: n, errores: [{id, clave, error}]}` (`{0, []}` sin catastro); 403 sin actualización sobre
+`arancel`; 422 `anio` fuera de 1900..2100 u otro parámetro.
 |===
 
 [[ref-api-pide]]

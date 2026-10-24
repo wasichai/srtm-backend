@@ -164,6 +164,10 @@ redeterminó. Por eso el perfil `{p-registrador}` sugerido los tiene (<<ref-perm
 |Importar aranceles de un CSV +
 `POST /api/srtm/normativa/aranceles/importar`
 |`CREATE` y `UPDATE` sobre `arancel`.
+
+|Sincronizar con catastro (reintentar las copias pendientes) +
+`POST /api/srtm/normativa/aranceles/sincronizar`
+|`UPDATE` sobre `arancel`. En catastro-backend escribe la cuenta de servicio de srtm (<<ref-permisos-aranceles>>).
 |===
 
 [[ref-permisos-normativa]]
@@ -208,6 +212,12 @@ su regla (`srtm.normativa.ReglaDeArancel`) en toda escritura y los mismos estado
   o junto con una transición, pero un arancel nuevo nace sin ellos;
 * la puerta de importación es la misma: un arancel que nace `VIGENTE` con dos firmas distintas entra por la API
   genérica, para quien tiene `CREATE` sobre `arancel` (`{p-normativa}` y `ADMIN`).
+
+*La copia a catastro.* Verificar, anular, importar y sincronizar copian el `VIGENTE` de cada clave al objeto
+`arancel` de catastro-backend (o lo borran allí si ya no hay uno). En srtm basta el permiso del acto (`UPDATE` sobre
+`arancel`), porque el resultado (`sincronizado_en`, `error_sincronizacion`) se escribe con él. En catastro no escribe
+el usuario sino la cuenta de servicio de srtm (la misma de la brecha), cuyo rol `SRTM_LECTOR` tiene `READ`, `CREATE`,
+`UPDATE` y `DELETE` sobre `arancel` (catastro-backend #19). Una organización sin catastro configurado no copia nada.
 
 La DJ lee solo los `VIGENTE`: una DJ que nombra su tramo de vía (`id_aranc`) toma el `valor_m2` del arancel `VIGENTE`
 de ese tramo en su año (`READ` sobre `arancel`, que tienen los perfiles sugeridos que editan la DJ).
