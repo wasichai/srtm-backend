@@ -123,8 +123,8 @@ abstract class ConEscenarioApiTest : ConParametrosApiTest() {
                         "vigencia_desde" to "$anio-01-01",
                         "vigencia_hasta" to "$anio-12-31",
                         "valor_numerico" to Parametros.uit(2026),
-                        "transcribio" to "TEST",
-                        "verifico" to "TEST"
+                        "transcribio" to "TEST A",
+                        "verifico" to "TEST B"
                     )
             )
         )

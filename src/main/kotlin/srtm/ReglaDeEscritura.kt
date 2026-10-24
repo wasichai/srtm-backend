@@ -34,8 +34,12 @@ interface ReglaDeEscritura {
         nuevo: Map<String, Any?>
     ): Unit = throw noSeCambia(objeto)
 
-    // nothing of a rule is ever deleted
-    fun alBorrar(objeto: String): Nothing = throw noSeCambia(objeto)
+    // a delete of a stored record (`guardado`: its every field, as alActualizar gets them). by default nothing of a
+    // rule is ever deleted: 409
+    fun alBorrar(
+        objeto: String,
+        guardado: Map<String, Any?>
+    ): Unit = throw noSeCambia(objeto)
 
     // nor moved by a workflow
     fun alCambiarDeEstado(objeto: String): Nothing = throw noSeCambia(objeto)

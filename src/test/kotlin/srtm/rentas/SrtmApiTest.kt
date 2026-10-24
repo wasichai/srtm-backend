@@ -80,6 +80,8 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                 put("required", required(field))
                 put("unique", field["unique"]?.asBoolean() ?: false)
                 if (field["type"].asString() == "ENUM") put("enumOptions", options(field))
+                // core applies it on create to a field the create leaves out (parametro_tributario's estado)
+                field["defaultValue"]?.let { put("defaultValue", it.asString()) }
                 if (field["type"].asString() == "GEOMETRY") {
                     put("geometryType", field["geometryType"].asString())
                     put("srid", field["srid"]?.asInt() ?: 4326)
@@ -289,6 +291,7 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
                 "GET" -> client.get().uri(path)
                 "DELETE" -> client.delete().uri(path)
                 "PUT" -> client.put().uri(path).bodyValue(body!!)
+                "PATCH" -> client.patch().uri(path).bodyValue(body!!)
                 // a POST without a body: one whose body is optional
                 else -> client.post().uri(path).let { post -> body?.let { post.bodyValue(it) } ?: post }
             }

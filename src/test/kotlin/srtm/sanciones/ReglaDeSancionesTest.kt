@@ -222,7 +222,7 @@ class ReglaDeSancionesTest {
             assertTrue(e.message.contains("solo se agrega"), e.message)
         }
         regla.objetos.forEach { objeto ->
-            assertThrows(ConflictException::class.java) { regla.alBorrar(objeto) }
+            assertThrows(ConflictException::class.java) { regla.alBorrar(objeto, emptyMap()) }
             assertThrows(ConflictException::class.java) { regla.alCambiarDeEstado(objeto) }
         }
         assertTrue(regla.soloDesdeElServicio)

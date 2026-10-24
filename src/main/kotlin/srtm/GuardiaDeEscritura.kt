@@ -15,7 +15,7 @@ import wasichai.core.data.RecordWriteGuard
 // - an insert holds its invariants, whoever sends it (400); one of an object soloDesdeElServicio without the mark
 //   EscrituraDeSrtm is a 403 before anything is written (the platform and automations carry no mark either);
 // - an update is what the rule allows (by default nothing: 409), and with the mark when soloDesdeElServicio;
-// - a delete or a state transition is a 409, always.
+// - a delete is what the rule allows (by default nothing: 409); a state transition is a 409, always.
 // a refusal for the missing mark leaves a WARN line that starts with ESCRITURA FUERA DE SRTM RECHAZADA. what it does
 // not see: a direct write to the database (the lotes' states, srtm.emision.TablasCore) and a module that writes
 // through the RecordStore without RecordWriteGuards
@@ -48,7 +48,7 @@ class GuardiaDeEscritura(
                 regla.alActualizar(objeto, campos.associateWith { guardado[it] }, campos.associateWith { nuevo[it] })
                 exigirLaMarca(regla, "UPDATE", change)
             }
-            RecordChangeKind.DELETED -> regla.alBorrar(objeto)
+            RecordChangeKind.DELETED -> regla.alBorrar(objeto, change.before.orEmpty())
             RecordChangeKind.TRANSITIONED -> regla.alCambiarDeEstado(objeto)
         }
     }

@@ -65,6 +65,26 @@ abstract class ConSancionesApiTest : SrtmApiTest() {
         return post("/api/objects/parametro_tributario/records", mapOf("attributes" to attrs))["id"].asString()
     }
 
+    // a parametro_tributario row corrected as the normativa corrects it (#187): a VIGENTE row is not edited, it is
+    // annulled and the correct value registered with its two signatures. the new row's id
+    protected fun corregir(
+        fila: String,
+        valor: String
+    ): String {
+        val ruta = "/api/objects/parametro_tributario/records/$fila"
+        val atributos = fields(tree(send("GET", ruta, null, HttpStatus.OK))["attributes"])
+        val anulacion =
+            mapOf(
+                "estado" to "ANULADO",
+                "motivo_anulacion" to "Corrección de prueba",
+                "anulado_por" to "OTRA PRUEBA",
+                "anulado_en" to "2026-01-01T00:00:00Z"
+            )
+        send("PUT", ruta, mapOf("attributes" to atributos + anulacion), HttpStatus.OK)
+        val correcta = atributos.filterKeys { it !in anulacion.keys } + ("valor_numerico" to valor) + ("estado" to "VIGENTE")
+        return post("/api/objects/parametro_tributario/records", mapOf("attributes" to correcta.filterValues { it != null }))["id"].asString()
+    }
+
     // the plazos of `anio` (FICTITIOUS: 5 business days for a descargo, 15 to impugnar a resolución), and its FERIADOS row
     // unless `conFeriados` is false (`feriados`: its movable ones, none by default)
     protected fun plazos(
