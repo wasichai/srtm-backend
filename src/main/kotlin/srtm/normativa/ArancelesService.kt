@@ -35,18 +35,21 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.cancellation.CancellationException
 
 // Normativa's aranceles (#188): the double signature over arancel, as NormativaService's over the parámetros. an
 // arancel is registered POR_VERIFICAR by the user (transcribio), corrected or deleted while so, verified by another
 // user (VIGENTE) and, if wrong, annulled and registered again. one alive (not ANULADO) per clave (id_aranc|anio), and
 // so one VIGENTE: what the DJ reads (vigente). ReglaDeArancel holds the same on every other door. each act on a clave
-// runs under its lock (Candado.ARANCEL)
+// runs under its lock (Candado.ARANCEL). what verificar, anular and importar leave VIGENTE or ANULADO is copied to
+// catastro-backend afterwards (SincronizacionAranceles), outside their transactions: their answers say how it went
 @Service
 class ArancelesService(
     private val registros: Registros,
     private val permisos: Permisos,
     private val currentUser: CurrentUser,
     private val candados: Candados,
+    private val sincronizacion: SincronizacionAranceles,
     transacciones: ReactiveTransactionManager
 ) {
     private val transaccion = TransactionalOperator.create(transacciones)
@@ -163,16 +166,18 @@ class ArancelesService(
 
     // each arancel on its own: POR_VERIFICAR, transcribed by someone else, and no other VIGENTE of its clave. the user
     // signs it (verifico) and it is VIGENTE
-    suspend fun verificar(pedido: PedidoVerificacion): ResultadoVerificacion {
+    suspend fun verificar(pedido: PedidoVerificacion): ResultadoVerificacionAranceles {
         permisos.exigirActualizar(ARANCEL, "verificar aranceles")
         val usuario = firma()
-        return verificarCada(pedido, "aranceles") { id -> transaccion.executeAndAwait { verificarUno(id, usuario) } }
+        val vigentes = mutableListOf<Arancel>()
+        val resultado = verificarCada(pedido, "aranceles") { id -> vigentes += transaccion.executeAndAwait { verificarUno(id, usuario) } }
+        return ResultadoVerificacionAranceles(resultado.verificados, resultado.rechazados, sincronizacion.despuesDe(vigentes))
     }
 
     private suspend fun verificarUno(
         id: UUID,
         usuario: String
-    ) {
+    ): Arancel {
         bloquear(leer(id).clave.orEmpty())
         val a = leer(id)
         val estado = EstadoParametro.de(a.estado)
@@ -181,35 +186,42 @@ class ArancelesService(
         deLaClave(a.clave.orEmpty()).firstOrNull { it.id != a.id && it.rige() }?.let {
             throw ConflictException("ya hay un arancel VIGENTE ${it.nombre()} (${it.id}): anúlelo antes")
         }
-        registros.replace(ARANCEL, Arancel::class.java, id, mapOf(ESTADO to VIGENTE, VERIFICO to usuario))
+        return registros.replace(ARANCEL, Arancel::class.java, id, mapOf(ESTADO to VIGENTE, VERIFICO to usuario))
     }
 
-    // a VIGENTE arancel is ANULADO: its motivo, the user and now. the correct value is registered as a new one
+    // a VIGENTE arancel is ANULADO: its motivo, the user and now. the correct value is registered as a new one. catastro
+    // loses its copy (or takes the clave's other VIGENTE one); the arancel answered is read after that copy
     suspend fun anular(
         id: UUID,
         pedido: PedidoAnulacion
-    ): Arancel {
+    ): ArancelAnulado {
         permisos.exigirActualizar(ARANCEL, "anular un arancel")
         val motivo = pedido.motivo?.trim()
         if (motivo.isNullOrEmpty()) throw ValidationException("Anular un arancel exige su motivo", "motivo", "es obligatorio")
         val usuario = firma()
-        return transaccion.executeAndAwait {
-            bloquear(leer(id).clave.orEmpty())
-            val estado = EstadoParametro.de(leer(id).estado)
-            if (estado != VIGENTE) throw ConflictException("Solo se anula un arancel VIGENTE: este está $estado")
-            registros.replace(
-                ARANCEL,
-                Arancel::class.java,
-                id,
-                mapOf(
-                    ESTADO to ANULADO,
-                    MOTIVO_ANULACION to motivo,
-                    ANULADO_POR to usuario,
-                    ANULADO_EN to OffsetDateTime.now(ZoneOffset.UTC).toString()
+        val anulado =
+            transaccion.executeAndAwait {
+                bloquear(leer(id).clave.orEmpty())
+                val estado = EstadoParametro.de(leer(id).estado)
+                if (estado != VIGENTE) throw ConflictException("Solo se anula un arancel VIGENTE: este está $estado")
+                registros.replace(
+                    ARANCEL,
+                    Arancel::class.java,
+                    id,
+                    mapOf(
+                        ESTADO to ANULADO,
+                        MOTIVO_ANULACION to motivo,
+                        ANULADO_POR to usuario,
+                        ANULADO_EN to OffsetDateTime.now(ZoneOffset.UTC).toString()
+                    )
                 )
-            )
-        }
+            }
+        val copia = sincronizacion.despuesDe(listOf(anulado)) ?: return ArancelAnulado(anulado, null)
+        return ArancelAnulado(leer(id), copia)
     }
+
+    // POST /normativa/aranceles/sincronizar: the copies still pending (or failed) of the year, again
+    suspend fun sincronizar(anio: Int?): Sincronizacion = sincronizacion.pendientes(anio)
 
     // the csv (CsvDeAranceles, PlanDeAranceles): with dryRun what it would do, without it the same written lote by
     // lote. the whole file is planned first (its rechazos, the claves it repeats); then each lote of the rows to write
@@ -254,17 +266,29 @@ class ArancelesService(
                             }
                         }.awaitAll()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // nothing written: the error as it is. some lotes in: say so, and that running it again is safe
                 if (escritos.get() == 0) throw e
                 throw PlanDeAranceles.parcial(escritos.get(), porLote.size, filasEscritas.get(), e.message ?: e.javaClass.simpleName)
             }
+        // the rows left VIGENTE, to catastro: read again by their claves (a new one's id is core's)
+        val vigentes =
+            (lotes.flatMap { it.crear } + lotes.flatMap { it.actualizar })
+                .filter { it.estado == VIGENTE }
+                .map { it.arancel.clave.orEmpty() }
+                .distinct()
+                .chunked(PageRequest.MAX_SIZE)
+                .flatMap { claves -> registros.donde(ARANCEL, Arancel::class.java, listOf(unoDe(CLAVE, claves))) }
+                .filter { it.rige() }
         return resultado(
             false,
             lotes.flatMap { it.crear },
             lotes.flatMap { it.actualizar },
             plan.iguales + lotes.sumOf { it.iguales },
-            (plan.rechazos + lotes.flatMap { it.rechazos }).sortedBy { it.fila }
+            (plan.rechazos + lotes.flatMap { it.rechazos }).sortedBy { it.fila },
+            sincronizacion.despuesDe(vigentes)
         )
     }
 
@@ -273,8 +297,9 @@ class ArancelesService(
         crear: List<EscrituraDeArancel>,
         actualizar: List<EscrituraDeArancel>,
         iguales: Int,
-        rechazos: List<RechazoDeFila>
-    ) = ResultadoImportacionAranceles(dryRun, crear.map(FilaDeArancel::de), actualizar.map(FilaDeArancel::de), iguales, rechazos)
+        rechazos: List<RechazoDeFila>,
+        copia: Sincronizacion? = null
+    ) = ResultadoImportacionAranceles(dryRun, crear.map(FilaDeArancel::de), actualizar.map(FilaDeArancel::de), iguales, rechazos, copia)
 
     private suspend fun escribir(plan: PlanDeArancel) {
         registros.createAll(

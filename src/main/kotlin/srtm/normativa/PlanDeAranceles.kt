@@ -1,5 +1,6 @@
 package srtm.normativa
 
+import com.fasterxml.jackson.annotation.JsonUnwrapped
 import srtm.Violaciones
 import srtm.leerRegistro
 import tools.jackson.databind.PropertyNamingStrategies
@@ -188,7 +189,24 @@ data class ResultadoImportacionAranceles(
     val crear: List<FilaDeArancel>,
     val actualizar: List<FilaDeArancel>,
     val iguales: Int,
-    val rechazos: List<RechazoDeFila>
+    val rechazos: List<RechazoDeFila>,
+    // the copy to catastro of the rows left VIGENTE (#189): null with dry_run or without catastro
+    val sincronizacion: Sincronizacion? = null
+)
+
+// the 200 of POST /normativa/aranceles/verificar: the ids verified, the ones refused and the copy to catastro of the
+// verified ones (null without catastro)
+data class ResultadoVerificacionAranceles(
+    val verificados: List<String>,
+    val rechazados: List<RechazoDeVerificacion>,
+    val sincronizacion: Sincronizacion?
+)
+
+// the 200 of POST /normativa/aranceles/{id}/anular: the arancel, flat, and the copy to catastro (null without it)
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class ArancelAnulado(
+    @get:JsonUnwrapped val arancel: Arancel,
+    val sincronizacion: Sincronizacion?
 )
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
