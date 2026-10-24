@@ -557,6 +557,7 @@
   "usuario/normativa#normativa-estados": "Los estados de un parámetro",
   "usuario/normativa#normativa-doble-firma": "La doble firma",
   "usuario/normativa#normativa-anular": "Corregir un valor vigente",
+  "usuario/normativa#normativa-cerrar": "Cerrar la vigencia de un valor",
   "usuario/normativa#normativa-importar": "Importar un CSV",
   "usuario/registrador#_manual_del_registrador_registro_tributario_predios_y_declaraciones_juradas": "Manual del registrador: Registro tributario, predios y declaraciones juradas",
   "usuario/registrador#presentacion": "Presentación",

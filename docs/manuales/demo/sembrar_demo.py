@@ -272,14 +272,16 @@ def perfiles(adm, s, clave):
         else:
             cuerpo = {"permissions": [{"objectName": o, "action": a} for o, a in quiere]}
             s.crear("permisos del rol", f"{rol}: {len(quiere)} permisos", lambda: adm.put(f"/api/roles/{rol}/permissions", cuerpo))
-        u = usuarios.get(p["email"].lower())
-        if u is None:
-            cuerpo = {"email": p["email"], "displayName": p["displayName"], "password": clave, "roles": [rol]}
-            s.crear("usuario", f"{p['email']} ({rol})", lambda: adm.post("/api/users", cuerpo))
-        elif u.get("roles") != [rol]:
-            s.crear("roles del usuario", f"{p['email']} -> {rol}", lambda: adm.put(f"/api/users/{u['id']}/roles", {"roles": [rol]}))
-        else:
-            s.omitir("usuario")
+        # la cuenta del perfil y las otras del mismo rol (NORMATIVA: la segunda firma la pone otra persona)
+        for cuenta in [p] + p.get("otras_cuentas", []):
+            u = usuarios.get(cuenta["email"].lower())
+            if u is None:
+                cuerpo = {"email": cuenta["email"], "displayName": cuenta["displayName"], "password": clave, "roles": [rol]}
+                s.crear("usuario", f"{cuenta['email']} ({rol})", lambda cuerpo=cuerpo: adm.post("/api/users", cuerpo))
+            elif u.get("roles") != [rol]:
+                s.crear("roles del usuario", f"{cuenta['email']} -> {rol}", lambda u=u: adm.put(f"/api/users/{u['id']}/roles", {"roles": [rol]}))
+            else:
+                s.omitir("usuario")
 
 
 def clientes(args, adm, clave):

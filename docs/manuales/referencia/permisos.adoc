@@ -129,6 +129,10 @@ redeterminó. Por eso el perfil `{p-registrador}` sugerido los tiene (<<ref-perm
 `POST /api/srtm/normativa/parametros/{id}/anular`
 |`UPDATE` sobre `parametro_tributario`.
 
+|Cerrar la vigencia de un parámetro vigente +
+`POST /api/srtm/normativa/parametros/{id}/cerrar`
+|`UPDATE` sobre `parametro_tributario`.
+
 |Importar parámetros de un CSV +
 `POST /api/srtm/normativa/parametros/importar`
 |`CREATE` y `UPDATE` sobre `parametro_tributario`.
@@ -148,7 +152,10 @@ API genérica, de `/admin`, de un importador o de un `ADMIN`:
   antes de la coma) y sin otro cambio. Normativa rechaza además la verificación de un parámetro cuya vigencia se
   solapa con otro `VIGENTE` del mismo tipo y clave;
 * un `VIGENTE` no se edita ni se borra: se anula (`ANULADO`, con `motivo_anulacion`, `anulado_por` y `anulado_en`) y
-  se registra el valor correcto, que vuelve a pasar por la doble firma. Un `ANULADO` no cambia.
+  se registra el valor correcto, que vuelve a pasar por la doble firma. Un `ANULADO` no cambia;
+* la única edición de un `VIGENTE` es *cerrar* su vigencia: poner `vigencia_hasta` a uno que no la tiene, con una
+  fecha no anterior a `vigencia_desde`, sin cambiar nada más. Así un valor nuevo del mismo tipo y clave rige después
+  de él sin solaparse.
 
 Lo demás responde 409, también a un `ADMIN`. Un parámetro sin estado (anterior al campo) cuenta como `VIGENTE`. Con
 permiso de `UPDATE` una persona puede transcribir y verificar, pero nunca lo mismo: la segunda firma tiene que ser de
@@ -216,7 +223,9 @@ pago o su anulación; ningún perfil los escribe.
 |Cargar datos con los importadores
 |`CREATE` y `UPDATE` sobre los objetos que cada script escribe; `import_cuis.py` pasa por la API de {sigla}
 (`CREATE` sobre `codigo_infraccion`). En la práctica se corren con una cuenta `ADMIN`. `import_parametros.py` sigue
-la doble firma (<<ref-permisos-normativa>>): no corrige un parámetro `VIGENTE` (409), hay que anularlo primero.
+la doble firma (<<ref-permisos-normativa>>): Core no le deja corregir un parámetro `VIGENTE` (409). El script lo
+informa como rechazo («VIGENTE distinto: anule o cierre primero», con su línea y su llave), sigue con las demás filas
+y termina con código 1.
 
 |Administrar usuarios y roles
 |`MANAGE_ORGANIZATION`.

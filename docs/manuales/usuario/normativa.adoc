@@ -56,7 +56,7 @@ El sistema no deja verificar:
 
 * lo que uno mismo transcribió: la segunda firma tiene que ser de otra cuenta;
 * un parámetro cuya vigencia se cruza con la de otro vigente del mismo tipo y clave. La respuesta nombra el otro
-  parámetro: anúlelo antes, o corrija la vigencia del nuevo.
+  parámetro: cierre su vigencia antes (<<normativa-cerrar>>), anúlelo, o corrija la vigencia del nuevo.
 
 Tampoco deja registrar dos parámetros del mismo tipo, clave y fecha de inicio, salvo que el primero esté anulado.
 
@@ -71,6 +71,21 @@ Un parámetro vigente no se edita, ni desde Normativa ni desde la consola de adm
 
 El anulado queda en el historial con su motivo, quién lo anuló y cuándo.
 
+[[normativa-cerrar]]
+== Cerrar la vigencia de un valor
+
+Un parámetro vigente sin fecha de fin rige hasta que se cierre. Cuando una norma nueva lo reemplaza (por ejemplo, una
+alícuota que cambia desde el 1 de enero), cierre la vigencia del anterior con el último día en que rige, y después
+registre y verifique el nuevo desde el día siguiente.
+
+Cerrar es lo único que se puede cambiar en un parámetro vigente, y solo una vez:
+
+* solo se cierra uno que no tiene fecha de fin;
+* la fecha de fin no puede ser anterior a la fecha de inicio;
+* no cambia nada más: ni el valor, ni la norma, ni las firmas.
+
+Si la fecha de cierre está mal, anule el parámetro y regístrelo de nuevo.
+
 [[normativa-importar]]
 == Importar un CSV
 
@@ -83,7 +98,7 @@ con `#` son comentarios.
 * Una fila con una sola firma, o sin firmas, entra por verificar, a nombre de quien la transcribió o, si no lo dice,
   de quien importa.
 * Una fila que ya está, igual, no se vuelve a cargar. Una que cambia un parámetro por verificar lo corrige. Una que
-  cambia un parámetro vigente se rechaza: anúlelo primero.
+  cambia un parámetro vigente se rechaza: anúlelo o cierre su vigencia primero.
 
 Antes de cargar, el sistema muestra qué haría (cuántas filas crearía, cuáles corregiría, cuáles ya están y cuáles
 rechaza, con su número de línea y el motivo), sin escribir nada. Solo al confirmar se escribe todo junto.

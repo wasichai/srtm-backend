@@ -579,13 +579,18 @@ los datos que cambian
 |`POST /parametros/verificar` +
 `{ids: [...]}`
 |Verifica cada uno: `verifico` es el usuario y pasa a `VIGENTE`. Se rechaza el propio, el que no está por verificar y
-el que se solapa con otro `VIGENTE` del mismo tipo y clave.
+el que se solapa con otro `VIGENTE` del mismo tipo y clave (el motivo sugiere cerrar la vigencia del otro).
 |200 `{verificados: [id], rechazados: [{id, motivo}]}`.
 
 |`POST /parametros/{id}/anular` +
 `{motivo}`
 |Anula un parámetro `VIGENTE`.
 |200; 400 sin motivo; 409 no está vigente.
+
+|`POST /parametros/{id}/cerrar` +
+`{vigencia_hasta}`
+|Cierra la vigencia de un parámetro `VIGENTE` sin `vigencia_hasta`; no cambia nada más.
+|200; 400 sin fecha o anterior a `vigencia_desde`; 409 no está vigente o ya está cerrada.
 
 |`POST /parametros/importar?dry_run=true\|false` +
 cuerpo `text/csv`
