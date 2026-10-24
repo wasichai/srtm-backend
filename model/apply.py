@@ -267,6 +267,9 @@ def validate(model):
                 enum_name = field.get("enum")
                 if not enum_name or enum_name not in enums:
                     errors.append(f"{flabel}: enum '{enum_name}' is not defined in enums")
+                # core checks a default as any value the field gets (FieldDefaults.checked): one of the options
+                elif field.get("defaultValue") is not None and field["defaultValue"] not in enums[enum_name]:
+                    errors.append(f"{flabel}: defaultValue '{field['defaultValue']}' is not an option of {enum_name}")
 
         fields_by_object[oname] = field_names
 
@@ -333,6 +336,9 @@ def field_payload(model, f):
     }
     if "description" in f:
         field["description"] = f["description"]
+    # core applies it on create to a field the create leaves out, never on update (FieldDefaults)
+    if f.get("defaultValue") is not None:
+        field["defaultValue"] = f["defaultValue"]
     if f["type"] == "ENUM":
         field["enumOptions"] = model["enums"][f["enum"]]
     if f["type"] == "GEOMETRY":

@@ -260,7 +260,7 @@ campo sin lectura deja de mostrarse a ese rol.
 [[perfiles-sugeridos]]
 === Perfiles sugeridos
 
-{producto} no trae roles de fábrica, salvo {p-admin}. La base de demostración crea cinco perfiles que reparten el
+{producto} no trae roles de fábrica, salvo {p-admin}. La base de demostración crea seis perfiles que reparten el
 trabajo de una oficina de rentas; sirven de punto de partida y son los que usan los manuales de usuario.
 
 .Perfiles de la base de demostración
@@ -272,6 +272,7 @@ trabajo de una oficina de rentas; sirven de punto de partida y son los que usan 
 |{p-fiscalizador} |Fiscalización e infracciones |CUIS, notificaciones previas, actas, descargos, resoluciones y sus notificaciones. |{m-fiscalizador}
 |{p-anuncios} |Anuncios y propaganda |Autorizar, renovar, cesar y retirar anuncios. |{m-anuncios}
 |{p-consulta} |Consulta |Solo lectura de todo el padrón y de la brecha de recaudación. |{m-consulta}
+|{p-normativa} |Normativa |Registrar, verificar (la doble firma), anular e importar los parámetros tributarios. |{m-normativa}
 |===
 
 Todos llevan, además, lectura sobre las corridas y los predios de la brecha de recaudación (`brecha_corrida` y

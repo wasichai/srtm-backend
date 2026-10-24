@@ -69,6 +69,7 @@
 :m-fiscalizador: Manual del fiscalizador
 :m-anuncios: Manual de anuncios
 :m-consulta: Manual de consulta
+:m-normativa: Manual de normativa
 :m-admin: Manual del administrador
 :m-sistema: Manual técnico del sistema
 // perfiles demo (demo/perfiles.json)
@@ -77,6 +78,7 @@
 :p-fiscalizador: FISCALIZADOR
 :p-anuncios: ANUNCIOS
 :p-consulta: CONSULTA
+:p-normativa: NORMATIVA
 :p-admin: ADMIN
 // la portada del conjunto (index.adoc la redefine a index.html)
 :biblioteca: ../index.html

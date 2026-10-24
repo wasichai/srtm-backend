@@ -3,6 +3,7 @@ package srtm
 import kotlinx.coroutines.currentCoroutineContext
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import wasichai.core.common.ConflictException
 import wasichai.core.common.ForbiddenException
 import wasichai.core.data.RecordChangeKind
 import wasichai.core.data.RecordWrite
@@ -14,8 +15,9 @@ import wasichai.core.data.RecordWriteGuard
 // relation targets (D29). this one asks each object's ReglaDeEscritura:
 // - an insert holds its invariants, whoever sends it (400); one of an object soloDesdeElServicio without the mark
 //   EscrituraDeSrtm is a 403 before anything is written (the platform and automations carry no mark either);
-// - an update is what the rule allows (by default nothing: 409), and with the mark when soloDesdeElServicio;
-// - a delete or a state transition is a 409, always.
+// - an update is what the rule allows (by default nothing: 409), and with the mark when soloDesdeElServicio, or when
+//   the rule says that change needs it (sinLaMarca: a parámetro is verified only by Normativa);
+// - a delete is what the rule allows (by default nothing: 409); a state transition is a 409, always.
 // a refusal for the missing mark leaves a WARN line that starts with ESCRITURA FUERA DE SRTM RECHAZADA. what it does
 // not see: a direct write to the database (the lotes' states, srtm.emision.TablasCore) and a module that writes
 // through the RecordStore without RecordWriteGuards
@@ -45,10 +47,15 @@ class GuardiaDeEscritura(
                 val guardado = change.before.orEmpty()
                 val nuevo = change.attributes.orEmpty()
                 val campos = guardado.keys + nuevo.keys
-                regla.alActualizar(objeto, campos.associateWith { guardado[it] }, campos.associateWith { nuevo[it] })
+                val antes = campos.associateWith { guardado[it] }
+                val despues = campos.associateWith { nuevo[it] }
+                if (currentCoroutineContext()[EscrituraDeSrtm.Clave] == null) {
+                    regla.sinLaMarca(objeto, antes, despues)?.let { throw ConflictException(it) }
+                }
+                regla.alActualizar(objeto, antes, despues)
                 exigirLaMarca(regla, "UPDATE", change)
             }
-            RecordChangeKind.DELETED -> regla.alBorrar(objeto)
+            RecordChangeKind.DELETED -> regla.alBorrar(objeto, change.before.orEmpty())
             RecordChangeKind.TRANSITIONED -> regla.alCambiarDeEstado(objeto)
         }
     }

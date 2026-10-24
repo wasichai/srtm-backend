@@ -6,10 +6,12 @@ import tools.jackson.databind.annotation.JsonNaming
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
+import java.time.OffsetDateTime
 
-// one row of parametro_tributario (model/model.json): a verified normative value, in force from vigencia_desde to
-// vigencia_hasta (open when empty). valor_numerico is the figure as the norm prints it: an alícuota or the mínimo in %,
-// a tramo's límite in UIT, the UIT in soles
+// one row of parametro_tributario (model/model.json): a normative value, in force from vigencia_desde to vigencia_hasta
+// (open when empty). valor_numerico is the figure as the norm prints it: an alícuota or the mínimo in %, a tramo's
+// límite in UIT, the UIT in soles. estado is the normativa's (srtm.normativa.EstadoParametro): ParametrosTributarios
+// hands on only the VIGENTE ones, the verified by two people
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class ParametroTributario(
     val id: String? = null,
@@ -22,7 +24,11 @@ data class ParametroTributario(
     val norma: String? = null,
     val fuente: String? = null,
     val transcribio: String? = null,
-    val verifico: String? = null
+    val verifico: String? = null,
+    val estado: String? = null,
+    val motivoAnulacion: String? = null,
+    val anuladoPor: String? = null,
+    val anuladoEn: OffsetDateTime? = null
 )
 
 // in force on `dia` (srtm.vigente)
@@ -72,6 +78,13 @@ const val UIT = "UIT"
 const val TRAMO_PREDIAL = "TRAMO_PREDIAL"
 const val TRAMO_PREDIAL_LIMITE = "TRAMO_PREDIAL_LIMITE"
 const val PREDIAL_MINIMO = "PREDIAL_MINIMO"
+
+// the deducciones of art. 19 and of the Ley 30490, in UIT: loaded from the csv, no calculation reads them yet
+const val DEDUCCION_PENSIONISTA = "DEDUCCION_PENSIONISTA"
+const val DEDUCCION_ADULTO_MAYOR = "DEDUCCION_ADULTO_MAYOR"
+
+// the predial's tipos (model/data/parametros-predial.csv): srtm.normativa.TiposDeParametro names each
+val TIPOS_PREDIAL = listOf(UIT, TRAMO_PREDIAL, TRAMO_PREDIAL_LIMITE, PREDIAL_MINIMO, DEDUCCION_PENSIONISTA, DEDUCCION_ADULTO_MAYOR)
 
 // art. 13 of the TUO LTM: the base (the valor afecto of the contribuyente's predios) pays by progressive tramos in UIT,
 // and never less than the mínimo, a % of the UIT, while there is a base. art. 15: four cuotas of a quarter each. the

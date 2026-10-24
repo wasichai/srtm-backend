@@ -46,7 +46,11 @@ enum class Candado(
     // pagoId, then its original's), then CAJA_CONTRIBUYENTE, by the contribuyentes' ids ascending. a pago
     // (PagosService), a sincronización (CajaService, one contribuyente) and a write of cuotas de arbitrio (anular,
     // redeterminar: the contribuyentes only) all follow it, so none waits on another in a cycle
-    CAJA_PAGO(0x5352_0009)
+    CAJA_PAGO(0x5352_0009),
+
+    // the parámetros of one tipo and clave (organización|tipo|clave, see bloquearEnOrganizacion): registering one and
+    // verifying one read the others first, and two verifications never leave two VIGENTE rows that overlap
+    PARAMETRO_TRIBUTARIO(0x5352_000A)
 }
 
 // postgres' transaction advisory locks, by kind and key (caja-backend's Candados). wasichai has no row lock nor

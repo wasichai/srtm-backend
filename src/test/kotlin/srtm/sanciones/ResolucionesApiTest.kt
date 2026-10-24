@@ -287,11 +287,9 @@ class ResolucionesApiTest : ConSancionesApiTest() {
         assertTrue("Presentado dentro del plazo: SÍ, el plazo vencía el 12/03/$ANIO_CONGELADO" in delRecurso, delRecurso)
         assertTrue("Infundado" in delRecurso, delRecurso)
 
-        // the UIT row and the plazo row are corrected, and the code gets a new version
+        // the UIT row and the plazo row are corrected (annulled and registered again), and the code gets a new version
         for ((fila, valor) in listOf(uit(ANIO_CONGELADO) to "5000.00", parametro(Llaves.PLAZO, Llaves.RG_RECURSO, ANIO_CONGELADO) to "20")) {
-            val ruta = "/api/objects/parametro_tributario/records/$fila"
-            val atributos = fields(tree(send("GET", ruta, null, HttpStatus.OK))["attributes"])
-            send("PUT", ruta, mapOf("attributes" to atributos + ("valor_numerico" to valor)), HttpStatus.OK)
+            corregir(fila, valor)
         }
         post(CUIS, version(codigo, "$ANIO_CONGELADO-02-01", porcentaje = 20) + ("base_legal" to "Ordenanza ficticia 002"))
         assertEquals(texto, texto(bajar("$RESOLUCIONES/${ris["id"].asString()}/pdf").third))

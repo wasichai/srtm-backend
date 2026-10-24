@@ -13,7 +13,7 @@
 SHELL := /bin/bash
 ASCIIDOCTOR ?= asciidoctor
 ASCIIDOCTOR_PDF ?= asciidoctor-pdf
-LIBROS := usuario/registrador usuario/arbitrios-emision usuario/fiscalizador usuario/anuncios usuario/consulta \
+LIBROS := usuario/registrador usuario/arbitrios-emision usuario/fiscalizador usuario/anuncios usuario/consulta usuario/normativa \
           administrador/manual-administrador sistema/manual-sistema
 FUENTES := $(addsuffix .adoc,$(LIBROS))
 SALIDA := salida

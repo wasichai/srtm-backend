@@ -82,10 +82,8 @@ class ActasApiTest : ConSancionesApiTest() {
         val id = acta["id"].asString()
         assertEquals(432.10, acta["importe_a_pagar"].asDouble())
 
-        // the UIT row is corrected and the code gets a new version from june
-        val fila = "/api/objects/parametro_tributario/records/$uit"
-        val atributos = fields(tree(send("GET", fila, null, HttpStatus.OK))["attributes"])
-        send("PUT", fila, mapOf("attributes" to atributos + ("valor_numerico" to "5000.00")), HttpStatus.OK)
+        // the UIT row is corrected (annulled and registered again) and the code gets a new version from june
+        corregir(uit, "5000.00")
         post(CUIS, version(codigo, "$ANIO_CONGELADO-06-01", porcentaje = 20))
 
         val ficha = expediente(id)

@@ -11,6 +11,8 @@ import srtm.anuncios.ReglaDeAnuncios
 import srtm.arbitrios.ANULACION_CUOTA_ARBITRIO
 import srtm.arbitrios.CUOTA_ARBITRIO
 import srtm.arbitrios.ReglaDeArbitrios
+import srtm.impuesto.PARAMETRO_TRIBUTARIO
+import srtm.normativa.ReglaDeNormativa
 import srtm.sanciones.CODIGO_INFRACCION
 import srtm.sanciones.PAPELETA
 import srtm.sanciones.ReglaDeSanciones
@@ -29,7 +31,7 @@ import srtm.sanciones.Ejemplos as EjemplosSanciones
 // lets through and which it refuses, with the mark EscrituraDeSrtm and without it. a write that passes returns, one
 // that does not throws, and nothing would reach the store
 class GuardiaDeEscrituraTest {
-    private val guardia = GuardiaDeEscritura(listOf(ReglaDeArbitrios(), ReglaDeSanciones(), ReglaDeAnuncios()))
+    private val guardia = GuardiaDeEscritura(listOf(ReglaDeArbitrios(), ReglaDeSanciones(), ReglaDeAnuncios(), ReglaDeNormativa()))
 
     private val sanciones = ReglaDeSanciones().objetos
     private val anuncios = ReglaDeAnuncios().objetos
@@ -124,6 +126,47 @@ class GuardiaDeEscrituraTest {
         listOf(false, true).forEach { marca ->
             falla<ConflictException>(marca) { guardia.beforeWrite(escritura(CUOTA_ARBITRIO, RecordChangeKind.UPDATED, CUOTA, CUOTA)) }
             falla<ConflictException>(marca) { guardia.beforeWrite(escritura(CUOTA_ARBITRIO, RecordChangeKind.DELETED, before = CUOTA)) }
+        }
+    }
+
+    // #187: a delete hands the rule the stored row, so a parámetro POR_VERIFICAR is deleted and a VIGENTE one is not
+    @Test
+    fun `a delete is judged on the stored row`() {
+        val parametro =
+            mapOf(
+                "tipo" to "UIT",
+                "vigencia_desde" to "2026-01-01",
+                "valor_numerico" to "5500.00",
+                "transcribio" to "ANA",
+                "verifico" to null,
+                "estado" to "POR_VERIFICAR"
+            )
+        runBlocking { guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.DELETED, before = parametro)) }
+        val vigente = parametro + ("estado" to "VIGENTE") + ("verifico" to "BETO")
+        falla<ConflictException> { guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.DELETED, before = vigente)) }
+        falla<ConflictException> { guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.DELETED, before = parametro - "estado")) }
+    }
+
+    // #187: a parámetro is verified only by srtm (Normativa); the generic api's PUT POR_VERIFICAR -> VIGENTE is a 409
+    @Test
+    fun `a parámetro becomes VIGENTE only with the mark`() {
+        val borrador =
+            mapOf(
+                "tipo" to "UIT",
+                "vigencia_desde" to "2026-01-01",
+                "valor_numerico" to "5500.00",
+                "transcribio" to "ANA",
+                "verifico" to null,
+                "estado" to "POR_VERIFICAR"
+            )
+        val verificado = borrador + ("estado" to "VIGENTE") + ("verifico" to "BETO")
+        val e = falla<ConflictException> { guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.UPDATED, verificado, borrador)) }
+        assertTrue(e.message.contains("se verifica en Normativa"), e.message)
+        runBlocking {
+            withContext(EscrituraDeSrtm) { guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.UPDATED, verificado, borrador)) }
+            // the importers' door stays open: an insert with two signatures, and a correction of a POR_VERIFICAR
+            guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.CREATED, verificado))
+            guardia.beforeWrite(escritura(PARAMETRO_TRIBUTARIO, RecordChangeKind.UPDATED, borrador + ("valor_numerico" to "5600"), borrador))
         }
     }
 

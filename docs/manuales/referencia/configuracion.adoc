@@ -15,8 +15,9 @@ por entorno, con la regla de nombres de Spring Boot (mayúsculas, puntos y guion
 
 No hay archivos de configuración fuera del jar, ni configuración guardada en la base salvo la que se carga como
 datos: el registro `municipalidad`
-(cabecera de los documentos) y los parámetros tributarios (`parametro_tributario`), que se administran como
-registros.
+(cabecera de los documentos) y los parámetros tributarios (`parametro_tributario`), que se administran en
+Normativa (`/api/srtm/normativa`) con doble firma: quien transcribe un valor lo registra por verificar, otra persona lo
+verifica, y un valor vigente no se edita, se anula y se registra el correcto (<<ref-permisos-normativa>>).
 
 Lo mínimo que un entorno real debe fijar:
 

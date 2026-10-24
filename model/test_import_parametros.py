@@ -114,6 +114,44 @@ class LoadTests(unittest.TestCase):
         self.assertIn("  update UIT 2026-01-01: valor_numerico 5000.00 -> 5500.00", out)
         self.assertIn(f"{OBJECT}: 0 created, 1 updated, 12 skipped", out)
 
+    def test_an_annulled_row_is_not_the_one_the_csv_has(self):
+        # srtm.normativa (#187): an ANULADO row stays as history, and its key is free for the correct value
+        uit = next(p for p in self.parametros if p["tipo"] == "UIT" and p["vigencia_desde"] == "2026-01-01")
+        self.core.add_record(OBJECT, {**uit, "valor_numerico": "5000.00", "estado": "ANULADO", "motivo_anulacion": "cifra mal copiada"})
+        code, out, err = self.run_main()
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.writes().count(("POST", f"/api/objects/{OBJECT}/records")), 13)
+        self.assertIn(f"{OBJECT}: 13 created, 0 updated, 0 skipped", out)
+
+    def test_a_vigente_core_refuses_to_change_is_a_rechazo_and_the_run_goes_on(self):
+        # srtm.normativa (#187): Core answers 409 to a change of a VIGENTE row. it is reported with its key, the other
+        # rows are still written, and the run exits 1 (Core refused something)
+        self.run_main()
+        for anio in ("2025", "2026"):
+            r = next(r for r in self.core.records[OBJECT] if r["attributes"]["tipo"] == "UIT" and r["attributes"]["vigencia_desde"] == f"{anio}-01-01")
+            r["attributes"]["valor_numerico"] = "1.00"
+        self.core.records[OBJECT] = [r for r in self.core.records[OBJECT] if r["attributes"]["tipo"] != "PREDIAL_MINIMO"]
+        self.core.conflict_on_update = OBJECT
+        self.core.requests.clear()
+        code, out, err = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn("rechazo línea 13 UIT 2025-01-01: VIGENTE distinto: anule o cierre primero", err)
+        self.assertIn("rechazo línea 14 UIT 2026-01-01: VIGENTE distinto: anule o cierre primero", err)
+        self.assertEqual(self.writes().count(("POST", f"/api/objects/{OBJECT}/records")), 1)
+        self.assertIn(f"{OBJECT}: 1 created, 0 updated, 10 skipped, 2 rechazados", out)
+
+    def test_a_por_verificar_core_refuses_to_verify_says_so(self):
+        # only Normativa verifies: the 409 of a POR_VERIFICAR row the CSV's two signatures would verify is not «VIGENTE
+        # distinto», it says where it is verified, with Core's detail
+        self.run_main()
+        r = next(r for r in self.core.records[OBJECT] if r["attributes"]["tipo"] == "UIT" and r["attributes"]["vigencia_desde"] == "2026-01-01")
+        r["attributes"].update({"estado": "POR_VERIFICAR", "verifico": None, "valor_numerico": "1.00"})
+        self.core.conflict_on_update = OBJECT
+        code, out, err = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn("rechazo línea 14 UIT 2026-01-01: POR_VERIFICAR: se verifica en Normativa (", err)
+        self.assertNotIn("VIGENTE distinto", err)
+
     def test_dry_run_reads_core_and_writes_nothing(self):
         code, out, err = self.run_main("--dry-run")
         self.assertEqual(code, 0, err)

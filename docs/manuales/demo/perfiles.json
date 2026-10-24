@@ -1,5 +1,5 @@
 {
-  "_comentario": "Perfiles de la demostración de los manuales: un rol y una cuenta por perfil. sembrar_demo.py los crea (POST /api/roles, PUT /api/roles/{rol}/permissions, POST /api/users) y verificar_perfiles.py comprueba que cada uno pueda lo que sus pantallas usan y reciba 403 en lo demás. permisos: objeto -> acciones (CREATE, READ, UPDATE, DELETE). La clave de las cuentas sale de SRTM_DEMO_PASSWORD (Demo-2026 por omisión): solo para la demo local.",
+  "_comentario": "Perfiles de la demostración de los manuales: un rol y una cuenta por perfil (otras_cuentas: más cuentas del mismo rol). sembrar_demo.py los crea (POST /api/roles, PUT /api/roles/{rol}/permissions, POST /api/users) y verificar_perfiles.py comprueba que cada uno pueda lo que sus pantallas usan y reciba 403 en lo demás. permisos: objeto -> acciones (CREATE, READ, UPDATE, DELETE). La clave de las cuentas sale de SRTM_DEMO_PASSWORD (Demo-2026 por omisión): solo para la demo local.",
   "perfiles": [
     {
       "rol": "REGISTRADOR",
@@ -569,6 +569,27 @@
           "READ"
         ]
       }
+    },
+    {
+      "rol": "NORMATIVA",
+      "etiqueta": "Normativa",
+      "email": "normativa@demo.srtm.local",
+      "displayName": "Normativa Demo",
+      "_para": "Normativa (#187): registra, corrige, borra (mientras están por verificar), verifica, anula e importa los parámetros tributarios (UIT, tramos, tasas, plazos). La doble firma pide que verifique otra persona: en la demo, la segunda cuenta NORMATIVA (otras_cuentas).",
+      "permisos": {
+        "parametro_tributario": [
+          "CREATE",
+          "READ",
+          "UPDATE",
+          "DELETE"
+        ]
+      },
+      "otras_cuentas": [
+        {
+          "email": "normativa2@demo.srtm.local",
+          "displayName": "Verificadora Normativa Demo"
+        }
+      ]
     }
   ]
 }

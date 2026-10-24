@@ -19,6 +19,17 @@ class Permisos(
         acto: String
     ) = exigir(Actions.CREATE, "creación", objeto, acto)
 
+    // an act that changes a stored record (verifying or annulling a parámetro)
+    suspend fun exigirActualizar(
+        objeto: String,
+        acto: String
+    ) = exigir(Actions.UPDATE, "actualización", objeto, acto)
+
+    suspend fun exigirBorrar(
+        objeto: String,
+        acto: String
+    ) = exigir(Actions.DELETE, "borrado", objeto, acto)
+
     // a query of what an object keeps (the brecha's panel over brecha_corrida): a 403 that names it, before reading
     suspend fun exigirLeer(
         objeto: String,

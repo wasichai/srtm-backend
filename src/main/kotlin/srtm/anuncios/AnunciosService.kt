@@ -14,6 +14,7 @@ import srtm.Violaciones
 import srtm.impuesto.PARAMETRO_TRIBUTARIO
 import srtm.impuesto.ParametroTributario
 import srtm.legible
+import srtm.normativa.rige
 import srtm.pagina
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
@@ -438,8 +439,9 @@ class AnunciosService(
             }
         )
 
+    // the VIGENTE ones (srtm.normativa): a tasa POR_VERIFICAR or ANULADA is not charged
     private suspend fun tasasLeidas(): List<ParametroTributario> =
-        registros.all(PARAMETRO_TRIBUTARIO, ParametroTributario::class.java, filters = mapOf("tipo" to Llaves.TASA_ANUNCIO))
+        registros.all(PARAMETRO_TRIBUTARIO, ParametroTributario::class.java, filters = mapOf("tipo" to Llaves.TASA_ANUNCIO)).filter { it.rige() }
 
     private suspend fun tasaDe(
         clase: String,

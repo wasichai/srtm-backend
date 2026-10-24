@@ -32,7 +32,7 @@ quedó igual.
 |`demo.env.example` |Las variables de la demo (base, Core en :8098, cuentas). Se copia a `demo.env`, que no se versiona.
 |`demo.sh` |La entrada única: `arriba`, `core`, `sembrar`, `exportar`, `restaurar`, `verificar`, `abajo`.
 |`sembrar_demo.py` |Carga el modelo y los datos sintéticos por la API del sistema. Idempotente.
-|`perfiles.json` |Los cinco perfiles sugeridos (rol, permisos y cuenta). Es la lista canónica de sus permisos.
+|`perfiles.json` |Los seis perfiles sugeridos (rol, permisos y cuenta). Es la lista canónica de sus permisos.
 |`verificar_perfiles.py` |Comprueba que cada perfil puede lo que sus pantallas usan y recibe 403 en lo demás.
 |`guardia.py` |La comprobación de que el Core es el de la demo, que comparten los scripts.
 |`datos/` |Los datos ficticios que los cargadores del repositorio necesitan además de `model/data/` (plazos, zonas, tasas extra).

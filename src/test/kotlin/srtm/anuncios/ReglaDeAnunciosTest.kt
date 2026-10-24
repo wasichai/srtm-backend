@@ -94,7 +94,7 @@ class ReglaDeAnunciosTest {
         regla.objetos.forEach { objeto ->
             val e = assertThrows(ConflictException::class.java) { regla.alActualizar(objeto, emptyMap(), emptyMap()) }
             assertTrue(e.message.contains("solo se agrega"), e.message)
-            assertThrows(ConflictException::class.java) { regla.alBorrar(objeto) }
+            assertThrows(ConflictException::class.java) { regla.alBorrar(objeto, emptyMap()) }
             assertThrows(ConflictException::class.java) { regla.alCambiarDeEstado(objeto) }
         }
         assertTrue(regla.soloDesdeElServicio)
