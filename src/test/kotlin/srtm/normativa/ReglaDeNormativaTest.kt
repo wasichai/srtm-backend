@@ -115,6 +115,20 @@ class ReglaDeNormativaTest {
     }
 
     @Test
+    fun `an open VIGENTE row is closed - its vigencia_hasta, from vigencia_desde on, and nothing else`() {
+        val abierto = fila("vigencia_hasta" to null)
+        pasa(abierto, abierto + ("vigencia_hasta" to "2026-06-30"))
+        pasa(abierto, abierto + ("vigencia_hasta" to "2026-01-01"))
+        pasa(abierto + ("estado" to null), abierto + ("vigencia_hasta" to "2026-06-30"))
+        assertTrue(conflicto(abierto, abierto + ("vigencia_hasta" to "2025-12-31")).contains("vigencia_desde"))
+        assertTrue(conflicto(abierto, abierto + ("vigencia_hasta" to "2026-06-30") + ("valor_numerico" to "1")).contains("valor_numerico"))
+        // one already closed is not closed again, nor reopened
+        val cerrado = fila()
+        assertTrue(conflicto(cerrado, cerrado + ("vigencia_hasta" to "2026-06-30")).contains("cerrada"))
+        assertTrue(conflicto(cerrado, cerrado + ("vigencia_hasta" to null)).contains("cerrada"))
+    }
+
+    @Test
     fun `the same VIGENTE row written again is no change - the migration's estado included`() {
         val antes = fila()
         pasa(antes, antes)

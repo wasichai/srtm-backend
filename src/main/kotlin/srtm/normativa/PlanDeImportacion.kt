@@ -125,7 +125,8 @@ object PlanDeImportacion {
     ): ParametroTributario? = vigentes.firstOrNull { seSolapan(it, p) }
 
     fun seSolapaCon(otro: ParametroTributario) =
-        "se solapa con ${nombreDe(otro)}, VIGENTE${otro.id?.let { " ($it)" }.orEmpty()}: anúlelo antes, o corrija la vigencia"
+        "se solapa con ${nombreDe(otro)}, VIGENTE${otro.id?.let { " ($it)" }.orEmpty()}: cierre la vigencia de ${nombreDe(otro)} antes " +
+            "(o anúlelo), o corrija la vigencia de este"
 }
 
 // the 200 of an importación: what it writes (or would, with dry_run), what was already as the csv says, and the rows

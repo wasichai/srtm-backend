@@ -68,6 +68,12 @@ class NormativaController(
         @RequestBody pedido: PedidoAnulacion
     ): ParametroTributario = normativa.anular(id, pedido)
 
+    @PostMapping("/normativa/parametros/{id}/cerrar")
+    suspend fun cerrar(
+        @PathVariable id: UUID,
+        @RequestBody pedido: PedidoCierre
+    ): ParametroTributario = normativa.cerrar(id, pedido)
+
     // the csv itself is the body (Content-Type text/csv). without dry_run=false nothing is written: what it would do
     @PostMapping("/normativa/parametros/importar", consumes = ["text/csv", "text/plain"])
     suspend fun importar(

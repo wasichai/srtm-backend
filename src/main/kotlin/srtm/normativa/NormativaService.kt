@@ -21,6 +21,8 @@ import srtm.normativa.EstadoParametro.ANULADO
 import srtm.normativa.EstadoParametro.POR_VERIFICAR
 import srtm.normativa.EstadoParametro.VIGENTE
 import srtm.rentas.Registros
+import tools.jackson.databind.PropertyNamingStrategies
+import tools.jackson.databind.annotation.JsonNaming
 import wasichai.core.common.ConflictException
 import wasichai.core.common.NotFoundException
 import wasichai.core.common.ValidationException
@@ -38,6 +40,12 @@ data class PedidoVerificacion(
 // POST /normativa/parametros/{id}/anular
 data class PedidoAnulacion(
     val motivo: String? = null
+)
+
+// POST /normativa/parametros/{id}/cerrar
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class PedidoCierre(
+    val vigenciaHasta: LocalDate? = null
 )
 
 data class RechazoDeVerificacion(
@@ -196,6 +204,27 @@ class NormativaService(
                     ANULADO_EN to OffsetDateTime.now(ZoneOffset.UTC).toString()
                 )
             )
+        }
+    }
+
+    // an open VIGENTE row (vigencia_hasta empty) rules until vigencia_hasta, from its vigencia_desde on, and nothing else
+    // changes: the only edition of a VIGENTE row, so a later one of its tipo and clave can be verified after it
+    suspend fun cerrar(
+        id: UUID,
+        pedido: PedidoCierre
+    ): ParametroTributario {
+        permisos.exigirActualizar(PARAMETRO_TRIBUTARIO, "cerrar la vigencia de un parámetro")
+        val hasta = pedido.vigenciaHasta ?: throw ValidationException("Cerrar la vigencia exige su fecha", "vigencia_hasta", "es obligatoria")
+        return transaccion.executeAndAwait {
+            bloquear(leer(id))
+            val p = leer(id)
+            val estado = EstadoParametro.de(p.estado)
+            if (estado != VIGENTE) throw ConflictException("Solo se cierra la vigencia de un parámetro VIGENTE: este está $estado")
+            if (p.vigenciaHasta != null) throw ConflictException("La vigencia del parámetro ya está cerrada (${p.vigenciaHasta}): no se cambia")
+            if (p.vigenciaDesde != null && hasta.isBefore(p.vigenciaDesde)) {
+                throw ValidationException("La vigencia no se cierra antes de empezar", "vigencia_hasta", "no es anterior a vigencia_desde (${p.vigenciaDesde})")
+            }
+            registros.replace(PARAMETRO_TRIBUTARIO, ParametroTributario::class.java, id, mapOf("vigencia_hasta" to hasta.toString()))
         }
     }
 

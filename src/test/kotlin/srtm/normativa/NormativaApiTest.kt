@@ -98,6 +98,40 @@ class NormativaApiTest : ConNormativaApiTest() {
     }
 
     @Test
+    fun `an open VIGENTE row is closed once, from its vigencia_desde on, and a later one is verified after it`() {
+        // a tasa of a clase no other test uses: an open row would rule every later year of the others
+        val y = anio()
+        val tasa = uit(y) + mapOf("tipo" to "TASA_ANUNCIO", "clave" to "LETRERO", "vigencia_hasta" to null)
+        val abierto = vigente(tasa)
+        val siguiente = registrar(tasa + ("vigencia_desde" to "$y-07-01") + ("valor_numerico" to "9100.00"))["id"].asString()
+        val solapado = verificar(listOf(siguiente))["rechazados"][0]["motivo"].asString()
+        assertTrue(solapado.contains("cierre la vigencia de TASA_ANUNCIO LETRERO $y-01-01.."), solapado)
+
+        rechazo("POST", "$PARAMETROS/$abierto/cerrar", mapOf("vigencia_hasta" to "${y - 1}-12-31"), "vigencia_hasta")
+        val cerrado = tree(send("POST", "$PARAMETROS/$abierto/cerrar", mapOf("vigencia_hasta" to "$y-06-30"), HttpStatus.OK, beto))
+        assertEquals("$y-06-30", cerrado["vigencia_hasta"].asString())
+        assertEquals("VIGENTE", cerrado["estado"].asString())
+        assertEquals(BigDecimal("9000.00"), cerrado["valor_numerico"].decimalValue().setScale(2))
+        assertTrue(conflicto("POST", "$PARAMETROS/$abierto/cerrar", mapOf("vigencia_hasta" to "$y-08-31")).contains("ya está cerrada"))
+        // nor through the generic api
+        val registro = "/api/objects/$PARAMETRO_TRIBUTARIO/records/$abierto"
+        val atributos = fields(tree(send("GET", registro, null, HttpStatus.OK))["attributes"])
+        send("PUT", registro, mapOf("attributes" to atributos + ("vigencia_hasta" to "$y-08-31")), HttpStatus.CONFLICT)
+
+        assertEquals(listOf(siguiente), verificar(listOf(siguiente))["verificados"].elementos().map { it.asString() })
+        // one POR_VERIFICAR is not closed: it is corrected
+        val borrador = registrar(tasa + ("clave" to "BANDEROLA"))["id"].asString()
+        assertTrue(conflicto("POST", "$PARAMETROS/$borrador/cerrar", mapOf("vigencia_hasta" to "2100-01-01")).contains("POR_VERIFICAR"))
+        send(
+            "POST",
+            "$PARAMETROS/$abierto/cerrar",
+            mapOf("vigencia_hasta" to "$y-06-30"),
+            HttpStatus.FORBIDDEN,
+            funcionario(listOf(permiso(PARAMETRO_TRIBUTARIO, "READ")))
+        )
+    }
+
+    @Test
     fun `a UIT POR_VERIFICAR is not what the liquidación reads, the VIGENTE one is`() {
         val y = anio()
         // the tramos and the mínimo, open since 2004: the shipped csv, VIGENTE by its two signatures

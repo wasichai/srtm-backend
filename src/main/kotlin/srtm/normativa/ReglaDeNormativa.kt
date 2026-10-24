@@ -3,6 +3,7 @@ package srtm.normativa
 import org.springframework.stereotype.Component
 import srtm.ReglaDeEscritura
 import srtm.Violaciones
+import srtm.fecha
 import srtm.iguales
 import srtm.impuesto.PARAMETRO_TRIBUTARIO
 import srtm.impuesto.ParametroTributario
@@ -65,7 +66,7 @@ class ReglaDeNormativa : ReglaDeEscritura {
         if (antes == despues && cambios.isEmpty()) return
         when (antes) {
             POR_VERIFICAR -> desdePorVerificar(objeto, despues, cambios, nuevo)
-            VIGENTE -> desdeVigente(despues, cambios, nuevo)
+            VIGENTE -> desdeVigente(despues, cambios, guardado, nuevo)
             ANULADO -> throw ConflictException("Un parámetro ANULADO no cambia: queda como historia. Registre el valor correcto como un parámetro nuevo")
             else -> throw ConflictException("El parámetro tiene un estado que no es de normativa: $antes")
         }
@@ -102,6 +103,7 @@ class ReglaDeNormativa : ReglaDeEscritura {
     private fun desdeVigente(
         despues: String,
         cambios: List<String>,
+        guardado: Map<String, Any?>,
         nuevo: Map<String, Any?>
     ) {
         when (despues) {
@@ -119,14 +121,29 @@ class ReglaDeNormativa : ReglaDeEscritura {
                     )
                 }
             }
-            VIGENTE ->
-                throw ConflictException(
-                    "Un parámetro VIGENTE no se edita: anúlelo y registre el valor correcto, que vuelve a pasar por la doble firma " +
-                        "(cambia: ${cambios.joinToString(", ")})"
-                )
+            VIGENTE -> cerrar(cambios, guardado, nuevo)
             POR_VERIFICAR -> throw ConflictException("Un parámetro VIGENTE no vuelve a POR_VERIFICAR: anúlelo y registre uno nuevo")
             else -> throw ConflictException("El estado de un parámetro es ${EstadoParametro.TODOS.joinToString(", ")}: no $despues")
         }
+    }
+
+    // the one edition of a VIGENTE row: closing its open vigencia (vigencia_hasta empty) on a day from vigencia_desde on,
+    // so a later row of its tipo and clave can rule after it without overlapping
+    private fun cerrar(
+        cambios: List<String>,
+        guardado: Map<String, Any?>,
+        nuevo: Map<String, Any?>
+    ) {
+        if (cambios != listOf(VIGENCIA_HASTA)) {
+            throw ConflictException(
+                "Un parámetro VIGENTE no se edita: anúlelo y registre el valor correcto, que vuelve a pasar por la doble firma, " +
+                    "o cierre su vigencia (cambia: ${cambios.joinToString(", ")})"
+            )
+        }
+        if (lleno(guardado[VIGENCIA_HASTA])) throw ConflictException("La vigencia del parámetro ya está cerrada (${guardado[VIGENCIA_HASTA]}): no se cambia")
+        val desde = fecha(nuevo["vigencia_desde"])
+        val hasta = fecha(nuevo[VIGENCIA_HASTA]) ?: throw ConflictException("Cerrar la vigencia de un parámetro exige su vigencia_hasta")
+        if (desde != null && hasta.isBefore(desde)) throw ConflictException("La vigencia_hasta ($hasta) no es anterior a vigencia_desde ($desde)")
     }
 
     override fun alBorrar(
@@ -153,6 +170,10 @@ class ReglaDeNormativa : ReglaDeEscritura {
         if (p.valorNumerico == null && p.texto.isNullOrBlank() && tipo?.admiteVacio != true) {
             v.mal(if (tipo?.valor == ClaseDeValor.TEXTO) "texto" else "valor_numerico", "es obligatorio: el valor_numerico o el texto")
         }
+    }
+
+    private companion object {
+        const val VIGENCIA_HASTA = "vigencia_hasta"
     }
 
     private fun lleno(valor: Any?) = valor != null && !(valor is String && valor.isBlank())
