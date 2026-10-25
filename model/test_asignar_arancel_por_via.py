@@ -37,6 +37,42 @@ class PureTests(unittest.TestCase):
         ])
         self.assertEqual(vias, {"A": ("A-01", Decimal("20")), "B": None})
 
+    def test_a_tramo_without_valor_m2_is_no_arancel_and_cod_via_is_matched_as_stored(self):
+        vias = aav.por_via([
+            registro("1", id_aranc="A-01", cod_via="A", valor_m2=None, estado="VIGENTE"),
+            registro("2", id_aranc="B-01", cod_via="B ", valor_m2=5, estado="VIGENTE"),
+        ])
+        self.assertEqual(vias, {"B ": ("B-01", Decimal("5"))})
+        self.assertEqual(aav.destino({}, {"codigo_via": "A"}, vias)[0], "sin_arancel_del_anio")
+        # srtm filters cod_via exactly: "B " is no arancel of the predio's "B"
+        self.assertEqual(aav.destino({}, {"codigo_via": "B"}, vias)[0], "sin_arancel_del_anio")
+
+    def test_a_marked_predio_never_takes_its_via(self):
+        vias = {"A": ("A", Decimal("20"))}
+        self.assertEqual(aav.destino({}, {"codigo_via": "A", "varios_codigos_via": True}, vias)[0],
+                         "varios_codigos_valores_distintos")
+
+    def test_the_regla_para_varios_codigos_on_the_predios_core_holds(self):
+        predios = [registro("p1", codigo="P1", codigo_via="V-01"), registro("p2", codigo="P2", codigo_via="V-03"),
+                   registro("p3", codigo="P3", codigo_via="V-05", varios_codigos_via=True),
+                   registro("p4", codigo="P4", codigo_via="V-07", varios_codigos_via=True)]
+        varios = [
+            {"codigo_predio": "P1", "regla": "varios_codigos_mismo_valor", "codigo_elegido": "V-02"},
+            {"codigo_predio": "P2", "regla": "varios_codigos_valores_distintos", "codigo_elegido": ""},
+            {"codigo_predio": "P3", "regla": "varios_codigos_valores_distintos", "codigo_elegido": ""},
+            # one marked before, with the same value now: it takes the code and loses the mark
+            {"codigo_predio": "P4", "regla": "varios_codigos_mismo_valor", "codigo_elegido": "V-07"},
+            {"codigo_predio": "P9", "regla": "varios_codigos_mismo_valor", "codigo_elegido": "V-09"},
+        ]
+        cambios, cuentas = aav.cambios_varios(varios, predios)
+        self.assertEqual(cambios, [("p1", {"codigo_via": "V-02"}), ("p2", {"varios_codigos_via": True}),
+                                   ("p4", {"varios_codigos_via": False})])
+        self.assertEqual(dict(cuentas), {"codigo_via": 2, "marcados": 1, "iguales": 1, "no_encontrados": 1})
+        despues = aav.aplicar_en_memoria(predios, cambios)
+        self.assertEqual(despues[0]["attributes"]["codigo_via"], "V-02")
+        self.assertIs(despues[1]["attributes"]["varios_codigos_via"], True)
+        self.assertEqual(predios[0]["attributes"]["codigo_via"], "V-01")
+
     def test_a_djs_fate(self):
         vias = {"A": ("A", Decimal("20")), "B": None}
         self.assertEqual(aav.destino({}, {"codigo_via": "A", "tipo_predio": "PREDIO URBANO"}, vias), ("toma", "A", Decimal("20")))
@@ -68,10 +104,10 @@ class CliTests(unittest.TestCase):
         self.addCleanup(self.core.stop)
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        urbano = self.predio("V-01", "PREDIO URBANO")
+        urbano = self.urbano = self.predio("V-01", "PREDIO URBANO")
         rustico = self.predio("V-01", "PREDIO RUSTICO")
         sin_codigo = self.predio(None, "PREDIO URBANO")
-        sin_arancel = self.predio("V-09", "PREDIO URBANO")
+        sin_arancel = self.sin_arancel_predio = self.predio("V-09", "PREDIO URBANO")
         distintos = self.predio("V-02", "PREDIO URBANO")
         self.arancel("V-01", 2026, 356, "V-01")
         self.arancel("V-01", 2027, 400, "V-01")
@@ -119,9 +155,9 @@ class CliTests(unittest.TestCase):
         reporte = os.path.join(self.tmp.name, "asignacion.csv")
         code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2026", "--dry-run", "--reporte", reporte)
         self.assertEqual(code, 0, err)
-        self.assertIn("declaraciones sin id_aranc: 6 (con id_aranc ya: 1, de ellas con un valor nuevo del año: 0)", out)
+        self.assertIn("declaraciones sin id_aranc: 6 (con id_aranc ya: 1, de ellas con un valor nuevo del año: 0, con id_aranc sin arancel VIGENTE del año: 0)", out)
         self.assertIn("toman el arancel de su vía: 2, cambian de valor: 1", out)
-        self.assertIn("sin tramo: rústicas 1, sin código de vía 1, sin arancel del año 1, tramos con valores distintos 1", out)
+        self.assertIn("sin tramo: rústicas 1, varios códigos con valores distintos 0, sin código de vía 1, sin arancel del año 1, tramos con valores distintos 1", out)
         self.assertEqual(self.recalculadas(), [])
         self.assertFalse([r for r in self.core.requests if r[0] in ("PUT", "DELETE")])
         with open(reporte, newline="", encoding="utf-8") as f:
@@ -134,15 +170,76 @@ class CliTests(unittest.TestCase):
         code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2026")
         self.assertEqual(code, 0, err)
         self.assertEqual(self.recalculadas(), sorted([self.igual, self.distinta]))
-        self.assertIn("recalculadas: 2, quedaron con su tramo: 2", out)
+        self.assertIn("recalculadas 2 de 2, quedaron con su tramo: 2", out)
 
     def test_a_dj_with_id_aranc_whose_tramo_has_a_new_value_is_recalculated_too(self):
         # the year's value changed after it took its tramo: annulled and registered again
         cambiada = self.dj(None, 2026, 300, id_aranc="V-01")
         code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2026")
         self.assertEqual(code, 0, err)
-        self.assertIn("(con id_aranc ya: 2, de ellas con un valor nuevo del año: 1)", out)
+        self.assertIn("(con id_aranc ya: 2, de ellas con un valor nuevo del año: 1,", out)
         self.assertEqual(self.recalculadas(), sorted([self.igual, self.distinta, cambiada]))
+
+    def test_a_dj_with_id_aranc_and_no_vigente_arancel_of_the_year_is_counted_only(self):
+        sin = self.dj(None, 2026, 356, id_aranc="V-77")
+        code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2026")
+        self.assertEqual(code, 0, err)
+        self.assertIn("con id_aranc sin arancel VIGENTE del año: 1)", out)
+        self.assertNotIn(sin, self.recalculadas())
+
+    def varios_csv(self, filas):
+        path = os.path.join(self.tmp.name, "aranceles.varios_codigos.csv")
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=["codigo_predio", "codigos", "valores", "regla", "codigo_elegido"])
+            w.writeheader()
+            w.writerows(filas)
+        return path
+
+    def test_varios_codigos_marks_the_predios_of_different_values_and_never_recalculates_them(self):
+        predio = next(r for r in self.core.records["predio"] if r["id"] == self.urbano)
+        predio["attributes"]["codigo"] = "P-URB"
+        path = self.varios_csv([{"codigo_predio": "P-URB", "codigos": "V-01x1 V-02x1", "valores": "",
+                                 "regla": "varios_codigos_valores_distintos", "codigo_elegido": ""}])
+        code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2026", "--varios-codigos", path, "--dry-run")
+        self.assertEqual(code, 0, err)
+        self.assertIn("varios códigos de vía: codigo_via al más frecuente 0, marcados 1, ya estaban 0, no encontrados 0", out)
+        self.assertIn("varios códigos con valores distintos 2", out)
+        # dry-run: nothing written
+        self.assertFalse([r for r in self.core.requests if r[0] == "PATCH"])
+        self.assertNotIn("varios_codigos_via", predio["attributes"])
+
+        code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2026", "--varios-codigos", path)
+        self.assertEqual(code, 0, err)
+        self.assertIs(predio["attributes"]["varios_codigos_via"], True)
+        self.assertEqual(self.recalculadas(), [])
+
+    def test_varios_codigos_gives_a_predio_of_one_value_its_most_frequent_code(self):
+        predio = next(r for r in self.core.records["predio"] if r["id"] == self.sin_arancel_predio)
+        predio["attributes"]["codigo"] = "P-SIN"
+        path = self.varios_csv([{"codigo_predio": "P-SIN", "codigos": "V-01x2 V-09x1", "valores": "",
+                                 "regla": "varios_codigos_mismo_valor", "codigo_elegido": "V-01"}])
+        code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2026", "--varios-codigos", path)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(predio["attributes"]["codigo_via"], "V-01")
+        self.assertIn(self.sin_arancel, self.recalculadas())
+
+    def test_a_failure_halfway_prints_the_progress_and_writes_the_report(self):
+        # the reads answer, then the network fails: no CoreError, and still no traceback
+        cliente = aav.Client
+
+        class SeCae(cliente):
+            def post(self, path, body):
+                raise ConnectionError("se cayó")
+
+        aav.Client = SeCae
+        self.addCleanup(setattr, aav, "Client", cliente)
+        reporte = os.path.join(self.tmp.name, "asignacion.csv")
+        code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2026", "--workers", "1", "--reporte", reporte)
+        self.assertEqual(code, 1)
+        self.assertIn("recalculadas 0 de 2, quedaron con su tramo: 0", out)
+        self.assertIn("ConnectionError", err)
+        with open(reporte, newline="", encoding="utf-8") as f:
+            self.assertEqual(len(list(csv.DictReader(f))), 6)
 
     def test_the_year_asked_for_only(self):
         code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2027")
@@ -153,7 +250,7 @@ class CliTests(unittest.TestCase):
         self.core.recalcular = lambda id: {"id": id, "id_aranc": None}
         code, out, _ = self.run_main("--org", "ica-prueba", "--anio", "2026")
         self.assertEqual(code, 1)
-        self.assertIn("recalculadas: 2, quedaron con su tramo: 0", out)
+        self.assertIn("recalculadas 2 de 2, quedaron con su tramo: 0", out)
 
     def test_another_organizations_login_writes_nothing(self):
         code, _, err = self.run_main("--org", "ica", "--anio", "2026")

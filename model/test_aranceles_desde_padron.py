@@ -180,13 +180,13 @@ class CopiaCliTests(CliTestCase):
         self.arancel("V-04", 2026, 98, estado="ANULADO")
         self.arancel("V-05", 2025, 97)
         code, out, err = self.run_main("--copiar-de", "2026", "--anio", "2027", "--salida", self.salida,
-                                       "--core", self.core.base_url, "--email", "a@b.c", "--password", "x")
+                                       "--core", self.core.base_url, "--email", "a@b.c", "--password", "x", "--org", "perene")
         self.assertEqual(code, 0, err)
         filas = self.leer()
         self.assertEqual([(f["id_aranc"], f["anio"], f["valor_m2"], f["cod_via"], f["norma"]) for f in filas],
                          [("V-01", "2027", "356.00", "V-01", ""), ("V-02", "2027", "340.50", "V-02", "")])
         self.assertEqual(filas[0]["fuente"], "copia de los aranceles VIGENTE de 2026")
-        self.assertIn("aranceles: 2 VIGENTE de 2026, copiados a 2027", out)
+        self.assertIn("aranceles: 2 VIGENTE de 2026, copiados a 2027, sin valor_m2 (fuera): 0", out)
         # the Core is only read
         self.assertFalse([r for r in self.core.requests if r[0] in ("PUT", "DELETE")
                           or (r[0] == "POST" and r[1] != "/api/auth/login")])
@@ -197,6 +197,21 @@ class CopiaCliTests(CliTestCase):
         vigentes = adp.vigentes_de([a, b])
         self.assertEqual(len(vigentes), 1)
         self.assertEqual(vigentes[0]["valor_m2"], min([a, b], key=lambda r: r["id"])["attributes"]["valor_m2"])
+
+    def test_a_copy_without_valor_m2_is_left_out(self):
+        filas, sin_valor = adp.copia([{"id_aranc": "V-01", "valor_m2": None}, {"id_aranc": "V-02", "valor_m2": 5}], 2027, "", "f")
+        self.assertEqual(([f["id_aranc"] for f in filas], sin_valor), (["V-02"], 1))
+
+    def test_a_copy_asks_for_the_organization_and_checks_the_login(self):
+        self.arancel("V-01", 2026, 356.0)
+        code, _, err = self.run_main("--copiar-de", "2026", "--anio", "2027", "--salida", self.salida, "--core", self.core.base_url)
+        self.assertEqual(code, 2)
+        self.assertIn("pide --org", err)
+        code, _, err = self.run_main("--copiar-de", "2026", "--anio", "2027", "--salida", self.salida, "--core", self.core.base_url,
+                                     "--org", "ica")
+        self.assertEqual(code, 2)
+        self.assertIn("no de 'ica'", err)
+        self.assertFalse(os.path.exists(self.salida))
 
     def test_a_copy_to_the_same_year_is_refused(self):
         code, _, err = self.run_main("--copiar-de", "2026", "--anio", "2026", "--salida", self.salida,

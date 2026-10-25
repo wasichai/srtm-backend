@@ -203,6 +203,7 @@ class ShippedModelTests(unittest.TestCase):
         # what came after them, at the end too: the rectificatoria's (#147) and the derivados (#156)
         despues = {objeto: set(campos) for objeto, campos in DERIVADOS.items()}
         despues["declaracion_predial"] |= {"sustituye", "fecha_sustitucion"} | DESPUES_DE_DERIVADOS
+        despues["predio"] = {"varios_codigos_via"}
         for objeto, campos in nuevos.items():
             with self.subTest(objeto=objeto):
                 antes = [f for f in self.campos(objeto).values() if f["name"] not in despues.get(objeto, set())]
@@ -215,6 +216,13 @@ class ShippedModelTests(unittest.TestCase):
         # ica has no month of construction: the nivel's goes optional (the portal still asks for it), the obra's stays
         self.assertFalse(self.campos("nivel_construccion")["mes_construccion"].get("required"))
         self.assertTrue(self.campos("obra_complementaria")["mes_construccion"]["required"])
+
+    def test_the_predio_marks_the_regla_para_varios_codigos_de_via(self):
+        # #226: last of the predio, optional and false when blank: a predio of several códigos de vía of different values
+        campos = list(self.campos("predio").values())
+        self.assertEqual((campos[-1]["name"], campos[-1]["type"]), ("varios_codigos_via", "BOOLEAN"))
+        self.assertFalse(campos[-1].get("required"))
+        self.assertIn("Vacío cuenta como false", campos[-1]["description"])
 
     def test_the_predio_keeps_its_code_of_origin(self):
         # #207: the SAT code of a predio in Ica's padrón, kept right after codigo (not at the end, unlike the padrón
@@ -266,7 +274,8 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual((arancel["label"], arancel["pluralLabel"]), ("Arancel", "Aranceles"))
         for palabra in ("catastro", "POR_VERIFICAR", "doble firma"):
             self.assertIn(palabra, arancel["description"])
-        self.assertEqual(arancel["indexes"], [["id_aranc", "anio"]])
+        # #226: and by vía, for the DJ that takes the arancel of its predio's vía (ArancelesService.deLaVia)
+        self.assertEqual(arancel["indexes"], [["id_aranc", "anio"], ["cod_via", "anio"]])
         fields = self.campos("arancel")
         self.assertEqual(list(fields), ["clave", "id_aranc", "anio", "valor_m2", "cod_via", "cuadra", "lado", "norma", "fuente",
                                         "transcribio", "verifico", "estado", "motivo_anulacion", "anulado_por", "anulado_en",

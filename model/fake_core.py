@@ -61,6 +61,9 @@ class FakeCoreHandler(BaseHTTPRequestHandler):
     def do_PUT(self):
         self._handle("PUT")
 
+    def do_PATCH(self):
+        self._handle("PATCH")
+
     def do_DELETE(self):
         self._handle("DELETE")
 
@@ -153,6 +156,15 @@ class FakeCore:
         if record is None:
             return 404, {"detail": "not found"}
         record["attributes"] = dict(body["attributes"])
+        return 200, record
+
+    def _patch(self, path, body):
+        """A record's PATCH: Core merges the attributes sent over the stored ones (ADR-051)."""
+        name, record_id = RECORD.match(path).groups()
+        record = next((r for r in self.records.get(name, []) if r["id"] == record_id), None)
+        if record is None:
+            return 404, {"detail": "not found"}
+        record["attributes"].update(body["attributes"])
         return 200, record
 
     def _delete(self, path):
@@ -319,6 +331,8 @@ class FakeCore:
             return self._records(method, path, query, body)
         if RECORD.match(path) and method == "PUT":
             return self._update(path, body)
+        if RECORD.match(path) and method == "PATCH":
+            return self._patch(path, body)
         if RECORD.match(path) and method == "DELETE":
             return self._delete(path)
         if path == "/api/objects" and method == "GET":

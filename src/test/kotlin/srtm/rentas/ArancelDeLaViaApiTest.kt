@@ -1,12 +1,14 @@
 package srtm.rentas
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import tools.jackson.databind.JsonNode
+import java.io.File
 import java.math.BigDecimal
 
 // #226: a DJ without id_aranc takes the arancel of its predio's vía (predio.codigo_via, Ica's SAT code, against the
@@ -121,6 +123,125 @@ class ArancelDeLaViaApiTest : SrtmApiTest() {
         assertArancel("35.50", de2028)
     }
 
+    @Test
+    fun `a predio marked varios_codigos_via never takes its via - the regla para varios codigos`() {
+        val via = via()
+        importarAranceles("$via,2026,41.50,$via,ANA,BETO")
+        val predio = predioEnLaVia(via)
+        marcar(predio)
+        val id = declarar(predio)["id"].asString()
+        padron(id, BigDecimal("35.50"))
+        recalcular(id)
+        assertTrue(registro(id)["id_aranc"].isNull, registro(id).toString())
+        assertArancel("35.50", id)
+    }
+
+    @Test
+    fun `the condominio takes the tramo in one pass - an edit of one condomino does not mark the others valuation`() {
+        val via = via()
+        val a = declarar(predioEnLaVia(via))["id"].asString()
+        val b = post("/api/srtm/declaraciones/$a/condominos", mapOf("contribuyente" to inscribir(), "porcentaje_condominio" to 25))["id"].asString()
+        // both from the padrón: its arancel and a value of its valuation
+        for (id in listOf(a, b)) padron(id, BigDecimal("41.50"), "valor_terreno" to BigDecimal("1000"))
+        importarAranceles("$via,2026,41.50,$via,ANA,BETO")
+        recalcular(a)
+        for (id in listOf(a, b)) {
+            assertEquals(via, registro(id)["id_aranc"].asString(), registro(id).toString())
+            assertArancel("41.50", id)
+            assertFalse(modificada(id), registro(id).toString())
+        }
+        // b saved with a body read before (no id_aranc), nothing of the predio changed: b takes the tramo again, and a
+        // is not written (a replicated id_aranc would mark its valuation)
+        put("/api/srtm/declaraciones/$b", fields(declaracion(b)) + ("id_aranc" to null))
+        assertEquals(via, registro(b)["id_aranc"].asString())
+        assertEquals(via, registro(a)["id_aranc"].asString())
+        assertFalse(modificada(a), registro(a).toString())
+    }
+
+    @Test
+    fun `a DJ declared into another year carries the tramo, not the arancel - that year's when it has one`() {
+        val via = via()
+        importarAranceles("$via,2026,41.50,$via,ANA,BETO")
+        val contribuyente = inscribir()
+        val predio = predioEnLaVia(via)
+        val origen =
+            post(
+                "/api/srtm/declaraciones",
+                mapOf(
+                    "contribuyente" to contribuyente,
+                    "predio" to predio,
+                    "anio" to 2026,
+                    "secuencia_uso" to "1",
+                    "uso" to "CASA HABITACIÓN"
+                )
+            )
+        val id = origen["id"].asString()
+        assertArancel("41.50", id)
+
+        val copia =
+            post(
+                "/api/srtm/contribuyentes/$contribuyente/declaraciones-juradas",
+                mapOf("predio_id" to predio, "desde" to id, "declaracion" to mapOf("anio" to 2027))
+            )["declaracion"]["id"].asString()
+        assertEquals(via, registro(copia)["id_aranc"].asString())
+        assertTrue(registro(copia)["arancel"].isNull, registro(copia).toString())
+        importarAranceles("$via,2027,44,$via,ANA,BETO")
+        recalcular(copia)
+        assertArancel("44", copia)
+
+        // the rectificatoria is of the same year: it keeps both
+        val rectificatoria = tree(send("POST", "/api/srtm/declaraciones/$id/rectificar", null, HttpStatus.CREATED))["declaracion"]["id"].asString()
+        assertEquals(via, registro(rectificatoria)["id_aranc"].asString())
+        assertArancel("41.50", rectificatoria)
+    }
+
+    @Test
+    fun `a PUT that clears id_aranc takes the via again`() {
+        val via = via()
+        importarAranceles("$via,2026,41.50,$via,ANA,BETO")
+        val id = declarar(predioEnLaVia(via))["id"].asString()
+        put("/api/srtm/declaraciones/$id", fields(declaracion(id)) + ("id_aranc" to ""))
+        assertEquals(via, registro(id)["id_aranc"].asString())
+        assertArancel("41.50", id)
+    }
+
+    // the demo's REGISTRADOR without the aranceles: its recálculo takes no vía, and nothing fails
+    @Test
+    fun `a caller who may not read the aranceles recalculates without the via`() {
+        val via = via()
+        importarAranceles("$via,2026,41.50,$via,ANA,BETO")
+        val predio = predioEnLaVia(via)
+        marcar(predio)
+        val id = declarar(predio)["id"].asString()
+        padron(id, BigDecimal("35.50"))
+        desmarcar(predio)
+        val perfil = tree(File("docs/manuales/demo/perfiles.json").readText())["perfiles"].single { it["rol"].asString() == "REGISTRADOR" }
+        val permisos =
+            perfil["permisos"]
+                .properties()
+                .filter { (objeto, _) -> objeto != "arancel" }
+                .flatMap { (objeto, acciones) -> acciones.iterator().asSequence().map { permiso(objeto, it.asString()) } }
+        val sinAranceles = funcionario(permisos)
+        send("POST", "/api/srtm/declaraciones/$id/recalcular", null, HttpStatus.OK, sinAranceles)
+        assertTrue(registro(id)["id_aranc"].isNull, registro(id).toString())
+        assertArancel("35.50", id)
+    }
+
+    private fun marcar(predio: String) = marca(predio, true)
+
+    private fun desmarcar(predio: String) = marca(predio, false)
+
+    private fun marca(
+        predio: String,
+        valor: Boolean
+    ) {
+        val ruta = "/api/objects/$PREDIO/records/$predio"
+        val atributos = fields(tree(send("GET", ruta, null, HttpStatus.OK))["attributes"])
+        send("PUT", ruta, mapOf("attributes" to atributos + ("varios_codigos_via" to valor)), HttpStatus.OK)
+    }
+
+    private fun modificada(id: String): Boolean = registro(id)["origen_modificado"].let { it != null && !it.isNull && it.asBoolean() }
+
     private fun via(): String = "V${uniqueDocumento()}-01"
 
     // a predio of the srtm with an external padrón's codigo_via, written by core's api as the import does
@@ -175,11 +296,12 @@ class ArancelDeLaViaApiTest : SrtmApiTest() {
     // an external padrón's arancel, written by core's api as an import would
     private fun padron(
         id: String,
-        arancel: BigDecimal
+        arancel: BigDecimal,
+        vararg otros: Pair<String, Any?>
     ) {
         val ruta = "/api/objects/$DECLARACION/records/$id"
         val atributos = fields(tree(send("GET", ruta, null, HttpStatus.OK))["attributes"])
-        send("PUT", ruta, mapOf("attributes" to atributos + ("arancel" to arancel)), HttpStatus.OK)
+        send("PUT", ruta, mapOf("attributes" to atributos + ("arancel" to arancel) + otros), HttpStatus.OK)
     }
 
     // the arancel stored, read from core

@@ -14,7 +14,9 @@ import srtm.iguales
 import srtm.normativa.ArancelesService
 import srtm.pide.ConsultasReniec
 import wasichai.core.common.ConflictException
+import wasichai.core.common.ForbiddenException
 import wasichai.core.common.ValidationException
+import java.math.BigDecimal
 import java.time.Duration
 import java.time.LocalDate
 import java.util.UUID
@@ -211,8 +213,19 @@ class DeclaracionService(
         if (seUne) recalcularResto(stored)
         marcarOrigenModificado(id, pisaPadron)
         val recalculo = recalcular(id)
-        if (!seUne) replicarPredio(next, otros)
+        if (!seUne) replicarPredio(conTramoTomado(next, recalculo.despues), otros.map { conTramoTomado(next, recalculo.despues, it) })
         return recalculo.despues.also { despuesDeCambiar(stored, it) }
+    }
+
+    // #226: the tramo de vía the recálculo of `next` took (it had none): its condominio's without one took it too in
+    // that pass (arancelDeLaVia), so `d`, as read before, is replicated with it and nothing is written twice
+    private fun conTramoTomado(
+        next: Declaracion,
+        despues: Declaracion,
+        d: Declaracion = next
+    ): Declaracion {
+        if (!next.idAranc.isNullOrBlank() || despues.idAranc.isNullOrBlank() || !d.idAranc.isNullOrBlank()) return d
+        return d.copy(idAranc = despues.idAranc)
     }
 
     // #157: what `origen` declares of the predio (delPredioCambiado), written in each condómino that declares it
@@ -257,7 +270,8 @@ class DeclaracionService(
     // (registrar's rule). the condominio is recomputed, not checked: a nivel's write is never refused for the % of an
     // imported condominio. what changed is returned to the hooks that follow (Recalculo)
     suspend fun recalcular(id: UUID): Recalculo {
-        val stored = resolverArancel(id, registros.get(DECLARACION, Declaracion::class.java, id))
+        val tomados = mutableListOf<UUID>()
+        val stored = resolverArancel(id, registros.get(DECLARACION, Declaracion::class.java, id), tomados)
         val totales = Derivados.totales(niveles(id), frentes(id), stored.frontisPrincipal)
         val next = Derivados.aplicar(stored, totales, autoavaluos.deLaDeclaracion(id))
         val otros = if (vigente(stored)) titulares(stored).filter { it.id != stored.id && it.id != stored.sustituye } else emptyList()
@@ -266,7 +280,11 @@ class DeclaracionService(
         val cambiados = Derivados.cambiados(stored, despues)
         if (cambiados.isNotEmpty()) registros.replace(DECLARACION, Declaracion::class.java, id, Derivados.campos(despues).filterKeys { it in cambiados })
         guardarDerivados(grupo.drop(1), otros)
-        return Recalculo(stored, despues)
+        if (tomados.isEmpty()) return Recalculo(stored, despues)
+        // #226: the condóminos that took the same tramo in this pass, recomputed with it (they name it now: none
+        // resolves the vía again), and this one read again with what their condominio left it
+        tomados.forEach { recalcular(it) }
+        return Recalculo(stored, registros.get(DECLARACION, Declaracion::class.java, id))
     }
 
     // #188: the arancel of a DJ that names its tramo de vía is the valor_m2 of that tramo's VIGENTE arancel in its year,
@@ -274,9 +292,10 @@ class DeclaracionService(
     // replacement): the arancel stored stays, and nothing fails. `d` with the arancel it has now
     private suspend fun resolverArancel(
         id: UUID,
-        d: Declaracion
+        d: Declaracion,
+        tomados: MutableList<UUID>
     ): Declaracion {
-        val idAranc = d.idAranc?.trim()?.ifEmpty { null } ?: return arancelDeLaVia(id, d)
+        val idAranc = d.idAranc?.trim()?.ifEmpty { null } ?: return arancelDeLaVia(id, d, tomados)
         val valor = aranceles.alRecalcular(idAranc, d.anio ?: return d)?.valorM2 ?: return d
         if (iguales(d.arancel, valor)) return d
         registros.replace(DECLARACION, Map::class.java, id, mapOf(ARANCEL to valor))
@@ -284,24 +303,57 @@ class DeclaracionService(
     }
 
     // #226: a DJ without id_aranc takes the arancel of its predio's vía (codigo_via, an external padrón's code) in its
-    // year (ArancelesService.deLaVia): its id_aranc is stored, and from then on it is a DJ that names its tramo. a
-    // rústico predio (tipo_predio, the predio's own: the DJ has none, #209) never does, nor one without codigo_via or
-    // without that arancel: the arancel stored stays (the padrón's). a padrón's arancel it replaces with another value
-    // no longer describes the valuation imported: marked as marcarOrigenModificado does
+    // year (ArancelesService.deLaVia): its id_aranc is stored, and from then on it is a DJ that names its tramo. never:
+    // without READ on the aranceles (checked first: nothing else is read), for a predio the caller may not read, a
+    // rústico one (tipo_predio, the predio's own: the DJ has none, #209), one marked varios_codigos_via (frentes of
+    // different values: the regla para varios códigos de vía leaves it as it is), one without codigo_via or without
+    // that arancel: the arancel stored stays (the padrón's). id_aranc is the condominio's (compartido): its vigente
+    // titulares without one take the same tramo in the same pass, and land in `tomados` for recalcular
     private suspend fun arancelDeLaVia(
         id: UUID,
-        d: Declaracion
+        d: Declaracion,
+        tomados: MutableList<UUID>
     ): Declaracion {
         val anio = d.anio ?: return d
-        val predio = registros.get(PREDIO, Map::class.java, UUID.fromString(d.predio ?: return d))
-        if (predio["tipo_predio"]?.toString() == PREDIO_RUSTICO) return d
+        val predioId = d.predio ?: return d
+        if (!aranceles.legibles()) return d
+        val predio =
+            try {
+                registros.get(PREDIO, Map::class.java, UUID.fromString(predioId))
+            } catch (_: ForbiddenException) {
+                return d
+            }
+        if (predio["tipo_predio"]?.toString() == PREDIO_RUSTICO || predio[VARIOS_CODIGOS_VIA] == true) return d
         val via = predio[CODIGO_VIA]?.toString()?.trim()?.ifEmpty { null } ?: return d
         val arancel = aranceles.deLaVia(via, anio) ?: return d
+        val idAranc = arancel.idAranc ?: return d
         val valor = arancel.valorM2 ?: return d
-        val cambios = mutableMapOf<String, Any?>("id_aranc" to arancel.idAranc, ARANCEL to valor)
-        if (d.arancel != null && !iguales(d.arancel, valor)) cambios[ORIGEN_MODIFICADO] = true
+        tomarTramo(id, idAranc, valor)
+        if (vigente(d)) {
+            titulares(d)
+                .filter { it.id != d.id && it.id != d.sustituye && it.idAranc.isNullOrBlank() }
+                .forEach {
+                    val otro = UUID.fromString(it.id)
+                    tomarTramo(otro, idAranc, valor)
+                    tomados += otro
+                }
+        }
+        return d.copy(idAranc = idAranc, arancel = valor)
+    }
+
+    // a DJ's tramo de vía and its arancel, written once. an external padrón's arancel it replaces with another value
+    // no longer describes the valuation imported: marked as marcarOrigenModificado does (only then: an arancel that is
+    // no padrón's, or the same value, is not)
+    private suspend fun tomarTramo(
+        id: UUID,
+        idAranc: String,
+        valor: BigDecimal
+    ) {
+        val guardada = registros.get(DECLARACION, Map::class.java, id)
+        val cambios = mutableMapOf<String, Any?>("id_aranc" to idAranc, ARANCEL to valor)
+        val delPadron = padronExterno(guardada)[ARANCEL]
+        if (delPadron != null && !iguales(delPadron, valor)) cambios[ORIGEN_MODIFICADO] = true
         registros.replace(DECLARACION, Map::class.java, id, cambios)
-        return d.copy(idAranc = arancel.idAranc, arancel = valor)
     }
 
     // #195: a declaración's attributes as a write sends them: without its arancel, which the dto carries read-only.
@@ -422,9 +474,10 @@ class DeclaracionService(
         val id = UUID.fromString(origen.id)
         val nuevaId = UUID.fromString(creada.id)
         try {
-            // #188: a DJ that names its tramo de vía carries its arancel to the copy, which recalcular resolves again
-            // in the copy's year (and keeps, without a VIGENTE one there)
-            if (!origen.idAranc.isNullOrBlank()) copiarPadronExterno(DECLARACION, id, nuevaId, listOf(ARANCEL))
+            // #188, #226: a DJ that names its tramo de vía carries it (id_aranc) to the copy, and recalcular resolves
+            // its arancel in the copy's year. the arancel itself only to a copy of the same year (a rectificatoria):
+            // a DJ of year N never carries another year's arancel, and without a VIGENTE one in N it has none
+            if (!origen.idAranc.isNullOrBlank() && copia.anio == origen.anio) copiarPadronExterno(DECLARACION, id, nuevaId, listOf(ARANCEL))
             transferentes(id).forEach { listas.agregar(TRANSFERENTE, Transferente::class.java, PARENT, nuevaId, it.copy(id = null, declaracion = null)) }
             // nuevo*, not agregar*: a copy is no edit, and it has no valuation de origen to mark
             val delPadron = nivelesDelPadron(origen, copia)
@@ -995,6 +1048,7 @@ class DeclaracionService(
         const val ARANCEL = "arancel"
         const val CODIGO_VIA = "codigo_via"
         const val PREDIO_RUSTICO = "PREDIO RUSTICO"
+        const val VARIOS_CODIGOS_VIA = "varios_codigos_via"
         val LISTAS = listOf(TRANSFERENTE, NIVEL_CONSTRUCCION, OBRA_COMPLEMENTARIA, OTRO_FRENTE)
 
         // the lists a write of which marks an external padrón's valuation as modified (marcarOrigenModificado)

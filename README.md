@@ -1531,52 +1531,81 @@ python3 -I recalcular_obras_padron.py --core <url> --anio 2026             # rec
 La DJ importada de Ica trae su arancel como un número suelto (la columna `arancel` del padrón), sin `id_aranc`. Desde
 #226 una DJ sin `id_aranc` toma, en cada recálculo, el arancel de la vía de su predio
 (`DeclaracionService.arancelDeLaVia`): el arancel VIGENTE del año de la DJ cuyo `cod_via` es el `predio.codigo_via`
-(el código SAT, por ejemplo `0010000401-01`, que va por frente de vía: RM 514-2025-EF/15). Guarda su `id_aranc` y desde
-entonces es una DJ que nombra su tramo (#188). Nunca toma el de otro año; un predio rústico (`predio.tipo_predio`
-`PREDIO RUSTICO`: la DJ no tiene tipo, #209) nunca lo toma; si los tramos de la vía tienen valores distintos no toma
-ninguno (`ArancelesService.deLaVia` lo deja en el log); un `id_aranc` explícito gana. Si el arancel nuevo difiere del
-que tenía la DJ del padrón, la marca `origen_modificado`. Los pasos, cada uno con su dry-run y su OK:
+(el código SAT, por ejemplo `0010000401-01`). Guarda su `id_aranc` y desde entonces es una DJ que nombra su tramo
+(#188). Las reglas:
+
+- nunca toma el de otro año;
+- un predio rústico (`predio.tipo_predio` `PREDIO RUSTICO`: la DJ no tiene tipo, #209) nunca lo toma, ni uno marcado
+  `predio.varios_codigos_via` (la regla para varios códigos de vía, abajo);
+- si los tramos de la vía tienen valores distintos no toma ninguno (`ArancelesService.deLaVia` lo deja en el log);
+- un `id_aranc` explícito gana; un PUT que lo borra lo vuelve a tomar de la vía;
+- quien no puede leer `arancel` (o el predio) recalcula sin la vía: la DJ queda como está, sin error;
+- los condóminos vigentes sin `id_aranc` toman el mismo tramo en la misma pasada y se recalculan con él;
+- si el arancel nuevo difiere del arancel del padrón (`padronExterno`), la marca `origen_modificado`; si es igual, o
+  si no era del padrón, no;
+- una DJ declarada desde otra de otro año (`declararDesde`) lleva `id_aranc`, no el arancel: toma el VIGENTE de su
+  año, y sin él queda sin arancel. La rectificatoria (mismo año) y la copia del condómino conservan los dos.
+
+**Fundamento:** el arancel urbano se fija por frente de vía (cuadra y lado), no por sector: RM 514-2025-EF/15 y las
+notas 2 y 3 del plano predial. Por eso el código SAT va por frente (`…-01`, `…-02`).
+
+**Regla para varios códigos de vía.** Un predio o ficha vinculado a varios `codigo_de_via` (uno por frente): si todos
+tienen el mismo valor arancelario en el año, toma el código más frecuente (de un empate, el menor); si difieren, se
+deja como está y se reporta para revisión. Es la misma regla de `deLaVia` para los tramos de una vía. La aplican:
+
+- `import_padron_ica.py`, en cada importación (`regla_varios_codigos`): agrupa las filas urbanas de cada predio (por
+  su código srtm, #207); `varios_codigos_mismo_valor` guarda en `codigo_via` el más frecuente;
+  `varios_codigos_valores_distintos` guarda el de la primera fila y marca `varios_codigos_via = true`. Los dos casos van
+  al reporte del importador con esa categoría;
+- `asignar_arancel_por_via.py --varios-codigos <csv>`, para los predios ya importados: lee el CSV que escribe
+  `aranceles_desde_padron.py` y, antes de recalcular, hace PATCH de `codigo_via = codigo_elegido` en los
+  `varios_codigos_mismo_valor` y de `varios_codigos_via = true` en los `varios_codigos_valores_distintos`, que nunca se
+  recalculan y salen con su propia cuenta («varios códigos con valores distintos»). Con `--dry-run` solo cuenta.
+
+Quien revisa un predio marcado corrige su `codigo_via` y le quita la marca; el próximo recálculo toma la vía.
+
+Los pasos, cada uno con su dry-run y su OK:
 
 ```bash
 cd model
-# 1. el CSV de Normativa desde el padrón (solo urbanos, sin los 0; un código con dos valores va a --conflictos)
+# 1. el CSV de Normativa desde el padrón (solo urbanos, sin los 0; un código con dos valores va a --conflictos,
+#    los predios con varios códigos a --varios-codigos)
 python3 -I aranceles_desde_padron.py --excel ~/Documents/srtm/ica/PADRON_CONSTRUCCION.xlsx \
   --salida ~/Documents/srtm/ica/aranceles-2026.csv
 # 2. importarlo (POST /api/srtm/normativa/aranceles/importar, dry_run primero): entra POR_VERIFICAR, sin firmas, y
 #    otra persona lo verifica en lote en la pantalla Normativa (la doble firma); luego sincronizar a catastro
-# 3. las DJ del año toman su tramo (POST /declaraciones/{id}/recalcular de cada una que lo toma)
-python3 -I asignar_arancel_por_via.py --org ica --anio 2026 --dry-run
-python3 -I asignar_arancel_por_via.py --org ica --anio 2026
+# 3. la regla para varios códigos y las DJ del año (POST /declaraciones/{id}/recalcular de cada una que toma tramo)
+python3 -I asignar_arancel_por_via.py --org ica --anio 2026 \
+  --varios-codigos ~/Documents/srtm/ica/aranceles-2026.varios_codigos.csv --dry-run
+python3 -I asignar_arancel_por_via.py --org ica --anio 2026 \
+  --varios-codigos ~/Documents/srtm/ica/aranceles-2026.varios_codigos.csv
 ```
 
 - `aranceles_desde_padron.py` escribe `id_aranc, anio, valor_m2, cod_via, cuadra, lado, norma, fuente` con
   `id_aranc = cod_via = codigo_de_via` (leído como `import_padron_ica.py` lee `predio.codigo_via`), `--anio` (default
   2026) y `--norma` (default `RM 514-2025-EF/15` en 2026, vacía otro año). `--salida` es obligatoria y no puede
-  quedar dentro del repo (sale de datos reales); `--conflictos` (default `<salida>.conflictos.csv`) lista los códigos con
-  más de un valor y sus filas. Solo imprime conteos.
-- **Un año nuevo:** `aranceles_desde_padron.py --copiar-de 2026 --anio 2027 --salida …` lee del Core
-  (`--core/--email/--password` o `WASICHAI_CORE/WASICHAI_EMAIL/WASICHAI_PASSWORD`) los aranceles VIGENTE de 2026 y
-  escribe el mismo CSV para 2027. Se importa igual: entra POR_VERIFICAR y Normativa lo corrige o lo verifica; nada
-  pasa a VIGENTE sin la doble firma. Los planos de otro año se cargan con la importación CSV de Normativa.
-- `asignar_arancel_por_via.py` recorre las DJ vigentes de `--anio` sin `id_aranc`, resuelve lo mismo que srtm sobre
-  lo que lee (aranceles del año, predios) e imprime cuántas toman el tramo, cuántas cambian de valor contra el padrón
-  (se espera ≈ 0) y por qué el resto no (rústicas, sin código de vía, sin arancel del año, tramos con valores
-  distintos). Sin `--dry-run` llama a `/recalcular` de las que lo toman (`--workers`, default 4): srtm guarda su
-  `id_aranc` y recalcula el autoavalúo. Usa `/recalcular` y no el PUT de la ficha: no marca `origen_modificado` en las
-  que no cambian ni revalida la ficha importada. Las DJ de otros años no se tocan. `--reporte` (fuera del repo) lista
-  cada DJ con su destino. Sale con `0`; `1` si Core rechaza algo o una DJ recalculada no quedó con su tramo; `2` si el
-  usuario es de otra organización.
-- **Regla para varios códigos de vía.** El arancel urbano va por frente de vía (cuadra y lado), no por sector
-  (RM 514-2025-EF/15, notas 2 y 3 del plano predial), y un predio o ficha puede quedar vinculado a varios
-  `codigo_de_via`, uno por frente: si todos tienen el mismo valor en el año, toma el código más frecuente; si
-  difieren, se deja como está y se reporta para revisión (la misma regla de `deLaVia` para los tramos de una vía).
-  `aranceles_desde_padron.py --excel` agrupa las filas urbanas del padrón por `codigo_predio` y cuenta
-  `varios_codigos_mismo_valor` y `varios_codigos_valores_distintos`; los lista en `--varios-codigos` (default
-  `<salida>.varios_codigos.csv`, fuera del repo: `codigo_predio, codigos, valores, regla, codigo_elegido`). El predio
-  de srtm guarda **un** `codigo_via` (el de su primera fila del padrón, `import_padron_ica.py`), así que
-  `asignar_arancel_por_via.py` no ve los otros códigos: esos predios cuentan según el código que guardó el predio.
-  Antes de aplicarlo, los de `varios_codigos_valores_distintos` se revisan a mano, y los de
-  `varios_codigos_mismo_valor` toman el mismo valor con el código que sea.
+  quedar dentro del repo (sale de datos reales), ni `--conflictos` (default `<salida>.conflictos.csv`: los códigos con
+  más de un valor y sus filas) ni `--varios-codigos` (default `<salida>.varios_codigos.csv`: `codigo_predio, codigos,
+  valores, regla, codigo_elegido`). Solo imprime conteos, entre ellos `varios_codigos_mismo_valor` y
+  `varios_codigos_valores_distintos`.
+- **Un año nuevo:** `aranceles_desde_padron.py --copiar-de 2026 --anio 2027 --org ica --salida …` lee del Core
+  (`--core/--email/--password` o `WASICHAI_CORE/WASICHAI_EMAIL/WASICHAI_PASSWORD`; el login debe ser de `--org`) los
+  aranceles VIGENTE de 2026 y escribe el mismo CSV para 2027 (sin los que no tienen `valor_m2`). Se importa igual:
+  entra POR_VERIFICAR y Normativa lo corrige o lo verifica; nada pasa a VIGENTE sin la doble firma. Los planos de otro
+  año se cargan con la importación CSV de Normativa.
+- `asignar_arancel_por_via.py` recorre las DJ vigentes de `--anio`, resuelve lo mismo que srtm sobre lo que lee
+  (aranceles del año, predios) e imprime cuántas toman el tramo, cuántas cambian de valor contra el padrón (se espera
+  ≈ 0) y por qué el resto no (rústicas, varios códigos con valores distintos, sin código de vía, sin arancel del año,
+  tramos con valores distintos), y de las que ya tienen `id_aranc`, cuántas tienen un valor nuevo del año y cuántas
+  están «con id_aranc sin arancel VIGENTE del año» (solo se cuentan). Sin `--dry-run` llama a `/recalcular` de las que
+  toman tramo o valor nuevo (`--workers`, default 4). Usa `/recalcular` y no el PUT de la ficha: no marca
+  `origen_modificado` en las que no cambian ni revalida la ficha importada. Las DJ de otros años no se tocan.
+  `--reporte` (fuera del repo) lista cada DJ con su destino, también si falla a la mitad (entonces imprime
+  «recalculadas N de M»). Sale con `0`; `1` si Core rechaza algo o no contesta, o si una DJ recalculada no quedó con su
+  tramo; `2` si el usuario es de otra organización.
+- **Después de cada importación del padrón** (o de un `apply.py` que la acompañe), vuelva a correr
+  `asignar_arancel_por_via.py`: `import_padron_ica.py` escribe por Core y no pasa por `resolverArancel`, así que las
+  DJ nuevas conservan el arancel del padrón hasta su primer recálculo.
 - **Cuando cambia el valor de un año** (se anula y se registra otro), `asignar_arancel_por_via.py --anio N` vuelve a
   resolver las DJ de ese año: también recalcula las que ya tienen `id_aranc` y cuyo arancel no es el VIGENTE de su
   tramo (`valor_nuevo` en el reporte). Las de otros años no se tocan.

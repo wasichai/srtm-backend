@@ -18,8 +18,9 @@ outside the repo: the padrón is real data. Only counts are printed.
 Stdlib only. See README.md («Cargar la Municipalidad de Ica» → «Aranceles por vía»).
 
 Run: python3 -I aranceles_desde_padron.py --excel PADRON_CONSTRUCCION.xlsx --salida ~/Documents/srtm/ica/aranceles-2026.csv
-     python3 -I aranceles_desde_padron.py --copiar-de 2026 --anio 2027 --salida ~/Documents/srtm/ica/aranceles-2027.csv
-Exit: 0 ok, 1 Core refused something, 2 bad arguments (nothing is written).
+     python3 -I aranceles_desde_padron.py --copiar-de 2026 --anio 2027 --org ica --salida ~/Documents/srtm/ica/aranceles-2027.csv
+Exit: 0 ok, 1 Core refused something, 2 bad arguments or (--copiar-de) the login is of another organization than
+--org (nothing is written).
 """
 import argparse
 import csv
@@ -34,16 +35,13 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 from core_client import Client, CoreError  # noqa: E402
-from import_padron_ica import codigo  # noqa: E402
+from import_padron_ica import MISMO_VALOR, VALORES_DISTINTOS, codigo, codigos_derivados, regla_varios_codigos  # noqa: E402
 from import_predios import read_xlsx  # noqa: E402
 
 REPO = os.path.dirname(HERE)
 COLUMNAS = ["id_aranc", "anio", "valor_m2", "cod_via", "cuadra", "lado", "norma", "fuente"]
 COLUMNAS_CONFLICTO = ["cod_via", "valores", "filas"]
 COLUMNAS_VARIOS = ["codigo_predio", "codigos", "valores", "regla", "codigo_elegido"]
-# a predio with several codigo_de_via: all with one value, or not (varios_codigos)
-MISMO_VALOR = "varios_codigos_mismo_valor"
-VALORES_DISTINTOS = "varios_codigos_valores_distintos"
 URBANO = "1"
 RUSTICO = "2"
 NORMA_2026 = "RM 514-2025-EF/15"
@@ -75,7 +73,6 @@ def desde_padron(filas):
     VALORES_DISTINTOS). varios: those predios (varios_codigos)."""
     valores = defaultdict(set)
     filas_de = defaultdict(list)
-    codigos_de = defaultdict(Counter)
     cuentas = Counter()
     for fila in filas:
         cuentas["filas"] += 1
@@ -97,33 +94,39 @@ def desde_padron(filas):
         cuentas["urbanas_con_arancel"] += 1
         valores[cod_via].add(v)
         filas_de[cod_via].append(fila.get("_fila"))
-        codigos_de[codigo(fila.get("codigo_predio"))][cod_via] += 1
     aranceles = {c: next(iter(v)) for c, v in valores.items() if len(v) == 1}
     conflictos = {c: (sorted(v), filas_de[c]) for c, v in valores.items() if len(v) > 1}
-    varios = varios_codigos({p: c for p, c in codigos_de.items() if p is not None and len(c) > 1}, valores)
+    varios = varios_codigos(filas)
     cuentas[MISMO_VALOR] = sum(1 for v in varios if v["regla"] == MISMO_VALOR)
     cuentas[VALORES_DISTINTOS] = sum(1 for v in varios if v["regla"] == VALORES_DISTINTOS)
     return aranceles, conflictos, cuentas, varios
 
 
-def varios_codigos(por_predio, valores):
-    """The regla para varios códigos de vía, for a predio (its SAT codigo_predio) whose urbano rows name more than one
-    codigo_de_via (one per frente): if every code has one and the same arancel, it takes the most frequent code (of a
-    tie, the lowest); if their values differ (or a code has two), it is left as it is and listed for review. Rows of
-    COLUMNAS_VARIOS, sorted by predio."""
-    filas = []
-    for predio, cuantos in sorted(por_predio.items()):
-        de_cada = {c: valores[c] for c in cuantos}
-        unico = len(set().union(*de_cada.values())) == 1
-        mas_frecuente = sorted(cuantos.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
-        filas.append({
+def varios_codigos(filas):
+    """The predios (by their srtm code, as import_padron_ica.py gives it: codigos_derivados, #207) whose urbano rows
+    name several codigo_de_via, with what the regla para varios códigos de vía does to each
+    (import_padron_ica.regla_varios_codigos): MISMO_VALOR takes codigo_elegido, the most frequent;
+    VALORES_DISTINTOS is left as it is and marked. Rows of COLUMNAS_VARIOS, sorted by predio: what
+    asignar_arancel_por_via.py --varios-codigos applies to the predios already imported."""
+    srtm, _ = codigos_derivados(filas)
+    grupos = defaultdict(list)
+    for fila in filas:
+        code = srtm.get((codigo(fila.get("codigo_predio")), codigo(fila.get("codigo_contribuyente"))))
+        if code is not None:
+            grupos[code].append(fila)
+    resultado = []
+    for predio, suyas in sorted(grupos.items()):
+        cod_via, regla, cuantos, valores = regla_varios_codigos(suyas)
+        if regla is None:
+            continue
+        resultado.append({
             "codigo_predio": predio,
             "codigos": " ".join(f"{c}x{n}" for c, n in sorted(cuantos.items())),
-            "valores": " ".join(f"{c}={'/'.join(str(v) for v in sorted(de_cada[c]))}" for c in sorted(cuantos)),
-            "regla": MISMO_VALOR if unico else VALORES_DISTINTOS,
-            "codigo_elegido": mas_frecuente if unico else "",
+            "valores": " ".join(f"{c}={'/'.join(str(v) for v in sorted(valores[c]))}" for c in sorted(cuantos)),
+            "regla": regla,
+            "codigo_elegido": cod_via if regla == MISMO_VALOR else "",
         })
-    return filas
+    return resultado
 
 
 def filas_csv(aranceles, anio, norma, fuente):
@@ -146,13 +149,20 @@ def vigentes_de(registros):
 
 
 def copia(vigentes, anio, norma, fuente):
-    """The aranceles of another year as CSV rows of `anio`: the same tramo and value, the given norma and fuente."""
+    """The aranceles of another year as CSV rows of `anio`: the same tramo and value, the given norma and fuente. One
+    without valor_m2 (Normativa requires it) is left out: (rows, how many were)."""
     def texto(x):
         return "" if x is None else str(x)
 
-    return [{"id_aranc": a["id_aranc"], "anio": anio, "valor_m2": texto(valor(texto(a.get("valor_m2")))),
-             "cod_via": texto(a.get("cod_via")), "cuadra": texto(a.get("cuadra")), "lado": texto(a.get("lado")),
-             "norma": norma, "fuente": fuente} for a in vigentes]
+    filas, sin_valor = [], 0
+    for a in vigentes:
+        v = valor(texto(a.get("valor_m2")))
+        if v is None:
+            sin_valor += 1
+            continue
+        filas.append({"id_aranc": a["id_aranc"], "anio": anio, "valor_m2": str(v), "cod_via": texto(a.get("cod_via")),
+                      "cuadra": texto(a.get("cuadra")), "lado": texto(a.get("lado")), "norma": norma, "fuente": fuente})
+    return filas, sin_valor
 
 
 def dentro_del_repo(path):
@@ -184,6 +194,7 @@ def _parse_args(argv):
     p.add_argument("--conflictos", help="the codes with more than one value (--excel); default: <salida>.conflictos.csv")
     p.add_argument("--varios-codigos", help="the predios with several codigo_de_via (--excel); default: <salida>.varios_codigos.csv")
     p.add_argument("--norma", help=f"the norma of every row (default {NORMA_2026!r} for 2026, blank otherwise)")
+    p.add_argument("--org", help="--copiar-de: the organization (its slug or id): the login must be of it")
     p.add_argument("--core", default=os.environ.get("WASICHAI_CORE", "http://localhost:8090"))
     p.add_argument("--email", default=os.environ.get("WASICHAI_EMAIL", "admin@wasichai.local"))
     p.add_argument("--password", default=os.environ.get("WASICHAI_PASSWORD", "admin"))
@@ -224,18 +235,25 @@ def main(argv=None):
               f"{VALORES_DISTINTOS}: {cuentas[VALORES_DISTINTOS]}, a revisar) -> {varios_path}")
         return 0
 
+    if not args.org:
+        print("error: --copiar-de pide --org: los aranceles se leen de esa organización", file=sys.stderr)
+        return 2
     client = Client(args.core)
     try:
         client.login(args.email, args.password)
         organizacion = client.get("/api/organizations/current") or {}
+        if args.org.strip().lower() not in {str(organizacion.get("slug") or "").lower(), str(organizacion.get("id") or "").lower()}:
+            print(f"error: el usuario es de la organización {organizacion.get('slug')!r}, no de {args.org!r}: no se escribe nada",
+                  file=sys.stderr)
+            return 2
         vigentes = vigentes_de(client.list_all("arancel", anio=args.copiar_de))
     except CoreError as e:
         print(f"error -> {e.status}\n{e.body}", file=sys.stderr)
         return 1
-    filas = copia(vigentes, args.anio, norma, f"copia de los aranceles VIGENTE de {args.copiar_de}")
+    filas, sin_valor = copia(vigentes, args.anio, norma, f"copia de los aranceles VIGENTE de {args.copiar_de}")
     escribir(args.salida, COLUMNAS, filas)
     print(f"organización: {organizacion.get('slug')}")
-    print(f"aranceles: {len(filas)} VIGENTE de {args.copiar_de}, copiados a {args.anio}")
+    print(f"aranceles: {len(filas)} VIGENTE de {args.copiar_de}, copiados a {args.anio}, sin valor_m2 (fuera): {sin_valor}")
     print(f"csv: {len(filas)} filas -> {args.salida}")
     return 0
 

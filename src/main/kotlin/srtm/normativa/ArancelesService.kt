@@ -112,6 +112,9 @@ class ArancelesService(
         anio: Int
     ): Arancel? = if (permisos.puedeLeer(ARANCEL)) vigente(idAranc, anio) else null
 
+    // whether the caller may read the aranceles: a recalculation asks before it reads anything for them (#226)
+    suspend fun legibles(): Boolean = permisos.puedeLeer(ARANCEL)
+
     // #226: the arancel of a predio's vía (its código de vía, Ica's SAT code) for a recalculation of a DJ without
     // id_aranc: the VIGENTE one of that cod_via in anio, never another year's. several (cuadras or lados) count only
     // with one valor_m2: then the one of the lowest id_aranc (and id), always the same. different values are no
@@ -120,7 +123,7 @@ class ArancelesService(
         codVia: String,
         anio: Int
     ): Arancel? {
-        if (!permisos.puedeLeer(ARANCEL)) return null
+        if (!legibles()) return null
         val vigentes =
             registros
                 .all(ARANCEL, Arancel::class.java, filters = mapOf(COD_VIA to codVia, CamposArancel.ANIO to "$anio"))

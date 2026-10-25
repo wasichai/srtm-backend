@@ -463,7 +463,9 @@
         {"name": "codigo_hu_armonizacion", "label": "Código de HU (armonización)", "type": "TEXT",
           "description": "Heredado de un padrón externo (Ica): el código de la habilitación urbana del Formato Padrón Municipal Armonización."},
         {"name": "codigo_via_armonizacion", "label": "Código de vía (armonización)", "type": "TEXT",
-          "description": "Heredado de un padrón externo (Ica): el código de la vía del Formato Padrón Municipal Armonización."}
+          "description": "Heredado de un padrón externo (Ica): el código de la vía del Formato Padrón Municipal Armonización."},
+        {"name": "varios_codigos_via", "label": "Varios códigos de vía", "type": "BOOLEAN",
+          "description": "Regla para varios códigos de vía (#226): el predio del padrón externo está vinculado a varios códigos de vía (uno por frente) con valores arancelarios distintos en el año. Se deja como está y se reporta para revisión: su DJ no toma el arancel de la vía. Si todos tuvieran el mismo valor, codigo_via sería el más frecuente y esto quedaría vacío. Vacío cuenta como false."}
       ]
     },
     {
@@ -1493,7 +1495,7 @@
       "label": "Arancel",
       "pluralLabel": "Aranceles",
       "description": "El valor arancelario del tramo de vía (S/ por m²) en un año. srtm es su dueño y catastro-backend guarda una copia con la que valúa (sincronizado_en, error_sincronizacion). Se administra en Normativa (/api/srtm/normativa/aranceles) con doble firma: nace POR_VERIFICAR con quien lo transcribió, otra persona lo verifica y pasa a VIGENTE, y un VIGENTE no se edita ni se borra: se anula (ANULADO, con motivo) y se registra el valor correcto. Uno vivo (no ANULADO) por id_aranc y año, que garantiza la clave. La DJ lee solo los VIGENTE.",
-      "indexes": [["id_aranc", "anio"]],
+      "indexes": [["id_aranc", "anio"], ["cod_via", "anio"]],
       "fields": [
         {"name": "clave", "label": "Clave", "type": "TEXT", "required": true,
           "description": "id_aranc|anio, la pone el servicio: wasichai no tiene únicos compuestos. No es única: un ANULADO la conserva."},

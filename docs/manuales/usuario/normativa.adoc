@@ -148,6 +148,9 @@ la declaración guarda su _Identificador de arancel_ y desde entonces se comport
 * si la vía tiene varios tramos (cuadras o lados) con valores distintos, no toma ninguno, y la vía se revisa en
   Normativa;
 * un identificador de arancel que la declaración ya nombra gana siempre;
+* los condóminos del predio toman el mismo tramo a la vez;
+* la declaración de otro año hecha desde esta lleva el tramo, no el arancel: toma el arancel vigente de su propio año,
+  y mientras ese año no tenga uno, queda sin arancel. La rectificatoria, que es del mismo año, conserva los dos;
 * la declaración lo toma al grabarse o al pulsar btn:[Recalcular]. Para las declaraciones ya importadas, quien
   administra el sistema lo hace para todo un año a la vez.
 
@@ -158,10 +161,15 @@ frente (`…-01`, `…-02`) y un predio con varios frentes puede tener varios.
 
 *Regla para varios códigos de vía.* Un predio o ficha vinculado a varios códigos de vía (uno por frente):
 
-* si todos esos códigos tienen el mismo valor arancelario en el año, toma el código más frecuente;
-* si sus valores difieren, se deja como está y se reporta para revisión.
+* si todos esos códigos tienen el mismo valor arancelario en el año, toma el código más frecuente: ese queda como el
+  _Código de vía_ del predio;
+* si sus valores difieren, se deja como está y se reporta para revisión: el predio queda marcado (_Varios códigos de
+  vía_) y su declaración no toma el arancel de la vía, sino que conserva el valor que tenía. Quien revisa el caso
+  corrige el código del predio y le quita la marca.
 
-Es la misma regla de una vía con varios tramos: si sus valores difieren, la declaración no toma ninguno.
+Es la misma regla de una vía con varios tramos: si sus valores difieren, la declaración no toma ninguno. La regla la
+aplica la importación del padrón, y quien administra el sistema la aplica a los predios ya importados antes de
+asignar los aranceles del año.
 
 *Importar aranceles.* El CSV lleva las columnas `id_aranc`, `anio`, `valor_m2`, `cod_via`, `cuadra`, `lado`, `norma`,
 `fuente`, `transcribio` y `verifico`, con las mismas reglas que el de parámetros (<<normativa-importar>>): con las dos
