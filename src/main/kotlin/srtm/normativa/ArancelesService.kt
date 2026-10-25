@@ -5,6 +5,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.ReactiveTransactionManager
 import org.springframework.transaction.reactive.TransactionalOperator
@@ -53,6 +54,7 @@ class ArancelesService(
     transacciones: ReactiveTransactionManager
 ) {
     private val transaccion = TransactionalOperator.create(transacciones)
+    private val log = LoggerFactory.getLogger(javaClass)
 
     // a page by id_aranc. q: the start of id_aranc or cod_via, in any case. an empty estado is VIGENTE
     suspend fun aranceles(
@@ -109,6 +111,26 @@ class ArancelesService(
         idAranc: String,
         anio: Int
     ): Arancel? = if (permisos.puedeLeer(ARANCEL)) vigente(idAranc, anio) else null
+
+    // #226: the arancel of a predio's vía (its código de vía, Ica's SAT code) for a recalculation of a DJ without
+    // id_aranc: the VIGENTE one of that cod_via in anio, never another year's. several (cuadras or lados) count only
+    // with one valor_m2: then the one of the lowest id_aranc (and id), always the same. different values are no
+    // arancel, and are logged. null as alRecalcular's: none, or the caller may not read aranceles
+    suspend fun deLaVia(
+        codVia: String,
+        anio: Int
+    ): Arancel? {
+        if (!permisos.puedeLeer(ARANCEL)) return null
+        val vigentes =
+            registros
+                .all(ARANCEL, Arancel::class.java, filters = mapOf(COD_VIA to codVia, CamposArancel.ANIO to "$anio"))
+                .filter { it.rige() }
+        if (vigentes.distinctBy { it.valorM2?.stripTrailingZeros() }.size > 1) {
+            log.warn("la vía {} tiene {} aranceles VIGENTE de {} con valores distintos: la DJ no toma ninguno", codVia, vigentes.size, anio)
+            return null
+        }
+        return vigentes.minWithOrNull(compareBy<Arancel>({ it.idAranc.orEmpty() }, { it.id.orEmpty() }))
+    }
 
     // a new arancel POR_VERIFICAR, transcribed by the user: 201. one alive with its clave is a 409
     suspend fun registrar(cuerpo: Map<String, Any?>): Arancel {
@@ -372,5 +394,6 @@ class ArancelesService(
         // rows per transaction of an importación, and transactions at once (each holds a connection of the shared pool)
         const val LOTE = 100
         const val CONCURRENCIA = 4
+        const val COD_VIA = "cod_via"
     }
 }

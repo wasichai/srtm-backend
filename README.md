@@ -1526,6 +1526,50 @@ python3 -I recalcular_obras_padron.py --core <url> --anio 2026             # rec
 - Sale con `0`, o `1` si Core rechaza algo. **Nunca contra un Core real sin que lo pida quien controla el despliegue:**
   el dry-run en dev lo corre el controlador de la épica, con el OK dado.
 
+### Aranceles por vía
+
+La DJ importada de Ica trae su arancel como un número suelto (la columna `arancel` del padrón), sin `id_aranc`. Desde
+#226 una DJ sin `id_aranc` toma, en cada recálculo, el arancel de la vía de su predio
+(`DeclaracionService.arancelDeLaVia`): el arancel VIGENTE del año de la DJ cuyo `cod_via` es el `predio.codigo_via`
+(el código SAT, por ejemplo `0010000401-01`, que va por frente de vía: RM 514-2025-EF/15). Guarda su `id_aranc` y desde
+entonces es una DJ que nombra su tramo (#188). Nunca toma el de otro año; un predio rústico (`predio.tipo_predio`
+`PREDIO RUSTICO`: la DJ no tiene tipo, #209) nunca lo toma; si los tramos de la vía tienen valores distintos no toma
+ninguno (`ArancelesService.deLaVia` lo deja en el log); un `id_aranc` explícito gana. Si el arancel nuevo difiere del
+que tenía la DJ del padrón, la marca `origen_modificado`. Los pasos, cada uno con su dry-run y su OK:
+
+```bash
+cd model
+# 1. el CSV de Normativa desde el padrón (solo urbanos, sin los 0; un código con dos valores va a --conflictos)
+python3 -I aranceles_desde_padron.py --excel ~/Documents/srtm/ica/PADRON_CONSTRUCCION.xlsx \
+  --salida ~/Documents/srtm/ica/aranceles-2026.csv
+# 2. importarlo (POST /api/srtm/normativa/aranceles/importar, dry_run primero): entra POR_VERIFICAR, sin firmas, y
+#    otra persona lo verifica en lote en la pantalla Normativa (la doble firma); luego sincronizar a catastro
+# 3. las DJ del año toman su tramo (POST /declaraciones/{id}/recalcular de cada una que lo toma)
+python3 -I asignar_arancel_por_via.py --org ica --anio 2026 --dry-run
+python3 -I asignar_arancel_por_via.py --org ica --anio 2026
+```
+
+- `aranceles_desde_padron.py` escribe `id_aranc, anio, valor_m2, cod_via, cuadra, lado, norma, fuente` con
+  `id_aranc = cod_via = codigo_de_via` (leído como `import_padron_ica.py` lee `predio.codigo_via`), `--anio` (default
+  2026) y `--norma` (default `RM 514-2025-EF/15` en 2026, vacía otro año). `--salida` es obligatoria y no puede
+  quedar dentro del repo (sale de datos reales); `--conflictos` (default `<salida>.conflictos.csv`) lista los códigos con
+  más de un valor y sus filas. Solo imprime conteos.
+- **Un año nuevo:** `aranceles_desde_padron.py --copiar-de 2026 --anio 2027 --salida …` lee del Core
+  (`--core/--email/--password` o `WASICHAI_CORE/WASICHAI_EMAIL/WASICHAI_PASSWORD`) los aranceles VIGENTE de 2026 y
+  escribe el mismo CSV para 2027. Se importa igual: entra POR_VERIFICAR y Normativa lo corrige o lo verifica; nada
+  pasa a VIGENTE sin la doble firma. Los planos de otro año se cargan con la importación CSV de Normativa.
+- `asignar_arancel_por_via.py` recorre las DJ vigentes de `--anio` sin `id_aranc`, resuelve lo mismo que srtm sobre
+  lo que lee (aranceles del año, predios) e imprime cuántas toman el tramo, cuántas cambian de valor contra el padrón
+  (se espera ≈ 0) y por qué el resto no (rústicas, sin código de vía, sin arancel del año, tramos con valores
+  distintos). Sin `--dry-run` llama a `/recalcular` de las que lo toman (`--workers`, default 4): srtm guarda su
+  `id_aranc` y recalcula el autoavalúo. Usa `/recalcular` y no el PUT de la ficha: no marca `origen_modificado` en las
+  que no cambian ni revalida la ficha importada. Las DJ de otros años no se tocan. `--reporte` (fuera del repo) lista
+  cada DJ con su destino. Sale con `0`; `1` si Core rechaza algo o una DJ recalculada no quedó con su tramo; `2` si el
+  usuario es de otra organización.
+- **Cuando cambia el valor de un año** (se anula y se registra otro), `asignar_arancel_por_via.py --anio N` vuelve a
+  resolver las DJ de ese año: también recalcula las que ya tienen `id_aranc` y cuyo arancel no es el VIGENTE de su
+  tramo (`valor_nuevo` en el reporte). Las de otros años no se tocan.
+
 ## Normalizar el padrón importado
 
 Un padrón importado antes de que `import_predios.py` separara los tipos se normaliza en Core, sin volver a importar:

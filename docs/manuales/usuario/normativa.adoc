@@ -136,6 +136,21 @@ arancel de la declaración es el valor por m² del arancel vigente de ese tramo 
   nuevo;
 * si se anula sin registrar otro, la declaración conserva el valor que tenía.
 
+[[normativa-arancel-via]]
+*El arancel de la vía del predio.* Una declaración que no nombra su tramo toma el arancel de la vía de su predio: el
+predio importado de un padrón externo (Ica) trae el código de su vía (_Código de vía_, el del SAT, que va por frente
+de vía), y el arancel vigente del año de la declaración con ese mismo código de vía (`cod_via`) es el suyo. Al tomarlo,
+la declaración guarda su _Identificador de arancel_ y desde entonces se comporta como una que nombra su tramo:
+
+* solo toma el arancel del año de la declaración, nunca el de otro año. Si la vía no tiene un arancel vigente ese año,
+  la declaración conserva el valor que tenía (el del padrón);
+* un predio rústico nunca lo toma: su arancel va por hectárea;
+* si la vía tiene varios tramos (cuadras o lados) con valores distintos, no toma ninguno, y la vía se revisa en
+  Normativa;
+* un identificador de arancel que la declaración ya nombra gana siempre;
+* la declaración lo toma al grabarse o al pulsar btn:[Recalcular]. Para las declaraciones ya importadas, quien
+  administra el sistema lo hace para todo un año a la vez.
+
 *Importar aranceles.* El CSV lleva las columnas `id_aranc`, `anio`, `valor_m2`, `cod_via`, `cuadra`, `lado`, `norma`,
 `fuente`, `transcribio` y `verifico`, con las mismas reglas que el de parámetros (<<normativa-importar>>): con las dos
 firmas entra vigente; con una o ninguna, por verificar; una fila igual no se vuelve a cargar; una que cambia un

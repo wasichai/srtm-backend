@@ -276,11 +276,32 @@ class DeclaracionService(
         id: UUID,
         d: Declaracion
     ): Declaracion {
-        val idAranc = d.idAranc?.trim()?.ifEmpty { null } ?: return d
+        val idAranc = d.idAranc?.trim()?.ifEmpty { null } ?: return arancelDeLaVia(id, d)
         val valor = aranceles.alRecalcular(idAranc, d.anio ?: return d)?.valorM2 ?: return d
         if (iguales(d.arancel, valor)) return d
         registros.replace(DECLARACION, Map::class.java, id, mapOf(ARANCEL to valor))
         return d.copy(arancel = valor)
+    }
+
+    // #226: a DJ without id_aranc takes the arancel of its predio's vía (codigo_via, an external padrón's code) in its
+    // year (ArancelesService.deLaVia): its id_aranc is stored, and from then on it is a DJ that names its tramo. a
+    // rústico predio (tipo_predio, the predio's own: the DJ has none, #209) never does, nor one without codigo_via or
+    // without that arancel: the arancel stored stays (the padrón's). a padrón's arancel it replaces with another value
+    // no longer describes the valuation imported: marked as marcarOrigenModificado does
+    private suspend fun arancelDeLaVia(
+        id: UUID,
+        d: Declaracion
+    ): Declaracion {
+        val anio = d.anio ?: return d
+        val predio = registros.get(PREDIO, Map::class.java, UUID.fromString(d.predio ?: return d))
+        if (predio["tipo_predio"]?.toString() == PREDIO_RUSTICO) return d
+        val via = predio[CODIGO_VIA]?.toString()?.trim()?.ifEmpty { null } ?: return d
+        val arancel = aranceles.deLaVia(via, anio) ?: return d
+        val valor = arancel.valorM2 ?: return d
+        val cambios = mutableMapOf<String, Any?>("id_aranc" to arancel.idAranc, ARANCEL to valor)
+        if (d.arancel != null && !iguales(d.arancel, valor)) cambios[ORIGEN_MODIFICADO] = true
+        registros.replace(DECLARACION, Map::class.java, id, cambios)
+        return d.copy(idAranc = arancel.idAranc, arancel = valor)
     }
 
     // #195: a declaración's attributes as a write sends them: without its arancel, which the dto carries read-only.
@@ -972,6 +993,8 @@ class DeclaracionService(
         const val FILA = "fila"
         const val ATTEMPTS = 3
         const val ARANCEL = "arancel"
+        const val CODIGO_VIA = "codigo_via"
+        const val PREDIO_RUSTICO = "PREDIO RUSTICO"
         val LISTAS = listOf(TRANSFERENTE, NIVEL_CONSTRUCCION, OBRA_COMPLEMENTARIA, OTRO_FRENTE)
 
         // the lists a write of which marks an external padrón's valuation as modified (marcarOrigenModificado)

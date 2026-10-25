@@ -72,7 +72,7 @@ class FakeCore:
                  fail_put=False, fail_put_status=500, login_response=None, fail_on_record=None, existing_fields=None,
                  fail_on_update=None, fail_on_delete=None, object_rules=None, fail_object_put=None, object_meta=None,
                  conflict_on_update=None, organization=None, sugeridos=None,
-                 fail_on_role=None, fail_on_service_account=None):
+                 fail_on_role=None, fail_on_service_account=None, recalcular=None):
         self.existing_objects = set(existing_objects)
         # object name -> its object-level rules ({"indexes", "appendOnly"}), as Core stores them; none by default
         self.object_rules = {n: dict((object_rules or {}).get(n, {})) for n in self.existing_objects}
@@ -91,6 +91,8 @@ class FakeCore:
         self.fail_on_delete = fail_on_delete  # object name -> its record DELETEs answer 409
         self.records = {}  # object name -> list of {"id", "attributes"}
         self.sugeridos = dict(sugeridos or {})  # declaración id -> its autoavaluo-sugerido dict, or 404 if missing
+        # POST /recalcular: a function of the declaración id -> the declaración answered ({"id"} by default)
+        self.recalcular = recalcular
         # GET /api/organizations/current: the login's organization
         self.organization = organization or {"id": "00000000-0000-0000-0000-000000000001", "name": "Perené", "slug": "perene"}
         self.fail_on_role = fail_on_role  # role name -> its POST /api/roles answers 500
@@ -305,7 +307,8 @@ class FakeCore:
             return (404, {"detail": "not found"}) if respuesta is None else (200, respuesta)
         recalcular = RECALCULAR.match(path)
         if recalcular and method == "POST":
-            return 200, {"id": recalcular.group(1)}
+            id = recalcular.group(1)
+            return 200, self.recalcular(id) if self.recalcular else {"id": id}
         if path == "/api/organizations/current" and method == "GET":
             return 200, self.organization
         if path == "/api/auth/login" and method == "POST":
