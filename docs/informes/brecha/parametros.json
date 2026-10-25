@@ -1,0 +1,14 @@
+{
+  "_comentario": "Parámetros públicos del corte: dónde se publica y qué organizaciones tiene. Las URL, las credenciales y la clave HMAC van fuera del repositorio, en ~/.config/srtm-analitica/<org>.env (modo 0600).",
+  "publicacion": {
+    "s3": "s3://sgtm-dev/analitica"
+  },
+  "organizaciones": {
+    "perene": {
+      "nombre": "Municipalidad Distrital de Perené"
+    },
+    "ica": {
+      "nombre": "Municipalidad Provincial de Ica"
+    }
+  }
+}
