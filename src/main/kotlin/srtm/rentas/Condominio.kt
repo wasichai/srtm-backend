@@ -139,7 +139,11 @@ private fun porValor(valor: Any?) = if (valor is BigDecimal) valor.stripTrailing
 // the valuation an external padrón (Ica) brings (model/model.json), which the dtos do not write (Declaracion carries
 // its arancel read-only, #195): a condómino's copy takes it from the stored records, and
 // GET /declaraciones/{id}/valuacion-origen reads it there (ValuacionOrigen)
-val PADRON_EXTERNO_DECLARACION = listOf("arancel", "valor_terreno", "valor_construccion", "valor_otras_instalaciones")
+val PADRON_EXTERNO_DECLARACION = listOf("arancel", "valor_terreno", "valor_construccion", OTRAS_INSTALACIONES)
+
+// the external padrón's otras instalaciones (#208): an amount catastro's valuation adds as an obra, fixed: not a figure
+// of its year (padronDeLaCopia)
+const val OTRAS_INSTALACIONES = "valor_otras_instalaciones"
 val PADRON_EXTERNO_NIVEL = listOf(CLASIFICACION, "valor_unitario", "incremento", "porcentaje_depreciacion", "valor_total")
 
 // a nivel's clasificación de la construcción: an insumo of the construction, not a figure of its year (copiar)
@@ -153,10 +157,14 @@ val VALUACION_PADRON_NIVEL = PADRON_EXTERNO_NIVEL - CLASIFICACION
 fun conValuacionDelPadron(nivel: Map<*, *>) = conValor(nivel, VALUACION_PADRON_NIVEL).isNotEmpty()
 
 // of a stored declaración, the external padrón's valuation it has (conValor): its arancel is no padrón's when it names
-// its tramo de vía (id_aranc, #188): Normativa's, derived
+// its tramo de vía (id_aranc, #188): Normativa's, derived. #237: as a nivel's clasificación (VALUACION_PADRON_NIVEL),
+// the otras instalaciones alone, which a copy to another year keeps, are no valuation: they come with its figures. Ica's
+// import (model/import_padron_ica.py) always writes valor_terreno and valor_construccion next to them; a DJ whose only
+// padrón figure was its arancel and then names its tramo keeps just the fixed amount, as a copy to another year does
 fun padronExterno(declaracion: Map<*, *>): Map<String, Any> {
-    val valores = conValor(declaracion, PADRON_EXTERNO_DECLARACION)
-    return if (declaracion["id_aranc"]?.toString().isNullOrBlank()) valores else valores - "arancel"
+    val conTodo = conValor(declaracion, PADRON_EXTERNO_DECLARACION)
+    val valores = if (declaracion["id_aranc"]?.toString().isNullOrBlank()) conTodo else conTodo - "arancel"
+    return if (valores.keys.any { it != OTRAS_INSTALACIONES }) valores else emptyMap()
 }
 
 // the declaración's mark that it changed after that valuation was imported (DeclaracionService.marcarOrigenModificado)
