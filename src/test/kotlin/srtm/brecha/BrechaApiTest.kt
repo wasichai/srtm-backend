@@ -141,6 +141,7 @@ class BrechaApiTest : SrtmApiTest() {
 
         val corrida = corrida(org, 2026)
         assertEquals(TERMINADA, corrida["estado"].asString(), corrida.toString())
+        assertEquals("MANUAL", corrida["origen"].asString())
         assertEquals("valuacion-v1", corrida["versionCatastro"].asString())
         assertEquals(5, corrida["totalPredios"].asInt())
         assertEquals(5, corrida["procesados"].asInt())

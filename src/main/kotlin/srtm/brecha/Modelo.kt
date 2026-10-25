@@ -14,6 +14,10 @@ const val TERMINADA = "TERMINADA"
 const val FALLIDA = "FALLIDA"
 val ACTIVAS = setOf(PENDIENTE, EN_CURSO)
 
+// who launched a corrida (#203): a POST (MANUAL), or an automatic one from the catastro feed's cambios (CAMBIOS) or
+// its weekly fallback (SEMANAL)
+enum class OrigenCorrida { MANUAL, CAMBIOS, SEMANAL }
+
 // catastro's motivo for a rústico predio (#209): it has no rústico aranceles (per hectárea) yet, so it never values
 // one, even with a ficha. used by the autoavalúo sugerido and the brecha (task 6)
 const val PREDIO_RUSTICO = "PREDIO_RUSTICO"
@@ -122,7 +126,9 @@ data class RegistroCorrida(
     val prediosSinLevantar: Int? = null,
     val deltaImpuestoConfiable: BigDecimal? = null,
     val deltaImpuestoDudoso: BigDecimal? = null,
-    val deltaImpuestoSinLevantar: BigDecimal? = null
+    val deltaImpuestoSinLevantar: BigDecimal? = null,
+    // #203: who launched it (null is an older MANUAL, from before this field)
+    val origen: String? = null
 )
 
 // the brecha_predio record: one per catastro item, plus one per padrón predio the catastro lacks. corrida and predio are
@@ -178,7 +184,8 @@ data class Corrida(
     val prediosSinLevantar: Int?,
     val deltaImpuestoConfiable: BigDecimal?,
     val deltaImpuestoDudoso: BigDecimal?,
-    val deltaImpuestoSinLevantar: BigDecimal?
+    val deltaImpuestoSinLevantar: BigDecimal?,
+    val origen: String?
 )
 
 fun corridaDe(r: RegistroCorrida) =
@@ -201,7 +208,8 @@ fun corridaDe(r: RegistroCorrida) =
         prediosSinLevantar = r.prediosSinLevantar,
         deltaImpuestoConfiable = r.deltaImpuestoConfiable,
         deltaImpuestoDudoso = r.deltaImpuestoDudoso,
-        deltaImpuestoSinLevantar = r.deltaImpuestoSinLevantar
+        deltaImpuestoSinLevantar = r.deltaImpuestoSinLevantar,
+        origen = r.origen
     )
 
 // a row of GET /brecha/{anio}/predios

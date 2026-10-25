@@ -40,6 +40,7 @@ import wasichai.core.common.PageResponse
 import wasichai.core.common.UnauthorizedException
 import wasichai.core.common.ValidationException
 import wasichai.core.data.RecordQuery
+import wasichai.core.data.RecordService
 import wasichai.core.identity.AuthenticatedUser
 import wasichai.core.identity.CurrentUser
 import wasichai.core.metadata.MetadataService
@@ -70,6 +71,7 @@ class BrechaService(
     private val parametrosTributarios: ParametrosTributarios,
     private val db: DatabaseClient,
     private val organizaciones: OrganizationRepository,
+    private val records: RecordService,
     transacciones: ReactiveTransactionManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -89,31 +91,55 @@ class BrechaService(
         }
         if (!catastros.configurado) throw ConflictException(NO_CONFIGURADO)
         val catastro = catastroDe(usuario)
-        val creada =
-            transaccion.executeAndAwait {
-                candados.bloquear(Candado.BRECHA, Candados.clave(usuario.organizationId, "$anio"))
-                val ahora = ahora()
-                for (activa in activas(anio)) {
-                    if (viva(activa, ahora)) throw ConflictException("Ya hay una corrida de la brecha de $anio en curso: espere a que termine")
-                    actualizar(UUID.fromString(activa.id), abandono(activa, ahora))
-                }
-                registros.create(
-                    BRECHA_CORRIDA,
-                    RegistroCorrida::class.java,
-                    mapOf(
-                        "anio" to anio,
-                        "estado" to PENDIENTE,
-                        "total_predios" to 0,
-                        "procesados" to 0,
-                        "iniciado" to ahora.toString(),
-                        "latido" to ahora.toString()
-                    )
-                )
-            }
+        val creada = crearCorrida(usuario.organizationId, anio, OrigenCorrida.MANUAL)
         val id = UUID.fromString(creada.id)
         scope.launch(ReactiveSecurityContextHolder.withAuthentication(llamante).asCoroutineContext()) { correr(id, anio, catastro) }
         return corridaDe(creada)
     }
+
+    // #203: the automatic corrida (Seguimiento's schedule picks origen and catastro, already inside asPlatform for
+    // organizacion). no permission is checked: a background job, never a request, reaches here. same candado and
+    // active check as lanzar; it runs as the platform too, since the launched coroutine starts its own context
+    suspend fun lanzarAutomatica(
+        organizacion: UUID,
+        catastro: Catastro,
+        anio: Int,
+        origen: OrigenCorrida
+    ): Corrida {
+        val creada = crearCorrida(organizacion, anio, origen)
+        val id = UUID.fromString(creada.id)
+        scope.launch { records.asPlatform(organizacion, "srtm: brecha automática") { correr(id, anio, catastro) } }
+        return corridaDe(creada)
+    }
+
+    // lanzar's and lanzarAutomatica's transaction: the candado, abandoning a dead active corrida (409 when one is
+    // still alive), and the PENDIENTE row with its origen
+    private suspend fun crearCorrida(
+        organizacion: UUID,
+        anio: Int,
+        origen: OrigenCorrida
+    ): RegistroCorrida =
+        transaccion.executeAndAwait {
+            candados.bloquear(Candado.BRECHA, Candados.clave(organizacion, "$anio"))
+            val ahora = ahora()
+            for (activa in activas(anio)) {
+                if (viva(activa, ahora)) throw ConflictException("Ya hay una corrida de la brecha de $anio en curso: espere a que termine")
+                actualizar(UUID.fromString(activa.id), abandono(activa, ahora))
+            }
+            registros.create(
+                BRECHA_CORRIDA,
+                RegistroCorrida::class.java,
+                mapOf(
+                    "anio" to anio,
+                    "estado" to PENDIENTE,
+                    "total_predios" to 0,
+                    "procesados" to 0,
+                    "iniciado" to ahora.toString(),
+                    "latido" to ahora.toString(),
+                    "origen" to origen.name
+                )
+            )
+        }
 
     suspend fun lista(anio: Int?): List<Corrida> {
         val corridas =
