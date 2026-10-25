@@ -746,9 +746,9 @@ FALLIDA. Terminada, trae los predios y el Δ impuesto por confianza (`prediosCon
 
 |`GET /{anio}/cambios?corrida&desde&marca&objeto&page&size`
 |Predios con cambios en catastro desde `desde` (AAAA-MM-DD, por omisión el 1 de enero del año), con el Δ autoavalúo
-de la última corrida TERMINADA (o de `corrida`) y `marca = SUPERA_5_UIT` cuando |Δ| pasa de 5 UIT del 1 de enero del
+de la última corrida TERMINADA (o de `corrida`) y `marca = SUPERA_5_UIT` cuando \|Δ\| pasa de 5 UIT del 1 de enero del
 año (#203). Lee `cambio_catastro` directo de su tabla, de la organización del llamante, sin pasar por
-`RecordService`: no pide un permiso propio. Página de 25 por omisión, marcados primero, luego |Δ| de mayor a menor
+`RecordService`: no pide un permiso propio. Página de 25 por omisión, marcados primero, luego \|Δ\| de mayor a menor
 (los sin corrida al final) y por código municipal.
 |200; 404 sin corrida TERMINADA del año; 422 `desde`, `marca` (solo `SUPERA_5_UIT`), `objeto` (uno de los cuatro de
 catastro), `page` o `size` inválidos, o falta la UIT del año (`faltan`).
