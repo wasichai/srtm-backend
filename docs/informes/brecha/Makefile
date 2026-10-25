@@ -16,7 +16,7 @@
 #   make humo        USUARIOS="<org>:<email> ..."                smoke test: isolation and every tablero's card
 #                                                                 (#206, task 11); METABASE_CLAVE_USUARIO is their
 #                                                                 shared password
-#   make respaldo    ENV=<archivo .env de Metabase>              backs up metabase-postgres (metabase/respaldo.sh)
+#   make respaldo    METABASE_ENV=<archivo .env de Metabase>     backs up metabase-postgres (metabase/respaldo.sh)
 #
 # FECHA defaults to today in America/Lima (herramientas.comun.hoy_lima()). SALIDA defaults to
 # $(HOME)/cortes/analitica (corte.py's own default) and can be moved with SALIDA=<carpeta base>; verificar and
@@ -144,7 +144,8 @@ humo: venv
 	@test -n "$(USUARIOS)" || { echo "falta USUARIOS=\"<org>:<email> ...\""; exit 2; }
 	$(VPY) humo.py $(foreach usuario,$(USUARIOS),--usuario "$(usuario)")
 
-# Daily backup of metabase-postgres (metabase/respaldo.sh); ENV is metabase.env on the VPS.
+# Daily backup of metabase-postgres (metabase/respaldo.sh); METABASE_ENV is metabase.env on the VPS. Not ENV:
+# that one is the shell's startup file (POSIX sh sources $ENV), and an exported ENV would leak into it.
 respaldo:
-	@test -n "$(ENV)" || { echo "falta ENV=<archivo .env de Metabase>"; exit 2; }
-	metabase/respaldo.sh "$(ENV)"
+	@test -n "$(METABASE_ENV)" || { echo "falta METABASE_ENV=<archivo .env de Metabase>"; exit 2; }
+	metabase/respaldo.sh "$(METABASE_ENV)"

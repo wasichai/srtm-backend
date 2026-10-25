@@ -100,7 +100,7 @@ Solo `metabase-postgres` guarda estado que no se puede reconstruir (tableros, us
 30 3 * * * cd /ruta/a/srtm-backend/docs/informes/brecha && metabase/respaldo.sh /srv/srtm-metabase/metabase.env
 ```
 
-(o `make respaldo ENV=/srv/srtm-metabase/metabase.env`, equivalente). Se conservan los 14 dumps más recientes
+(o `make respaldo METABASE_ENV=/srv/srtm-metabase/metabase.env`, equivalente). Se conservan los 14 dumps más recientes
 en `/srv/srtm-metabase/respaldos/`, y una copia en S3 si `METABASE_RESPALDOS_S3` está puesta en
 `metabase.env`, siempre con `--sse AES256`.
 

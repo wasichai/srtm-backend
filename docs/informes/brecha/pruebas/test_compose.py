@@ -101,6 +101,29 @@ class ScriptsDeRespaldoTests(unittest.TestCase):
         self.assertNotIn("compose up -d metabase", cuerpo)
 
 
+    def test_restaurar_espera_a_metabase_postgres(self):
+        # pg_restore right after `up -d` can find postgres still starting: --wait blocks until its healthcheck
+        # (pg_isready) passes
+        texto = (METABASE / "restaurar.sh").read_text(encoding="utf-8")
+        self.assertIn("compose up -d --wait metabase-postgres", texto)
+        self.assertLess(texto.index("up -d --wait metabase-postgres"), texto.index("compose exec -T metabase-postgres pg_restore"))
+        self.assertNotIn("compose up -d metabase-postgres\n", texto)
+
+
+class EjemploEnvTests(unittest.TestCase):
+    def test_clave_de_cifrado_de_ejemplo_no_sirve(self):
+        # a placeholder copied as is must be obviously wrong, yet long enough (>= 32) not to hide that the real
+        # one must be too; the guide says to generate it with `openssl rand -hex 32`
+        valores = dict(
+            linea.split("=", 1) for linea in EJEMPLO.read_text(encoding="utf-8").splitlines()
+            if linea and not linea.startswith("#")
+        )
+        clave = valores["MB_ENCRYPTION_SECRET_KEY"]
+        self.assertGreaterEqual(len(clave), 32)
+        self.assertIn("NO-USAR", clave)
+        self.assertIn("openssl rand -hex 32", EJEMPLO.read_text(encoding="utf-8"))
+
+
 class DockerfileTests(unittest.TestCase):
     def test_dockerfile_fija_versiones(self):
         texto = (METABASE / "Dockerfile").read_text(encoding="utf-8")

@@ -20,7 +20,8 @@ compose() { docker compose -p srtm-metabase -f "$aqui/compose.yml" --env-file "$
 
 echo "restaurar: se detiene metabase mientras se restaura metabase-postgres"
 compose stop metabase
-compose up -d metabase-postgres
+# --wait: until its healthcheck (pg_isready) passes - a pg_restore against a postgres still starting would fail
+compose up -d --wait metabase-postgres
 
 echo "restaurar: $archivo -> metabase-postgres"
 if ! compose exec -T metabase-postgres pg_restore --clean --if-exists --no-owner -U metabase -d metabase < "$archivo"; then
