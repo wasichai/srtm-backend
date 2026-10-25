@@ -485,10 +485,12 @@ class CondominioBuildTests(unittest.TestCase):
         self.assertEqual([a["valor_afecto"] for a in attrs], ["30006.00", "29997.00", "29997.00"])
         self.assertEqual(categorias(data)["condominio_100_n"], 1)
 
-    def test_different_values_are_to_review(self):
+    def test_different_values_are_distinct_predios(self):
         data = build(self.rows(["90000", "45000"], ["5", "5"]))
-        [r] = [r for r in data.reporte if r["categoria"] == "condominio_valores_distintos"]
-        self.assertEqual(r["codigo_predio"], self.PREDIO)
+        self.assertEqual(set(data.predios), {f"{self.PREDIO}-1", f"{self.PREDIO}-2"})
+        self.assertEqual([d.attributes["porcentaje_condominio"] for d in data.declaraciones], ["100.00", "100.00"])
+        self.assertNotIn("condominio_valores_distintos", categorias(data))
+        self.assertEqual(categorias(data)["codigo_compartido"], 1)
 
     def test_a_propietario_unico_with_others_is_in_conflict(self):
         data = build(self.rows(["90000", "90000"], ["1", "2"]))
@@ -500,6 +502,92 @@ class CondominioBuildTests(unittest.TestCase):
         self.assertEqual(data.declaraciones[0].attributes["condicion_propiedad"], "PROPIETARIO UNICO")
         self.assertEqual(data.declaraciones[0].attributes["porcentaje_condominio"], "100.00")
         self.assertEqual(categorias(data)["condomino_solo"], 1)
+
+
+class CodigoCompartidoTests(unittest.TestCase):
+    """A code of the SAT that groups distinct predios (#207): one srtm predio per distinct predio, at 100 %."""
+    P = "000000009-0001-0001"
+
+    def test_identidad_is_the_address_the_area_and_the_value(self):
+        self.assertEqual(ipi.identidad(padron(direccion_del_predio_completa=" jr  lima 100 ", area_terreno="120",
+                                              valor_predio="50000")),
+                         ("JR LIMA 100", Decimal("120.00"), Decimal("50000.00")))
+        # without the full address: the vía, the número, the manzana and the lote
+        self.assertEqual(ipi.identidad(padron(direccion_del_predio_completa=None))[0], "LAS FLORES 120 MZ C LT 17")
+
+    def test_a_code_shared_by_two_distinct_predios_gives_two_predios_at_100(self):
+        P = self.P
+        data = build([padron(codigo_predio=P, codigo_contribuyente="900001", direccion_del_predio_completa="JR LIMA 100", area_terreno="120", valor_predio="50000"),
+                      padron(codigo_predio=P, codigo_contribuyente="900002", nro_documento="40000002", direccion_del_predio_completa="JR LIMA 200", area_terreno="300", valor_predio="90000")])
+        self.assertEqual(set(data.predios), {f"{P}-1", f"{P}-2"})
+        self.assertEqual({a["codigo_origen"] for a in data.predios.values()}, {P})
+        self.assertEqual([(d.codigo_predio, d.attributes["porcentaje_condominio"]) for d in data.declaraciones], [(f"{P}-1", "100.00"), (f"{P}-2", "100.00")])
+        self.assertEqual([d.attributes["valor_condominio"] for d in data.declaraciones], ["50000.00", "90000.00"])
+        [r] = [r for r in data.reporte if r["categoria"] == "codigo_compartido"]
+        self.assertEqual((r["codigo_predio"], r["codigo_contribuyente"]), (P, None))
+        self.assertEqual(r["detalle"], f"2 DJ en 2 predios distintos: {P}-1 a {P}-2")
+        self.assertEqual(categorias(data)["condominio_100_n"], 0)
+
+    def test_a_real_condominio_stays_at_100_n(self):
+        P = self.P
+        data = build([padron(codigo_predio=P), padron(codigo_predio=P, codigo_contribuyente="900002", nro_documento="40000002")])
+        self.assertEqual(list(data.predios), [P])
+        self.assertEqual(data.predios[P]["codigo_origen"], P)
+        self.assertEqual([d.attributes["porcentaje_condominio"] for d in data.declaraciones], ["50.00", "50.00"])
+        self.assertEqual(categorias(data)["condominio_100_n"], 1)
+        self.assertNotIn("codigo_compartido", categorias(data))
+
+    def test_a_condominio_and_another_predio_under_one_code(self):
+        P = self.P
+        data = build([padron(codigo_predio=P),
+                      padron(codigo_predio=P, codigo_contribuyente="900002", nro_documento="40000002"),
+                      padron(codigo_predio=P, codigo_contribuyente="900003", nro_documento="40000003", direccion_del_predio_completa="JR LIMA 300")])
+        self.assertEqual([(d.codigo_predio, d.codigo_contribuyente, d.attributes["porcentaje_condominio"], d.attributes["condicion_propiedad"])
+                          for d in data.declaraciones],
+                         [(f"{P}-1", "900001", "50.00", "CONDOMINO"), (f"{P}-1", "900002", "50.00", "CONDOMINO"),
+                          (f"{P}-2", "900003", "100.00", "PROPIETARIO UNICO")])
+        [r] = [r for r in data.reporte if r["categoria"] == "codigo_compartido"]
+        self.assertEqual(r["detalle"], f"3 DJ en 2 predios distintos: {P}-1 a {P}-2")
+
+    def test_the_numbering_follows_the_lowest_contribuyente_code_numeric_first(self):
+        P = self.P
+        data = build([padron(codigo_predio=P, codigo_contribuyente="100000"),
+                      padron(codigo_predio=P, codigo_contribuyente="99999", nro_documento="40000002", direccion_del_predio_completa="JR LIMA 200")])
+        self.assertEqual({d.codigo_contribuyente: d.codigo_predio for d in data.declaraciones}, {"99999": f"{P}-1", "100000": f"{P}-2"})
+
+    def test_the_niveles_follow_their_derived_predio(self):
+        P = self.P
+        data = build([padron(codigo_predio=P),
+                      padron(codigo_predio=P, codigo_contribuyente="900002", nro_documento="40000002", direccion_del_predio_completa="JR LIMA 200")],
+                     [construccion(codigo_predio=P, codigo_contribuyente="900002")])
+        [n] = data.niveles
+        self.assertEqual((n.codigo_predio, n.codigo_contribuyente), (f"{P}-2", "900002"))
+
+    def test_a_derived_code_that_is_another_code_of_the_padron_is_rejected(self):
+        P = self.P
+        data = build([padron(codigo_predio=P),
+                      padron(codigo_predio=P, codigo_contribuyente="900002", nro_documento="40000002", direccion_del_predio_completa="JR LIMA 200"),
+                      padron(codigo_predio=f"{P}-1", codigo_contribuyente="900003", nro_documento="40000003")],
+                     [construccion(codigo_predio=P)])
+        [r] = [r for r in data.reporte if r["categoria"] == "codigo_derivado_repetido"]
+        self.assertEqual((r["codigo_predio"], r["fila"]), (P, 2))
+        self.assertIn(f"{P}-1", r["detalle"])
+        # P-1 is the padrón's own predio; the group of 900001 is not loaded, nor its nivel
+        self.assertEqual(set(data.predios), {f"{P}-1", f"{P}-2"})
+        self.assertEqual(data.predios[f"{P}-1"]["codigo_origen"], f"{P}-1")
+        self.assertEqual([(d.codigo_predio, d.codigo_contribuyente) for d in data.declaraciones], [(f"{P}-2", "900002"), (f"{P}-1", "900003")])
+        self.assertEqual(data.niveles, [])
+
+    def test_the_shared_code_report_names_no_person(self):
+        P = self.P
+        data = build([padron(codigo_predio=P),
+                      padron(codigo_predio=P, codigo_contribuyente="900002", nro_documento="40000002", nombre_completo="PEREZ ROJAS LUIS",
+                             apellido_paterno="PEREZ", apellido_materno="ROJAS", nombres="LUIS", direccion_del_predio_completa="JR LIMA 200")])
+        rows = [r for r in data.reporte if r["categoria"] == "codigo_compartido"]
+        self.assertEqual(len(rows), 1)
+        texto = json.dumps(rows)
+        for dato in ("40000001", "40000002", "QUISPE", "MAMANI", "ANA", "PEREZ", "ROJAS", "LUIS", "900001", "900002"):
+            self.assertNotIn(dato, texto)
 
 
 class BuildNivelesTests(unittest.TestCase):
@@ -627,6 +715,7 @@ def write_xlsx(path, padron_rows, construcciones_rows):
         z.writestr("xl/worksheets/sheet2.xml", _sheet_xml(CONSTRUCCIONES, construcciones_rows))
 
 
+SHARED = "000000009-0001-0001"
 SAMPLE_PADRON = [
     padron(),
     # a condominio of two, the second titular a persona jurídica
@@ -637,6 +726,9 @@ SAMPLE_PADRON = [
     padron(codigo_predio="000000003-0001-0001", codigo_contribuyente="900003", nro_documento="4000003",
            codigo_de_via="502", tipo_de_via="0", nombre_de_la_via="SECTOR NORTE", codigo_uso="20",
            area_construida="0", valor_area_construida="0", valor_predio="42720"),
+    # a code of the SAT shared by two distinct predios (#207)
+    padron(codigo_predio=SHARED, direccion_del_predio_completa="JR LIMA 100"),
+    padron(codigo_predio=SHARED, codigo_contribuyente="900002", direccion_del_predio_completa="JR LIMA 200", area_terreno="300"),
 ]
 SAMPLE_CONSTRUCCIONES = [
     construccion(),
@@ -671,8 +763,8 @@ class CliTests(unittest.TestCase):
         code, out, err = self.run_cli(["--dry-run"])
         self.assertEqual(code, 0, msg=err)
         self.assertEqual(self.core.requests, [])
-        for line in ("vías: 2", "unidades urbanas: 1", "contribuyentes: 3", "predios: 3", "declaraciones: 4", "niveles: 3",
-                     "rechazadas: 1"):
+        for line in ("vías: 2", "unidades urbanas: 1", "contribuyentes: 3", "predios: 5", "declaraciones: 6", "niveles: 3",
+                     "rechazadas: 1", "códigos compartidos: 1 (2 predios, 2 DJ)"):
             self.assertIn(line, out)
         with open(self.report, encoding="utf-8") as f:
             rows = list(csv.DictReader(f))
@@ -686,7 +778,7 @@ class CliTests(unittest.TestCase):
         code, out, err = self.run_cli()
         self.assertEqual(code, 0, msg=err)
         self.assertEqual([self.count(n) for n in ("via", "unidad_urbana", "contribuyente", "predio", "declaracion_predial", "nivel_construccion")],
-                         [2, 1, 3, 3, 4, 3])
+                         [2, 1, 3, 5, 6, 3])
         by_id = {name: {r["id"]: r["attributes"] for r in self.core.records[name]} for name in ("predio", "contribuyente", "declaracion_predial")}
         for nivel in self.core.records["nivel_construccion"]:
             dj = by_id["declaracion_predial"][nivel["attributes"]["declaracion"]]
@@ -722,6 +814,24 @@ class CliTests(unittest.TestCase):
         self.core.records["nivel_construccion"].pop()
         self.assertEqual(self.run_cli()[0], 0)
         self.assertEqual(self.count("nivel_construccion"), 3)
+
+    def test_a_shared_code_core_already_has_is_skipped_and_reported(self):
+        # dev's Ica holds the bare code with its DJ at 100/n: a reload must not put P-1 and P-2 next to it
+        write_xlsx(self.excel, SAMPLE_PADRON, SAMPLE_CONSTRUCCIONES + [construccion(codigo_predio=SHARED, codigo_contribuyente="900002")])
+        self.core.add_record("predio", {"codigo": SHARED})
+        code, out, err = self.run_cli()
+        self.assertEqual(code, 0, msg=err)
+        posts = [json.dumps(body) for method, path, _, body in self.core.requests if method == "POST"]
+        self.assertFalse(any(f"{SHARED}-" in body for body in posts))
+        self.assertEqual(sorted(r["attributes"]["codigo"] for r in self.core.records["predio"]),
+                         ["000000001-0001-0001", "000000002-0001-0001", "000000003-0001-0001", SHARED])
+        shared_id = next(r["id"] for r in self.core.records["predio"] if r["attributes"]["codigo"] == SHARED)
+        self.assertEqual(self.count("declaracion_predial"), 4)
+        self.assertNotIn(shared_id, {r["attributes"]["predio"] for r in self.core.records["declaracion_predial"]})
+        self.assertEqual(self.count("nivel_construccion"), 3)
+        with open(self.report, encoding="utf-8") as f:
+            [row] = [r for r in csv.DictReader(f) if r["categoria"] == "codigo_compartido_en_core"]
+        self.assertEqual((row["codigo_predio"], row["codigo_contribuyente"]), (SHARED, ""))
 
     def test_a_document_core_has_under_another_code_is_sent_without_it(self):
         self.core.add_record("contribuyente", {"codigo": "800000", "numero_documento": "40000001", "tipo_persona": "NATURAL",
