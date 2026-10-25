@@ -9,7 +9,7 @@ from decimal import Decimal
 
 import armar_duckdb
 from herramientas import base
-from herramientas.sinteticos import minimos
+from herramientas.sinteticos import C1, C3, D2, F3, P2, minimos
 from pruebas.test_corte import ORG, ConCorte
 
 PARAMETROS = "5500, 0.2, 0.6, 1.0, 15, 60, 0.6"
@@ -125,6 +125,53 @@ class VistasTests(ConCorte, unittest.TestCase):
         )
         for fila in filas:
             self.assertRegex(fila[1], r"^[0-9a-f]{64}$")
+
+    @staticmethod
+    def _p2_compartido(*valores_afecto):
+        """minimos() with P2 declared by three vigentes DJ: D2 (C2), D5 (C3) and D6 (C1), none with origin
+        values, carrying `valores_afecto` in that order; BP2 puts 2300.00 of impuesto_catastro on P2."""
+        s = minimos()
+        declaraciones = s.srtm["declaracion_predial"]
+        d2 = next(d for d in declaraciones if d["id"] == D2)
+        d2["attributes"]["valor_afecto"] = valores_afecto[0]
+        nuevas = (("D5", C3, "VIGENTE", valores_afecto[1]), ("D6", C1, "", valores_afecto[2]))
+        for id_, contribuyente, estado, valor in nuevas:
+            atributos = {"predio": P2, "contribuyente": contribuyente, "anio": 2026, "estado": estado}
+            declaraciones.append({"id": id_, "attributes": {**atributos, "valor_afecto": valor}})
+        return s
+
+    def _motor_catastro(self, con):
+        return dict(con.execute("SELECT contribuyente, motor_catastro FROM v_predial_contribuyente").fetchall())
+
+    def test_motor_catastro_reparte_por_valor_afecto(self):
+        con = self._base(self._p2_compartido(400000, 100000, 100000))
+        # 2300 in 4:1:1 is 1533.33 + 383.33 + 383.33 = 2299.99: D6, the greatest id, takes the céntimo left over
+        self.assertEqual(
+            self._motor_catastro(con),
+            {"C1": Decimal("300.00") + Decimal("383.34"), "C2": Decimal("1533.33"), "C3": Decimal("383.33")},
+        )
+        total = con.execute("SELECT motor_catastro FROM v_predial_tres_columnas").fetchone()[0]
+        self.assertEqual(total, Decimal("2600.00"))
+
+    def test_motor_catastro_en_partes_iguales_sin_valor_afecto(self):
+        con = self._base(self._p2_compartido(None, 0, None))
+        # no weight at all: 2300 / 3 is 766.67 twice, and D6 takes 766.66 so the parts add up to 2300.00
+        self.assertEqual(
+            self._motor_catastro(con),
+            {"C1": Decimal("300.00") + Decimal("766.66"), "C2": Decimal("766.67"), "C3": Decimal("766.67")},
+        )
+        total = con.execute("SELECT motor_catastro FROM v_predial_tres_columnas").fetchone()[0]
+        self.assertEqual(total, Decimal("2600.00"))
+
+    def test_clase_sin_clasificacion(self):
+        s = minimos()
+        # F3 gains constructions, none of them classified (one NULL, one blank)
+        for id_, clasificacion in (("CC7", None), ("CC8", "  ")):
+            atributos = {"predio": F3, "codigo_municipal": "0101003", "piso": 1, "seccion": id_, "area_construida": 20}
+            s.catastro["construccion"].append({"id": id_, "attributes": {**atributos, "clasificacion": clasificacion}})
+        con = self._base(s)
+        clase = con.execute("SELECT clase FROM v_clase_predominante WHERE codigo_municipal = '0101003'").fetchone()
+        self.assertEqual(clase, ("SIN CLASIFICACION",))
 
     def test_predial_tres_columnas(self):
         con = self._base()
