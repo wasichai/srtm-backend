@@ -6,6 +6,7 @@ catastro-backend's dedicated endpoints (contratos.md §1-§3). Test helper only.
 """
 
 import base64
+import itertools
 import json
 import random
 import re
@@ -41,6 +42,28 @@ def _indice_de(cursor):
 
 def _cursor(indice):
     return base64.b64encode(str(indice).encode("ascii")).decode("ascii")
+
+
+def _barajadas(filas, semilla):
+    # a copy of `filas` in another order, fixed by the seed; None keeps the given order
+    filas = list(filas)
+    if semilla is not None:
+        random.Random(semilla).shuffle(filas)
+    return filas
+
+
+def _barajadas_por_en(cambios, semilla):
+    """cambios keep contract §3's oldest-first order: only the rows sharing one `en` are shuffled among
+    themselves (the given list is already oldest first, so equal `en` are consecutive)."""
+    if semilla is None:
+        return list(cambios)
+    aleatorio = random.Random(semilla)
+    resultado = []
+    for _, grupo in itertools.groupby(cambios, key=lambda cambio: cambio.get("en")):
+        grupo = list(grupo)
+        aleatorio.shuffle(grupo)
+        resultado.extend(grupo)
+    return resultado
 
 
 class _ErrorParametro(Exception):
@@ -178,12 +201,7 @@ class _Registros:
     rely on the server's order (it ignores `sort`), only on the cursor it follows."""
 
     def __init__(self, tablas, barajar=None):
-        self._tablas = {}
-        for nombre, filas in tablas.items():
-            filas = list(filas)
-            if barajar is not None:
-                random.Random(barajar).shuffle(filas)
-            self._tablas[nombre] = filas
+        self._tablas = {nombre: _barajadas(filas, barajar) for nombre, filas in tablas.items()}
 
     def responder(self, metodo, ruta, query):
         coincide = _RUTA_REGISTROS.match(ruta)
@@ -228,7 +246,10 @@ class CatastroFalso(ServidorFalso):
     """catastro-backend's reads for the corte: the generic record API (like SrtmFalso, for predio_catastral,
     construccion, obra_complementaria) plus the three dedicated endpoints of contratos.md §1-§3. `sin_titulares`
     and `sin_cambios` simulate an older catastro that lacks those routes (404, contexto.md's tolerance ruling);
-    `sin_llaves_nuevas` drops §1's seven new keys from every valuaciones item (an older engine)."""
+    `sin_llaves_nuevas` drops §1's seven new keys from every valuaciones item (an older engine); `tamano_servido`
+    caps the `size` valuaciones/titulares serve, whatever was asked (srtm's ClienteCatastro.kt: catastro "may cap
+    the one asked"). `barajar` shuffles the record objects, valuaciones and titulares, and cambios only among rows
+    sharing one `en` (oldest first is part of §3's contract)."""
 
     def __init__(
         self,
@@ -241,14 +262,16 @@ class CatastroFalso(ServidorFalso):
         sin_titulares=False,
         sin_cambios=False,
         sin_llaves_nuevas=False,
+        tamano_servido=None,
         barajar=None,
         puerto=0,
     ):
         super().__init__(puerto)
         self._registros = _Registros(registros, barajar=barajar)
-        self._valuaciones = list(valuaciones)
-        self._titulares = list(titulares)
-        self._cambios = list(cambios)
+        self._valuaciones = _barajadas(valuaciones, barajar)
+        self._titulares = _barajadas(titulares, barajar)
+        self._cambios = _barajadas_por_en(cambios, barajar)
+        self.tamano_servido = tamano_servido
         self.version = version
         self.region = region
         self.sin_titulares = sin_titulares
@@ -265,10 +288,13 @@ class CatastroFalso(ServidorFalso):
         respuesta = self._registros.responder(metodo, ruta, query)
         return respuesta if respuesta is not None else (404, {"detail": "ruta no encontrada"})
 
+    def _pagina_y_tamano_servido(self, query):
+        page, size = _pagina_y_tamano(_parsear_query(query), tamano_por_omision=500)
+        return page, size if self.tamano_servido is None else min(size, self.tamano_servido)
+
     def _valuaciones_pagina(self, query):
-        params = _parsear_query(query)
         try:
-            page, size = _pagina_y_tamano(params, tamano_por_omision=500)
+            page, size = self._pagina_y_tamano_servido(query)
         except _ErrorParametro as e:
             return 422, {"detail": str(e)}
         items = self._valuaciones[page * size : (page + 1) * size]
@@ -286,9 +312,8 @@ class CatastroFalso(ServidorFalso):
     def _titulares_pagina(self, query):
         if self.sin_titulares:
             return 404, {"detail": "titulares no disponible"}
-        params = _parsear_query(query)
         try:
-            page, size = _pagina_y_tamano(params, tamano_por_omision=500)
+            page, size = self._pagina_y_tamano_servido(query)
         except _ErrorParametro as e:
             return 422, {"detail": str(e)}
         items = self._titulares[page * size : (page + 1) * size]

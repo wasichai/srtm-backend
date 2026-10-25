@@ -745,7 +745,16 @@ def datos(semilla, contribuyentes=40):
             "campos": [],
             "en": f"{_ANIO}-10-20T08:00:00Z",
             "entrega": None,
-        }
+        },
+        # the same `en`: CatastroFalso's barajar may swap these two, so catastro_cambio's own sort is exercised
+        {
+            "codigoMunicipal": predios[1]["attributes"]["codigo"],
+            "objeto": "predio_catastral",
+            "operacion": "UPDATE",
+            "campos": ["uso"],
+            "en": f"{_ANIO}-10-20T08:00:00Z",
+            "entrega": None,
+        },
     ]
 
     return Sinteticos(

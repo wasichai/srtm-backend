@@ -10,6 +10,7 @@ exists whole or not at all. Exit codes: 0 ok, 2 bad usage (organization, fecha, 
 """
 
 import argparse
+import math
 import os
 import shutil
 import sys
@@ -22,7 +23,7 @@ if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
 
 from herramientas import comun, manifiesto, parquet  # noqa: E402
 from herramientas.catastro import extraer_catastro  # noqa: E402
-from herramientas.cliente import Cliente, ErrorApi  # noqa: E402
+from herramientas.cliente import TIMEOUT, Cliente, ErrorApi  # noqa: E402
 from herramientas.seudonimo import clave_desde_hex  # noqa: E402
 from herramientas.srtm import extraer_srtm  # noqa: E402
 from herramientas.tablas import COLUMNAS  # noqa: E402
@@ -48,13 +49,39 @@ def _argumentos():
 
 def _leer_secretos(ruta):
     try:
-        return comun.leer_secretos(ruta)
+        secretos = comun.leer_secretos(ruta)
     except OSError as e:
         raise comun.ErrorCorte(f"no se puede leer el archivo de secretos {ruta}: {e.strerror}") from None
+    for prefijo in ("SRTM", "CATASTRO"):
+        _timeout(secretos, prefijo)  # a bad value is a usage error (exit 2), before anything is read
+    return secretos
+
+
+def _timeout(secretos, prefijo):
+    """The optional <PREFIJO>_TIMEOUT of the secrets file, in seconds (srtm lets each organization override
+    catastro's timeout too); cliente.TIMEOUT when absent or blank."""
+    clave = f"{prefijo}_TIMEOUT"
+    texto = secretos.get(clave)
+    if not texto:
+        return TIMEOUT
+    try:
+        segundos = float(texto)
+    except ValueError:
+        segundos = math.nan
+    if not math.isfinite(segundos) or segundos <= 0:
+        raise comun.ErrorCorte(
+            f"{clave} inválido en el archivo de secretos: debe ser un número de segundos mayor que 0"
+        )
+    return segundos
 
 
 def _cliente(secretos, prefijo):
-    return Cliente(secretos[f"{prefijo}_URL"], secretos[f"{prefijo}_CLIENT_ID"], secretos[f"{prefijo}_CLIENT_SECRET"])
+    return Cliente(
+        secretos[f"{prefijo}_URL"],
+        secretos[f"{prefijo}_CLIENT_ID"],
+        secretos[f"{prefijo}_CLIENT_SECRET"],
+        timeout=_timeout(secretos, prefijo),
+    )
 
 
 def _backends(secretos):

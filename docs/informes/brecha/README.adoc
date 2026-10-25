@@ -129,6 +129,10 @@ CATASTRO_CLIENT_SECRET=<clientSecret de la cuenta srtm en catastro>
 CLAVE_SEUDONIMO=<64 caracteres hexadecimales, al menos 32 bytes>
 ----
 
+Dos claves son opcionales: `SRTM_TIMEOUT` y `CATASTRO_TIMEOUT`, el tiempo máximo de cada petición en segundos
+(por omisión 60), para una organización cuyo catastro tarda más en valuar una página, como srtm ya permite
+configurar por organización. Un valor que no sea un número mayor que 0 detiene el corte antes de leer nada.
+
 La clave se genera una sola vez por organización y se guarda también en el gestor de claves de la organización,
 no solo en este archivo:
 

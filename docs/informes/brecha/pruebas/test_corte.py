@@ -72,7 +72,7 @@ class ConCorte:
         self.addCleanup(servidor_catastro.cerrar)
         return servidor_srtm, servidor_catastro
 
-    def _secretos(self, servidor_srtm, servidor_catastro, modo=0o600):
+    def _secretos(self, servidor_srtm, servidor_catastro, modo=0o600, extra=""):
         ruta = self.tmp / "secretos.env"
         ruta.write_text(
             f"SRTM_URL={servidor_srtm.url}\n"
@@ -81,7 +81,7 @@ class ConCorte:
             f"CATASTRO_URL={servidor_catastro.url}\n"
             f"CATASTRO_CLIENT_ID={servidor_catastro.CLIENT_ID}\n"
             f"CATASTRO_CLIENT_SECRET={servidor_catastro.CLIENT_SECRET}\n"
-            f"CLAVE_SEUDONIMO={CLAVE.hex()}\n",
+            f"CLAVE_SEUDONIMO={CLAVE.hex()}\n" + extra,
             encoding="utf-8",
         )
         ruta.chmod(modo)
@@ -376,6 +376,25 @@ class CorteTests(ConCorte, unittest.TestCase):
         with self.assertRaises(ErrorCorte) as error:
             manifiesto.verificar_corte(carpeta)
         self.assertIn("extra.parquet", str(error.exception))
+
+    def test_timeout_del_archivo_de_secretos(self):
+        servidores = self._falsos(minimos())
+        secretos = comun.leer_secretos(self._secretos(*servidores, extra="SRTM_TIMEOUT=5\nCATASTRO_TIMEOUT=120.5\n"))
+        self.assertEqual(corte._cliente(secretos, "SRTM").timeout, 5.0)
+        self.assertEqual(corte._cliente(secretos, "CATASTRO").timeout, 120.5)
+        sin_timeout = comun.leer_secretos(self._secretos(*servidores))
+        self.assertEqual(corte._cliente(sin_timeout, "SRTM").timeout, 60)
+
+    def test_timeout_invalido_sale_con_2(self):
+        servidores = self._falsos(minimos())
+        salida = self.tmp / "cortes"
+        for valor in ("abc", "0", "-3"):
+            with self.subTest(valor=valor):
+                secretos = self._secretos(*servidores, extra=f"CATASTRO_TIMEOUT={valor}\n")
+                codigo, _, error = self._correr(secretos, salida)
+                self.assertEqual(codigo, 2)
+                self.assertIn("CATASTRO_TIMEOUT", error)
+                self.assertFalse((salida / ORG / FECHA).exists())
 
     def test_version_de_backends_del_entorno(self):
         os.environ["VERSION_SRTM"] = "2.0.0"

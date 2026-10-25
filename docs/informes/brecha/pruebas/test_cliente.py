@@ -15,6 +15,35 @@ def _cliente(servidor, client_secret=None):
     return Cliente(servidor.url, servidor.CLIENT_ID, client_secret or servidor.CLIENT_SECRET)
 
 
+class _ValuacionesSinTotal(CatastroFalso):
+    """A catastro whose valuaciones pages carry no `total`: only a short page can end the pass."""
+
+    def manejar(self, metodo, ruta, query, cuerpo):
+        estado, datos = super().manejar(metodo, ruta, query, cuerpo)
+        if ruta == "/api/catastro/valuaciones" and estado == 200:
+            datos.pop("total")
+        return estado, datos
+
+
+class _ValuacionesQueSeCortan(CatastroFalso):
+    """A catastro that answers an empty page 1 while `total` still promises more items."""
+
+    def manejar(self, metodo, ruta, query, cuerpo):
+        estado, datos = super().manejar(metodo, ruta, query, cuerpo)
+        if ruta == "/api/catastro/valuaciones" and estado == 200 and datos["page"] >= 1:
+            datos["items"] = []
+        return estado, datos
+
+
+class _FeedAtascado(CatastroFalso):
+    """A catastro whose cambios feed says hayMas with a cursor that never moves."""
+
+    def manejar(self, metodo, ruta, query, cuerpo):
+        if ruta == "/api/catastro/cambios":
+            return 200, {"items": [{"codigoMunicipal": "C0001"}], "cursor": "fijo", "hayMas": True}
+        return super().manejar(metodo, ruta, query, cuerpo)
+
+
 class RegistrosTests(unittest.TestCase):
     def test_registros_sigue_el_cursor(self):
         predios = [_predio(i) for i in range(450)]
@@ -101,6 +130,40 @@ class PaginasTests(unittest.TestCase):
         self.assertEqual(cliente.ultima_pagina.get("version"), "valuacion-v3")
         self.assertEqual(cliente.ultima_pagina.get("region"), "COSTA")
 
+    def test_paginas_con_size_recortado_por_el_servidor(self):
+        # srtm's ClienteCatastro.kt: "the size catastro served (it may cap the one asked)"
+        valuaciones = [{"codigoMunicipal": f"V{i:04d}"} for i in range(1200)]
+        servidor = CatastroFalso({}, valuaciones, [], [], tamano_servido=200)
+        try:
+            items = list(_cliente(servidor).paginas("/api/catastro/valuaciones", 500, anio=2026))
+            peticiones = [p for p in servidor.peticiones if p[0] == "GET"]
+        finally:
+            servidor.cerrar()
+        self.assertEqual(len(items), 1200)
+        self.assertEqual(len({item["codigoMunicipal"] for item in items}), 1200)
+        self.assertEqual(len(peticiones), 6)
+
+    def test_paginas_vacia_antes_del_total_es_error(self):
+        valuaciones = [{"codigoMunicipal": f"V{i:04d}"} for i in range(1200)]
+        servidor = _ValuacionesQueSeCortan({}, valuaciones, [], [])
+        try:
+            with self.assertRaises(ErrorApi) as contexto:
+                list(_cliente(servidor).paginas("/api/catastro/valuaciones", 500, anio=2026))
+        finally:
+            servidor.cerrar()
+        self.assertIn("500 de 1200", str(contexto.exception))
+
+    def test_paginas_sin_total_para_en_la_pagina_corta(self):
+        valuaciones = [{"codigoMunicipal": f"V{i:04d}"} for i in range(1001)]
+        servidor = _ValuacionesSinTotal({}, valuaciones, [], [])
+        try:
+            items = list(_cliente(servidor).paginas("/api/catastro/valuaciones", 500, anio=2026))
+            peticiones = [p for p in servidor.peticiones if p[0] == "GET"]
+        finally:
+            servidor.cerrar()
+        self.assertEqual(len(items), 1001)
+        self.assertEqual(len(peticiones), 3)
+
     def test_paginas_con_size_fuera_de_rango_es_422(self):
         # contratos.md §2: titulares/valuaciones paginan con size 1..500, con los mismos errores (422)
         servidor = CatastroFalso({}, [], [], [])
@@ -126,6 +189,17 @@ class FeedTests(unittest.TestCase):
         self.assertNotIn("desde=", peticiones[0][1])
         self.assertTrue(all("desde=" in ruta for _, ruta, _ in peticiones[1:]))
 
+    def test_feed_con_cursor_que_no_avanza_es_error(self):
+        servidor = _FeedAtascado({}, [], [], [])
+        try:
+            with self.assertRaises(ErrorApi) as contexto:
+                list(_cliente(servidor).feed("/api/catastro/cambios", 200))
+            peticiones = [p for p in servidor.peticiones if p[0] == "GET"]
+        finally:
+            servidor.cerrar()
+        self.assertIn("cursor", str(contexto.exception))
+        self.assertEqual(len(peticiones), 2)
+
     def test_feed_con_desde_vacio_es_422(self):
         # contratos.md §3: un desde vacío no es "desde el principio", es un cursor inválido
         servidor = CatastroFalso({}, [], [], [])
@@ -145,6 +219,37 @@ class FeedTests(unittest.TestCase):
         finally:
             servidor.cerrar()
         self.assertEqual(contexto.exception.estado, 422)
+
+
+class BarajarTests(unittest.TestCase):
+    """`barajar` reorders what the corte must sort itself (task 5's two-cortes test relies on it)."""
+
+    def _servidor(self, barajar):
+        valuaciones = [{"codigoMunicipal": f"V{i:04d}"} for i in range(50)]
+        titulares = [{"codigoMunicipal": f"T{i:04d}"} for i in range(50)]
+        # equal `en` in pairs: only rows within a pair may move (cambios are oldest first by contract §3)
+        cambios = [{"codigoMunicipal": f"C{i:04d}", "en": f"2026-10-{10 + i // 2:02d}T00:00:00Z"} for i in range(20)]
+        return CatastroFalso({}, valuaciones, titulares, cambios, barajar=barajar)
+
+    def _leer(self, barajar):
+        servidor = self._servidor(barajar)
+        try:
+            cliente = _cliente(servidor)
+            return (
+                list(cliente.paginas("/api/catastro/valuaciones", 500, anio=2026)),
+                list(cliente.paginas("/api/catastro/titulares", 500)),
+                list(cliente.feed("/api/catastro/cambios", 200)),
+            )
+        finally:
+            servidor.cerrar()
+
+    def test_barajar_reordena_valuaciones_titulares_y_cambios_de_igual_en(self):
+        en_orden, barajado = self._leer(None), self._leer(3)
+        for original, otro in zip(en_orden, barajado):
+            self.assertNotEqual(original, otro)
+            self.assertCountEqual(original, otro)
+        cambios = barajado[2]
+        self.assertEqual([c["en"] for c in cambios], sorted(c["en"] for c in cambios))
 
 
 class GetTests(unittest.TestCase):
