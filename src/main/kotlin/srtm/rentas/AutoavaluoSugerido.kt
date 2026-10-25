@@ -5,7 +5,8 @@ import srtm.brecha.InsumosValuacion
 import srtm.brecha.ObraValuacion
 import java.math.BigDecimal
 
-// a nivel with the clasificación an external padrón brought (PADRON_EXTERNO_NIVEL), which the dto does not carry
+// a nivel with its clasificación (PADRON_EXTERNO_NIVEL): read from the stored record, as before #241 the dto did not
+// carry it (NivelConstruccion.clasificacion has it now)
 data class NivelDeValuacion(
     val nivel: NivelConstruccion,
     val clasificacion: String? = null
