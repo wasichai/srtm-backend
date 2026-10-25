@@ -80,6 +80,16 @@ class DerivadosTest {
     }
 
     @Test
+    fun `catastro's PREDIO_RUSTICO keeps the declared autoavaluo, marked to review`() {
+        val antes = Declaracion(valorAutoavaluo = BigDecimal("12800.00"))
+        val v = valuacion(motivo = "PREDIO_RUSTICO")
+        val d = Derivados.aplicar(antes, totales(), Derivados.autoavaluo(v))
+        assertEquals(BigDecimal("12800.00"), d.valorAutoavaluo)
+        assertEquals(true, d.autoavaluoPorRevisar)
+        assertEquals("PREDIO_RUSTICO", d.autoavaluoMotivo)
+    }
+
+    @Test
     fun `catastro not answering is a mark that says so`() {
         assertEquals(Autoavaluo.PorRevisar("El catastro no respondió: catastro-backend respondió 500"), Derivados.noResponde("catastro-backend respondió 500"))
     }

@@ -170,6 +170,18 @@ object Brecha {
             else -> Categoria.COINCIDE
         }
 
+    // #209: catastro has no rústico aranceles (per hectárea) yet, so any value it gives a rústico predio is the urban
+    // engine's, not a real one. its terreno, construcción, obras and autoavalúo are nulled so the row reads as SIN_VALOR:
+    // its own motivo if it has one (a ficha without tipo_predio that catastro still valued), else PREDIO_RUSTICO. applies
+    // before conObrasDeLaDj and valuados (medir), so an OMISO crossed to a rústico predio gets no estimate either
+    fun sinValorSiRustico(
+        item: ValuacionCatastral,
+        predio: Predio?
+    ): ValuacionCatastral {
+        if (predio?.tipoPredio != "PREDIO RUSTICO") return item
+        return item.copy(autoavaluo = null, terreno = null, construccion = null, obras = null, motivo = item.motivo ?: PREDIO_RUSTICO)
+    }
+
     // `total` in parts proportional to `pesos`, to the cent (half up); the last one takes what rounding leaves, so they
     // add up to total exactly. all pesos zero: equal parts
     fun repartir(
@@ -459,14 +471,18 @@ object Brecha {
         val vigentes = delAnio.filter(::declaracionVigente)
         val vigentesPorPredio = vigentes.filter { it.predio != null }.groupBy { it.predio!! }
         val todasPorPredio = delAnio.filter { it.predio != null }.groupBy { it.predio!! }
-        // the catastro side of each crossed pair, before anything is computed with it. sumadas: what conObrasDeLaDj added
+        // the catastro side of each crossed pair, before anything is computed with it. sumadas: what conObrasDeLaDj added.
+        // rusticos: #209's pairs sinValorSiRustico nulled
         val sumadas = IdentityHashMap<ValuacionCatastral, BigDecimal>()
+        var rusticos = 0
         val pares =
             cruzar(items, padron.predios, vigentesPorPredio.keys)
                 .map { (item, predio) ->
+                    if (predio?.tipoPredio == "PREDIO RUSTICO") rusticos++
+                    val sinRustico = sinValorSiRustico(item, predio)
                     val obras = predio?.id?.let(vigentesPorPredio::get)?.let { obrasDeLaDj(it, padron.obrasDelPadron) }
-                    val conObras = conObrasDeLaDj(item, obras)
-                    if (conObras !== item) sumadas[conObras] = obras
+                    val conObras = conObrasDeLaDj(sinRustico, obras)
+                    if (conObras !== sinRustico) sumadas[conObras] = obras
                     conObras to predio
                 }
         val valuados =
@@ -500,6 +516,9 @@ object Brecha {
         }
         if (sumadas.isNotEmpty()) {
             avisos += "${sumadas.size} predios sin obras en la ficha: se sumaron S/ ${suma(sumadas.values.toList()).toPlainString()} de obras de sus DJ"
+        }
+        if (rusticos > 0) {
+            avisos += "$rusticos predios rústicos sin valor: el catastro aún no valúa terrenos rústicos ($PREDIO_RUSTICO)"
         }
         val inafectaciones = padron.inafectaciones.filter { it.predio != null }.groupBy { it.predio!! }
         val sinDelta = linkedMapOf<String, Int>()
