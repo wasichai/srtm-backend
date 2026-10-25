@@ -14,6 +14,7 @@ import srtm.rentas.Predio
 import java.awt.image.BufferedImage
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.lang.management.ManagementFactory
 import java.math.BigDecimal
 import java.time.LocalDateTime
 import javax.imageio.ImageIO
@@ -170,12 +171,27 @@ class HojaPuTest {
         val hoja = hoja(usos = listOf(uso("001", 11), uso("002", 12)))
         // warm-up: the first one parses the template and loads the fonts
         renderer.render("pu", mapOf("pu" to hoja))
-        val inicio = System.nanoTime()
-        repeat(100) { renderer.render("pu", mapOf("pu" to hoja)) }
-        val ms = (System.nanoTime() - inicio) / 1_000_000.0
-        System.err.println("PU: 100 en %.0f ms, %.1f ms/PU (solo el pdf, sin leer Core)".format(ms, ms / 100))
+        // thread cpu time, not wall clock: a load spike on the machine does not count (wall clock as fallback)
+        val bean = ManagementFactory.getThreadMXBean()
+        val cpu = bean.isCurrentThreadCpuTimeSupported
+
+        fun ahoraNs() = if (cpu) bean.currentThreadCpuTime else System.nanoTime()
+        val ms =
+            List(100) {
+                val inicio = ahoraNs()
+                renderer.render("pu", mapOf("pu" to hoja))
+                (ahoraNs() - inicio) / 1_000_000.0
+            }
+
+        fun mediana(v: List<Double>) = v.sorted()[v.size / 2]
+        val mediana = mediana(ms)
+        System.err.println("PU: 100 en %.0f ms, mediana %.1f ms/PU (solo el pdf, sin leer Core)".format(ms.sum(), mediana))
         // the issue's goal is < 200 ms/PU; this is only the rendering, the whole pu is measured in PuApiTest
-        assertTrue(ms / 100 < 200, "%.1f ms/PU".format(ms / 100))
+        assertTrue(mediana < 200, "%.1f ms/PU".format(mediana))
+        // no degradation: the last 20 are not slower than 3x the first 20 (plus 5 ms so a ~0 median does not flake)
+        val primeros = mediana(ms.take(20))
+        val ultimos = mediana(ms.takeLast(20))
+        assertTrue(ultimos <= 3 * primeros + 5, "primeros %.1f ms, ultimos %.1f ms".format(primeros, ultimos))
     }
 
     // with -Dmuestra.dir the rendered pu and its first page as png land there, to look at
