@@ -15,7 +15,13 @@ id_aranc and no VIGENTE arancel of their tramo in the year are only counted. The
 --varios-codigos takes the CSV aranceles_desde_padron.py writes (the regla para varios códigos de vía) and applies
 it to the predios already imported, before anything is recalculated: a varios_codigos_mismo_valor predio gets
 codigo_via = its codigo_elegido (the most frequent); a varios_codigos_valores_distintos one is marked
-varios_codigos_via, and its DJ are never recalculated. With --dry-run, nothing is written: only counted.
+varios_codigos_via, and its DJ are never recalculated. The DJ that had already taken a tramo there (a marked predio,
+or an id_aranc that is not the new codigo_via) go a_revisar: counted, listed, not recalculated. Run it right after a
+deploy or a padrón import, before anyone edits. With --dry-run, nothing is written: only counted.
+
+One DJ per condominio is recalculated: srtm's pass gives its tramo to the other titulares without one (and a titular
+that names a tramo gives that one to the condominio: toma_el_tramo_del_condominio). The condominios run across
+--workers.
 
 Stdlib only. Only counts are printed; --reporte (outside the repo) lists each DJ's id and fate, also after a failure.
 
@@ -56,8 +62,10 @@ SIN_ARANCEL = "sin_arancel_del_anio"
 DISTINTOS = "tramos_distintos"
 VALOR_NUEVO = "valor_nuevo"
 CON_ID_SIN_ARANCEL = "con_id_aranc_sin_arancel_del_anio"
+TOMA_DEL_CONDOMINIO = "toma_el_tramo_del_condominio"
+A_REVISAR = "a_revisar"
 # the fates that are recalculated
-RECALCULAN = (TOMA, VALOR_NUEVO)
+RECALCULAN = (TOMA, TOMA_DEL_CONDOMINIO, VALOR_NUEVO)
 
 
 # ---------------------------------------------------------------------------
@@ -137,18 +145,42 @@ def _distinto(arancel, valor):
     return arancel is None or arancel.compare(valor) != 0
 
 
-def plan(declaraciones, predios, aranceles):
-    """Every vigente DJ of the year with its fate (rows of REPORTE): the ones without id_aranc (destino), and those
-    with one: VALOR_NUEVO when their tramo has another VIGENTE value now, CON_ID_SIN_ARANCEL when it has none this
-    year (only counted). And how many had id_aranc."""
+def _secuencia(valor):
+    """secuencia_uso as srtm compares it (Reglas.secuenciaUso): blank is 1, digits to three."""
+    texto = str(valor or "").strip() or "1"
+    return texto.zfill(3) if texto.isdigit() else texto
+
+
+def condominio_de(attributes):
+    """A DJ's condominio, as DeclaracionService.titulares groups it: its predio, year and secuencia de uso."""
+    return attributes.get("predio"), str(attributes.get("anio")), _secuencia(attributes.get("secuencia_uso"))
+
+
+def plan(declaraciones, predios, aranceles, revisar=None):
+    """Every vigente DJ of the year with its fate (rows of REPORTE):
+    - without id_aranc: destino, but a DJ whose condominio has a titular that names a tramo takes that one
+      (TOMA_DEL_CONDOMINIO: an explicit id_aranc wins, DeclaracionService.arancelDeLaVia);
+    - with id_aranc on a predio of `revisar` (predio id -> the code it should have, or None when it is marked): A_REVISAR,
+      never recalculated (the regla para varios códigos de vía came after it took its tramo);
+    - with id_aranc: VALOR_NUEVO when their tramo has another VIGENTE value now, CON_ID_SIN_ARANCEL when it has none this
+      year (only counted).
+    And how many had id_aranc."""
+    revisar = revisar or {}
     vias = por_via(aranceles)
     tramos = por_tramo(aranceles)
     predio_de = {p["id"]: p["attributes"] for p in predios}
     sin, con = candidatas(declaraciones)
+    explicito = {}
+    for r in sorted(con, key=lambda r: r["id"]):
+        explicito.setdefault(condominio_de(r["attributes"]), _texto(r["attributes"].get("id_aranc")))
     filas = []
     for r in sin:
         a = r["attributes"]
-        cual, id_aranc, valor = destino(a, predio_de.get(a.get("predio")), vias)
+        del_condominio = explicito.get(condominio_de(a))
+        if del_condominio is not None:
+            cual, id_aranc, valor = TOMA_DEL_CONDOMINIO, del_condominio, tramos.get(del_condominio)
+        else:
+            cual, id_aranc, valor = destino(a, predio_de.get(a.get("predio")), vias)
         filas.append({"declaracion": r["id"], "destino": cual, "id_aranc": id_aranc, "arancel": _decimal(a.get("arancel")),
                       "valor_via": valor})
     for r in con:
@@ -156,13 +188,44 @@ def plan(declaraciones, predios, aranceles):
         id_aranc = _texto(a.get("id_aranc"))
         valor = tramos.get(id_aranc)
         arancel = _decimal(a.get("arancel"))
-        if valor is None:
+        if a.get("predio") in revisar and revisar[a.get("predio")] != id_aranc:
+            filas.append({"declaracion": r["id"], "destino": A_REVISAR, "id_aranc": id_aranc, "arancel": arancel,
+                          "valor_via": revisar[a.get("predio")]})
+        elif valor is None:
             filas.append({"declaracion": r["id"], "destino": CON_ID_SIN_ARANCEL, "id_aranc": id_aranc, "arancel": arancel,
                           "valor_via": None})
         elif _distinto(arancel, valor):
             filas.append({"declaracion": r["id"], "destino": VALOR_NUEVO, "id_aranc": id_aranc, "arancel": arancel,
                           "valor_via": valor})
     return filas, len(con)
+
+
+def por_condominio(filas, declaraciones):
+    """The DJ to recalculate in groups: the ones that take a tramo by condominio (one recálculo takes it for every
+    titular without one: arancelDeLaVia), each VALOR_NUEVO on its own (its recálculo is its own). [(the DJ recalculated,
+    the rows it covers)]."""
+    grupo_de = {r["id"]: condominio_de(r["attributes"]) for r in declaraciones}
+    grupos, solas = {}, []
+    for f in filas:
+        if f["destino"] in (TOMA, TOMA_DEL_CONDOMINIO):
+            grupos.setdefault(grupo_de.get(f["declaracion"], f["declaracion"]), []).append(f)
+        elif f["destino"] == VALOR_NUEVO:
+            solas.append([f])
+    return [(g[0], g) for g in list(grupos.values()) + solas]
+
+
+def revisar_de(cambios, predios):
+    """The predios whose DJ with id_aranc go A_REVISAR: the ones marked (None) and the ones whose codigo_via the regla
+    changes (the new code), after `cambios`."""
+    por_id = dict(cambios)
+    resultado = {}
+    for p in predios:
+        a = {**p["attributes"], **por_id.get(p["id"], {})}
+        if a.get(VARIOS) is True:
+            resultado[p["id"]] = None
+        elif "codigo_via" in por_id.get(p["id"], {}):
+            resultado[p["id"]] = a["codigo_via"]
+    return resultado
 
 
 def resumen(filas):
@@ -243,27 +306,37 @@ def escribir_reporte(path, filas):
 # ---------------------------------------------------------------------------
 
 class Progreso:
-    """How many recálculos answered, and how many of them left the DJ with its tramo: read after a failure too."""
+    """How many predios were changed, recálculos answered, and DJ left with their tramo: read after a failure too."""
 
     def __init__(self):
+        self.predios = 0
         self.hechas = 0
         self.tomaron = 0
 
 
-def recalcular_todas(client, filas, workers, progreso):
-    """POSTs /recalcular for every DJ that takes a tramo (or its new value), in parallel, counting into `progreso` as
-    they answer. The first failure (a refusal, or no answer) stops the rest and is raised."""
-    def una(fila):
+def cambiar_predios(client, cambios, progreso):
+    """PATCHes each predio of the regla para varios códigos de vía, counting into `progreso` as they are sent."""
+    for predio_id, cambio in cambios:
+        client.patch(f"/api/objects/predio/records/{predio_id}", {"attributes": cambio})
+        progreso.predios += 1
+
+
+def recalcular_todas(client, grupos, workers, progreso):
+    """POSTs /recalcular for one DJ of each group (por_condominio), the groups in parallel, counting into `progreso` as
+    they answer: the group's rows are done, and they took their tramo when the DJ recalculated did. The first failure
+    (a refusal, or no answer) stops the rest and is raised."""
+    def una(grupo):
+        fila, filas = grupo
         _, d = client.post(f"/api/srtm/declaraciones/{fila['declaracion']}/recalcular", None)
-        return (d or {}).get("id_aranc") == fila["id_aranc"]
+        return len(filas), (d or {}).get("id_aranc") == fila["id_aranc"]
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = [pool.submit(una, f) for f in filas]
+        futures = [pool.submit(una, g) for g in grupos]
         try:
             for future in as_completed(futures):
-                tomo = future.result()
-                progreso.hechas += 1
-                progreso.tomaron += 1 if tomo else 0
+                n, tomo = future.result()
+                progreso.hechas += n
+                progreso.tomaron += n if tomo else 0
         except Exception:
             for future in futures:
                 future.cancel()
@@ -293,10 +366,12 @@ def _imprimir(args, organizacion, filas, con_id, cuentas, varios):
     if varios is not None:
         print(f"varios códigos de vía: codigo_via al más frecuente {varios['codigo_via']}, marcados "
               f"{varios['marcados']}, ya estaban {varios['iguales']}, no encontrados {varios['no_encontrados']}")
-    sin_id = len(filas) - cuentas[VALOR_NUEVO] - cuentas[CON_ID_SIN_ARANCEL]
+    sin_id = len(filas) - cuentas[VALOR_NUEVO] - cuentas[CON_ID_SIN_ARANCEL] - cuentas[A_REVISAR]
     print(f"declaraciones sin id_aranc: {sin_id} (con id_aranc ya: {con_id}, de ellas con un valor nuevo del año: "
           f"{cuentas[VALOR_NUEVO]}, con id_aranc sin arancel VIGENTE del año: {cuentas[CON_ID_SIN_ARANCEL]})")
-    print(f"toman el arancel de su vía: {cuentas[TOMA]}, cambian de valor: {cuentas['cambian']}")
+    print(f"toman el arancel de su vía: {cuentas[TOMA]}, cambian de valor: {cuentas['cambian']}; "
+          f"toman el tramo de su condominio: {cuentas[TOMA_DEL_CONDOMINIO]}")
+    print(f"a revisar: {cuentas[A_REVISAR]} (con id_aranc en predios marcados o cuyo codigo_via cambió: no se recalculan)")
     print(f"sin tramo: rústicas {cuentas[RUSTICA]}, varios códigos con valores distintos {cuentas[MARCADA]}, "
           f"sin código de vía {cuentas[SIN_CODIGO]}, sin arancel del año {cuentas[SIN_ARANCEL]}, "
           f"tramos con valores distintos {cuentas[DISTINTOS]}")
@@ -318,7 +393,7 @@ def main(argv=None):
         return 2
 
     client = Client(args.core)
-    filas, progreso, recalcular = [], Progreso(), []
+    filas, progreso, recalcular, cambios = [], Progreso(), [], []
     try:
         client.login(args.email, args.password)
         organizacion = client.get("/api/organizations/current") or {}
@@ -331,17 +406,21 @@ def main(argv=None):
         if varios is not None:
             cambios, cuentas_varios = cambios_varios(varios, predios)
             if not args.dry_run:
-                for predio_id, cambio in cambios:
-                    client.patch(f"/api/objects/predio/records/{predio_id}", {"attributes": cambio})
-            predios = aplicar_en_memoria(predios, cambios)
-        filas, con_id = plan(client.list_all("declaracion_predial", anio=args.anio), predios,
-                             client.list_all("arancel", anio=args.anio))
+                cambiar_predios(client, cambios, progreso)
+        revisar = revisar_de(cambios, predios)
+        predios = aplicar_en_memoria(predios, cambios)
+        declaraciones = client.list_all("declaracion_predial", anio=args.anio)
+        filas, con_id = plan(declaraciones, predios, client.list_all("arancel", anio=args.anio), revisar)
         cuentas = resumen(filas)
         _imprimir(args, organizacion, filas, con_id, cuentas, cuentas_varios)
         recalcular = [f for f in filas if f["destino"] in RECALCULAN]
+        grupos = por_condominio(recalcular, declaraciones)
+        print(f"a recalcular: {len(recalcular)} DJ en {len(grupos)} recálculos (uno por condominio)")
         if not args.dry_run:
-            recalcular_todas(client, recalcular, args.workers, progreso)
+            recalcular_todas(client, grupos, args.workers, progreso)
     except Exception as e:
+        if cambios and progreso.predios < len(cambios) and not args.dry_run:
+            print(f"predios cambiados {progreso.predios} de {len(cambios)}")
         if recalcular:
             print(f"recalculadas {progreso.hechas} de {len(recalcular)}, quedaron con su tramo: {progreso.tomaron}")
         detalle = f"{e.status}\n{e.body}" if isinstance(e, CoreError) else f"{type(e).__name__}: {e}"

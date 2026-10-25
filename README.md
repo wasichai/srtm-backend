@@ -1540,7 +1540,8 @@ La DJ importada de Ica trae su arancel como un número suelto (la columna `aranc
 - si los tramos de la vía tienen valores distintos no toma ninguno (`ArancelesService.deLaVia` lo deja en el log);
 - un `id_aranc` explícito gana; un PUT que lo borra lo vuelve a tomar de la vía;
 - quien no puede leer `arancel` (o el predio) recalcula sin la vía: la DJ queda como está, sin error;
-- los condóminos vigentes sin `id_aranc` toman el mismo tramo en la misma pasada y se recalculan con él;
+- los condóminos vigentes sin `id_aranc` toman el mismo tramo en la misma pasada y se recalculan con él; si un
+  condómino ya nombra un tramo, todo el condominio toma ese y no el de la vía (un `id_aranc` explícito gana);
 - si el arancel nuevo difiere del arancel del padrón (`padronExterno`), la marca `origen_modificado`; si es igual, o
   si no era del padrón, no;
 - una DJ declarada desde otra de otro año (`declararDesde`) lleva `id_aranc`, no el arancel: toma el VIGENTE de su
@@ -1550,8 +1551,11 @@ La DJ importada de Ica trae su arancel como un número suelto (la columna `aranc
 notas 2 y 3 del plano predial. Por eso el código SAT va por frente (`…-01`, `…-02`).
 
 **Regla para varios códigos de vía.** Un predio o ficha vinculado a varios `codigo_de_via` (uno por frente): si todos
-tienen el mismo valor arancelario en el año, toma el código más frecuente (de un empate, el menor); si difieren, se
-deja como está y se reporta para revisión. Es la misma regla de `deLaVia` para los tramos de una vía. La aplican:
+tienen el mismo valor arancelario, toma el código más frecuente (de un empate, el menor); si difieren, se deja como
+está y se reporta para revisión. Es la misma regla de `deLaVia` para los tramos de una vía. **Se evalúa una vez, al
+importar, sobre la columna `arancel` del padrón** (el de 2026): no se vuelve a evaluar por año. Un predio
+`varios_codigos_mismo_valor` conserva su código más frecuente aunque en Normativa de otro año ese código y sus otros
+frentes lleguen a valer distinto. La aplican:
 
 - `import_padron_ica.py`, en cada importación (`regla_varios_codigos`): agrupa las filas urbanas de cada predio (por
   su código srtm, #207); `varios_codigos_mismo_valor` guarda en `codigo_via` el más frecuente;
@@ -1559,8 +1563,13 @@ deja como está y se reporta para revisión. Es la misma regla de `deLaVia` para
   al reporte del importador con esa categoría;
 - `asignar_arancel_por_via.py --varios-codigos <csv>`, para los predios ya importados: lee el CSV que escribe
   `aranceles_desde_padron.py` y, antes de recalcular, hace PATCH de `codigo_via = codigo_elegido` en los
-  `varios_codigos_mismo_valor` y de `varios_codigos_via = true` en los `varios_codigos_valores_distintos`, que nunca se
-  recalculan y salen con su propia cuenta («varios códigos con valores distintos»). Con `--dry-run` solo cuenta.
+  `varios_codigos_mismo_valor` y de `varios_codigos_via = true` en los `varios_codigos_valores_distintos`. Sus DJ sin
+  `id_aranc` no se recalculan y salen con su propia cuenta («varios códigos con valores distintos»); las que ya habían
+  tomado un tramo (en un predio marcado, o con un `id_aranc` distinto del `codigo_via` nuevo) salen «a revisar», en la
+  cuenta y en `--reporte` (`a_revisar`), y tampoco se recalculan. Con `--dry-run` solo cuenta.
+- **Cuándo:** `asignar_arancel_por_via.py --varios-codigos` se corre apenas desplegada esta versión, y apenas termina
+  cada importación del padrón, antes de que nadie edite: en ese intervalo, una edición o un «Recalcular» de una DJ de
+  un predio aún sin la regla toma el código de la primera fila, y esa DJ queda «a revisar».
 
 Quien revisa un predio marcado corrige su `codigo_via` y le quita la marca; el próximo recálculo toma la vía.
 
@@ -1600,8 +1609,9 @@ python3 -I asignar_arancel_por_via.py --org ica --anio 2026 \
   están «con id_aranc sin arancel VIGENTE del año» (solo se cuentan). Sin `--dry-run` llama a `/recalcular` de las que
   toman tramo o valor nuevo (`--workers`, default 4). Usa `/recalcular` y no el PUT de la ficha: no marca
   `origen_modificado` en las que no cambian ni revalida la ficha importada. Las DJ de otros años no se tocan.
-  `--reporte` (fuera del repo) lista cada DJ con su destino, también si falla a la mitad (entonces imprime
-  «recalculadas N de M»). Sale con `0`; `1` si Core rechaza algo o no contesta, o si una DJ recalculada no quedó con su
+  Recalcula **una DJ por condominio** (predio, año, secuencia): esa pasada da el tramo a los demás titulares sin uno,
+  y los condominios se reparten entre los workers. `--reporte` (fuera del repo) lista cada DJ con su destino, también
+  si falla a la mitad (entonces imprime «predios cambiados N de M» y «recalculadas N de M»). Sale con `0`; `1` si Core rechaza algo o no contesta, o si una DJ recalculada no quedó con su
   tramo; `2` si el usuario es de otra organización.
 - **Después de cada importación del padrón** (o de un `apply.py` que la acompañe), vuelva a correr
   `asignar_arancel_por_via.py`: `import_padron_ica.py` escribe por Core y no pasa por `resolverArancel`, así que las

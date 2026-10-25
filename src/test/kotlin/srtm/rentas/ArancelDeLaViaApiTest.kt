@@ -159,6 +159,28 @@ class ArancelDeLaViaApiTest : SrtmApiTest() {
     }
 
     @Test
+    fun `a condomino that names a tramo gives it to the condominio - not the via`() {
+        val via = via()
+        importarAranceles("$via,2026,41.50,$via,ANA,BETO\n$via-Y,2026,12,,ANA,BETO")
+        val a = declarar(predioEnLaVia(via))["id"].asString()
+        // a took the vía when it was declared: start again from the padrón, and b names its own tramo
+        val b = post("/api/srtm/declaraciones/$a/condominos", mapOf("contribuyente" to inscribir(), "porcentaje_condominio" to 25))["id"].asString()
+        padron(a, BigDecimal("35.50"), "id_aranc" to null)
+        padron(b, BigDecimal("35.50"), "id_aranc" to "$via-Y")
+        recalcular(a)
+        assertEquals("$via-Y", registro(a)["id_aranc"].asString(), registro(a).toString())
+        assertArancel("12", a)
+        // b keeps its tramo; its arancel is its own recálculo's, as any DJ that names one
+        assertEquals("$via-Y", registro(b)["id_aranc"].asString(), registro(b).toString())
+        recalcular(b)
+        assertArancel("12", b)
+        // an edit of a keeps b's tramo
+        put("/api/srtm/declaraciones/$a", fields(declaracion(a)) + ("id_aranc" to null))
+        assertEquals("$via-Y", registro(b)["id_aranc"].asString())
+        assertEquals("$via-Y", registro(a)["id_aranc"].asString())
+    }
+
+    @Test
     fun `a DJ declared into another year carries the tramo, not the arancel - that year's when it has one`() {
         val via = via()
         importarAranceles("$via,2026,41.50,$via,ANA,BETO")

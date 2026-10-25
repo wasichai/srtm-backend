@@ -116,13 +116,14 @@ class CliTests(unittest.TestCase):
         # V-09 has an arancel, of another year only
         self.arancel("V-09", 2025, 50, "V-09")
         self.igual = self.dj(urbano, 2026, 356)
-        self.distinta = self.dj(urbano, 2026, 300)
+        # another secuencia de uso of the same predio: another condominio
+        self.distinta = self.dj(urbano, 2026, 300, secuencia="2")
         self.rustica = self.dj(rustico, 2026, 3)
         self.sin_codigo = self.dj(sin_codigo, 2026, 10)
         self.sin_arancel = self.dj(sin_arancel, 2026, 50)
         self.distintos = self.dj(distintos, 2026, 20)
         # neither one with id_aranc, nor an anulada, nor another year's
-        self.dj(urbano, 2026, 356, id_aranc="V-01")
+        self.dj(urbano, 2026, 356, id_aranc="V-01", secuencia="9")
         self.dj(urbano, 2026, 356, estado="ANULADA")
         self.de_2027 = self.dj(urbano, 2027, 356)
 
@@ -132,9 +133,9 @@ class CliTests(unittest.TestCase):
     def arancel(self, id_aranc, anio, valor, cod_via, estado="VIGENTE"):
         self.core.add_record("arancel", {"id_aranc": id_aranc, "anio": anio, "valor_m2": valor, "cod_via": cod_via, "estado": estado})
 
-    def dj(self, predio, anio, arancel, id_aranc=None, estado=None):
+    def dj(self, predio, anio, arancel, id_aranc=None, estado=None, secuencia="1"):
         return self.core.add_record(DJ, {"predio": predio, "anio": anio, "arancel": arancel, "id_aranc": id_aranc,
-                                         "estado": estado})["id"]
+                                         "estado": estado, "secuencia_uso": secuencia})["id"]
 
     # srtm's recálculo, as the fake answers it: the DJ of the urbano predio takes V-01
     def recalcular(self, id):
@@ -240,6 +241,77 @@ class CliTests(unittest.TestCase):
         self.assertIn("ConnectionError", err)
         with open(reporte, newline="", encoding="utf-8") as f:
             self.assertEqual(len(list(csv.DictReader(f))), 6)
+
+    def test_a_condominio_is_recalculated_once_and_counts_for_all_its_titulares(self):
+        otro = self.dj(self.urbano, 2026, 356)  # a condómino of self.igual
+        code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2026", "--workers", "1")
+        self.assertEqual(code, 0, err)
+        self.assertIn("a recalcular: 3 DJ en 2 recálculos (uno por condominio)", out)
+        recalculadas = self.recalculadas()
+        self.assertEqual(len(recalculadas), 2)
+        self.assertEqual(len({self.igual, otro} & set(recalculadas)), 1)
+        self.assertIn("recalculadas 3 de 3, quedaron con su tramo: 3", out)
+
+    def test_a_condominio_with_a_tramo_gives_it_to_its_titulares_without_one(self):
+        condomino = self.dj(self.urbano, 2026, 20, id_aranc="V-02-A", secuencia="2")  # a condómino of self.distinta
+        self.core.recalcular = lambda id: {"id": id, "id_aranc": "V-02-A" if id in (self.distinta, condomino) else "V-01"}
+        reporte = os.path.join(self.tmp.name, "asignacion.csv")
+        code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2026", "--reporte", reporte)
+        self.assertEqual(code, 0, err)
+        self.assertIn("toman el tramo de su condominio: 1", out)
+        with open(reporte, newline="", encoding="utf-8") as f:
+            fila = next(r for r in csv.DictReader(f) if r["declaracion"] == self.distinta)
+        self.assertEqual((fila["destino"], fila["id_aranc"]), ("toma_el_tramo_del_condominio", "V-02-A"))
+
+    def test_a_dj_that_took_its_tramo_before_the_regla_is_left_for_review(self):
+        predio = next(r for r in self.core.records["predio"] if r["id"] == self.urbano)
+        predio["attributes"]["codigo"] = "P-URB"
+        # self.igual took V-01 before the regla ran: the predio's frentes differ
+        next(r for r in self.core.records[DJ] if r["id"] == self.igual)["attributes"]["id_aranc"] = "V-01"
+        path = self.varios_csv([{"codigo_predio": "P-URB", "codigos": "", "valores": "",
+                                 "regla": "varios_codigos_valores_distintos", "codigo_elegido": ""}])
+        reporte = os.path.join(self.tmp.name, "asignacion.csv")
+        code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2026", "--varios-codigos", path, "--reporte", reporte)
+        self.assertEqual(code, 0, err)
+        # self.igual and the one with V-01 since setUp
+        self.assertIn("a revisar: 2 (", out)
+        self.assertNotIn(self.igual, self.recalculadas())
+        with open(reporte, newline="", encoding="utf-8") as f:
+            self.assertEqual(next(r for r in csv.DictReader(f) if r["declaracion"] == self.igual)["destino"], "a_revisar")
+
+    def test_a_dj_whose_predio_changes_code_is_left_for_review_unless_it_has_the_new_one(self):
+        predio = next(r for r in self.core.records["predio"] if r["id"] == self.urbano)
+        predio["attributes"]["codigo"] = "P-URB"
+        path = self.varios_csv([{"codigo_predio": "P-URB", "codigos": "", "valores": "",
+                                 "regla": "varios_codigos_mismo_valor", "codigo_elegido": "V-02-A"}])
+        code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2026", "--varios-codigos", path, "--dry-run")
+        self.assertEqual(code, 0, err)
+        # the DJ with V-01 since setUp: V-02-A is the predio's code now
+        self.assertIn("a revisar: 1 (", out)
+
+    def test_a_failure_while_changing_the_predios_says_how_many(self):
+        for codigo, id in (("P-URB", self.urbano), ("P-SIN", self.sin_arancel_predio)):
+            next(r for r in self.core.records["predio"] if r["id"] == id)["attributes"]["codigo"] = codigo
+        path = self.varios_csv([
+            {"codigo_predio": "P-URB", "codigos": "", "valores": "", "regla": "varios_codigos_valores_distintos", "codigo_elegido": ""},
+            {"codigo_predio": "P-SIN", "codigos": "", "valores": "", "regla": "varios_codigos_valores_distintos", "codigo_elegido": ""},
+        ])
+        cliente = aav.Client
+        enviados = []
+
+        class FallaLaSegunda(cliente):
+            def patch(self, path, body):
+                if enviados:
+                    raise aav.CoreError(500, "boom")
+                enviados.append(path)
+                return super().patch(path, body)
+
+        aav.Client = FallaLaSegunda
+        self.addCleanup(setattr, aav, "Client", cliente)
+        code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2026", "--varios-codigos", path)
+        self.assertEqual(code, 1)
+        self.assertIn("predios cambiados 1 de 2", out)
+        self.assertEqual(self.recalculadas(), [])
 
     def test_the_year_asked_for_only(self):
         code, out, err = self.run_main("--org", "ica-prueba", "--anio", "2027")
