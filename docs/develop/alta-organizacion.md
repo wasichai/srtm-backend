@@ -196,6 +196,58 @@ también por el día y por las órdenes (solo lectura: `pago_caja` y `orden_caja
 | `POST {url}/ordenes/vigencia` con `{"ordenes":[{"referencia_externa","importe"}]}` (hasta 50) | 200 `{"ordenes":[{"referencia_externa","vigente","importe","motivo"}]}`, en el mismo orden y con el importe de srtm. No es vigente la desconocida, la que ya no se cobra (anulada, sustituida o retirada) ni la ya pagada |
 | Organización sin caja configurada | 503, y caja la toma como «no contesta» |
 
+## 9. Corte analítico (#205)
+
+El corte analítico (`docs/informes/brecha`) lee srtm y catastro con cuentas de servicio de solo lectura y saca
+una foto de la organización en Parquet, seudonimizada. Los pasos van como administrador de la organización, en
+el Core de srtm.
+
+**El rol `ANALITICA`:** solo lee las diez tablas que el corte necesita, nada de escritura.
+
+```bash
+curl -X POST "$SRTM/api/roles" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name": "ANALITICA", "label": "Corte analítico (solo lectura)"}'
+curl -X PUT "$SRTM/api/roles/ANALITICA/permissions" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"permissions": [
+  {"objectName": "predio", "action": "READ"}, {"objectName": "contribuyente", "action": "READ"},
+  {"objectName": "declaracion_predial", "action": "READ"}, {"objectName": "nivel_construccion", "action": "READ"},
+  {"objectName": "obra_complementaria", "action": "READ"}, {"objectName": "cuota_predial", "action": "READ"},
+  {"objectName": "brecha_corrida", "action": "READ"}, {"objectName": "brecha_predio", "action": "READ"},
+  {"objectName": "parametro_tributario", "action": "READ"}, {"objectName": "arancel", "action": "READ"}]}'
+```
+
+**La cuenta de servicio `analitica`:**
+
+```bash
+curl -X POST "$SRTM/api/service-accounts" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name": "analitica", "roles": ["ANALITICA"]}'
+```
+
+- **El secreto:** la respuesta trae `clientId` y `clientSecret`, y el secreto se muestra **una sola vez**. La
+  salida se redirige a un archivo con `chmod 600`, como la de `crear_cuenta_srtm.py` y la de `caja`.
+- **Si se filtra:** `POST /api/service-accounts/{id}/secret` lo rota. Los tokens ya emitidos viven 15 minutos
+  (wasichai ADR-043): el cliente del corte vuelve a pedir uno ante un 401 y sigue.
+
+**En catastro:** el corte no abre una cuenta nueva; lee con la cuenta `srtm` que ya existe (`SRTM_LECTOR`,
+sección 5), la misma que usa srtm para leer fichas, construcciones, obras, titulares y valuaciones de la
+organización. Si catastro necesita distinguir en su auditoría el corte de la lectura normal de la brecha, hace
+falta otra cuenta allá (no está hecho).
+
+**El archivo de secretos:** las dos URL, las dos credenciales y la clave de seudonimización van en
+`~/.config/srtm-analitica/<org>.env` (fuera del repositorio, modo `0600`), nunca en `parametros.json`:
+
+```bash
+SRTM_URL=<url del Core de srtm de la organización>
+SRTM_CLIENT_ID=<clientId de analitica>
+SRTM_CLIENT_SECRET=<clientSecret de analitica>
+CATASTRO_URL=<url del Core de catastro de la organización>
+CATASTRO_CLIENT_ID=<clientId de la cuenta srtm en catastro>
+CATASTRO_CLIENT_SECRET=<clientSecret de la cuenta srtm en catastro>
+CLAVE_SEUDONIMO=<64 caracteres hexadecimales, de python3 -c "import secrets; print(secrets.token_hex(32))">
+```
+
+La clave se guarda también en el gestor de claves de la organización, no solo en este archivo: cambiarla corta
+la comparación entre cortes anteriores y nuevos. Más detalle en `docs/informes/brecha/README.adoc`.
+
 ## Registro de Ica (2026-10-20)
 
 **Dev:**
