@@ -70,4 +70,25 @@ class RecordsTest {
         assertEquals("1", back.secuenciaUso)
         assertEquals(BigDecimal("12.5"), back.areaTerreno)
     }
+
+    // #241: a nivel carries its clasificación (the RNT tabla, the padrón's enum), read and written as any field
+    @Test
+    fun `a nivel's clasificacion goes to attributes and back`() {
+        val nivel = NivelConstruccion(numeroPiso = 1, clasificacion = "EDIFICIO-OFICINAS")
+        val attributes = Records.attributes(nivel)
+        assertEquals("EDIFICIO-OFICINAS", attributes["clasificacion"])
+        assertEquals(nivel.copy(id = "n1"), Records.read<NivelConstruccion>("n1", attributes))
+    }
+
+    // #241: an edit without it (a client that does not know it) keeps the stored one; a blank one clears it
+    @Test
+    fun `an edit without the clasificacion keeps it, a blank one clears it`() {
+        assertEquals("EDIFICIO-OFICINAS", clasificacionAlEditar(null, "EDIFICIO-OFICINAS"))
+        val casa = "CASA HABITACION Y DEPARTAMENTOS PARA VIVIENDA"
+        assertEquals(casa, clasificacionAlEditar(casa, "EDIFICIO-OFICINAS"))
+        assertNull(clasificacionAlEditar("", "EDIFICIO-OFICINAS"))
+        assertNull(clasificacionAlEditar("  ", "EDIFICIO-OFICINAS"))
+        assertNull(clasificacionAlEditar(null, null))
+        assertEquals("EDIFICIO-OFICINAS", clasificacionAlEditar(" EDIFICIO-OFICINAS ", null))
+    }
 }

@@ -630,7 +630,7 @@ class DeclaracionService(
     suspend fun agregarNivel(
         id: UUID,
         body: NivelConstruccion
-    ) = nuevoNivel(id, body.copy(fila = null)).also { nivel ->
+    ) = nuevoNivel(id, body.copy(fila = null, clasificacion = clasificacionAlEditar(body.clasificacion, null))).also { nivel ->
         escrita(id)
         replicar(NIVEL_CONSTRUCCION, id, null) { otra, _ -> nuevoNivel(otra, nivel.copy(id = null, declaracion = null)) }
     }
@@ -652,7 +652,8 @@ class DeclaracionService(
         body: NivelConstruccion
     ): NivelConstruccion {
         val fila = deVigente(NIVEL_CONSTRUCCION, id)
-        val nivel = body.copy(id = null, declaracion = null, fila = fila.fila)
+        val clasificacion = clasificacionAlEditar(body.clasificacion, fila.registro[CLASIFICACION]?.toString())
+        val nivel = body.copy(id = null, declaracion = null, fila = fila.fila, clasificacion = clasificacion)
         val saved = listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id, nivel)
         fila.declaracion?.let {
             escrita(it)

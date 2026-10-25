@@ -276,9 +276,28 @@ valuación del padrón externo); esta queda SUSTITUIDA, de solo lectura. Devuelv
 
 |`GET`, `POST /declaraciones/{id}/{lista}` +
 `PUT`, `DELETE /{lista}/{id}`
-|Listas de la DJ: `transferentes`, `niveles`, `obras`, `frentes`.
-|200; 201; 204.
+|Listas de la DJ: `transferentes`, `niveles`, `obras`, `frentes`. Un nivel lleva su `clasificacion`
+(<<ref-api-nivel-clasificacion>>).
+|200; 201; 204; 400 por campo.
 |===
+
+[[ref-api-nivel-clasificacion]]
+*La clasificación del nivel.* El nivel se responde con `clasificacion` (`string` o `null`): la tabla de depreciación
+del RNT con la que catastro deprecia ese nivel. Toma uno de los valores del enum `clasificacion`, los mismos de la
+`clasificacion` de la DJ:
+
+* `CASA HABITACION Y DEPARTAMENTOS PARA VIVIENDA`;
+* `TIENDAS DEPOSITOS CENTROS DE RECREACION CLUBES E INSTITUCIONES`;
+* `CLINICAS HOSPITALES CINES INDUSTRIAS COLEGIOS TALLERES`;
+* `EDIFICIO-OFICINAS`.
+
+Puede venir del padrón externo o ponerla el usuario. Sin ella, el nivel usa la de la DJ y, sin esa, la del uso.
+
+* *Alta* (`POST /declaraciones/{id}/niveles`): la del cuerpo; sin ella o en blanco, ninguna.
+* *Edición* (`PUT /niveles/{id}`): la del cuerpo. Sin el campo (o con `null`), el nivel conserva la que tenía: un
+  cliente que no la conoce no borra la del padrón. Con `""`, la quita.
+* Un valor fuera del enum es un 400 en el campo `clasificacion`.
+* Las copias (rectificatoria, `desde`, condómino) la llevan, y la edición la replica en los condóminos.
 
 [[ref-api-arancel-dj]]
 *El arancel de la DJ.* La DJ se responde con `id_aranc` (el tramo de vía que nombra) y `arancel` (`number` o

@@ -316,7 +316,11 @@ data class NivelConstruccion(
     val instalaciones: String? = null,
     val estado: String? = null,
     // the same row in the condóminos' declaraciones: the backend's
-    val fila: String? = null
+    val fila: String? = null,
+    // #241: the RNT tabla it depreciates with (enum clasificacion, the declaración's options), an external padrón's or
+    // the user's. none: the declaración's, else its uso's (AutoavaluoSugerido). an edit without it keeps it
+    // (clasificacionAlEditar)
+    val clasificacion: String? = null
 )
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)

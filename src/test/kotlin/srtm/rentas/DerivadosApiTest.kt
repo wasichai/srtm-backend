@@ -634,6 +634,41 @@ class DerivadosApiTest : SrtmApiTest() {
         }
     }
 
+    // #241: a nivel added in the portal carries its own clasificación, the RNT tabla catastro depreciates it with: a DJ
+    // without uso is valued with it (D1). an edit that does not send it keeps it, a blank one clears it, and one out
+    // of the padrón's enum is refused
+    @Test
+    fun `a nivel added in the portal carries its own clasificacion, which catastro depreciates it with`() {
+        val org = conCatastro()
+        val id = declarar(org, mapOf("clase_uso" to null, "sub_clase_uso" to null, "uso" to null))
+        val nivel = post("/api/srtm/declaraciones/$id/niveles", NIVEL + (CLASIFICACION to TIENDAS), org)
+
+        assertEquals(TIENDAS, nivel["clasificacion"].asString())
+        assertEquals(TIENDAS, JSON.readTree(PEDIDO.get())["construcciones"][0]["clasificacion"].asString(), PEDIDO.get())
+        declaracion(id, org).let {
+            assertDec("12000", it["valor_autoavaluo"])
+            assertFalse(it["autoavaluo_por_revisar"]?.asBoolean() ?: false, it.toString())
+        }
+        val nid = nivel["id"].asString()
+        assertEquals(TIENDAS, filas(id, "niveles", org).single()["clasificacion"].asString())
+
+        // srtm-ui before #241 does not send it: the nivel keeps it
+        put("/api/srtm/niveles/$nid", fields(nivel) - CLASIFICACION + ("area_construida" to 120), org)
+        assertEquals(TIENDAS, registro("nivel_construccion", nid, org)[CLASIFICACION].asString())
+        assertDec("14000", declaracion(id, org)["valor_autoavaluo"])
+
+        // a blank one clears it: without uso nor clasificación catastro has no tabla
+        val limpio = put("/api/srtm/niveles/$nid", fields(nivel) + (CLASIFICACION to ""), org)
+        assertTrue(limpio[CLASIFICACION] == null || limpio[CLASIFICACION].isNull, limpio.toString())
+        assertTrue(declaracion(id, org)["autoavaluo_por_revisar"].asBoolean())
+
+        for ((metodo, ruta) in listOf("PUT" to "/api/srtm/niveles/$nid", "POST" to "/api/srtm/declaraciones/$id/niveles")) {
+            val problema = tree(send(metodo, ruta, fields(nivel) - "id" + (CLASIFICACION to "PALACIO"), HttpStatus.BAD_REQUEST, org))
+            assertEquals(CLASIFICACION, problema["errors"][0]["field"].asString(), problema.toString())
+        }
+        assertEquals(1, filas(id, "niveles", org).size)
+    }
+
     @Test
     fun `a fila is the backend's`() {
         val org = conCatastro()
