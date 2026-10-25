@@ -966,6 +966,8 @@ image::{capturas}/usuario/registrador/dj-caracteristicas.png[Secciones Caracter�
   y las obras, cada vez que algo de eso cambia. Es de solo lectura. Si la municipalidad no tiene catastro configurado,
   el autoavalúo lo escribe usted, como antes. El autoavalúo sugerido (<<autoavaluo-sugerido>>) muestra el detalle
   del cálculo.
+  Si la declaración tiene clase y sub clase pero no uso (como las importadas del padrón de Ica), el sistema valúa con
+  el uso de su sub clase, o de su clase si no tiene sub clase.
 * *Autoavalúo por revisar*: si el catastro no pudo valuar la declaración (le falta un dato o un parámetro, o no
   respondió), el sistema conserva el autoavalúo anterior y lo marca con el motivo. Complete lo que falta, o pulse
   btn:[Recalcular] cuando el catastro ya responda. Una DJ de un predio rústico queda *por revisar* con el motivo

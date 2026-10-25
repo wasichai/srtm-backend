@@ -35,6 +35,11 @@ class DerivadosApiTest : SrtmApiTest() {
             aplicarModelo(suyo)
             val uso = mapOf("codigo" to "010101", "clase" to "RESIDENCIAL", "sub_clase" to "UNIFAMILIAR", "uso" to "CASA HABITACIÓN")
             post("/api/objects/uso_predio/records", mapOf("attributes" to uso), suyo)
+            // #235: two usos of the sub clase TIENDAS, its 0203 the prefix a declaración without uso is valued with
+            for ((codigo, nombre) in listOf("020301" to "DE PRODUCTOS AGRÍCOLAS COMESTIBLES", "020326" to "TIENDA MÚLTIPLE DE DIFERENTE RUBRO")) {
+                val tienda = mapOf("codigo" to codigo, "clase" to "COMERCIAL", "sub_clase" to "TIENDAS", "uso" to nombre)
+                post("/api/objects/uso_predio/records", mapOf("attributes" to tienda), suyo)
+            }
             suyo.also { organizacionDelCatastro = it }
         }
 
@@ -598,6 +603,37 @@ class DerivadosApiTest : SrtmApiTest() {
         assertTrue(fila!!.asString() in filas, filas.toString())
     }
 
+    // #235: an Ica DJ imported with its clase and sub clase but no uso, its floor with the padrón's clasificación,
+    // rectified with a new floor that has none: catastro has no uso to depreciate it with (D1) unless the uso is the
+    // sub clase's code
+    @Test
+    fun `a rectificatoria of a dj without uso values a new floor with its sub clase's uso`() {
+        val org = conCatastro()
+        val id = declarar(org, mapOf("clase_uso" to "COMERCIAL", "sub_clase_uso" to "TIENDAS", "uso" to null))
+        val nivel = piso(id, org, 1, 100)
+        val padron = registro("nivel_construccion", nivel, org)
+        send(
+            "PUT",
+            "/api/objects/nivel_construccion/records/$nivel",
+            mapOf("attributes" to fields(padron) + (CLASIFICACION to TIENDAS)),
+            HttpStatus.OK,
+            org
+        )
+        send("POST", "/api/srtm/declaraciones/$id/recalcular", null, HttpStatus.OK, org)
+        assertDec("12000", declaracion(id, org)["valor_autoavaluo"])
+        val rid = tree(send("POST", "/api/srtm/declaraciones/$id/rectificar", null, HttpStatus.CREATED, org))["declaracion"]["id"].asString()
+
+        piso(rid, org, 2, 50)
+        send("POST", "/api/srtm/declaraciones/$rid/recalcular", null, HttpStatus.OK, org)
+
+        assertEquals("020300", JSON.readTree(PEDIDO.get())["uso"]?.asString(), PEDIDO.get())
+        declaracion(rid, org).let {
+            assertDec("150", it["area_construida"])
+            assertDec("17000", it["valor_autoavaluo"])
+            assertFalse(it["autoavaluo_por_revisar"]?.asBoolean() ?: false, it.toString())
+        }
+    }
+
     @Test
     fun `a fila is the backend's`() {
         val org = conCatastro()
@@ -621,6 +657,10 @@ class DerivadosApiTest : SrtmApiTest() {
 
         // how many valuaciones catastro was asked for
         private val PEDIDOS = AtomicInteger()
+
+        // the last valuación catastro was asked for
+        private val PEDIDO = AtomicReference<String>()
+        private const val TIENDAS = "TIENDAS DEPOSITOS CENTROS DE RECREACION CLUBES E INSTITUCIONES"
         private val JSON = JsonMapper.builder().build()
 
         val NIVEL =
@@ -644,9 +684,17 @@ class DerivadosApiTest : SrtmApiTest() {
             "motivo":"Falta el porcentaje de actualización de 2027","llave":"PARAMETRO_FALTANTE:PORCENTAJE_ACTUALIZACION:2027",
             "detalle":null}"""
 
-        // 10 per m² of terreno, 100 per m² of each construcción
+        private const val SIN_TABLA =
+            """{"anio":2026,"version":"valuacion-v2","region":"SELVA","autoavaluo":null,
+            "motivo":"No hay tabla de depreciación del RNT para el uso «sin uso» (D1): sin ella lo construido no se deprecia",
+            "llave":"TABLA_DE_DEPRECIACION:","detalle":null}"""
+
+        // 10 per m² of terreno, 100 per m² of each construcción. as catastro, without uso a construcción without its
+        // clasificación has no tabla to depreciate with (D1)
         private fun valuar(pedido: String): String {
             val p = JSON.readTree(pedido)
+            val sinUso = p["uso"] == null || p["uso"].isNull
+            if (sinUso && p["construcciones"].any { it["clasificacion"] == null || it["clasificacion"].isNull }) return SIN_TABLA
             val terreno = p["areaTerreno"]?.takeUnless { it.isNull }?.decimalValue() ?: BigDecimal.ZERO
             val construido = p["construcciones"].sumOf { it["areaConstruida"]?.takeUnless { a -> a.isNull }?.decimalValue() ?: BigDecimal.ZERO }
             val autoavaluo = terreno * BigDecimal(10) + construido * BigDecimal(100)
@@ -662,6 +710,7 @@ class DerivadosApiTest : SrtmApiTest() {
                 createContext("/api/catastro/valuacion") { ex ->
                     val pedido = ex.requestBody.readAllBytes().decodeToString()
                     PEDIDOS.incrementAndGet()
+                    PEDIDO.set(pedido)
                     when (MODO.get()) {
                         Modo.VALUA -> responder(ex, 200, valuar(pedido))
                         Modo.MOTIVO -> responder(ex, 200, SIN_VALOR)
