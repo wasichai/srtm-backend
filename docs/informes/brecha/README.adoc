@@ -152,11 +152,17 @@ make corte ORG=perene FECHA=2026-10-25        # extrae y publica; FECHA por omis
 ----
 
 `make corte` es `make extraer` (escribe el corte en `~/cortes/analitica/perene/2026-10-25`, o la carpeta que dé
-`SALIDA=`) seguido de `make publicar` (lo verifica contra su manifiesto y lo sincroniza a S3 con
-`aws s3 sync … --sse AES256`). Un corte publicado es inmutable: `make publicar` rechaza un
-`manifiesto.json` remoto que ya exista, y `make extraer` rechaza una carpeta local que ya exista, salvo que se
-pase `REEMPLAZAR=1` a propósito (para corregir un corte malo, nunca por rutina). Para correr cada paso por
-separado:
+`SALIDA=`) seguido de `make publicar` (lo verifica contra su manifiesto y lo sube a S3, siempre con
+`--sse AES256`). `make publicar` sube primero los Parquet (`aws s3 sync … --exclude manifiesto.json`) y el
+`manifiesto.json` al final (`aws s3 cp`): un `manifiesto.json` en S3 quiere decir que el corte subió entero, y
+una subida cortada a medias no deja manifiesto, así que se puede volver a correr.
+
+Un corte publicado es inmutable: `make publicar` rechaza un `manifiesto.json` remoto que ya exista, y
+`make extraer` rechaza una carpeta local que ya exista, salvo que se pase `REEMPLAZAR=1` a propósito (para
+corregir un corte malo, nunca por rutina; con `REEMPLAZAR=1` el manifiesto viejo se borra antes de subir los
+Parquet nuevos). La existencia se comprueba con `aws s3api head-object`: si responde 404 el corte no está
+publicado; cualquier otro error (credenciales, red, bucket) detiene la publicación sin subir nada. Para correr
+cada paso por separado:
 
 [source,bash]
 ----
