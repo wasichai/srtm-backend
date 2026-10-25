@@ -2110,7 +2110,9 @@ su `valor_autoavaluo` ([Valores derivados de la DJ](#valores-derivados-de-la-dj)
   Si no hay uno solo, va `null` y el catastro responde su motivo. Sin uso (#235: el padrón de Ica lo deja vacío
   cuando su código es de sub clase), va el prefijo que comparten los usos de su sub clase (`XXYY00`, p. ej. `020300`)
   o, sin sub clase, los de su clase (`XX0000`); el catastro toma el prefijo más largo para la tabla de depreciación.
-  Si no hay un solo prefijo, va `null`.
+  Si no hay un solo prefijo, va `null`. Es una aproximación: en sub clases cuyos usos caen en tablas distintas
+  (p. ej. `0205` SERVICIOS, con talleres en la tabla 04), el piso sin clasificación toma la tabla del prefijo de la
+  sub clase; lo exacto es ponerle su clasificación o el uso a la DJ.
 - **Tipo de predio (#209):** el `tipo_predio` del predio (nunca el de la DJ, que no lo tiene) va como `tipoPredio`
   (`PREDIO RUSTICO` → `RUSTICO`, `PREDIO URBANO` → `URBANO`; otro valor, o ninguno, `null`, como siempre urbano).
   Un predio rústico responde `motivo = "PREDIO_RUSTICO"` y sin `autoavaluo`: el catastro todavía no tiene los
