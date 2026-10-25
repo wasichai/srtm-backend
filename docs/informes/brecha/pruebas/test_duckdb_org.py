@@ -34,31 +34,51 @@ def _cli(funcion, argv):
 TIENDAS = "TIENDAS DEPOSITOS CENTROS DE RECREACION CLUBES E INSTITUCIONES"
 
 
-class UltimoCorteTests(unittest.TestCase):
-    def test_ultimo_corte_toma_la_fecha_mayor(self):
+class FechasPublicadasTests(unittest.TestCase):
+    def test_fechas_publicadas_de_la_mayor_a_la_menor(self):
         listado = "PRE 2026-09-01/\nPRE 2026-11-01/\nPRE 2026-10-01/\nPRE tmp/\n2026-12-01 x.json"
-        self.assertEqual(s3.ultimo_corte(listado), "2026-11-01")
-        self.assertIsNone(s3.ultimo_corte(""))
-        self.assertIsNone(s3.ultimo_corte("PRE tmp/\n2026-12-01 x.json"))
+        self.assertEqual(s3.fechas_publicadas(listado), ["2026-11-01", "2026-10-01", "2026-09-01"])
+        self.assertEqual(s3.fechas_publicadas(""), [])
+        self.assertEqual(s3.fechas_publicadas("PRE tmp/\n2026-12-01 x.json"), [])
+
+
+def _resultado(cmd, codigo, stdout="", stderr="", check=False):
+    """What subprocess.run returns, or raises with check=True and a non-zero exit - as the real one does."""
+    if check and codigo != 0:
+        raise subprocess.CalledProcessError(codigo, cmd, output=stdout, stderr=stderr)
+    return subprocess.CompletedProcess(cmd, codigo, stdout=stdout, stderr=stderr)
 
 
 class DescargarTests(ConCorte, unittest.TestCase):
-    def _sincronizador(self, origen_local):
-        """A fake `ejecutar`: "aws s3 ls" answers a canned listing, and "aws s3 sync" copies `origen_local`'s
-        files into the destination the real sync command would have written them to - close enough to let
-        manifiesto.verificar_corte run for real on the result."""
-        llamadas = []
+    S3 = "s3://sgtm-dev/analitica/perene"
 
-        def ejecutar(cmd, **kwargs):
+    def _sincronizador(self, origen_local, fechas=("2026-10-01", "2026-11-01"), con_manifiesto=None):
+        """A fake `ejecutar` playing the AWS CLI over a bucket holding `fechas` under perene/, of which
+        `con_manifiesto` (by omission, all) have their manifiesto.json: "aws s3 ls <prefijo>/" answers the
+        "PRE <fecha>/" listing, "aws s3 ls <prefijo>/<fecha>/manifiesto.json" the object's line, and both exit 1
+        with no output when nothing matches - as `aws s3 ls` does on an empty or missing prefix. "aws s3 sync"
+        copies `origen_local`'s files into the destination the real sync would have written them to - close
+        enough to let manifiesto.verificar_corte run for real on the result."""
+        llamadas = []
+        con_manifiesto = set(fechas if con_manifiesto is None else con_manifiesto)
+
+        def ejecutar(cmd, check=False, **kwargs):
             llamadas.append(cmd)
             if cmd[:3] == ["aws", "s3", "ls"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout="PRE 2026-10-01/\nPRE 2026-11-01/\n", stderr="")
+                ruta = cmd[3]
+                if ruta == f"{self.S3}/":
+                    listado = "".join(f"                           PRE {f}/\n" for f in fechas)
+                    return _resultado(cmd, 0 if listado else 1, stdout=listado, check=check)
+                fecha = ruta.removeprefix(f"{self.S3}/").removesuffix("/manifiesto.json")
+                if fecha in con_manifiesto:
+                    return _resultado(cmd, 0, stdout="2026-11-01 05:00:00       2048 manifiesto.json\n", check=check)
+                return _resultado(cmd, 1, check=check)
             if cmd[:3] == ["aws", "s3", "sync"]:
                 destino = Path(cmd[4])
                 destino.mkdir(parents=True, exist_ok=True)
                 for archivo in origen_local.iterdir():
                     (destino / archivo.name).write_bytes(archivo.read_bytes())
-                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+                return _resultado(cmd, 0, check=check)
             raise AssertionError(f"comando inesperado: {cmd}")
 
         return ejecutar, llamadas
@@ -72,21 +92,60 @@ class DescargarTests(ConCorte, unittest.TestCase):
 
         self.assertEqual(carpeta, cortes / "perene" / "2026-11-01")
         self.assertEqual(llamadas[0], ["aws", "s3", "ls", "s3://sgtm-dev/analitica/perene/"])
+        self.assertEqual(llamadas[1], ["aws", "s3", "ls", "s3://sgtm-dev/analitica/perene/2026-11-01/manifiesto.json"])
         self.assertEqual(
-            llamadas[1][:3] + llamadas[1][-1:],
+            llamadas[2][:3] + llamadas[2][-1:],
             ["aws", "s3", "sync", "--only-show-errors"],
         )
-        self.assertEqual(llamadas[1][3], "s3://sgtm-dev/analitica/perene/2026-11-01/")
-        self.assertEqual(llamadas[1][4], str(carpeta))
+        self.assertEqual(llamadas[2][3], "s3://sgtm-dev/analitica/perene/2026-11-01/")
+        self.assertEqual(llamadas[2][4], str(carpeta))
         manifiesto.verificar_corte(carpeta)  # no ErrorCorte: the "downloaded" corte matches its manifest
 
     def test_descargar_sin_corte_publicado(self):
-        def ejecutar(cmd, **kwargs):
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-
+        # `aws s3 ls` of an empty or missing prefix exits 1 with no output: that is "nothing published", an
+        # ErrorCorte (exit 2), not a CalledProcessError (exit 1, "no se pudo bajar")
+        ejecutar, _ = self._sincronizador(self._corte(minimos()), fechas=())
         with self.assertRaises(comun.ErrorCorte) as error:
             s3.descargar("s3://sgtm-dev/analitica", "perene", self.tmp / "cortes", ejecutar=ejecutar)
         self.assertIn("perene", str(error.exception))
+
+    def test_descargar_error_de_aws_no_es_sin_corte(self):
+        # exit 1 WITH something on stderr (credentials, network) is a real failure, never "nothing published"
+        def ejecutar(cmd, check=False, **kwargs):
+            return _resultado(cmd, 1, stderr="Unable to locate credentials", check=check)
+
+        with self.assertRaises(subprocess.CalledProcessError):
+            s3.descargar("s3://sgtm-dev/analitica", "perene", self.tmp / "cortes", ejecutar=ejecutar)
+
+    def test_descargar_salta_un_corte_sin_manifiesto(self):
+        # the newest fecha has no manifiesto.json yet (a publish in progress, or cut): the newest complete corte
+        # is downloaded instead, and the skipped fecha is named on stderr
+        ejecutar, llamadas = self._sincronizador(self._corte(minimos()), con_manifiesto={"2026-10-01"})
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error):
+            carpeta = s3.descargar("s3://sgtm-dev/analitica", "perene", self.tmp / "cortes", ejecutar=ejecutar)
+        self.assertEqual(carpeta.name, "2026-10-01")
+        sync = next(c for c in llamadas if c[:3] == ["aws", "s3", "sync"])
+        self.assertEqual(sync[3], "s3://sgtm-dev/analitica/perene/2026-10-01/")
+        self.assertIn("2026-11-01", error.getvalue())
+
+    def test_descargar_ningun_corte_completo(self):
+        ejecutar, llamadas = self._sincronizador(self._corte(minimos()), con_manifiesto=())
+        with self.assertRaises(comun.ErrorCorte) as error:
+            s3.descargar("s3://sgtm-dev/analitica", "perene", self.tmp / "cortes", ejecutar=ejecutar)
+        self.assertIn("manifiesto.json", str(error.exception))
+        self.assertIn("2026-11-01", str(error.exception))
+        self.assertFalse(any(c[:3] == ["aws", "s3", "sync"] for c in llamadas))
+
+    def test_descargar_no_mezcla_restos_de_una_descarga_anterior(self):
+        # a folder left by an older (cut, or since replaced) download of the same fecha starts over empty
+        ejecutar, _ = self._sincronizador(self._corte(minimos()))
+        viejo = self.tmp / "cortes" / "perene" / "2026-11-01"
+        viejo.mkdir(parents=True)
+        (viejo / "srtm_tabla_vieja.parquet").write_bytes(b"resto")
+        carpeta = s3.descargar("s3://sgtm-dev/analitica", "perene", self.tmp / "cortes", ejecutar=ejecutar)
+        self.assertEqual(carpeta, viejo)
+        self.assertFalse((carpeta / "srtm_tabla_vieja.parquet").exists())
 
     def test_descargar_rechaza_una_organizacion_invalida(self):
         # an unvalidated org becomes a filesystem path segment (cortes/org/fecha) and an S3 key segment: "../x"
