@@ -8,10 +8,12 @@ data/ica/codigos.json, none of them confirmed by the municipalidad yet.
 
 Creates, in this order and skipping what Core already has (so a second run creates nothing): the via and unidad_urbana
 catalogs, contribuyente (by codigo), predio (by codigo), declaracion_predial (by predio, contribuyente, año and
-secuencia 001) and nivel_construccion (by its declaración, nivel, año and área, counting repeated sections). Every
-record is checked against model.json first: a row that does not fit is rejected to the report, with what hangs from
-it, and the rest is loaded. The report (--report, a CSV) also lists what needs a look: condominios without a %, titulares
-in conflict, unmapped codes, niveles that do not add up to the padrón.
+secuencia 001) and nivel_construccion (by its declaración, nivel, año and área, counting repeated sections). A SAT code
+that groups distinct predios (address, area or value differ) gives one predio per distinct predio, coded <codigo>-<n>,
+each with the SAT code in codigo_origen (#207). Every record is checked against model.json first: a row that does not
+fit is rejected to the report, with what hangs from it, and the rest is loaded. The report (--report, a CSV) also lists
+what needs a look: condominios without a %, shared codes, titulares in conflict, unmapped codes, niveles that do not add
+up to the padrón.
 
 Stdlib only. See README.md («Cargar la Municipalidad de Ica»).
 
@@ -159,6 +161,59 @@ def porcentajes(n):
     return [base + CENTIMO if i < sobra else base for i in range(n)]
 
 
+def _centimos(value):
+    """A number of the xlsx to the cent; empty or unreadable is None."""
+    try:
+        text = clean_decimal(value)
+    except InvalidOperation:
+        return None
+    return None if text is None else Decimal(text)
+
+
+def identidad(row):
+    """What makes two rows of a code the same predio (#207): the address (direccion_del_predio_completa, else the vía,
+    número, manzana and lote, upper case with single spaces), area_terreno and valor_predio to the cent. A SAT
+    condominio repeats them verbatim, so they are compared exactly."""
+    direccion = clean_text(row.get("direccion_del_predio_completa"))
+    if direccion is None:
+        via, numero, manzana, lote = (clean_text(row.get(k)) for k in ("nombre_de_la_via", "numero", "manzana", "lote"))
+        direccion = clean_text(" ".join(p for p in (via, numero, manzana and f"MZ {manzana}", lote and f"LT {lote}") if p))
+    return (direccion.upper() if direccion else None, _centimos(row.get("area_terreno")),
+            _centimos(row.get("valor_predio")))
+
+
+def _orden(code):
+    # the importer's lowest code: numeric codes by their value
+    return len(code or ""), code or ""
+
+
+def codigos_derivados(rows):
+    """Each (SAT code, contribuyente) -> its srtm code, and the shared codes. A code whose titulares are all the same
+    predio keeps its code; one that groups distinct predios gives `<code>-<n>` to each, n from 1 in the order of their
+    lowest contribuyente code, and none keeps the bare code. A shared code is listed as {codigo, fila (its first row),
+    djs, predios}."""
+    primeras = defaultdict(dict)  # SAT code -> contribuyente -> its first row
+    for row in rows:
+        code = codigo(row.get("codigo_predio"))
+        if code is not None:
+            primeras[code].setdefault(codigo(row.get("codigo_contribuyente")), row)
+    srtm, compartidos = {}, []
+    for code, titulares in primeras.items():
+        grupos = defaultdict(list)  # identidad -> its contribuyentes
+        for contribuyente, row in titulares.items():
+            grupos[identidad(row)].append(contribuyente)
+        if len(grupos) == 1:
+            srtm.update({(code, c): code for c in titulares})
+            continue
+        ordenados = sorted(grupos.values(), key=lambda cs: min(map(_orden, cs)))
+        derivados = [f"{code}-{n}" for n in range(1, len(ordenados) + 1)]
+        for derivado, contribuyentes in zip(derivados, ordenados):
+            srtm.update({(code, c): derivado for c in contribuyentes})
+        compartidos.append({"codigo": code, "fila": next(iter(titulares.values()))["_fila"], "djs": len(titulares),
+                            "predios": derivados})
+    return srtm, compartidos
+
+
 def valores_condominio(autoavaluo, porcentaje):
     """(valor_condominio, valor_afecto) as Condominio.kt: the % of the autoavalúo to the cent, half up; with deducción
     0, valor_afecto is the same."""
@@ -284,7 +339,8 @@ def check(model, name, attributes, relations=False):
 
 @dataclass
 class Registro:
-    """A declaración or a nivel: its row, the (predio, contribuyente) it belongs to and its attributes."""
+    """A declaración or a nivel: its row, the (predio, contribuyente) it belongs to and its attributes. codigo_predio is
+    the srtm code, the SAT code or one derived from it (#207)."""
     fila: int
     codigo_predio: str
     codigo_contribuyente: str
@@ -296,11 +352,12 @@ class Dataset:
     vias: dict = field(default_factory=dict)  # (codigo, tipo, nombre, ubigeo) -> attributes
     unidades: dict = field(default_factory=dict)
     contribuyentes: dict = field(default_factory=dict)  # codigo -> attributes
-    predios: dict = field(default_factory=dict)  # codigo -> attributes
+    predios: dict = field(default_factory=dict)  # srtm codigo -> attributes
     declaraciones: list = field(default_factory=list)
     niveles: list = field(default_factory=list)
     filas: dict = field(default_factory=dict)  # ("contribuyente" | "predio", codigo) -> its first row
     reporte: list = field(default_factory=list)
+    compartidos: list = field(default_factory=list)  # the SAT codes of distinct predios, as codigos_derivados lists them
     errores: list = field(default_factory=list)  # the model lacks a field: nothing can be loaded
 
 
@@ -328,6 +385,7 @@ class _Builder:
         self.primera = {}  # (columna, valor) -> (hoja, fila)
         self.campos = defaultdict(set)  # object -> every attribute it was given
         self.rechazados = set()  # predios that do not fit the model
+        self.srtm = {}  # (SAT code, contribuyente) -> srtm code; None when its group is not loaded
 
     def report(self, categoria, hoja, fila, predio=None, contribuyente=None, detalle=""):
         self.data.reporte.append({"categoria": categoria, "hoja": hoja, "fila": fila, "codigo_predio": predio,
@@ -372,7 +430,7 @@ class _Builder:
             condiciones[code].add(codigo(row.get("condicion_predio")))
         documentos = {}  # numero -> the codigo that keeps it
         # the lowest code keeps a shared document: numeric codes by their value
-        for code in sorted(primeras, key=lambda c: (len(c), c)):
+        for code in sorted(primeras, key=_orden):
             row = primeras[code]
             tipo, numero, motivo = documento(row.get("tipo_documento"), row.get("nro_documento"), self.codigos)
             if motivo == "codigo_sin_mapeo":
@@ -413,13 +471,33 @@ class _Builder:
 
     # predios and catalogs ----------------------------------------------------
 
+    def derivados(self, rows):
+        """The srtm code of every row (#207). A derived code the padrón already has as a code of its own is not loaded:
+        its predio, DJ and niveles go to the report."""
+        self.srtm, self.data.compartidos = codigos_derivados(rows)
+        propios = {codigo(r.get("codigo_predio")) for r in rows}
+        for c in self.data.compartidos:
+            self.report("codigo_compartido", "padron", c["fila"], c["codigo"], None,
+                        f"{c['djs']} DJ en {len(c['predios'])} predios distintos: {c['predios'][0]} a {c['predios'][-1]}")
+            for derivado in c["predios"]:
+                if derivado in propios:
+                    self.report("codigo_derivado_repetido", "padron", c["fila"], c["codigo"], None,
+                                f"el código derivado {derivado} ya es un código del padrón: ese predio no se carga, ni sus DJ "
+                                "ni sus niveles")
+                    self.srtm.update({par: None for par, code in self.srtm.items() if par[0] == c["codigo"] and code == derivado})
+
+    def par(self, row):
+        """The row's (SAT code, contribuyente) and its srtm code."""
+        par = codigo(row.get("codigo_predio")), codigo(row.get("codigo_contribuyente"))
+        return par, self.srtm.get(par)
+
     def predios(self, rows):
         for row in rows:
-            code = codigo(row.get("codigo_predio"))
+            (origen, _), code = self.par(row)
             self.catalogos(row)
             if code is None or ("predio", code) in self.data.filas or code in self.rechazados:
                 continue
-            attributes = self.predio(row, code)
+            attributes = self.predio(row, code, origen)
             valid = self.valid("predio", attributes, "padron", row, code, None)
             if valid is None:
                 self.rechazados.add(code)
@@ -427,7 +505,7 @@ class _Builder:
             self.data.predios[code] = valid
             self.data.filas[("predio", code)] = row["_fila"]
 
-    def predio(self, row, code):
+    def predio(self, row, code, origen):
         tipo_via = self.mapped("padron", row, "tipo_via") or self.codigos["tipo_via"]["por_defecto"]
         via, numero, manzana, lote = (clean_text(row.get(k)) for k in ("nombre_de_la_via", "numero", "manzana", "lote"))
         tipo_zona, zona = clean_text(row.get("tipo_de_unidad_urbana")), clean_text(row.get("nombre_de_unidad_urbana"))
@@ -440,6 +518,7 @@ class _Builder:
                         "sin direccion_del_predio_completa: se arma con la vía, el número, la manzana, el lote y la unidad urbana")
         return {
             "codigo": code,
+            "codigo_origen": origen,
             "direccion": direccion,
             "tipo_predio": self.mapped("padron", row, "tipo_predio"),
             "tipo_via": tipo_via,
@@ -479,17 +558,19 @@ class _Builder:
 
     def declaraciones(self, rows):
         # the predio's titulares, each once, in the sheet's order: a repeated row is rejected and is no titular
-        grupos = defaultdict(dict)  # codigo_predio -> codigo_contribuyente -> its first row
+        grupos = defaultdict(dict)  # srtm codigo_predio -> codigo_contribuyente -> its first row
         for row in rows:
-            grupos[codigo(row.get("codigo_predio"))].setdefault(codigo(row.get("codigo_contribuyente")), row)
+            (_, contribuyente), code = self.par(row)
+            grupos[code].setdefault(contribuyente, row)
         rellenos = []
         for row in rows:
-            predio, contribuyente = codigo(row.get("codigo_predio")), codigo(row.get("codigo_contribuyente"))
-            titulares = list(grupos[predio])
+            (origen, contribuyente), code = self.par(row)
+            predio = code or origen  # what the report names
+            titulares = list(grupos[code])
             missing = [f"{nombre} rechazado o sin código" for nombre, ok in (
-                ("predio", predio in self.data.predios), ("contribuyente", contribuyente in self.data.contribuyentes))
+                ("predio", code in self.data.predios), ("contribuyente", contribuyente in self.data.contribuyentes))
                 if not ok]
-            if grupos[predio][contribuyente] is not row:
+            if grupos[code][contribuyente] is not row:
                 missing.append("DJ repetida (mismo predio y contribuyente)")
             try:
                 attributes = self.declaracion(row, titulares.index(contribuyente), len(titulares))
@@ -505,7 +586,7 @@ class _Builder:
                 self.report("fecha_invalida", "padron", row["_fila"], predio, contribuyente, f"{e}: se carga vacía")
             valid = self.valid("declaracion_predial", attributes, "padron", row, predio, contribuyente, missing)
             if valid is not None:
-                self.data.declaraciones.append(Registro(row["_fila"], predio, contribuyente, valid))
+                self.data.declaraciones.append(Registro(row["_fila"], code, contribuyente, valid))
             self.cuadre(row, predio, contribuyente)
         for predio, titulares in grupos.items():
             if predio is not None:
@@ -555,13 +636,9 @@ class _Builder:
                 self.report("condomino_solo", "padron", fila, predio, codigo(grupo[0].get("codigo_contribuyente")),
                             f"condición {codes[0]} (condómino) sin otros titulares en el padrón: se carga PROPIETARIO UNICO con 100 %")
             return
-        valores = {_decimal(r.get("valor_predio")) for r in grupo}
-        if len(valores) == 1:
-            self.report("condominio_100_n", "padron", fila, predio, None,
-                        f"{len(grupo)} titulares con el mismo valor_predio y sin %: 100/{len(grupo)} cada uno")
-        else:
-            self.report("condominio_valores_distintos", "padron", fila, predio, None,
-                        f"{len(grupo)} titulares con valor_predio distintos ({len(valores)} valores): 100/{len(grupo)} cada uno, revisar")
+        # the titulares of one srtm predio share its address, area and value: a code of distinct predios was split
+        self.report("condominio_100_n", "padron", fila, predio, None,
+                    f"{len(grupo)} titulares del mismo predio y sin %: 100/{len(grupo)} cada uno")
         if any(condiciones.get(c) == PROPIETARIO_UNICO for c in codes):
             self.report("titulares_en_conflicto", "padron", fila, predio, None,
                         f"PROPIETARIO UNICO con otros titulares (condiciones {', '.join(sorted(set(c or '-' for c in codes)))})")
@@ -575,22 +652,23 @@ class _Builder:
             en_padron.setdefault((codigo(r.get("codigo_predio")), codigo(r.get("codigo_contribuyente"))), r)
         por_par = defaultdict(list)
         for row in rows:
-            par = (codigo(row.get("codigo_predio")), codigo(row.get("codigo_contribuyente")))
+            par, code = self.par(row)
+            nombrado = (code or par[0], par[1])  # what the report names
             por_par[par].append(row)
-            missing = [] if par in declaradas else [
+            missing = [] if (code, par[1]) in declaradas else [
                 "sin DJ: el par predio-contribuyente no está en el padrón" if par not in en_padron else "su DJ fue rechazada"]
             try:
                 attributes = self.nivel(row)
             except (InvalidOperation, ValueError) as e:
-                self.report("rechazada", "construcciones", row["_fila"], *par, f"nivel_construccion: {e}")
+                self.report("rechazada", "construcciones", row["_fila"], *nombrado, f"nivel_construccion: {e}")
                 continue
-            valid = self.valid("nivel_construccion", attributes, "construcciones", row, *par, relations=missing)
+            valid = self.valid("nivel_construccion", attributes, "construcciones", row, *nombrado, relations=missing)
             if valid is not None:
-                self.data.niveles.append(Registro(row["_fila"], *par, valid))
-            self.formula(row, par, attributes)
+                self.data.niveles.append(Registro(row["_fila"], *nombrado, valid))
+            self.formula(row, nombrado, attributes)
         for par, secciones in por_par.items():
             if par in en_padron:
-                self.suma(en_padron[par], par, secciones)
+                self.suma(en_padron[par], (self.srtm.get(par) or par[0], par[1]), secciones)
 
     def nivel(self, row):
         tipo_nivel, numero_piso = nivel(row.get("nivel"), self.codigos)
@@ -662,6 +740,7 @@ def build_dataset(padron, construcciones, anio, model, codigos, usos, depreciaci
     """The two sheets' rows -> what to load and what to report. Pure: reads nothing, calls nothing."""
     builder = _Builder(anio, model, codigos, usos, depreciacion)
     builder.contribuyentes(padron)
+    builder.derivados(padron)
     builder.predios(padron)
     builder.declaraciones(padron)
     builder.niveles(construcciones, padron)
@@ -717,7 +796,8 @@ def _catalogo(client, name, items, filas, workers):
 
 def load(client, data, anio, workers):
     """Creates what is missing, in dependency order. Returns (created, skipped). A contribuyente sent without its
-    document goes to data.reporte."""
+    document goes to data.reporte, and so does a shared code whose bare predio Core already has (#207): its derived
+    predios, their DJ and their niveles are not sent."""
     created = skipped = 0
     for name, items in (("via", data.vias), ("unidad_urbana", data.unidades)):
         new, same = _catalogo(client, name, items, data.filas, workers)
@@ -746,11 +826,27 @@ def load(client, data, anio, workers):
         print(f"contribuyente: {sin_numero} sent sin número: Core has their document under another code", flush=True)
 
     predios = {r["attributes"].get("codigo"): r["id"] for r in client.list_all("predio")}
-    todo = [(code, data.filas[("predio", code)], a) for code, a in data.predios.items() if code not in predios]
+    # a load before #207 left the bare code with its DJ at 100/n: the derived predios would sit next to it until the
+    # migration moves them
+    en_core = [c for c in data.compartidos if c["codigo"] in predios]
+    origenes = {c["codigo"] for c in en_core}
+    fuera = {code for code, a in data.predios.items() if a.get("codigo_origen") in origenes}
+    for c in en_core:
+        data.reporte.append({"categoria": "codigo_compartido_en_core", "hoja": "padron", "fila": c["fila"],
+                             "codigo_predio": c["codigo"], "codigo_contribuyente": None,
+                             "detalle": f"Core ya tiene el predio {c['codigo']}: no se cargan {c['predios'][0]} a "
+                                        f"{c['predios'][-1]} ni sus {c['djs']} DJ ni sus niveles, hasta migrarlo"})
+    if en_core:
+        print(f"predio: {len(en_core)} shared codes Core already has: skipped with their {len(fuera)} predios, DJ and "
+              "niveles", flush=True)
+    data_predios = {code: a for code, a in data.predios.items() if code not in fuera}
+    todo = [(code, data.filas[("predio", code)], a) for code, a in data_predios.items() if code not in predios]
     new = post_all(client, "predio", todo, workers)
     predios.update(new)
-    created, skipped = created + len(new), skipped + len(data.predios) - len(todo)
-    print(f"predio: {len(new)} created, {len(data.predios) - len(todo)} skipped", flush=True)
+    created, skipped = created + len(new), skipped + len(data_predios) - len(todo)
+    print(f"predio: {len(new)} created, {len(data_predios) - len(todo)} skipped", flush=True)
+    data_declaraciones = [d for d in data.declaraciones if d.codigo_predio not in fuera]
+    data_niveles = [n for n in data.niveles if n.codigo_predio not in fuera]
 
     def key(predio_id, contribuyente_id):
         return str(predio_id), str(contribuyente_id), str(anio), SECUENCIA
@@ -760,19 +856,19 @@ def load(client, data, anio, workers):
         for r in client.list_all("declaracion_predial", anio=anio) if r["attributes"].get("secuencia_uso") == SECUENCIA
     }
     todo = []
-    for d in data.declaraciones:
+    for d in data_declaraciones:
         predio_id, contribuyente_id = predios[d.codigo_predio], contribuyentes[d.codigo_contribuyente]
         k = key(predio_id, contribuyente_id)
         if k not in declaraciones:
             todo.append((k, d.fila, {**d.attributes, "predio": predio_id, "contribuyente": contribuyente_id}))
     new = post_all(client, "declaracion_predial", todo, workers)
     declaraciones.update(new)
-    created, skipped = created + len(new), skipped + len(data.declaraciones) - len(todo)
-    print(f"declaracion_predial: {len(new)} created, {len(data.declaraciones) - len(todo)} skipped", flush=True)
+    created, skipped = created + len(new), skipped + len(data_declaraciones) - len(todo)
+    print(f"declaracion_predial: {len(new)} created, {len(data_declaraciones) - len(todo)} skipped", flush=True)
 
     existing = Counter(_firma(r["attributes"].get("declaracion"), r["attributes"]) for r in client.list_all("nivel_construccion"))
     todo = []
-    for i, n in enumerate(data.niveles):
+    for i, n in enumerate(data_niveles):
         declaracion = declaraciones[key(predios[n.codigo_predio], contribuyentes[n.codigo_contribuyente])]
         firma = _firma(declaracion, n.attributes)
         if existing[firma]:
@@ -780,8 +876,8 @@ def load(client, data, anio, workers):
             continue
         todo.append((i, n.fila, {**n.attributes, "declaracion": declaracion}))
     new = post_all(client, "nivel_construccion", todo, workers)
-    created, skipped = created + len(new), skipped + len(data.niveles) - len(todo)
-    print(f"nivel_construccion: {len(new)} created, {len(data.niveles) - len(todo)} skipped", flush=True)
+    created, skipped = created + len(new), skipped + len(data_niveles) - len(todo)
+    print(f"nivel_construccion: {len(new)} created, {len(data_niveles) - len(todo)} skipped", flush=True)
     return created, skipped
 
 
@@ -823,6 +919,8 @@ def main(argv=None):
     print(f"predios: {len(data.predios)}")
     print(f"declaraciones: {len(data.declaraciones)}")
     print(f"niveles: {len(data.niveles)}")
+    print(f"códigos compartidos: {len(data.compartidos)} ({sum(len(c['predios']) for c in data.compartidos)} predios, "
+          f"{sum(c['djs'] for c in data.compartidos)} DJ)")
     categorias = Counter(r["categoria"] for r in data.reporte)
     print(f"rechazadas: {categorias['rechazada']}")
     write_report(args.report, data.reporte)
