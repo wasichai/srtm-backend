@@ -19,6 +19,7 @@ OBJECT = re.compile(r"^/api/objects/([a-z0-9_]+)$")
 CUIS = "/api/srtm/infracciones/cuis"
 SUGERIDO = re.compile(r"^/api/srtm/declaraciones/([^/]+)/autoavaluo-sugerido$")
 RECALCULAR = re.compile(r"^/api/srtm/declaraciones/([^/]+)/recalcular$")
+LIQUIDACION = re.compile(r"^/api/srtm/contribuyentes/([^/]+)/liquidacion$")
 ROLE = re.compile(r"^/api/roles/([A-Z0-9_]+)$")
 ROLE_PERMISSIONS = re.compile(r"^/api/roles/([A-Z0-9_]+)/permissions$")
 SERVICE_ACCOUNT = re.compile(r"^/api/service-accounts/([0-9a-f-]+)$")
@@ -96,6 +97,9 @@ class FakeCore:
         self.sugeridos = dict(sugeridos or {})  # declaración id -> its autoavaluo-sugerido dict, or 404 if missing
         # POST /recalcular: a function of the declaración id -> the declaración answered ({"id"} by default)
         self.recalcular = recalcular
+        self.fail_on_recalcular = False  # POST /recalcular answers 500
+        # GET /contribuyentes/{id}/liquidacion?anio=: a function of (contribuyente id, anio) -> the Liquidacion; 404 if None
+        self.liquidacion = None
         # GET /api/organizations/current: the login's organization
         self.organization = organization or {"id": "00000000-0000-0000-0000-000000000001", "name": "Perené", "slug": "perene"}
         self.fail_on_role = fail_on_role  # role name -> its POST /api/roles answers 500
@@ -320,7 +324,15 @@ class FakeCore:
         recalcular = RECALCULAR.match(path)
         if recalcular and method == "POST":
             id = recalcular.group(1)
+            if self.fail_on_recalcular:
+                return 500, {"detail": "boom-recalcular"}
             return 200, self.recalcular(id) if self.recalcular else {"id": id}
+        liquidacion = LIQUIDACION.match(path)
+        if liquidacion and method == "GET":
+            if self.liquidacion is None:
+                return 404, {"detail": "not found"}
+            anio = urllib.parse.parse_qs(query).get("anio", [None])[0]
+            return 200, self.liquidacion(liquidacion.group(1), anio)
         if path == "/api/organizations/current" and method == "GET":
             return 200, self.organization
         if path == "/api/auth/login" and method == "POST":

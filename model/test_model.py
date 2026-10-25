@@ -203,7 +203,7 @@ class ShippedModelTests(unittest.TestCase):
         # what came after them, at the end too: the rectificatoria's (#147) and the derivados (#156)
         despues = {objeto: set(campos) for objeto, campos in DERIVADOS.items()}
         despues["declaracion_predial"] |= {"sustituye", "fecha_sustitucion"} | DESPUES_DE_DERIVADOS
-        despues["predio"] = {"varios_codigos_via"}
+        despues["predio"] = {"varios_codigos_via", "fecha_baja", "motivo_baja"}
         for objeto, campos in nuevos.items():
             with self.subTest(objeto=objeto):
                 antes = [f for f in self.campos(objeto).values() if f["name"] not in despues.get(objeto, set())]
@@ -218,11 +218,20 @@ class ShippedModelTests(unittest.TestCase):
         self.assertTrue(self.campos("obra_complementaria")["mes_construccion"]["required"])
 
     def test_the_predio_marks_the_regla_para_varios_codigos_de_via(self):
-        # #226: last of the predio, optional and false when blank: a predio of several códigos de vía of different values
+        # #226: after the padrón externo fields, optional and false when blank: a predio of several códigos de vía of
+        # different values
         campos = list(self.campos("predio").values())
-        self.assertEqual((campos[-1]["name"], campos[-1]["type"]), ("varios_codigos_via", "BOOLEAN"))
-        self.assertFalse(campos[-1].get("required"))
-        self.assertIn("Vacío cuenta como false", campos[-1]["description"])
+        self.assertEqual((campos[-3]["name"], campos[-3]["type"]), ("varios_codigos_via", "BOOLEAN"))
+        self.assertFalse(campos[-3].get("required"))
+        self.assertIn("Vacío cuenta como false", campos[-3]["description"])
+
+    def test_the_predio_can_be_given_de_baja(self):
+        # #219: last of the predio and optional: the bare code of a SAT code of distinct predios, once its DJ moved
+        # to <codigo>-<n>, is kept (its history and the brecha's crossing) and marked
+        campos = list(self.campos("predio").values())
+        self.assertEqual([(f["name"], f["type"]) for f in campos[-2:]], [("fecha_baja", "DATE"), ("motivo_baja", "LONG_TEXT")])
+        self.assertFalse(any(f.get("required") or f.get("unique") for f in campos[-2:]))
+        self.assertTrue(all(f.get("label") and f.get("description") for f in campos[-2:]))
 
     def test_the_predio_keeps_its_code_of_origin(self):
         # #207: the SAT code of a predio in Ica's padrón, kept right after codigo (not at the end, unlike the padrón

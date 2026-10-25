@@ -1458,7 +1458,8 @@ en 100/n haría pagar a cada contribuyente una fracción de su propio predio.
   tiene una fila `codigo_compartido` por código.
 - **Ya cargado sin partir:** si Core tiene el código pelado de un código compartido (una carga anterior a #207, como
   la de dev), la carga omite ese código con sus predios, sus DJ y sus niveles, y lo reporta como
-  `codigo_compartido_en_core`. Moverlo a los predios nuevos es una migración aparte.
+  `codigo_compartido_en_core`. Lo mueve a los predios nuevos `migrar_codigos_compartidos.py` (#219, abajo). Un código
+  cuyo predio pelado ya está dado de baja se carga como cualquier otro.
 - **Por confirmar** con la municipalidad que esos códigos agrupan predios distintos.
 
 **Tablas de códigos.** Están en `model/data/ica/codigos.json`: vía, documento, condición, uso, tipo de predio,
@@ -1482,7 +1483,7 @@ códigos, sin nombres ni documentos, pero no se versiona.
 | `condominio_100_n` | Varios titulares del mismo predio (dirección, área y valor) y sin %: se carga 100/n |
 | `codigo_compartido` | Un código del SAT con predios distintos: cuántas DJ y en qué predios `<codigo>-<n>` se reparten |
 | `codigo_derivado_repetido` | Un código `<codigo>-<n>` que el padrón ya usa para otro predio: ese predio, sus DJ y sus niveles no se cargan |
-| `codigo_compartido_en_core` | En la carga: Core ya tiene el código compartido sin partir, y se omite con todo lo que cuelga de él |
+| `codigo_compartido_en_core` | En la carga: Core ya tiene el código compartido sin partir (y no dado de baja), y se omite con todo lo que cuelga de él hasta migrarlo |
 | `titulares_en_conflicto` | Un PROPIETARIO ÚNICO comparte el predio con otros titulares (posible transferencia no cerrada) |
 | `condomino_solo` | Un condómino (5 o 9) sin otros titulares en el padrón: se carga PROPIETARIO UNICO con 100 % |
 | `codigo_sin_mapeo` | Un código que `codigos.json` no tiene, una fila por columna y valor |
@@ -1525,6 +1526,43 @@ python3 -I recalcular_obras_padron.py --core <url> --anio 2026             # rec
   montos, sin nombres ni documentos.
 - Sale con `0`, o `1` si Core rechaza algo. **Nunca contra un Core real sin que lo pida quien controla el despliegue:**
   el dry-run en dev lo corre el controlador de la épica, con el OK dado.
+
+### Migrar los códigos compartidos ya cargados
+
+Una carga anterior a #207 dejó en Core los códigos del SAT con predios distintos sin partir, con sus DJ al 100/n
+(en dev, unos 1 464). `migrar_codigos_compartidos.py` (#219) los pasa a sus predios `<codigo>-<n>`, con el mismo
+agrupamiento que el importador:
+
+```bash
+cd model
+python3 -I migrar_codigos_compartidos.py --excel PADRON_CONSTRUCCION.xlsx --core <url> --anio 2026 --dry-run  # solo lee
+python3 -I migrar_codigos_compartidos.py --excel PADRON_CONSTRUCCION.xlsx --core <url> --anio 2026            # migra
+```
+
+- Por cada código compartido cuyo predio pelado está en Core, crea los `<codigo>-<n>` que faltan (reusa los que ya
+  existen) y mueve a cada uno las DJ vigentes de sus titulares, de cualquier año. Es el mismo registro: sus niveles,
+  obras y frentes lo siguen. Toma la condición y el % de su grupo (PROPIETARIO UNICO al 100 % si es el único titular)
+  y los valores de `Condominio.kt`. Después recalcula cada DJ movida (`POST /declaraciones/{id}/recalcular`).
+- Da de baja el predio pelado: `fecha_baja` (hoy) y `motivo_baja`, campos de `predio` desde #219. No lo borra. Sus
+  DJ no vigentes (ANULADA o SUSTITUIDA) se quedan en él.
+- No toca un código con una DJ cuyo contribuyente no es titular suyo en el padrón (`contribuyente_sin_titular`), con
+  un `codigo_derivado_repetido` o con un `<codigo>-<n>` de Core de otro `codigo_origen`: lo reporta. Un condominio real
+  no es un código compartido y no se lee.
+- Lista sin tocarlas las cuotas de predial de `--anio` de los contribuyentes afectados y la emisión masiva del año:
+  decide la administración si hace falta una rectificación de oficio.
+- Lista también, sin tocarlas, las cuotas de arbitrio (`cuota_arbitrio`) de `--anio` de los predios pelados. Cuelgan del
+  predio y del año: la migración las deja en el predio dado de baja, y los `<codigo>-<n>` no tienen arbitrios. Hay que
+  redeterminarlos a mano, predio por predio: `POST /api/srtm/predios/{id}/arbitrios/redeterminacion` con
+  `{"anio": 2026}` en cada derivado, y en el pelado, que ya no tiene DJ vigentes, para que anule las que ya no le tocan
+  (las pagadas en caja no se tocan).
+- La salida lleva solo conteos: códigos migrables, ya migrados y no migrables por motivo, predios a crear, DJ a mover,
+  predios a dar de baja, el Δ de la base imponible por año (la suma de `valor_afecto` antes y después) y las cuotas y
+  la emisión del año. La corrida real añade el Δ del impuesto por año: lee
+  `GET /contribuyentes/{id}/liquidacion?anio=` de cada afectado antes y después. `--report` (default
+  `model/reports/codigos_compartidos.csv`) lleva el detalle con los códigos de predio y de contribuyente.
+- Sale con `0`, `1` si Core rechaza algo, o `2` si `predio` en Core aún no tiene `fecha_baja` y `motivo_baja` (aplicar
+  `model.json`): no escribe nada, y el dry-run igual informa. Una segunda corrida no cambia nada.
+- **La corrida real espera el OK** de quien controla el despliegue, después de revisar el dry-run.
 
 ### Aranceles por vía
 
