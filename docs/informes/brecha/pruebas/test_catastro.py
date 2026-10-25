@@ -111,6 +111,18 @@ class CatastroViejoTests(unittest.TestCase):
         self.assertEqual(ext.avisos, [])  # faltar esas llaves no es un 404: no hay aviso
 
 
+class MotorSinVersionTests(unittest.TestCase):
+    def test_aviso_sin_version_ni_region(self):
+        ext = _extraer(minimos(), version=None, region=None)
+        self.assertEqual(ext.motor, {"version": None, "region": None})
+        self.assertIn("catastro sin version en /api/catastro/valuaciones: motor.version es null", ext.avisos)
+        self.assertIn("catastro sin region en /api/catastro/valuaciones: motor.region es null", ext.avisos)
+
+    def test_aviso_solo_sin_region(self):
+        ext = _extraer(minimos(), region=None)
+        self.assertEqual(ext.avisos, ["catastro sin region en /api/catastro/valuaciones: motor.region es null"])
+
+
 class SinTitularesNiCambiosTests(unittest.TestCase):
     def test_sin_titulares_ni_cambios(self):
         ext = _extraer(minimos(), sin_titulares=True, sin_cambios=True)

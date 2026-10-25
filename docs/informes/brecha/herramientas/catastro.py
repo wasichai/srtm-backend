@@ -107,6 +107,8 @@ COLUMNAS = {
 
 _AVISO_SIN_TITULARES = "catastro sin /api/catastro/titulares (catastro-backend#25): se exporta la tabla vacía"
 _AVISO_SIN_CAMBIOS = "catastro sin /api/catastro/cambios (catastro-backend#26): se exporta la tabla vacía"
+# srtm's own valuaciones DTO has no region: a real catastro may well answer without one
+_AVISO_SIN_MOTOR = "catastro sin {campo} en /api/catastro/valuaciones: motor.{campo} es null"
 
 _TAMANO_PAGINA = 500
 
@@ -289,11 +291,11 @@ def extraer_catastro(cliente, anio, clave):
     valuaciones = list(cliente.paginas("/api/catastro/valuaciones", _TAMANO_PAGINA, anio=anio))
     # controller ruling R11: the motor's version/region are the top-level fields of that same call's first page
     motor = {"version": cliente.ultima_pagina.get("version"), "region": cliente.ultima_pagina.get("region")}
+    avisos = [_AVISO_SIN_MOTOR.format(campo=campo) for campo in ("version", "region") if motor[campo] is None]
     tablas["catastro_valuacion"] = [_fila_valuacion(v) for v in valuaciones]
     filas_lote = (_fila_lote(v) for v in valuaciones)
     tablas["catastro_lote"] = [fila for fila in filas_lote if fila is not None]
 
-    avisos = []
     try:
         titulares = list(cliente.paginas("/api/catastro/titulares", _TAMANO_PAGINA))
     except ErrorApi as e:

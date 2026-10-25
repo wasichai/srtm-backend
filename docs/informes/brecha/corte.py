@@ -134,6 +134,9 @@ def _verificar(carpeta):
     except comun.ErrorCorte as e:
         print(f"corte: {e}", file=sys.stderr)
         return 1
+    except OSError as e:
+        print(f"corte: no se pudo leer {carpeta}: {e.strerror}", file=sys.stderr)
+        return 1
     filas = sum(entrada["filas"] for entrada in m["archivos"])
     print(f"corte verificado: {carpeta}: {len(m['archivos'])} tablas, {filas} filas")
     return 0

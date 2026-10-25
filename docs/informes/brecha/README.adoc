@@ -190,7 +190,8 @@ CRON_TZ=America/Lima
 ----
 
 Un 1 de enero perdido (el cron no corrió) no se recupera exacto: `leido_en` en el manifiesto muestra el
-desfase frente al 1 de enero que en teoría debía leer.
+desfase frente al 1 de enero que en teoría debía leer, y `avisos` lo dice cuando `FECHA` no es el día de la
+lectura.
 
 == El manifiesto, llave por llave
 
@@ -239,8 +240,10 @@ corte).
 clave).
 
 |`avisos`
-|Lista ordenada de avisos: una tabla tolerada ausente (404), una versión de backend que no llegó, etc. Nunca un
-error: un corte con avisos de todas formas se publica.
+|Lista ordenada de avisos: una tabla tolerada ausente (404), una versión de backend que no llegó, un catastro
+que no dijo la `version` o la `region` de su motor, o una `FECHA` distinta del día (en America/Lima) en que se
+leyeron las APIs: como no hay lectura «a una fecha», ese corte trae los datos del día de la lectura con la
+etiqueta de otra fecha. Nunca un error: un corte con avisos de todas formas se publica.
 
 |`archivos`
 |Una entrada por Parquet (`archivo`, `bytes`, `sha256`, `filas`), ordenada por nombre de archivo.
@@ -259,7 +262,8 @@ duckdb ~/cortes/analitica/perene/2026-10-25.duckdb -c "SELECT * FROM v_segmentos
 El archivo tiene las 17 tablas del corte materializadas (no vistas sobre los Parquet), `corte_manifiesto` con
 las cifras del manifiesto, y las vistas de `vistas.sql`. `armar_duckdb.py` verifica el corte contra su
 manifiesto antes de tocar el archivo de destino, así que una carpeta que no coincide con su `manifiesto.json`
-nunca llega a reemplazarlo.
+nunca llega a reemplazarlo; también rechaza un destino dentro de la carpeta del corte (sería un archivo que el
+manifiesto no lista).
 
 === Qué vista da cada cifra del informe v3
 

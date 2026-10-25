@@ -8,7 +8,7 @@ import unittest
 from decimal import Decimal
 
 import armar_duckdb
-from herramientas import base
+from herramientas import base, manifiesto
 from herramientas.sinteticos import C1, C3, D2, F3, P2, minimos
 from pruebas.test_corte import ORG, ConCorte
 
@@ -223,6 +223,26 @@ class VistasTests(ConCorte, unittest.TestCase):
         self.assertEqual(codigo, 2)
         self.assertIn("catastro_lote.parquet", error)
         self.assertFalse((self.tmp / "otra.duckdb").exists())
+
+    def test_armar_duckdb_rechaza_un_destino_dentro_del_corte(self):
+        carpeta = self._corte(minimos())
+        for destino in (carpeta / ".duckdb", carpeta / "sub" / "x.duckdb"):
+            with self.subTest(destino=destino):
+                codigo, _, error = self._armar(carpeta, destino)
+                self.assertEqual(codigo, 2)
+                self.assertIn("dentro del corte", error)
+                self.assertFalse(destino.exists())
+        manifiesto.verificar_corte(carpeta)  # the corte is untouched
+
+    def test_armar_duckdb_con_manifiesto_corrupto_sale_con_2(self):
+        carpeta = self._corte(minimos())
+        (carpeta / "manifiesto.json").write_text("{no es json", encoding="utf-8")
+        destino = self.tmp / "ficticia.duckdb"
+        codigo, _, error = self._armar(carpeta, destino)
+        self.assertEqual(codigo, 2)
+        self.assertEqual(len(error.strip().splitlines()), 1, error)
+        self.assertIn("manifiesto.json", error)
+        self.assertFalse(destino.exists())
 
     @staticmethod
     def _armar(carpeta, destino):

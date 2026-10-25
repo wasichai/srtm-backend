@@ -7,6 +7,7 @@ cualquier otro error aborta el corte sin escribir ni publicar nada"). JSON bodie
 parse_float=Decimal (contexto.md: DECIMAL columns must stay exact, never a float).
 """
 
+import http.client
 import json
 import urllib.error
 import urllib.parse
@@ -144,9 +145,15 @@ class Cliente:
                 raise ErrorApi("GET", ruta, e.code) from None
             except urllib.error.URLError as e:
                 raise ErrorApi("GET", ruta, str(e.reason)) from None
+            except (http.client.HTTPException, OSError) as e:
+                # a response cut mid-way (IncompleteRead), a reset or a read timeout: one line, never a traceback
+                raise ErrorApi("GET", ruta, f"respuesta interrumpida ({type(e).__name__})") from None
         if not crudo:
             return None
-        return json.loads(crudo.decode("utf-8"), parse_float=Decimal)
+        try:
+            return json.loads(crudo.decode("utf-8"), parse_float=Decimal)
+        except ValueError:  # JSONDecodeError and UnicodeDecodeError: a proxy's HTML page, say
+            raise ErrorApi("GET", ruta, "la respuesta no es JSON") from None
 
     def _token_nuevo(self):
         cuerpo = json.dumps({"clientId": self.client_id, "clientSecret": self.client_secret}).encode("utf-8")
@@ -156,16 +163,26 @@ class Cliente:
             method="POST",
             headers={"Content-Type": "application/json", "Accept": "application/json"},
         )
+        ruta = "/api/auth/token"
         try:
             with urllib.request.urlopen(peticion, timeout=self.timeout) as respuesta:
-                datos = json.loads(respuesta.read().decode("utf-8"))
+                crudo = respuesta.read()
         except urllib.error.HTTPError as e:
             e.read()
             e.close()
-            raise ErrorApi("POST", "/api/auth/token", e.code) from None
+            raise ErrorApi("POST", ruta, e.code) from None
         except urllib.error.URLError as e:
-            raise ErrorApi("POST", "/api/auth/token", str(e.reason)) from None
-        return datos["token"]
+            raise ErrorApi("POST", ruta, str(e.reason)) from None
+        except (http.client.HTTPException, OSError) as e:
+            raise ErrorApi("POST", ruta, f"respuesta interrumpida ({type(e).__name__})") from None
+        try:
+            datos = json.loads(crudo.decode("utf-8"))
+        except ValueError:
+            raise ErrorApi("POST", ruta, "la respuesta no es JSON") from None
+        token = datos.get("token") if isinstance(datos, dict) else None
+        if not isinstance(token, str) or not token:
+            raise ErrorApi("POST", ruta, "respuesta sin token")
+        return token
 
     @staticmethod
     def _objeto(datos, ruta):

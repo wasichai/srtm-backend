@@ -34,6 +34,10 @@ def main(argv=None):
     except SystemExit as e:  # argparse already printed the usage error (2) or the help (0)
         return e.code if isinstance(e.code, int) else 2
     carpeta, destino = Path(args.corte).expanduser(), Path(args.destino).expanduser()
+    # a file inside the corte would be an extra file its manifest does not list: the corte would stop verifying
+    if carpeta.resolve() in (destino.resolve(), *destino.resolve().parents):
+        print(f"armar_duckdb: el destino {destino} queda dentro del corte {carpeta}; usa otra carpeta", file=sys.stderr)
+        return 2
     try:
         con = base.construir_duckdb(carpeta, destino)
     except comun.ErrorCorte as e:

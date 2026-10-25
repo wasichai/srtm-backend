@@ -95,6 +95,15 @@ def _pagina_y_tamano(params, tamano_por_omision, tamano_maximo=500):
     return page, _tamano(params, tamano_por_omision, tamano_maximo)
 
 
+class Crudo:
+    """A route's raw body instead of a JSON payload: a page that is not JSON, or with `largo` a Content-Length
+    longer than the body, a response cut mid-way (http.client.IncompleteRead on the client)."""
+
+    def __init__(self, cuerpo, largo=None):
+        self.cuerpo = cuerpo
+        self.largo = largo
+
+
 class _Manejador(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass  # keep test output quiet, like fake_core.py
@@ -111,6 +120,12 @@ class _Manejador(BaseHTTPRequestHandler):
             estado, payload = falso._responder(metodo, ruta, query, cuerpo, autorizacion)
         self.send_response(estado)
         self.send_header("Content-Type", "application/json")
+        if isinstance(payload, Crudo):
+            if payload.largo is not None:
+                self.send_header("Content-Length", str(payload.largo))
+            self.end_headers()
+            self.wfile.write(payload.cuerpo)
+            return
         self.end_headers()
         if payload is not None:
             self.wfile.write(json.dumps(payload).encode("utf-8"))

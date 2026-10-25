@@ -19,7 +19,7 @@ import pyarrow.parquet as pq
 import corte
 from herramientas import comun, manifiesto, parquet
 from herramientas.comun import ErrorCorte
-from herramientas.falsos import CatastroFalso, SrtmFalso
+from herramientas.falsos import CatastroFalso, Crudo, SrtmFalso
 from herramientas.seudonimo import huella_clave
 from herramientas.sinteticos import R2, datos, minimos
 from herramientas.tablas import COLUMNAS, ESQUEMAS
@@ -38,6 +38,15 @@ class _CatastroRoto(CatastroFalso):
     def manejar(self, metodo, ruta, query, cuerpo):
         if ruta == "/api/catastro/valuaciones":
             return 500, {"detail": "falla simulada"}
+        return super().manejar(metodo, ruta, query, cuerpo)
+
+
+class _CatastroNoJson(CatastroFalso):
+    """A catastro-backend whose titulares answer 200 with an HTML page: one line on stderr, exit 1."""
+
+    def manejar(self, metodo, ruta, query, cuerpo):
+        if ruta == "/api/catastro/titulares":
+            return 200, Crudo(b"<html>proxy</html>")
         return super().manejar(metodo, ruta, query, cuerpo)
 
 
@@ -309,6 +318,35 @@ class CorteTests(ConCorte, unittest.TestCase):
         self.assertFalse((salida / ORG / FECHA).exists())
         self.assertFalse((salida / ORG / f"{FECHA}.parcial").exists())
 
+    def test_respuesta_que_no_es_json_sale_con_1_en_una_linea(self):
+        secretos = self._secretos(*self._falsos(minimos(), clase_catastro=_CatastroNoJson))
+        salida = self.tmp / "cortes"
+        codigo, _, error = self._correr(secretos, salida)
+        self.assertEqual(codigo, 1)
+        self.assertEqual(len(error.strip().splitlines()), 1, error)
+        self.assertIn("/api/catastro/titulares", error)
+        self.assertFalse((salida / ORG / FECHA).exists())
+        self.assertFalse((salida / ORG / f"{FECHA}.parcial").exists())
+
+    def test_aviso_cuando_fecha_no_es_el_dia_de_la_lectura(self):
+        aviso = (
+            "fecha_corte 2026-10-24 no es el día de la lectura (2026-10-25 en America/Lima): "
+            "las tablas traen los datos del 2026-10-25"
+        )
+        m = self._manifiesto(self._corte(minimos(), fecha="2026-10-24"))
+        self.assertIn(aviso, m["avisos"])
+        m = self._manifiesto(self._corte(minimos()))
+        self.assertFalse(any(a.startswith("fecha_corte") for a in m["avisos"]))
+
+    def test_sin_aviso_si_la_lectura_es_ese_dia_en_lima(self):
+        # 03:00 UTC of the 25th is still the 24th in Lima (UTC-5)
+        secretos = self._secretos(*self._falsos(minimos()))
+        reloj = datetime(2026, 10, 25, 3, 0, tzinfo=timezone.utc)
+        codigo, _, error = self._correr(secretos, self.tmp / "cortes", fecha="2026-10-24", reloj=reloj)
+        self.assertEqual(codigo, 0, error)
+        m = self._manifiesto(self.tmp / "cortes" / ORG / "2026-10-24")
+        self.assertFalse(any(a.startswith("fecha_corte") for a in m["avisos"]))
+
     def test_carpeta_existente_sin_reemplazar(self):
         s = minimos()
         salida = self.tmp / "cortes"
@@ -395,6 +433,20 @@ class CorteTests(ConCorte, unittest.TestCase):
                 self.assertEqual(codigo, 2)
                 self.assertIn("CATASTRO_TIMEOUT", error)
                 self.assertFalse((salida / ORG / FECHA).exists())
+
+    def test_verificar_un_manifiesto_corrupto_sale_con_1_en_una_linea(self):
+        carpeta = self._corte(minimos())
+        ruta = carpeta / "manifiesto.json"
+        for contenido in ("{no es json", "[]", '{"archivos": [{"archivo": "srtm_predio.parquet"}]}', "\xff"):
+            with self.subTest(contenido=contenido):
+                ruta.write_bytes(contenido.encode("latin-1"))
+                with self.assertRaises(ErrorCorte):
+                    manifiesto.verificar_corte(carpeta)
+                salida_std, error_std = io.StringIO(), io.StringIO()
+                with contextlib.redirect_stdout(salida_std), contextlib.redirect_stderr(error_std):
+                    self.assertEqual(corte.main(["--verificar", str(carpeta)]), 1)
+                self.assertEqual(len(error_std.getvalue().strip().splitlines()), 1, error_std.getvalue())
+                self.assertIn("manifiesto.json", error_std.getvalue())
 
     def test_version_de_backends_del_entorno(self):
         os.environ["VERSION_SRTM"] = "2.0.0"

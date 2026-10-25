@@ -4,7 +4,7 @@ import unittest
 from decimal import Decimal
 
 from herramientas.cliente import Cliente, ErrorApi
-from herramientas.falsos import CatastroFalso, SrtmFalso
+from herramientas.falsos import CatastroFalso, Crudo, SrtmFalso
 
 
 def _predio(i):
@@ -33,6 +33,24 @@ class _ValuacionesQueSeCortan(CatastroFalso):
         if ruta == "/api/catastro/valuaciones" and estado == 200 and datos["page"] >= 1:
             datos["items"] = []
         return estado, datos
+
+
+class _SrtmCrudo(SrtmFalso):
+    """A srtm whose records route answers 200 with `crudo` (a body that is not JSON, or a cut one)."""
+
+    def __init__(self, crudo):
+        super().__init__({})
+        self.crudo = crudo
+
+    def manejar(self, metodo, ruta, query, cuerpo):
+        return 200, self.crudo
+
+
+class _TokenSinToken(SrtmFalso):
+    """A srtm whose /api/auth/token answers 200 without a `token`."""
+
+    def _autenticar(self, cuerpo):
+        return 200, {"detalle": "sin token"}
 
 
 class _FeedAtascado(CatastroFalso):
@@ -104,6 +122,43 @@ class RegistrosTests(unittest.TestCase):
         mensaje = str(contexto.exception)
         self.assertNotIn(servidor.CLIENT_SECRET, mensaje)
         self.assertNotIn("Bearer", mensaje)
+
+    def test_respuesta_que_no_es_json_es_error_api(self):
+        servidor = _SrtmCrudo(Crudo(b"<html>mantenimiento</html>"))
+        try:
+            with self.assertRaises(ErrorApi) as contexto:
+                list(_cliente(servidor).registros("predio"))
+        finally:
+            servidor.cerrar()
+        self.assertIn("JSON", str(contexto.exception))
+
+    def test_respuesta_que_no_es_un_objeto_es_error_api(self):
+        servidor = _SrtmCrudo(Crudo(b"[1, 2]"))
+        try:
+            with self.assertRaises(ErrorApi) as contexto:
+                list(_cliente(servidor).registros("predio"))
+        finally:
+            servidor.cerrar()
+        self.assertIn("objeto JSON", str(contexto.exception))
+
+    def test_respuesta_cortada_es_error_api(self):
+        servidor = _SrtmCrudo(Crudo(b'{"content": [', largo=1000))
+        try:
+            with self.assertRaises(ErrorApi) as contexto:
+                list(_cliente(servidor).registros("predio"))
+        finally:
+            servidor.cerrar()
+        self.assertIn("/api/objects/predio/records", str(contexto.exception))
+
+    def test_token_sin_token_es_error_api(self):
+        servidor = _TokenSinToken({"predio": [_predio(0)]})
+        try:
+            with self.assertRaises(ErrorApi) as contexto:
+                list(_cliente(servidor).registros("predio"))
+        finally:
+            servidor.cerrar()
+        self.assertIn("/api/auth/token", str(contexto.exception))
+        self.assertNotIn(servidor.CLIENT_SECRET, str(contexto.exception))
 
     def test_decimales_exactos(self):
         servidor = SrtmFalso({"cuota_predial": [{"id": "c1", "impuesto_anual": 0.1}]})
