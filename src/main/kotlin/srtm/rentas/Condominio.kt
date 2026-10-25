@@ -149,6 +149,13 @@ val PADRON_EXTERNO_NIVEL = listOf(CLASIFICACION, "valor_unitario", "incremento",
 // a nivel's clasificación de la construcción: an insumo of the construction, not a figure of its year (copiar)
 const val CLASIFICACION = "clasificacion"
 
+// #241: the clasificación a portal edit of a nivel leaves: the body's, trimmed; none in the body (a client that does not
+// know the field, srtm-ui before #241) keeps the stored one, the padrón's or the user's; a blank one clears it
+fun clasificacionAlEditar(
+    body: String?,
+    stored: String?
+): String? = if (body == null) stored else body.trim().ifEmpty { null }
+
 // #180: what makes a nivel carry an external padrón's valuation: its figures, not its clasificación (an insumo, which a
 // copy to another year keeps). a nivel with only that has no valuación de origen
 val VALUACION_PADRON_NIVEL = PADRON_EXTERNO_NIVEL - CLASIFICACION

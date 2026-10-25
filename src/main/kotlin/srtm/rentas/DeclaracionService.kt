@@ -504,9 +504,10 @@ class DeclaracionService(
         }
     }
 
-    // #180: what an external padrón brought of each nivel, which its dto does not carry. a rectificatoria (the same
-    // year) keeps it all, as a condómino's copy; another year keeps its clasificación (an insumo of the construction,
-    // which the autoavalúo sugerido reads), not the figures of the source year
+    // #180: what an external padrón brought of each nivel, beyond its dto (#241: the dto carries the clasificación too,
+    // so a copy keeps it either way). a rectificatoria (the same year) keeps it all, as a condómino's copy; another
+    // year keeps its clasificación (an insumo of the construction, which the autoavalúo sugerido reads), not the
+    // figures of the source year
     private fun nivelesDelPadron(
         origen: Declaracion,
         copia: Declaracion
@@ -630,7 +631,7 @@ class DeclaracionService(
     suspend fun agregarNivel(
         id: UUID,
         body: NivelConstruccion
-    ) = nuevoNivel(id, body.copy(fila = null)).also { nivel ->
+    ) = nuevoNivel(id, body.copy(fila = null, clasificacion = clasificacionAlEditar(body.clasificacion, null))).also { nivel ->
         escrita(id)
         replicar(NIVEL_CONSTRUCCION, id, null) { otra, _ -> nuevoNivel(otra, nivel.copy(id = null, declaracion = null)) }
     }
@@ -652,7 +653,8 @@ class DeclaracionService(
         body: NivelConstruccion
     ): NivelConstruccion {
         val fila = deVigente(NIVEL_CONSTRUCCION, id)
-        val nivel = body.copy(id = null, declaracion = null, fila = fila.fila)
+        val clasificacion = clasificacionAlEditar(body.clasificacion, fila.registro[CLASIFICACION]?.toString())
+        val nivel = body.copy(id = null, declaracion = null, fila = fila.fila, clasificacion = clasificacion)
         val saved = listas.cambiar(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, PARENT, id, nivel)
         fila.declaracion?.let {
             escrita(it)
