@@ -879,6 +879,19 @@ class CliTests(unittest.TestCase):
             [row] = [r for r in csv.DictReader(f) if r["categoria"] == "codigo_compartido_en_core"]
         self.assertEqual((row["codigo_predio"], row["codigo_contribuyente"]), (SHARED, ""))
 
+    def test_a_shared_code_migrated_in_core_is_loaded_again(self):
+        # #219: once migrar_codigos_compartidos.py gave the bare predio de baja, its derived predios are srtm's: a reload
+        # completes what they lack, and the bare predio stays as it is
+        self.core.add_record("predio", {"codigo": SHARED, "fecha_baja": "2026-10-25", "motivo_baja": "migrado"})
+        code, out, err = self.run_cli()
+        self.assertEqual(code, 0, msg=err)
+        codigos = sorted(r["attributes"]["codigo"] for r in self.core.records["predio"])
+        self.assertEqual(codigos, ["000000001-0001-0001", "000000002-0001-0001", "000000003-0001-0001", SHARED,
+                                   f"{SHARED}-1", f"{SHARED}-2"])
+        self.assertEqual(self.count("declaracion_predial"), 6)
+        with open(self.report, encoding="utf-8") as f:
+            self.assertNotIn("codigo_compartido_en_core", {r["categoria"] for r in csv.DictReader(f)})
+
     def test_a_document_core_has_under_another_code_is_sent_without_it(self):
         self.core.add_record("contribuyente", {"codigo": "800000", "numero_documento": "40000001", "tipo_persona": "NATURAL",
                                                "tipo_documento": "DNI", "nombre_completo": "OTRA PERSONA"})

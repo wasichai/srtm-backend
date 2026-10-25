@@ -274,6 +274,12 @@ def condicion(code, titulares, codigos):
     return propia if propia in TITULAR_UNICO else PROPIETARIO_UNICO
 
 
+def reparto(code, posicion, titulares, codigos):
+    """(condición, %) of the titular at `posicion` of a predio's `titulares`, in the sheet's order: 100/n to the cent
+    and the condición Condominio.kt leaves. The importer's and the migration's (#219)."""
+    return condicion(code, titulares, codigos), porcentajes(titulares)[posicion]
+
+
 def fecha(value):
     """An ISO date from the xlsx's text ('2004-01-01 00:00:00' or '31/12/2004') or an Excel serial. The 1900-01-01
     filler is None."""
@@ -400,6 +406,8 @@ class Dataset:
     filas: dict = field(default_factory=dict)  # ("contribuyente" | "predio", codigo) -> its first row
     reporte: list = field(default_factory=list)
     compartidos: list = field(default_factory=list)  # the SAT codes of distinct predios, as codigos_derivados lists them
+    srtm: dict = field(default_factory=dict)  # (SAT code, contribuyente) -> srtm code; None: codigo_derivado_repetido
+    titulares: dict = field(default_factory=dict)  # srtm code -> contribuyente -> its first row, in the sheet's order
     errores: list = field(default_factory=list)  # the model lacks a field: nothing can be loaded
 
 
@@ -517,6 +525,7 @@ class _Builder:
         """The srtm code of every row (#207). A derived code the padrón already has as a code of its own is not loaded:
         its predio, DJ and niveles go to the report."""
         self.srtm, self.data.compartidos = codigos_derivados(rows)
+        self.data.srtm = self.srtm
         propios = {codigo(r.get("codigo_predio")) for r in rows}
         for c in self.data.compartidos:
             self.report("codigo_compartido", "padron", c["fila"], c["codigo"], None,
@@ -617,6 +626,7 @@ class _Builder:
         for row in rows:
             (_, contribuyente), code = self.par(row)
             grupos[code].setdefault(contribuyente, row)
+        self.data.titulares = {code: dict(t) for code, t in grupos.items() if code is not None}
         rellenos = []
         for row in rows:
             (origen, contribuyente), code = self.par(row)
@@ -650,7 +660,7 @@ class _Builder:
             self.report("fecha_relleno", "padron", fila, detalle="fecha_adquisicion 1900-01-01: se carga vacía")
 
     def declaracion(self, row, posicion, titulares):
-        porcentaje = porcentajes(titulares)[posicion]
+        condicion_propiedad, porcentaje = reparto(row.get("condicion_predio"), posicion, titulares, self.codigos)
         autoavaluo = clean_decimal(row.get("valor_predio"))
         valor_condominio, valor_afecto = valores_condominio(autoavaluo, porcentaje)
         uso = uso_ica(row.get("codigo_uso"), self.codigos, self.usos)
@@ -659,7 +669,7 @@ class _Builder:
         return {
             "anio": self.anio,
             "secuencia_uso": SECUENCIA,
-            "condicion_propiedad": condicion(row.get("condicion_predio"), titulares, self.codigos),
+            "condicion_propiedad": condicion_propiedad,
             "porcentaje_condominio": str(porcentaje),
             **(uso or {"clase_uso": None, "sub_clase_uso": None, "uso": None}),
             "area_terreno": clean_decimal(row.get("area_terreno")),
@@ -880,10 +890,12 @@ def load(client, data, anio, workers):
     if sin_numero:
         print(f"contribuyente: {sin_numero} sent sin número: Core has their document under another code", flush=True)
 
-    predios = {r["attributes"].get("codigo"): r["id"] for r in client.list_all("predio")}
+    records = client.list_all("predio")
+    predios = {r["attributes"].get("codigo"): r["id"] for r in records}
+    de_baja = {r["attributes"].get("codigo") for r in records if r["attributes"].get("fecha_baja")}
     # a load before #207 left the bare code with its DJ at 100/n: the derived predios would sit next to it until the
-    # migration moves them
-    en_core = [c for c in data.compartidos if c["codigo"] in predios]
+    # migration (migrar_codigos_compartidos.py, #219) moves them and gives the bare one de baja
+    en_core = [c for c in data.compartidos if c["codigo"] in predios and c["codigo"] not in de_baja]
     origenes = {c["codigo"] for c in en_core}
     fuera = {code for code, a in data.predios.items() if a.get("codigo_origen") in origenes}
     for c in en_core:
