@@ -7,7 +7,9 @@
 #   metabase/respaldo.sh ENV_FILE
 #
 # ENV_FILE es metabase.env (o cualquier archivo con las mismas claves: METABASE_RESPALDOS_DIR,
-# METABASE_RESPALDOS_S3). Escribe metabase-<AAAAMMDDTHHMMSSZ, UTC>.dump en METABASE_RESPALDOS_DIR.
+# METABASE_RESPALDOS_S3). Escribe metabase-<AAAAMMDDTHHMMSSZ, UTC>.dump en METABASE_RESPALDOS_DIR: pg_dump
+# vuelca a un .parcial y solo se renombra al terminar (como el .parcial de corte.py), así un pg_dump a medias
+# nunca ocupa uno de los 14 cupos ni se confunde con un respaldo bueno.
 set -euo pipefail
 aqui=$(cd "$(dirname "$0")" && pwd)
 env_file=${1:?uso: respaldo.sh ENV_FILE}
@@ -20,13 +22,18 @@ set +a
 
 compose() { docker compose -p srtm-metabase -f "$aqui/compose.yml" --env-file "$env_file" "$@"; }
 
-mkdir -p "$METABASE_RESPALDOS_DIR"
 umask 077
+mkdir -p "$METABASE_RESPALDOS_DIR"
 sello=$(date -u +%Y%m%dT%H%M%SZ)
 destino="$METABASE_RESPALDOS_DIR/metabase-$sello.dump"
+parcial="$destino.parcial"
+# a pg_dump killed partway (disco lleno, el contenedor se cae) no debe dejar un .parcial huérfano ni, peor,
+# un $destino incompleto contado entre los 14 que se conservan
+trap 'rm -f "$parcial"' EXIT
 
 echo "respaldo: metabase-postgres -> $destino"
-compose exec -T metabase-postgres pg_dump -U metabase -Fc metabase > "$destino"
+compose exec -T metabase-postgres pg_dump -U metabase -Fc metabase > "$parcial"
+mv "$parcial" "$destino"
 
 # conserva los 14 más recientes: el sello (AAAAMMDDTHHMMSSZ) ordena por nombre igual que por fecha
 mapfile -t respaldos < <(find "$METABASE_RESPALDOS_DIR" -maxdepth 1 -name 'metabase-*.dump' | sort)

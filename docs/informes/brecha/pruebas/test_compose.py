@@ -79,6 +79,27 @@ class ScriptsDeRespaldoTests(unittest.TestCase):
                     resultado = subprocess.run(["shellcheck", str(ruta)], capture_output=True, text=True)
                     self.assertEqual(resultado.returncode, 0, resultado.stdout + resultado.stderr)
 
+    def test_respaldo_limpia_el_parcial_si_pg_dump_falla(self):
+        # a killed pg_dump must not leave a half-written file counted among the 14 kept backups: it is written
+        # to a .parcial and only renamed once pg_dump finishes (review finding, fix round 1)
+        texto = (METABASE / "respaldo.sh").read_text(encoding="utf-8")
+        self.assertIn('parcial="$destino.parcial"', texto)
+        self.assertIn("trap 'rm -f \"$parcial\"' EXIT", texto)
+        self.assertIn('pg_dump -U metabase -Fc metabase > "$parcial"', texto)
+        self.assertIn('mv "$parcial" "$destino"', texto)
+
+    def test_restaurar_no_arranca_metabase_si_pg_restore_falla(self):
+        # metabase must stay stopped (never started over a half-restored base) and the operator gets the
+        # exact command to start it again once metabase-postgres is fixed (review finding, fix round 1)
+        texto = (METABASE / "restaurar.sh").read_text(encoding="utf-8")
+        coincide = re.search(r"if ! compose exec -T metabase-postgres pg_restore.*?\n(.*?)fi\n", texto, re.DOTALL)
+        self.assertIsNotNone(coincide, "falta el chequeo de pg_restore en restaurar.sh")
+        cuerpo = coincide.group(1)
+        self.assertIn("exit 1", cuerpo)
+        self.assertIn("up -d metabase", cuerpo)
+        # "compose up -d metabase" (sin el "if !") solo debe aparecer después del bloque de error, nunca dentro
+        self.assertNotIn("compose up -d metabase", cuerpo)
+
 
 class DockerfileTests(unittest.TestCase):
     def test_dockerfile_fija_versiones(self):
