@@ -17,7 +17,7 @@ prediales, catastro fiscal) que se carga por REST, e importadores del padrón de
 
 - JDK 25 y Docker (para PostGIS y para los tests de integración con Testcontainers).
 - Python 3.11+ para `model/`.
-- Las librerías de wasichai (`wasichai:wasichai-bom:1.3.0` y los starters). Se resuelven desde:
+- Las librerías de wasichai (`wasichai:wasichai-bom:1.5.0` y los starters). Se resuelven desde:
   1. **GitHub Packages** (`https://maven.pkg.github.com/wasichai/wasichai`). Pide un token aunque sea para leer
      (`read:packages` basta). En `~/.gradle/gradle.properties`:
      ```properties
@@ -2564,7 +2564,7 @@ ninguna municipalidad en el frontend (wasichai/srtm-ui#112):
 
 ### Archivos (wasichai-files)
 
-srtm instala `wasichai-spring-boot-starter-files` (del BOM de wasichai, 1.3.0) para los campos `FILE` e `IMAGE`; hoy,
+srtm instala `wasichai-spring-boot-starter-files` (del BOM de wasichai, 1.5.0) para los campos `FILE` e `IMAGE`; hoy,
 solo `municipalidad.escudo`. Detalle del módulo: `docs/modules/files.md` de wasichai.
 
 - **Al arrancar** crea su tabla `stored_files` (y las columnas `custom_fields.file_max_bytes` y `file_content_types`,
