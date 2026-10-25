@@ -958,9 +958,9 @@ Una diferencia entre el autoavalúo de catastro y el declarado mayor a 5 UIT (de
 contribuyente a presentar DJ (TUO de la Ley de Tributación Municipal, art. 14 b); la fiscalización alcanza 4 años, o
 6 si no hubo DJ (TUO del Código Tributario, art. 43). Por eso `GET /{anio}/cambios` (abajo) lista, por cada predio
 con cambios desde `desde` (por omisión el 1 de enero del año), su Δ autoavalúo contra la última corrida TERMINADA
-(o `?corrida`) y marca `SUPERA_5_UIT` cuando |Δ| pasa esas 5 UIT: la lista de trabajo de fiscalización. La lee como
-la plataforma, sin exigir un permiso nuevo sobre `cambio_catastro`: pide la misma lectura de `brecha_corrida` que el
-resto de la brecha.
+(o `?corrida`) y marca `SUPERA_5_UIT` cuando |Δ| pasa esas 5 UIT: la lista de trabajo de fiscalización. Lee
+`cambio_catastro` directo de su tabla (nunca por `RecordService`, que rehúsa `asPlatform` dentro de una petición),
+sin exigir un permiso nuevo sobre ese objeto: pide la misma lectura de `brecha_corrida` que el resto de la brecha.
 
 **Quién la ve.** La brecha la consulta cualquier usuario de la municipalidad (decisión del 2026-10-19), y eso se da por
 roles, no por código: **todo rol** de srtm lleva lectura sobre `brecha_corrida` y `brecha_predio`. Core revisa la

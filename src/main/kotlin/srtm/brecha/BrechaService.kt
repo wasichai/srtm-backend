@@ -4,9 +4,10 @@ import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.reactive.asFlow
 import kotlinx.coroutines.reactive.awaitFirstOrNull
 import kotlinx.coroutines.reactor.asCoroutineContext
 import kotlinx.coroutines.reactor.awaitSingle
@@ -23,6 +24,7 @@ import srtm.arbitrios.ArbitriosService
 import srtm.arbitrios.ContextoArbitrios
 import srtm.arbitrios.INAFECTACION_ARBITRIO
 import srtm.arbitrios.InafectacionArbitrio
+import srtm.emision.TablasCore
 import srtm.impuesto.ParametrosTributarios
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
@@ -41,7 +43,6 @@ import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
 import wasichai.core.common.UnauthorizedException
 import wasichai.core.common.ValidationException
-import wasichai.core.data.RecordCriterion
 import wasichai.core.data.RecordQuery
 import wasichai.core.data.RecordService
 import wasichai.core.identity.AuthenticatedUser
@@ -75,6 +76,7 @@ class BrechaService(
     private val db: DatabaseClient,
     private val organizaciones: OrganizationRepository,
     private val records: RecordService,
+    private val tablas: TablasCore,
     transacciones: ReactiveTransactionManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -214,10 +216,11 @@ class BrechaService(
     // every row of a corrida
     suspend fun filas(corrida: String): List<FilaBrecha> = registros.all(BRECHA_PREDIO, FilaBrecha::class.java, filters = mapOf("corrida" to corrida))
 
-    // GET /{anio}/cambios (ruling #203): the corrida and its filas are read as the caller (its own permission on
-    // brecha_corrida and brecha_predio), but cambio_catastro as the platform, so no role needs a new permission over
-    // it. `asPlatform` refuses inside a request (ADR-039): the block runs in this service's own background scope,
-    // detached from the request's Reactor context, and the caller awaits it
+    // GET /{anio}/cambios (ruling #203, amended by controller ruling R13): the corrida and its filas are read as
+    // the caller (its own permission on brecha_corrida and brecha_predio). cambio_catastro has no role grant, and
+    // `asPlatform` refuses inside a request (ADR-039: relaxing that tripwire needs a new ADR, so in-request code
+    // must not escape it) - it is read straight from its physical table instead, scoped to the caller's own
+    // organization, the way EnvioACaja reads caja's tables with no user (TablasCore)
     suspend fun cambios(
         anio: Int,
         corrida: UUID?,
@@ -228,21 +231,44 @@ class BrechaService(
         val r = corridaDelAnio(anio, corrida)
         val filasDeLaCorrida = filas(r.id!!)
         val resultado = Multas.uit(parametrosTributarios.todos(), LocalDate.of(anio, 1, 1))
-        val uit = resultado.valor ?: throw FaltanBrecha(resultado.faltan)
+        val fila = resultado.valor ?: throw FaltanBrecha(resultado.faltan)
+        val uit = fila.valorNumerico ?: throw FaltanBrecha(resultado.faltan)
         val desdeInstante = (desde ?: LocalDate.of(anio, 1, 1)).atStartOfDay(Seguimiento.LIMA).toInstant()
-        val cambios =
-            scope
-                .async {
-                    records.asPlatform(usuario.organizationId, "srtm:aviso-cambios") {
-                        registros.donde(
-                            CAMBIO_CATASTRO,
-                            RegistroCambio::class.java,
-                            listOf(desdeDe(desdeInstante)),
-                            filters = objeto?.let { mapOf("objeto" to it) } ?: emptyMap()
-                        )
-                    }
-                }.await()
-        return Seguimiento.aviso(cambios, filasDeLaCorrida, uit.valorNumerico!!)
+        val cambios = cambiosDe(usuario.organizationId, desdeInstante, objeto)
+        return Seguimiento.aviso(cambios, filasDeLaCorrida, uit)
+    }
+
+    // cambio_catastro's rows of `organizacion` since `desde`, `objeto` filtered when given: no permission of its
+    // own (ruling #203), read directly off its table (never through RecordService), scoped by the organization's
+    // own physical table, never another's
+    private suspend fun cambiosDe(
+        organizacion: UUID,
+        desde: Instant,
+        objeto: String?
+    ): List<RegistroCambio> {
+        val t = tablas.de(CAMBIO_CATASTRO, CAMPOS_CAMBIO).firstOrNull { it.organizacion == organizacion } ?: return emptyList()
+        val c = { campo: String -> t.columna(campo) }
+        var spec =
+            db
+                .sql(
+                    "SELECT ${c("codigo_municipal")} AS codigo_municipal, ${c("objeto")} AS objeto, ${c("operacion")} AS operacion, " +
+                        "${c("campos")} AS campos, ${c("en")} AS en, ${c("entrega")} AS entrega FROM ${t.tabla} WHERE ${c("en")} >= :desde" +
+                        (if (objeto != null) " AND ${c("objeto")} = :objeto" else "")
+                ).bind("desde", desde)
+        if (objeto != null) spec = spec.bind("objeto", objeto)
+        return spec
+            .map { row, _ ->
+                RegistroCambio(
+                    codigoMunicipal = row.get("codigo_municipal", String::class.java),
+                    objeto = row.get("objeto", String::class.java),
+                    operacion = row.get("operacion", String::class.java),
+                    campos = row.get("campos", String::class.java),
+                    en = row.get("en", OffsetDateTime::class.java)?.toString(),
+                    entrega = row.get("entrega", String::class.java)
+                )
+            }.all()
+            .asFlow()
+            .toList()
     }
 
     // a page of a corrida's rows, by categoría, sector and confianza when given, in their orden (Brecha.ordenadas: the
@@ -466,13 +492,8 @@ class BrechaService(
         // a corrida whose latido is older is abandoned (its instance died): generous, the read of catastro beats once
         val LEASE: Duration = Duration.ofMinutes(10)
 
-        // cambio_catastro's `en` (DATETIME) at or after `desde` (ruling #203 R2: Peticiones.entre does not exist;
-        // bound as an Instant, the type the column's timestamptz compares correctly)
-        fun desdeDe(desde: Instant): RecordCriterion =
-            RecordCriterion { definition, bind ->
-                val columna = "\"${definition.fields.first { it.name == "en" }.columnName}\""
-                "$columna >= ${bind(desde)}"
-            }
+        // cambiosDe's columns: cambio_catastro's own fields, read off its table directly (R13)
+        val CAMPOS_CAMBIO = listOf("codigo_municipal", "objeto", "operacion", "campos", "en", "entrega")
     }
 }
 
