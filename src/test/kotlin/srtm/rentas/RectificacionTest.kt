@@ -142,4 +142,14 @@ class RectificacionTest {
     fun `a rectificatoria keeps its motivo when edited`() {
         assertEquals(RECTIFICACION, motivoAlEditar(RECTIFICACION))
     }
+
+    // #237: what a copy takes of the padrón's fields of the declaración, which the dto does not write
+    @Test
+    fun `a rectificatoria takes every padron field of the declaracion and its mark, another year its otras instalaciones`() {
+        assertEquals(
+            listOf("arancel", "valor_terreno", "valor_construccion", "valor_otras_instalaciones", "origen_modificado"),
+            padronDeLaCopia(origen, origen.copy(anio = 2025))
+        )
+        assertEquals(listOf("valor_otras_instalaciones"), padronDeLaCopia(origen, origen.copy(anio = 2026)))
+    }
 }

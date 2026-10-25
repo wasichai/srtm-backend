@@ -10,6 +10,8 @@ import srtm.rentas.Contribuyente
 import srtm.rentas.ContribuyenteService
 import srtm.rentas.DECLARACION
 import srtm.rentas.Declaracion
+import srtm.rentas.PREDIO
+import srtm.rentas.Predio
 import srtm.rentas.Registros
 import srtm.rentas.totalesDeContribuyente
 import srtm.rentas.vigente
@@ -64,6 +66,29 @@ class LiquidacionService(
                 .all(DECLARACION, Declaracion::class.java, filters = mapOf("contribuyente" to id.toString(), "anio" to anio.toString()))
                 .filter(::vigente)
         val liquidacion = ImpuestoPredial.liquidar(anio, totalesDeContribuyente(declaraciones).valorAfecto, parametros ?: parametrosTributarios.todos())
-        return Determinacion(contribuyente, declaraciones, liquidacion)
+        return Determinacion(contribuyente, declaraciones, liquidacion.copy(avisos = avisos(declaraciones)))
+    }
+
+    // #236: the predios are read only when some declaración is por revisar, so the masiva's lote pays nothing otherwise
+    private suspend fun avisos(declaraciones: List<Declaracion>): List<AvisoLiquidacion> {
+        val porRevisar = declaraciones.filter(::porRevisar)
+        if (porRevisar.isEmpty()) return emptyList()
+        return avisosPorRevisar(porRevisar, registros.byIds(PREDIO, Predio::class.java, porRevisar.mapNotNull { it.predio }))
     }
 }
+
+private fun porRevisar(d: Declaracion) = d.autoavaluoPorRevisar == true
+
+// #236: an aviso for each declaración por revisar, in their order; `predios` by id gives each its código
+fun avisosPorRevisar(
+    declaraciones: List<Declaracion>,
+    predios: Map<String, Predio>
+): List<AvisoLiquidacion> =
+    declaraciones.filter(::porRevisar).map { d ->
+        AvisoLiquidacion(
+            declaracion = d.id!!,
+            predio = d.predio,
+            predioCodigo = d.predio?.let { predios[it]?.codigo },
+            motivo = d.autoavaluoMotivo?.ifBlank { null } ?: AUTOAVALUO_POR_REVISAR
+        )
+    }

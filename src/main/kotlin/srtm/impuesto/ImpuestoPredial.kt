@@ -59,6 +59,18 @@ data class Cuota(
     val vencimiento: LocalDate
 )
 
+// #236: a declaración of the base whose autoavalúo catastro did not value (autoavaluo_por_revisar): it is liquidated on
+// the valor_autoavaluo stored, maybe an old one, and the liquidación says so. predioCodigo is null when the predio is
+// not found; motivo is catastro's (autoavaluo_motivo), else AUTOAVALUO_POR_REVISAR
+data class AvisoLiquidacion(
+    val declaracion: String,
+    val predio: String?,
+    val predioCodigo: String?,
+    val motivo: String
+)
+
+const val AUTOAVALUO_POR_REVISAR = "El autoavalúo de la declaración está por revisar"
+
 // a contribuyente's impuesto predial of a year. when a parameter of the year is missing, faltan names it and there is
 // no figure: uit, the amounts and minimoAplicado are null, tramos and cuotas empty. base is the contribuyente's still
 data class Liquidacion(
@@ -71,7 +83,9 @@ data class Liquidacion(
     val minimoAplicado: Boolean?,
     val impuestoAnual: BigDecimal?,
     val cuotas: List<Cuota>,
-    val faltan: List<String>
+    val faltan: List<String>,
+    // #236: one per declaración por revisar of the base (LiquidacionService.determinar); they do not stop the figure
+    val avisos: List<AvisoLiquidacion> = emptyList()
 )
 
 const val UIT = "UIT"

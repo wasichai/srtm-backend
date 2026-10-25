@@ -100,7 +100,8 @@ class DocumentosPrediales(
     // the HR of a contribuyente for `anio`: its vigente declaraciones and the impuesto predial with its cuotas, from the
     // same liquidación GET /liquidacion answers (LiquidacionService.determinar). FaltanParametros when a parameter of
     // the year is missing; NotFoundException when the contribuyente does not exist or has no vigente declaración.
-    // `parametros` are the year's already read (a lote of the masiva reads them once); null reads them
+    // `parametros` are the year's already read (a lote of the masiva reads them once); null reads them. the
+    // liquidación's avisos (#236, a DJ por revisar) are not printed: GET /liquidacion answers them
     suspend fun hr(
         contribuyenteId: UUID,
         anio: Int,

@@ -45,4 +45,18 @@ class ValuacionOrigenTest {
             PADRON_EXTERNO_PREDIO
         )
     }
+
+    // #237: as a nivel's clasificación, the otras instalaciones (which a copy to another year keeps) are no valuation
+    // alone; with the padrón's figures they come with them. an arancel is no padrón's when the DJ names its tramo
+    @Test
+    fun `the otras instalaciones alone are no valuation de origen, with the padron's figures they are`() {
+        val otras = BigDecimal("3000")
+        assertEquals(emptyMap<String, Any>(), padronExterno(mapOf("valor_otras_instalaciones" to otras)))
+        assertEquals(emptyMap<String, Any>(), padronExterno(mapOf("valor_otras_instalaciones" to otras, "arancel" to 35, "id_aranc" to "T1")))
+        assertEquals(
+            mapOf("valor_terreno" to BigDecimal("7100"), "valor_otras_instalaciones" to otras),
+            padronExterno(mapOf("valor_terreno" to BigDecimal("7100"), "valor_otras_instalaciones" to otras))
+        )
+        assertEquals(mapOf("arancel" to 35), padronExterno(mapOf("arancel" to 35)))
+    }
 }

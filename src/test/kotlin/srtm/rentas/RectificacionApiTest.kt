@@ -10,12 +10,12 @@ import java.math.BigDecimal
 import java.time.LocalDate
 
 // #147: a rectificatoria is a new declaración, numbered, with what the one it rectifies declares and its lists; that
-// one stays SUSTITUIDA, read-only and out of every count. another year is declared from the year before (desde). the
-// external padrón's valuation of the declaración stays where it came: neither copy takes it. its niveles' (#180): the
-// rectificatoria keeps it all, another year only the clasificación
+// one stays SUSTITUIDA, read-only and out of every count. another year is declared from the year before (desde). what
+// an external padrón brought of the declaración (#237) and of its niveles (#180): the rectificatoria keeps it all,
+// another year only what is no figure of the source's year (the otras instalaciones, a nivel's clasificación)
 class RectificacionApiTest : SrtmApiTest() {
     @Test
-    fun `a rectificatoria is numbered, with the lists and titular's data of the one it replaces, not its padron valuation`() {
+    fun `a rectificatoria is numbered, with the lists, titular's data and padron valuation of the one it replaces`() {
         val contribuyente = inscribir()
         val origen = declarar(contribuyente, predio())
         val id = origen["id"].asString()
@@ -54,11 +54,13 @@ class RectificacionApiTest : SrtmApiTest() {
         assertEquals(transferente["codigo"].asString(), copiado["codigo"].asString())
         assertEquals("43434352", copiado["numero_documento"].asString())
 
-        // the valuation of the padrón's declaración stays in the sustituida; its nivel's goes with the nivel (#180)
-        val sinOrigen = valuacionOrigen(nueva)
-        assertEquals(0, sinOrigen["declaracion"].size(), sinOrigen.toString())
-        assertEquals(1, sinOrigen["niveles"].size(), sinOrigen.toString())
-        assertEquals(DECLARACION_ICA.size, valuacionOrigen(id)["declaracion"].size())
+        // the padrón's valuation of the declaración (#237) and of its nivel (#180) is the rectificatoria's too
+        val conOrigen = valuacionOrigen(nueva)
+        assertEquals(DECLARACION_ICA.keys, conOrigen["declaracion"].propertyNames().toSet(), conOrigen.toString())
+        assertEquals(1, conOrigen["niveles"].size(), conOrigen.toString())
+        assertFalse(conOrigen["modificada"].asBoolean(), conOrigen.toString())
+        assertDeclaracionPadron(DECLARACION_ICA, nueva)
+        assertDeclaracionPadron(DECLARACION_ICA, id)
 
         val sustituida = declaracion(id)
         assertEquals("SUSTITUIDA", sustituida["estado"].asString())
@@ -141,14 +143,14 @@ class RectificacionApiTest : SrtmApiTest() {
     }
 
     @Test
-    fun `another year is declared from the year before, its lists and autoavaluo copied, its padron valuation not`() {
+    fun `another year is declared from the year before, its lists, autoavaluo and otras instalaciones copied, its padron valuation not`() {
         val contribuyente = inscribir()
         val predio = predio()
         val origen = declarar(contribuyente, predio, "anio" to 2025)
         val id = origen["id"].asString()
         val nivel = post("/api/srtm/declaraciones/$id/niveles", NIVEL)
         post("/api/srtm/declaraciones/$id/frentes", FRENTE)
-        importar(DECLARACION, id, DECLARACION_ICA)
+        importar(DECLARACION, id, DECLARACION_ICA + OTRAS_INSTALACIONES_ICA)
         importar(NIVEL_CONSTRUCCION, nivel["id"].asString(), NIVEL_ICA)
 
         val ficha =
@@ -168,11 +170,35 @@ class RectificacionApiTest : SrtmApiTest() {
         assertEquals(origen["tipo_adquisicion"].asString(), d["tipo_adquisicion"].asString())
         assertEquals(1, lista("/api/srtm/declaraciones/$nueva/niveles").size)
         assertEquals(1, lista("/api/srtm/declaraciones/$nueva/frentes").size)
+        // #237: the otras instalaciones go to the new year (a fixed amount, #208), the figures of 2025 do not. alone
+        // they are no valuation: none shown, an edit does not mark it, its year changes
+        assertDeclaracionPadron(OTRAS_INSTALACIONES_ICA, nueva)
         assertEquals(0, valuacionOrigen(nueva)["declaracion"].size())
         assertEquals(0, valuacionOrigen(nueva)["niveles"].size())
+        put("/api/srtm/declaraciones/$nueva", fields(declaracion(nueva)) + ("uso" to "EDIFICIO"))
+        assertFalse(valuacionOrigen(nueva)["modificada"].asBoolean())
+        assertEquals(2027, put("/api/srtm/declaraciones/$nueva", fields(declaracion(nueva)) + ("anio" to 2027))["anio"].asInt())
+        assertDeclaracionPadron(OTRAS_INSTALACIONES_ICA, nueva)
         // the year before stays as it was
         assertEquals("VIGENTE", declaracion(id)["estado"].asString())
-        assertEquals(DECLARACION_ICA.size, valuacionOrigen(id)["declaracion"].size())
+        assertEquals(DECLARACION_ICA.size + 1, valuacionOrigen(id)["declaracion"].size())
+    }
+
+    // #237: the rectificatoria of a DJ edited since its padrón's valuation was imported is as edited as it
+    @Test
+    fun `a rectificatoria of a declaration edited after its padron valuation stays marked`() {
+        val origen = declarar(inscribir(), predio())
+        val id = origen["id"].asString()
+        importar(DECLARACION, id, DECLARACION_ICA + OTRAS_INSTALACIONES_ICA)
+        put("/api/srtm/declaraciones/$id", fields(declaracion(id)) + ("uso" to "EDIFICIO"))
+        assertTrue(valuacionOrigen(id)["modificada"].asBoolean())
+
+        val nueva = rectificar(id)["declaracion"]["id"].asString()
+
+        val origenDeLaNueva = valuacionOrigen(nueva)
+        assertTrue(origenDeLaNueva["modificada"].asBoolean(), origenDeLaNueva.toString())
+        assertDeclaracionPadron(DECLARACION_ICA + OTRAS_INSTALACIONES_ICA, nueva)
+        rejected("PUT", "/api/srtm/declaraciones/$nueva", fields(declaracion(nueva)) + ("anio" to 2027), "anio")
     }
 
     @Test
@@ -356,6 +382,17 @@ class RectificacionApiTest : SrtmApiTest() {
         }
     }
 
+    // the stored declaración's PADRON_EXTERNO_DECLARACION fields with a value are exactly `esperado`'s (by value)
+    private fun assertDeclaracionPadron(
+        esperado: Map<String, BigDecimal>,
+        declaracion: String
+    ) {
+        val registro = tree(send("GET", "/api/objects/$DECLARACION/records/$declaracion", null, HttpStatus.OK))["attributes"]
+        val presentes = PADRON_EXTERNO_DECLARACION.filter { registro[it] != null && !registro[it].isNull && registro[it].asString().isNotBlank() }
+        assertEquals(esperado.keys, presentes.toSet(), registro.toString())
+        for ((campo, valor) in esperado) assertDecimal(valor.toPlainString(), registro[campo])
+    }
+
     private fun assertDecimal(
         expected: String,
         actual: JsonNode?
@@ -403,6 +440,7 @@ class RectificacionApiTest : SrtmApiTest() {
                 "descripcion_domicilio" to "JR. LIMA 123"
             )
         val DECLARACION_ICA = mapOf("arancel" to BigDecimal("35.50"), "valor_terreno" to BigDecimal("7100"))
+        val OTRAS_INSTALACIONES_ICA = mapOf("valor_otras_instalaciones" to BigDecimal("3000"))
         val NIVEL_ICA = mapOf("valor_unitario" to BigDecimal("402.08"), "valor_total" to BigDecimal("48250.75"))
 
         // every PADRON_EXTERNO_NIVEL field, fictitious

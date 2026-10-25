@@ -471,9 +471,9 @@ class DeclaracionService(
     }
 
     // a declaración copied with its lists, the same contribuyente's on the same predio: copiaDe with `cambios` over it,
-    // numbered as a new one. its transferentes keep their code, its rows their fila. the external padrón's valuation
-    // of the declaración stays in origen (the condómino's copy takes it: copiarPadronExterno); its niveles' goes as
-    // nivelesDelPadron says. recomputed once, with all its rows. one that fails halfway is removed with what it got
+    // numbered as a new one. its transferentes keep their code, its rows their fila. what the external padrón brought
+    // of the declaración goes as padronDeLaCopia says (#237), of its niveles as nivelesDelPadron does. recomputed once,
+    // with all its rows. one that fails halfway is removed with what it got
     private suspend fun copiar(
         origen: Declaracion,
         cambios: (Declaracion) -> Declaracion
@@ -484,9 +484,9 @@ class DeclaracionService(
         val nuevaId = UUID.fromString(creada.id)
         try {
             // #188, #226: a DJ that names its tramo de vía carries it (id_aranc) to the copy, and recalcular resolves
-            // its arancel in the copy's year. the arancel itself only to a copy of the same year (a rectificatoria):
-            // a DJ of year N never carries another year's arancel, and without a VIGENTE one in N it has none
-            if (!origen.idAranc.isNullOrBlank() && copia.anio == origen.anio) copiarPadronExterno(DECLARACION, id, nuevaId, listOf(ARANCEL))
+            // its arancel in the copy's year. the arancel itself, Normativa's or the padrón's, only to a copy of the
+            // same year (a rectificatoria): a DJ of year N never carries another year's arancel
+            copiarPadronExterno(DECLARACION, id, nuevaId, padronDeLaCopia(origen, copia))
             transferentes(id).forEach { listas.agregar(TRANSFERENTE, Transferente::class.java, PARENT, nuevaId, it.copy(id = null, declaracion = null)) }
             // nuevo*, not agregar*: a copy is no edit, and it has no valuation de origen to mark
             val delPadron = nivelesDelPadron(origen, copia)

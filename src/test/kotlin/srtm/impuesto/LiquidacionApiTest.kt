@@ -47,6 +47,7 @@ class LiquidacionApiTest : ConParametrosApiTest() {
         assertEquals(listOf(cuarto, cuarto, cuarto, anual - cuarto * BigDecimal(3)), lista(l["cuotas"]).map { it["monto"].let(::dec) })
         assertEquals(listOf("2026-02-27", "2026-05-29", "2026-08-31", "2026-11-30"), lista(l["cuotas"]).map { it["vencimiento"].asString() })
         assertTrue(lista(l["faltan"]).isEmpty())
+        assertTrue(lista(l["avisos"]).isEmpty())
     }
 
     // #147: the rectificatoria replaces the declaración it rectifies, which counts no more
@@ -74,6 +75,31 @@ class LiquidacionApiTest : ConParametrosApiTest() {
         }
         assertTrue(lista(l["tramos"]).isEmpty())
         assertTrue(lista(l["cuotas"]).isEmpty())
+    }
+
+    // #236: catastro did not value the DJ: it is liquidated on its stored valor_autoavaluo all the same, with an aviso
+    @Test
+    fun `a declaracion por revisar is liquidated and gives an aviso with its motivo`() {
+        val a = inscribir()
+        val predio = predio()
+        val dj = declarar(a, predio, autoavaluo = "60000.00")
+        declarar(a, predio(), autoavaluo = "10000.00")
+        val guardada = tree(send("GET", "/api/objects/declaracion_predial/records/$dj", null, HttpStatus.OK))["attributes"]
+        val marca = mapOf("autoavaluo_por_revisar" to true, "autoavaluo_motivo" to "Falta el porcentaje de actualización de 2027")
+        send("PUT", "/api/objects/declaracion_predial/records/$dj", mapOf("attributes" to fields(guardada) + marca), HttpStatus.OK)
+        val codigo = tree(send("GET", "/api/objects/predio/records/$predio", null, HttpStatus.OK))["attributes"]["codigo"].asString()
+
+        val l = liquidacion(a, 2026)
+
+        assertEquals(BigDecimal("70000.00"), l["base"].let(::dec))
+        assertTrue(!l["impuestoAnual"].isNull, l.toString())
+        assertTrue(lista(l["faltan"]).isEmpty())
+        val avisos = lista(l["avisos"])
+        assertEquals(1, avisos.size, l.toString())
+        assertEquals(dj, avisos[0]["declaracion"].asString())
+        assertEquals(predio, avisos[0]["predio"].asString())
+        assertEquals(codigo, avisos[0]["predioCodigo"].asString())
+        assertEquals("Falta el porcentaje de actualización de 2027", avisos[0]["motivo"].asString())
     }
 
     @Test
