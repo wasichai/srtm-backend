@@ -16,6 +16,8 @@ RECORD = re.compile(r"^/api/objects/([a-z0-9_]+)/records/([0-9a-f-]+)$")
 FIELDS = re.compile(r"^/api/metadata/objects/([a-z0-9_]+)/fields$")
 OBJECT = re.compile(r"^/api/objects/([a-z0-9_]+)$")
 CUIS = "/api/srtm/infracciones/cuis"
+SUGERIDO = re.compile(r"^/api/srtm/declaraciones/([^/]+)/autoavaluo-sugerido$")
+RECALCULAR = re.compile(r"^/api/srtm/declaraciones/([^/]+)/recalcular$")
 
 
 def _meta(label, plural_label=None, description=None, enabled=True):
@@ -64,7 +66,7 @@ class FakeCore:
     def __init__(self, existing_objects=(), existing_relationships=(), fail_on_post_object=None,
                  fail_put=False, fail_put_status=500, login_response=None, fail_on_record=None, existing_fields=None,
                  fail_on_update=None, fail_on_delete=None, object_rules=None, fail_object_put=None, object_meta=None,
-                 conflict_on_update=None, organization=None):
+                 conflict_on_update=None, organization=None, sugeridos=None):
         self.existing_objects = set(existing_objects)
         # object name -> its object-level rules ({"indexes", "appendOnly"}), as Core stores them; none by default
         self.object_rules = {n: dict((object_rules or {}).get(n, {})) for n in self.existing_objects}
@@ -82,6 +84,7 @@ class FakeCore:
         self.conflict_on_update = conflict_on_update  # object name -> its record PUTs answer 409 (srtm's ReglaDeNormativa)
         self.fail_on_delete = fail_on_delete  # object name -> its record DELETEs answer 409
         self.records = {}  # object name -> list of {"id", "attributes"}
+        self.sugeridos = dict(sugeridos or {})  # declaración id -> its autoavaluo-sugerido dict, or 404 if missing
         # GET /api/organizations/current: the login's organization
         self.organization = organization or {"id": "00000000-0000-0000-0000-000000000001", "name": "Perené", "slug": "perene"}
         self.requests = []
@@ -221,6 +224,13 @@ class FakeCore:
             return self._cuis(body)
         if path == CUIS + "/derogacion" and method == "POST":
             return self._derogacion(body)
+        sugerido = SUGERIDO.match(path)
+        if sugerido and method == "GET":
+            respuesta = self.sugeridos.get(sugerido.group(1))
+            return (404, {"detail": "not found"}) if respuesta is None else (200, respuesta)
+        recalcular = RECALCULAR.match(path)
+        if recalcular and method == "POST":
+            return 200, {"id": recalcular.group(1)}
         if path == "/api/organizations/current" and method == "GET":
             return 200, self.organization
         if path == "/api/auth/login" and method == "POST":

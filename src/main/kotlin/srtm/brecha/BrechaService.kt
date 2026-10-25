@@ -294,20 +294,29 @@ class BrechaService(
             .one()
             .awaitSingle()
 
-    // what Brecha.medir reads of srtm: every predio (the candidates of the cruce) and declaración of the year; for the
+    // what Brecha.medir reads of srtm: every predio (the candidates of the cruce) and declaración of the year, with the
+    // otras instalaciones of an external padrón (#208, which the dto does not read: one read of the records); for the
     // arbitrios, when their context was read, the contribuyentes' codes and the inafectaciones
+    @Suppress("UNCHECKED_CAST")
     private suspend fun padron(
         anio: Int,
         contexto: ContextoArbitrios?
     ): Padron {
         val predios = registros.all(PREDIO, Predio::class.java)
-        val declaraciones = registros.all(DECLARACION, Declaracion::class.java, filters = mapOf("anio" to "$anio"))
-        if (contexto == null) return Padron(predios, declaraciones)
+        val registrosDj = registros.all(DECLARACION, Map::class.java, filters = mapOf("anio" to "$anio")).map { it as Map<String, Any?> }
+        val declaraciones = registrosDj.map { Records.read(Declaracion::class.java, it["id"].toString(), it) }
+        val obrasDelPadron =
+            registrosDj
+                .mapNotNull { r ->
+                    val monto = r["valor_otras_instalaciones"]?.toString()?.trim()?.toBigDecimalOrNull() ?: return@mapNotNull null
+                    if (monto.signum() > 0) r["id"].toString() to monto else null
+                }.toMap()
+        if (contexto == null) return Padron(predios, declaraciones, obrasDelPadron = obrasDelPadron)
         val codigos =
             registros
                 .byIds(CONTRIBUYENTE, Contribuyente::class.java, declaraciones.mapNotNull { it.contribuyente })
                 .mapValues { it.value.codigo }
-        return Padron(predios, declaraciones, codigos, registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java))
+        return Padron(predios, declaraciones, codigos, registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java), obrasDelPadron)
     }
 
     private suspend fun activas(anio: Int) =

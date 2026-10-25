@@ -845,6 +845,16 @@ secuencia de uso, una vez).
 | `SOBREVALUADO` | Autoavalúo catastral < declarado × 0.95. |
 | `COINCIDE` | Dentro de ±5 %, ambos extremos incluidos (D10). |
 
+**Obras de la DJ** (#208). La ficha catastral no levanta obras complementarias, y la brecha contaría su falta como
+diferencia. Si un ítem valorizado cruza con un predio del padrón y trae `obras` vacío o 0, el lado catastro suma a su
+autoavalúo y a sus `obras` las obras de las DJ vigentes del predio: el `valor_obras` de cada DJ (las obras que valuó
+el catastro, con las del padrón de origen si se sumaron: ver [Valores derivados de la DJ](#valores-derivados-de-la-dj))
+o, si la DJ no se recalculó desde entonces y lo tiene vacío, el `valor_otras_instalaciones` del padrón externo. Cuentan
+una vez por secuencia de uso, el mayor de sus titulares (como el autoavalúo de `totalesDePredio`): cada condómino
+declara el monto entero. Se suma antes de categorizar y de liquidar, así el impuesto ve el mismo valor. Lo sumado
+queda en `obras_dj` de la fila (`obrasDj` en `/predios`) y la corrida lo cuenta en `mensaje` («1 predios sin obras en
+la ficha: se sumaron S/ 10000.00 de obras de sus DJ»). Una ficha con obras no suma nada.
+
 **Impuesto.** Por cada contribuyente con DJ vigente del año:
 - el valor catastral de cada predio cruzado y valorizado se reparte entre sus secuencias de uso según el autoavalúo
   declarado de cada una; si todas declaran 0, según su área construida; si tampoco, en partes iguales (D12), al
@@ -1419,6 +1429,32 @@ Con el extracto de 2026-10 (7 829 filas del padrón y 3 762 de construcciones), 
 unidades urbanas, 1 458 contribuyentes, 7 521 predios, 7 829 declaraciones y 3 758 niveles, con 4 filas rechazadas. El
 extracto es parte de un padrón de unas 32 000 filas: hasta tener el completo, la brecha de Ica infla los OMISOS.
 
+### Recalcular con las obras del padrón
+
+Las DJ importadas de Ica no tienen obras complementarias propias: su `valor_otras_instalaciones` es un monto fijo del
+padrón. Mientras no se recalculen, `Derivados.conObrasDelPadron` lo suma al autoavalúo que valúa catastro (#208); una
+vez recalculadas (`POST /declaraciones/{id}/recalcular`), si catastro ya valúa sus propias obras,
+`valor_autoavaluo` (y `valor_obras`) puede cambiar. `recalcular_obras_padron.py` mide ese cambio antes de aplicarlo:
+
+```bash
+cd model
+python3 -I recalcular_obras_padron.py --core <url> --anio 2026 --dry-run   # lee el sugerido de cada DJ, no escribe
+python3 -I recalcular_obras_padron.py --core <url> --anio 2026             # recalcula las que cambian
+```
+
+- Lee `GET /api/srtm/declaraciones/{id}/autoavaluo-sugerido` de cada DJ **vigente** (estado vacío o VIGENTE) con
+  `valor_otras_instalaciones > 0`, en paralelo (`--workers`, default 4).
+- Clasifica cada una: `cambia` (|sugerido − guardado| ≥ 0.01), `igual` o `sin_valor` (catastro no la valuó; el
+  motivo queda en el reporte).
+- Con `--dry-run` no llama a `/recalcular`; sin él, lo llama solo para las que cambian.
+- Imprime el resumen (`con_obras`, `valuadas`, `cambian`, `suma_delta`, `a_un_sol` — de las valuadas, cuántas
+  reproduce el motor a ±S/ 1 del valor guardado, el mismo cotejo contra el SAT del plan — y `sin_valor` por motivo)
+  y escribe `--report` (default
+  `model/reports/obras_padron.csv`), un CSV con `declaracion, valor_autoavaluo, sugerido, delta, motivo`: solo ids y
+  montos, sin nombres ni documentos.
+- Sale con `0`, o `1` si Core rechaza algo. **Nunca contra un Core real sin que lo pida quien controla el despliegue:**
+  el dry-run en dev lo corre el controlador de la épica, con el OK dado.
+
 ## Normalizar el padrón importado
 
 Un padrón importado antes de que `import_predios.py` separara los tipos se normaliza en Core, sin volver a importar:
@@ -1856,7 +1892,7 @@ su `valor_autoavaluo` ([Valores derivados de la DJ](#valores-derivados-de-la-dj)
 ```
 { "anio": 2026, "version": "valuacion-v2", "region": "SELVA", "codigo_municipal": "01-01-0006", "arancel_m2": 45.5,
   "origen_arancel": "CUERPO", "terreno": 9100.0, "construccion": 78781.6, "obras": 8870.61, "autoavaluo": 96752.21,
-  "motivo": null, "llave": null,
+  "motivo": null, "llave": null, "obras_padron_origen": null,
   "detalle": { "pisos": [ { "piso": "1", "seccion": null, "area_construida": 100, "valor_unitario": 829.28, "incremento": 0.0,
                             "tabla_depreciacion": "01", "antiguedad": 10, "porcentaje_depreciacion": 5,
                             "valor_unitario_depreciado": 787.816, "valor": 78781.6 } ],
@@ -1875,8 +1911,15 @@ su `valor_autoavaluo` ([Valores derivados de la DJ](#valores-derivados-de-la-dj)
 - **Obras:** `codigoVu` = `tipo_obra|n`, donde `n` es el número con que empieza la `categoria` (`3. MURO DE …`).
   Sin número, va `null` y el catastro nombra la obra que no valúa. `cantidad` es el total metrado (cantidad × metrado),
   en la unidad de la partida.
+- **Obras del padrón de origen (#208):** si la DJ no tiene ninguna obra activa (ninguna, o todas `INACTIVO`) y el
+  padrón externo trajo `valor_otras_instalaciones` mayor que 0, srtm suma ese monto al `autoavaluo` y a las `obras`
+  que valuó el catastro, y lo pone en `obras_padron_origen`. En el desglose es una fila más de `detalle.obras`, con
+  `codigo_vu = null`, `valor` = el monto y `descripcion = "Obras del padrón de origen"` (las filas del catastro traen
+  `descripcion = null`). Se deja de sumar en cuanto la DJ declara una obra activa: sus obras las valúa el catastro.
+  Si el catastro no da valor, no se suma nada.
+  Límite: el monto del padrón es fijo: no se vuelve a depreciar en los años siguientes.
 - **Edificio** (el 5 % desde el 5.° piso): si el predio tiene `edificacion` o hay un nivel PISO por encima del primero.
-- Sin valor, `terreno`, `construccion`, `obras`, `autoavaluo` y `detalle` son `null`, y `motivo` y `llave` dicen por
+- Sin valor, `terreno`, `construccion`, `obras`, `autoavaluo`, `obras_padron_origen` y `detalle` son `null`, y `motivo` y `llave` dicen por
   qué (`ARANCEL_FALTANTE`, `PARAMETRO_FALTANTE:PORCENTAJE_ACTUALIZACION:2027`…).
 - 404 si la DJ no existe o es de otra organización, 409 `SIN_CATASTRO_CONFIGURADO` si la organización no tiene catastro
   y 502 si el catastro no responde o rechaza el pedido.
@@ -1893,7 +1936,10 @@ frentes (`DeclaracionService.recalcular`, `Derivados.kt`):
   los otros frentes activos (la base `FRONTIS_ML` de los arbitrios). Sin ningún frontis, `null`.
 - **Autoavalúo:** lo valúa el catastro de la organización, con el motor del [autoavalúo sugerido](#autoavalúo-sugerido).
   - Si da valor, `valor_autoavaluo` es ese valor y se limpian `autoavaluo_por_revisar` y `autoavaluo_motivo`.
-  - Si no da valor, se conserva el autoavalúo anterior y se marca `autoavaluo_por_revisar = true`. `autoavaluo_motivo`
+  - `valor_obras` (#208) son las `obras` de esa valuación, con las del padrón de origen si se sumaron (mientras la DJ
+    no declare obras activas, ver el [autoavalúo sugerido](#autoavalúo-sugerido)).
+    Límite: el monto del padrón es fijo: no se vuelve a depreciar en los años siguientes.
+  - Si no da valor, se conservan el autoavalúo y el `valor_obras` anteriores y se marca `autoavaluo_por_revisar = true`. `autoavaluo_motivo`
     dice por qué: el `motivo` del catastro (o su `llave`), o `El catastro no respondió: …` si respondió con error. La
     escritura no se rechaza.
   - **Sin catastro configurado** (el 409 del sugerido), el autoavalúo es manual: lo escribe el usuario, como antes, y
@@ -1917,7 +1963,7 @@ frentes (`DeclaracionService.recalcular`, `Derivados.kt`):
 - **Una sola vez:** la rectificatoria, la DJ desde la anterior y el condómino nuevo copian todas sus filas y recalculan
   al final (una sola valuación).
 - **Lo que manda el portal:** en el alta y en la edición se ignoran `area_construida`, `area_comun_construida`,
-  `longitud_frente`, `autoavaluo_por_revisar` y `autoavaluo_motivo`, y también `valor_autoavaluo` mientras haya
+  `longitud_frente`, `valor_obras`, `autoavaluo_por_revisar` y `autoavaluo_motivo`, y también `valor_autoavaluo` mientras haya
   catastro. Un cliente anterior a #156 que manda `longitud_frente` sin `frontis_principal` en el alta declara con él el
   frontis principal. En la edición, un `frontis_principal` que no llega conserva el guardado (se borra mandando `0`) y,
   si la DJ no tiene ninguno (no la alcanzó `migrar_derivados.py`), se toma el `longitud_frente` que llega.

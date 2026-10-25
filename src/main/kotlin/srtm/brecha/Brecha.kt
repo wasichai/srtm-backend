@@ -21,12 +21,14 @@ import srtm.rentas.vigente as declaracionVigente
 
 // what a corrida reads of srtm: every predio of the organization (the candidates of the cruce), every declaración of
 // the year (an annulled one too: arbitrios may charge the months before a sale; the impuesto counts only the vigentes),
-// and for the arbitrios the contribuyentes' codes (the titular principal's tie-break) and the inafectaciones
+// and for the arbitrios the contribuyentes' codes (the titular principal's tie-break) and the inafectaciones.
+// obrasDelPadron: declaración id -> the otras instalaciones an external padrón brought (> 0), which no dto reads
 data class Padron(
     val predios: List<Predio>,
     val declaraciones: List<Declaracion>,
     val codigos: Map<String, String?> = emptyMap(),
-    val inafectaciones: List<InafectacionArbitrio> = emptyList()
+    val inafectaciones: List<InafectacionArbitrio> = emptyList(),
+    val obrasDelPadron: Map<String, BigDecimal> = emptyMap()
 )
 
 // the rows of a corrida, or what the year lacks to liquidate (then no row). avisos are what could not be computed
@@ -404,6 +406,32 @@ object Brecha {
         return DeltaArbitrios.Es(suma(catastro.cuotas.map { it.monto }) - suma(declarado.cuotas.map { it.monto }))
     }
 
+    // #208: the obras a predio's DJs declare: each one's valor_obras (the engine's obras, the padrón's amount included),
+    // else, not recalculated since, its padrón's otras instalaciones. once per secuencia, the highest of its titulares
+    // (as totalesDePredio counts the autoavalúo). null: none has any
+    fun obrasDeLaDj(
+        declaraciones: List<Declaracion>,
+        obrasDelPadron: Map<String, BigDecimal>
+    ): BigDecimal? =
+        declaraciones
+            .groupBy(::grupoDe)
+            .values
+            .mapNotNull { s -> s.mapNotNull { it.valorObras ?: it.id?.let(obrasDelPadron::get) }.maxOrNull() }
+            .takeIf { it.isNotEmpty() }
+            ?.fold(BigDecimal.ZERO, BigDecimal::add)
+
+    // #208: a valued ficha without obras (null or 0) takes the DJ's on the catastro side, in its obras and its autoavalúo:
+    // the ficha does not survey them, and the brecha would count what it lacks as a difference
+    fun conObrasDeLaDj(
+        item: ValuacionCatastral,
+        obras: BigDecimal?
+    ): ValuacionCatastral {
+        val autoavaluo = item.autoavaluo ?: return item
+        val monto = obras?.takeIf { it.signum() > 0 } ?: return item
+        if (item.obras != null && item.obras.signum() != 0) return item
+        return item.copy(autoavaluo = autoavaluo + monto, obras = monto)
+    }
+
     // the omiso's impuesto as if its autoavalúo were a contribuyente's whole base (no contribuyente to add it to)
     fun estimado(
         anio: Int,
@@ -431,7 +459,16 @@ object Brecha {
         val vigentes = delAnio.filter(::declaracionVigente)
         val vigentesPorPredio = vigentes.filter { it.predio != null }.groupBy { it.predio!! }
         val todasPorPredio = delAnio.filter { it.predio != null }.groupBy { it.predio!! }
-        val pares = cruzar(items, padron.predios, vigentesPorPredio.keys)
+        // the catastro side of each crossed pair, before anything is computed with it. sumadas: what conObrasDeLaDj added
+        val sumadas = IdentityHashMap<ValuacionCatastral, BigDecimal>()
+        val pares =
+            cruzar(items, padron.predios, vigentesPorPredio.keys)
+                .map { (item, predio) ->
+                    val obras = predio?.id?.let(vigentesPorPredio::get)?.let { obrasDeLaDj(it, padron.obrasDelPadron) }
+                    val conObras = conObrasDeLaDj(item, obras)
+                    if (conObras !== item) sumadas[conObras] = obras
+                    conObras to predio
+                }
         val valuados =
             pares
                 .mapNotNull { (item, predio) ->
@@ -460,6 +497,9 @@ object Brecha {
         }
         if (impuestos.deduccionProporcional > 0) {
             avisos += "${impuestos.deduccionProporcional} declaraciones con la deducción del 5 % (Amazonía, Ley 27037): se recalculó sobre el valor catastral"
+        }
+        if (sumadas.isNotEmpty()) {
+            avisos += "${sumadas.size} predios sin obras en la ficha: se sumaron S/ ${suma(sumadas.values.toList()).toPlainString()} de obras de sus DJ"
         }
         val inafectaciones = padron.inafectaciones.filter { it.predio != null }.groupBy { it.predio!! }
         val sinDelta = linkedMapOf<String, Int>()
@@ -522,6 +562,7 @@ object Brecha {
                     impuestoCatastro = valor?.let { impuesto.declarado + impuesto.delta },
                     deltaImpuesto = valor?.let { impuesto.delta },
                     deltaArbitrios = valor?.let { arbitriosDe(predio, item) },
+                    obrasDj = sumadas[item],
                     estimado = false,
                     loteGeom = poligono(predio.loteGeom) ?: poligono(item.loteGeom)
                 )

@@ -45,7 +45,8 @@ data class ObraValuacion(
 )
 
 // catastro's answer, in srtm's json (snake_case, as the portal's dtos). not valued: terreno, construccion, obras,
-// autoavaluo and detalle are null and motivo and llave say why (ARANCEL_FALTANTE, PARAMETRO_FALTANTE:...)
+// autoavaluo and detalle are null and motivo and llave say why (ARANCEL_FALTANTE, PARAMETRO_FALTANTE:...).
+// obras_padron_origen is srtm's: the external padrón's otras instalaciones it added (Derivados.conObrasDelPadron)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class ValuacionDeInsumos(
     val anio: Int?,
@@ -61,7 +62,8 @@ data class ValuacionDeInsumos(
     val autoavaluo: BigDecimal?,
     val motivo: String?,
     val llave: String?,
-    val detalle: DetalleValuacion?
+    val detalle: DetalleValuacion?,
+    val obrasPadronOrigen: BigDecimal? = null
 )
 
 // how the engine got to construccion and obras: Σ valor of each list is that total, in the body's order
@@ -86,6 +88,7 @@ data class DetallePisoValuacion(
     val valor: BigDecimal?
 )
 
+// descripcion names a row srtm adds (codigo_vu null): srtm.rentas.OBRAS_DEL_PADRON. catastro's rows have none
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class DetalleObraValuacion(
     val codigoVu: String?,
@@ -95,5 +98,6 @@ data class DetalleObraValuacion(
     val tablaDepreciacion: String?,
     val antiguedad: Int?,
     val porcentajeDepreciacion: BigDecimal?,
-    val valor: BigDecimal?
+    val valor: BigDecimal?,
+    val descripcion: String? = null
 )

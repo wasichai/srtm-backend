@@ -91,7 +91,9 @@ data class FilaBrecha(
     val motivo: String? = null,
     val loteGeom: Map<String, Any?>? = null,
     // its position in /predios (Brecha.ordenadas)
-    val orden: Int? = null
+    val orden: Int? = null,
+    // #208: the DJ's obras the catastro side added, its ficha without obras (Brecha.conObrasDeLaDj)
+    val obrasDj: BigDecimal? = null
 )
 
 // the corrida as the portal shows it (camelCase, like /liquidacion)
@@ -147,7 +149,8 @@ data class PredioBrecha(
     val deltaImpuesto: BigDecimal?,
     val deltaArbitrios: BigDecimal?,
     val estimado: Boolean,
-    val motivo: String?
+    val motivo: String?,
+    val obrasDj: BigDecimal?
 )
 
 fun predioBrechaDe(f: FilaBrecha) =
@@ -169,7 +172,8 @@ fun predioBrechaDe(f: FilaBrecha) =
         deltaImpuesto = f.deltaImpuesto,
         deltaArbitrios = f.deltaArbitrios,
         estimado = f.estimado == true,
-        motivo = f.motivo
+        motivo = f.motivo,
+        obrasDj = f.obrasDj
     )
 
 data class PedidoCorrida(

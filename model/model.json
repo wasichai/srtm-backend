@@ -487,6 +487,8 @@
         {"name": "numero_habitantes", "label": "Número de habitantes", "type": "INTEGER", "source": "cantidad_habitantes"},
         {"name": "valor_autoavaluo", "label": "Valor del autoavalúo", "type": "DECIMAL", "source": "autoavaluo_total",
           "description": "Autoavalúo total del predio (o de la secuencia de uso). Derivado: lo valúa el catastro de la organización en cada escritura de la DJ o de sus listas; si no lo valúa, se conserva y se marca autoavaluo_por_revisar. Sin catastro configurado lo escribe el usuario."},
+        {"name": "valor_obras", "label": "Valor de las obras complementarias", "type": "DECIMAL",
+          "description": "Derivado: las obras del autoavalúo que valuó el catastro o, sin obras declaradas, las del padrón de origen (#208)."},
         {"name": "valor_condominio", "label": "Valor en condominio", "type": "DECIMAL", "source": "condominio",
           "description": "Parte del autoavalúo que corresponde a este titular: valor_autoavaluo × porcentaje_condominio / 100."},
         {"name": "deduccion", "label": "Deducción", "type": "DECIMAL", "source": "deduccion"},
@@ -1372,7 +1374,9 @@
         {"name": "motivo", "label": "Motivo", "type": "TEXT", "description": "Por qué el catastro no lo valoró, o por qué no cruzó."},
         {"name": "lote_geom", "label": "Lote", "type": "GEOMETRY", "geometryType": "POLYGON", "srid": 32718,
           "description": "El lote del predio del padrón o, para un omiso, el del catastro (UTM 18S)."},
-        {"name": "orden", "label": "Orden", "type": "INTEGER", "description": "Su lugar en la lista: por código del predio, luego por código catastral."}
+        {"name": "orden", "label": "Orden", "type": "INTEGER", "description": "Su lugar en la lista: por código del predio, luego por código catastral."},
+        {"name": "obras_dj", "label": "Obras de la DJ (S/)", "type": "DECIMAL",
+          "description": "Lo que la corrida sumó al lado catastro porque la ficha no trae obras (#208)."}
       ]
     },
     {

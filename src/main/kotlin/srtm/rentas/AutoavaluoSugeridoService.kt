@@ -85,8 +85,9 @@ class AutoavaluoSugeridoService(
         val usos = registros.all(USO_PREDIO, UsoPredio::class.java)
         val arancel = registro["arancel"]?.toString()?.trim()?.toBigDecimalOrNull()
         val insumos = AutoavaluoSugerido.insumos(declaracion, arancel, predio, niveles, obras, usos)
+        val otrasInstalaciones = registro["valor_otras_instalaciones"]?.toString()?.trim()?.toBigDecimalOrNull()
         return try {
-            catastro.valuar(insumos)
+            Derivados.conObrasDelPadron(catastro.valuar(insumos), obras, otrasInstalaciones)
         } catch (e: CatastroException) {
             throw CatastroNoResponde(e.message ?: "catastro-backend no valuó la declaración")
         }

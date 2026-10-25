@@ -109,6 +109,9 @@ data class Declaracion(
     val longitudFrente: BigDecimal? = null,
     val numeroHabitantes: Int? = null,
     val valorAutoavaluo: BigDecimal? = null,
+    // #208: the obras of the autoavalúo catastro valued (the external padrón's otras instalaciones included), the
+    // backend's (Derivados)
+    val valorObras: BigDecimal? = null,
     val valorCondominio: BigDecimal? = null,
     val deduccion: BigDecimal? = null,
     val valorAfecto: BigDecimal? = null,

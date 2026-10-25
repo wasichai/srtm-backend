@@ -2,7 +2,9 @@ package srtm.rentas
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import srtm.brecha.DetalleValuacion
 import srtm.brecha.ValuacionDeInsumos
 import java.math.BigDecimal
 
@@ -93,6 +95,47 @@ class DerivadosTest {
         )
     }
 
+    @Test
+    fun `the padron's otras instalaciones are added while the DJ declares no obra`() {
+        val r = Derivados.conObrasDelPadron(valuada(), emptyList(), BigDecimal("10000.00"))
+        assertEquals(BigDecimal("100000.00"), r.autoavaluo)
+        assertEquals(BigDecimal("10000.00"), r.obras)
+        assertEquals(BigDecimal("10000.00"), r.obrasPadronOrigen)
+        val fila = r.detalle!!.obras.last()
+        assertEquals(OBRAS_DEL_PADRON, fila.descripcion)
+        assertNull(fila.codigoVu)
+        assertEquals(BigDecimal("10000.00"), fila.valor)
+    }
+
+    @Test
+    fun `an active obra stops it, an inactive one does not`() {
+        val v = valuada()
+        assertEquals(v, Derivados.conObrasDelPadron(v, listOf(ObraComplementaria(estado = null)), BigDecimal("10000.00")))
+        assertEquals(v, Derivados.conObrasDelPadron(v, listOf(ObraComplementaria(estado = "ACTIVO")), BigDecimal("10000.00")))
+        val r = Derivados.conObrasDelPadron(v, listOf(ObraComplementaria(estado = "INACTIVO")), BigDecimal("10000.00"))
+        assertEquals(BigDecimal("100000.00"), r.autoavaluo)
+    }
+
+    @Test
+    fun `not valued, no amount or zero leaves catastro's answer`() {
+        val noValuada = valuacion(motivo = "Falta el arancel", llave = "ARANCEL_FALTANTE")
+        assertEquals(noValuada, Derivados.conObrasDelPadron(noValuada, emptyList(), BigDecimal("10000.00")))
+        assertEquals(valuada(), Derivados.conObrasDelPadron(valuada(), emptyList(), null))
+        assertEquals(valuada(), Derivados.conObrasDelPadron(valuada(), emptyList(), BigDecimal.ZERO))
+    }
+
+    @Test
+    fun `a valued declaracion keeps its obras, one not valued its stored ones`() {
+        val antes = Declaracion(valorObras = BigDecimal("5.00"))
+        assertEquals(
+            BigDecimal("10000.00"),
+            Derivados.aplicar(antes, totales(), Autoavaluo.Valuado(BigDecimal("100000.00"), BigDecimal("10000.00"))).valorObras
+        )
+        assertEquals(BigDecimal("5.00"), Derivados.aplicar(antes, totales(), Autoavaluo.PorRevisar("X")).valorObras)
+        assertEquals(BigDecimal("5.00"), Derivados.aplicar(antes, totales(), Autoavaluo.Manual).valorObras)
+        assertTrue("valor_obras" in Derivados.campos(antes).keys)
+    }
+
     // 1, 2 and 3: what the lists add up to
     private fun totales() = TotalesDeLaDeclaracion(BigDecimal("1.00"), BigDecimal("2.00"), BigDecimal("3.00"))
 
@@ -107,4 +150,8 @@ class DerivadosTest {
         motivo: String? = null,
         llave: String? = null
     ) = ValuacionDeInsumos(2026, null, null, null, null, null, null, null, null, autoavaluo, motivo, llave, null)
+
+    // valued at 90000.00, no obra in its detail
+    private fun valuada() =
+        valuacion(autoavaluo = BigDecimal("90000.00")).copy(obras = BigDecimal("0.00"), detalle = DetalleValuacion(emptyList(), emptyList()))
 }
