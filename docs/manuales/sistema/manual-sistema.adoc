@@ -1149,8 +1149,9 @@ organización con el catastro de otra.
 página; importes como decimales, nunca como `double`.
 
 |Cruce
-|Por pasadas sobre todos los ítems: código municipal, luego CPU, luego sector, manzana y lote (este solo cuando a la
-llave le queda un ítem y un predio).
+|Por pasadas sobre todos los ítems: código municipal, luego `codigo_origen` (el código del SAT que Ica partió en
+`X-1`, `X-2`, ...), luego CPU, luego sector, manzana y lote (este solo cuando a la llave le queda un ítem y un
+predio).
 
 |Categorías
 |OMISO, SIN_CATASTRO, SIN_VALOR, SUBVALUADO (> declarado × 1,05), SOBREVALUADO (< × 0,95), COINCIDE.
