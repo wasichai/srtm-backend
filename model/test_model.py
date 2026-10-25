@@ -417,16 +417,19 @@ class ShippedModelTests(unittest.TestCase):
         # (an omiso has none in the padrón)
         corrida = self.campos("brecha_corrida")
         self.assertEqual(list(corrida), ["anio", "estado", "version_catastro", "iniciado", "terminado", "total_predios", "procesados",
-                                         "mensaje", "declarado", "catastro", "delta_impuesto", "delta_arbitrios", "latido"])
+                                         "mensaje", "declarado", "catastro", "delta_impuesto", "delta_arbitrios", "latido",
+                                         "predios_confiables", "predios_dudosos", "predios_sin_levantar",
+                                         "delta_impuesto_confiable", "delta_impuesto_dudoso", "delta_impuesto_sin_levantar"])
         self.assertEqual({n for n, f in corrida.items() if f.get("required")}, {"anio", "estado"})
         self.assertEqual(self.model["enums"]["estado_brecha"], ["PENDIENTE", "EN_CURSO", "TERMINADA", "FALLIDA"])
         predio = self.campos("brecha_predio")
         self.assertEqual(list(predio), ["codigo_catastro", "codigo_predio", "categoria", "sector", "manzana", "lote", "uso",
                                         "autoavaluo_declarado", "autoavaluo_catastro", "delta_autoavaluo", "impuesto_declarado",
                                         "impuesto_catastro", "delta_impuesto", "delta_arbitrios", "estimado", "motivo", "lote_geom",
-                                        "orden", "obras_dj"])
+                                        "orden", "obras_dj", "confianza", "confianza_motivo"])
         self.assertEqual(self.model["enums"]["categoria_brecha"],
-                         ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE"])
+                         ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE", "SIN_LEVANTAR"])
+        self.assertEqual(self.model["enums"]["confianza_brecha"], ["CONFIABLE", "DUDOSO", "SIN_LEVANTAR"])
         self.assertEqual(self.relaciones("brecha_predio"), {"corrida": ("brecha_corrida", True), "predio": ("predio", False)})
 
     def test_the_dj_keeps_its_obras_and_the_brecha_what_it_added(self):

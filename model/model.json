@@ -352,7 +352,8 @@
     "paridad_numeracion": ["PAR", "IMPAR", "AMBOS"],
     "base_arbitrio": ["PREDIO", "FRONTIS_ML", "AREA_CONSTRUIDA_M2"],
     "estado_brecha": ["PENDIENTE", "EN_CURSO", "TERMINADA", "FALLIDA"],
-    "categoria_brecha": ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE"],
+    "categoria_brecha": ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE", "SIN_LEVANTAR"],
+    "confianza_brecha": ["CONFIABLE", "DUDOSO", "SIN_LEVANTAR"],
     "estado_orden_caja": ["POR_ENVIAR", "ENVIADA", "POR_RETIRAR", "RETIRADA", "CANCELADA", "PAGADA_EN_CAJA", "CONFLICTO", "ERROR"],
     "tipo_orden_caja": ["PREDIAL", "ARBITRIO"],
     "tipo_pago_caja": ["PAGO_REGISTRADO", "PAGO_ANULADO"]
@@ -1349,7 +1350,19 @@
         {"name": "delta_impuesto", "label": "Δ impuesto predial (S/)", "type": "DECIMAL"},
         {"name": "delta_arbitrios", "label": "Δ arbitrios (S/)", "type": "DECIMAL", "description": "Vacío si los arbitrios del año no se pudieron calcular (ver mensaje)."},
         {"name": "latido", "label": "Latido", "type": "DATETIME",
-          "description": "Lease de la instancia que la corre: la renueva mientras trabaja; vencida, la corrida se da por abandonada."}
+          "description": "Lease de la instancia que la corre: la renueva mientras trabaja; vencida, la corrida se da por abandonada."},
+        {"name": "predios_confiables", "label": "Predios confiables", "type": "INTEGER",
+          "description": "Filas con confianza CONFIABLE (#204)."},
+        {"name": "predios_dudosos", "label": "Predios dudosos", "type": "INTEGER",
+          "description": "Filas con confianza DUDOSO (#204)."},
+        {"name": "predios_sin_levantar", "label": "Predios sin levantar", "type": "INTEGER",
+          "description": "Filas con confianza SIN_LEVANTAR: la ficha del catastro no se levantó (#204)."},
+        {"name": "delta_impuesto_confiable", "label": "Δ impuesto predial confiable (S/)", "type": "DECIMAL",
+          "description": "Δ impuesto de los predios confiables (#204)."},
+        {"name": "delta_impuesto_dudoso", "label": "Δ impuesto predial dudoso (S/)", "type": "DECIMAL",
+          "description": "Δ impuesto de los predios dudosos (#204)."},
+        {"name": "delta_impuesto_sin_levantar", "label": "Δ impuesto predial sin levantar (S/)", "type": "DECIMAL",
+          "description": "Δ impuesto de los predios sin levantar (#204)."}
       ]
     },
     {
@@ -1378,7 +1391,11 @@
           "description": "El lote del predio del padrón o, para un omiso, el del catastro (UTM 18S)."},
         {"name": "orden", "label": "Orden", "type": "INTEGER", "description": "Su lugar en la lista: por código del predio, luego por código catastral."},
         {"name": "obras_dj", "label": "Obras de la DJ (S/)", "type": "DECIMAL",
-          "description": "Lo que la corrida sumó al lado catastro porque la ficha no trae obras (#208)."}
+          "description": "Lo que la corrida sumó al lado catastro porque la ficha no trae obras (#208)."},
+        {"name": "confianza", "label": "Confianza", "type": "ENUM", "enum": "confianza_brecha",
+          "description": "Qué tan confiable es el cruce de esta fila: por vínculo, por titular o ninguno (#204)."},
+        {"name": "confianza_motivo", "label": "Motivo de la confianza", "type": "TEXT",
+          "description": "Por qué salió esa confianza, por ejemplo \"Sin ficha del catastro\" o \"Sin predio en el padrón\" (#204)."}
       ]
     },
     {
