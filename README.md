@@ -840,7 +840,7 @@ secuencia de uso, una vez).
 |---|---|
 | `OMISO` | Ítem del catastro sin predio en el padrón (o cuyo predio no tiene DJ vigente del año: la fila guarda el predio). |
 | `SIN_CATASTRO` | Predio del padrón que ningún ítem cruzó. |
-| `SIN_VALOR` | Cruzó, pero catastro no lo valorizó: lleva su `motivo` (D5). |
+| `SIN_VALOR` | Cruzó, pero catastro no lo valorizó: lleva su `motivo` (D5). También un predio rústico (`tipo_predio` = `PREDIO RUSTICO`): catastro aún no tiene aranceles rústicos, así que se anula el valor que diera (motivo `PREDIO_RUSTICO`) aunque la ficha lo trajera valorizado (#209). |
 | `SUBVALUADO` | Autoavalúo catastral > declarado × 1.05. |
 | `SOBREVALUADO` | Autoavalúo catastral < declarado × 0.95. |
 | `COINCIDE` | Dentro de ±5 %, ambos extremos incluidos (D10). |
