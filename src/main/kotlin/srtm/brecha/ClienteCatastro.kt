@@ -99,6 +99,10 @@ interface Catastro {
         porPagina: suspend () -> Unit = {}
     ): Valuaciones
 
+    // every titular of the padrón, every page (#204). an older catastro without GET /titulares answers 404 or 403:
+    // CatastroException.estado carries it, and that is no failure of the corrida
+    suspend fun titulares(porPagina: suspend () -> Unit = {}): List<TitularCatastral>
+
     // a declaración's autoavalúo sugerido (#149): nothing is stored on either side
     suspend fun valuar(insumos: InsumosValuacion): ValuacionDeInsumos
 
@@ -137,9 +141,11 @@ data class ArancelCatastral(
 // what a copy did in catastro
 enum class CopiaDeArancel { CREADO, ACTUALIZADO, IGUAL, BORRADO, NO_ESTABA }
 
-// catastro could not answer: the corrida fails with this message (never the secret nor a token)
+// catastro could not answer: the corrida fails with this message (never the secret nor a token). estado is catastro's
+// http status, when the failure was one (404 or 403 on /titulares is no failure: callers check it themselves)
 class CatastroException(
-    mensaje: String
+    mensaje: String,
+    val estado: Int? = null
 ) : RuntimeException(mensaje)
 
 // the catastros of the install, each its organization's (the key: its id or its slug). a corrida reads its own
@@ -238,6 +244,28 @@ class ClienteCatastro(
             page++
         }
         return Valuaciones(anio, version, items)
+    }
+
+    override suspend fun titulares(porPagina: suspend () -> Unit): List<TitularCatastral> {
+        val items = mutableListOf<TitularCatastral>()
+        var page = 0
+        while (true) {
+            val pagina = paginaDeTitulares(page)
+            val suyos =
+                pagina
+                    .path("items")
+                    .iterator()
+                    .asSequence()
+                    .map(::titular)
+                    .toList()
+            items += suyos
+            porPagina()
+            val total = pagina.path("total").takeIf { it.isNumber }?.asLong() ?: items.size.toLong()
+            val size = pagina.path("size").takeIf { it.isNumber }?.asInt() ?: TAMANIO_PAGINA
+            if (suyos.size < size || items.size >= total) break
+            page++
+        }
+        return items
     }
 
     override suspend fun valuar(insumos: InsumosValuacion): ValuacionDeInsumos {
@@ -357,6 +385,29 @@ class ClienteCatastro(
         return DECIMALES.readTree(body.orEmpty())
     }
 
+    // one page of titulares as its service account (#204)
+    private suspend fun paginaDeTitulares(page: Int): JsonNode {
+        val uri =
+            UriComponentsBuilder
+                .fromUriString(cuenta.url.trimEnd('/'))
+                .path("/api/catastro/titulares")
+                .queryParam("page", page)
+                .queryParam("size", TAMANIO_PAGINA)
+                .build()
+                .toUri()
+        val body =
+            autorizado("los titulares (página $page)") { token ->
+                client
+                    .get()
+                    .uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer $token")
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(String::class.java)
+            }
+        return DECIMALES.readTree(body.orEmpty())
+    }
+
     // a request as the service account; a 401 means the cached token is no longer good: once more with a new one.
     // que names it in the error
     private suspend fun autorizado(
@@ -374,7 +425,7 @@ class ClienteCatastro(
                 if (e.statusCode == HttpStatus.UNAUTHORIZED && intento == 0) {
                     servicio.olvidar()
                 } else {
-                    throw CatastroException("catastro-backend respondió ${e.statusCode.value()} ${a(que)}")
+                    throw CatastroException("catastro-backend respondió ${e.statusCode.value()} ${a(que)}", e.statusCode.value())
                 }
             } catch (e: Exception) {
                 throw CatastroException("catastro-backend no respondió $que: ${e.javaClass.simpleName}")
@@ -424,9 +475,27 @@ class ClienteCatastro(
                 autoavaluo = n.path("autoavaluo").decimal(),
                 motivo = n.path("motivo").texto(),
                 llave = n.path("llave").texto(),
-                loteGeom = geometria
+                loteGeom = geometria,
+                estadoLevantamiento = n.path("estadoLevantamiento").texto(),
+                fechaLevantamiento = n.path("fechaLevantamiento").texto(),
+                entrega = n.path("entrega").texto(),
+                vinculoMetodo = n.path("vinculoMetodo").texto(),
+                vinculoRevisado = n.path("vinculoRevisado").booleano(),
+                cuc = n.path("cuc").texto(),
+                codigoReferenciaCatastral = n.path("codigoReferenciaCatastral").texto()
             )
         }
+
+        // one item of GET /api/catastro/titulares (#204)
+        fun titular(n: JsonNode) =
+            TitularCatastral(
+                codigoMunicipal = n.path("codigoMunicipal").texto(),
+                tipoDocumento = n.path("tipoDocumento").texto(),
+                numeroDocumento = n.path("numeroDocumento").texto(),
+                nombre = n.path("nombre").texto(),
+                porcentaje = n.path("porcentaje").decimal(),
+                condicion = n.path("condicion").texto()
+            )
 
         // catastro's arancel says what a does: a number by its value, an empty text as null
         fun mismoArancel(
@@ -506,6 +575,8 @@ class ClienteCatastro(
                 isString -> asString().trim().toBigDecimalOrNull()
                 else -> null
             }
+
+        private fun JsonNode.booleano(): Boolean? = takeIf { isBoolean }?.booleanValue()
     }
 }
 

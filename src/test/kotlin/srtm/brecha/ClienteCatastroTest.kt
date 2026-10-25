@@ -46,6 +46,14 @@ class ClienteCatastroTest {
             val items = listOf(ITEM_VALORADO, ITEM_SIN_VALOR, ITEM_GRANDE).drop(page * 2).take(2)
             responder(ex, 200, """{"anio":2026,"version":"valuacion-v1","page":$page,"size":2,"total":3,"items":[${items.joinToString(",")}]}""")
         }
+        server.createContext("/api/catastro/titulares") { ex ->
+            val auth = ex.requestHeaders.getFirst("Authorization")
+            pedidos += "GET ${ex.requestURI.query} $auth"
+            val page = Regex("page=(\\d+)").find(ex.requestURI.query)!!.groupValues[1].toInt()
+            // 3 titulares in pages of 2 (the stub ignores size=500 to make paging visible)
+            val items = listOf(TITULAR_1, TITULAR_2, TITULAR_3).drop(page * 2).take(2)
+            responder(ex, 200, """{"page":$page,"size":2,"total":3,"items":[${items.joinToString(",")}]}""")
+        }
         server.createContext("/api/catastro/valuacion") { ex ->
             val auth = ex.requestHeaders.getFirst("Authorization")
             pedidos += "${ex.requestMethod} valuacion ${ex.requestBody.readAllBytes().decodeToString()} $auth"
@@ -104,6 +112,53 @@ class ClienteCatastroTest {
         assertEquals(BigDecimal("0.10"), v.items[2].obras)
         val anillo = (v.items[0].loteGeom!!["coordinates"] as List<*>).first() as List<*>
         assertEquals(listOf(-75.22, -10.95), anillo.first())
+    }
+
+    @Test
+    fun `an item carries the levantamiento and the vinculo, null when catastro has none`() {
+        val sinNinguno = runBlocking { cliente().valuaciones(2026) }.items[0]
+        assertNull(sinNinguno.estadoLevantamiento)
+        assertNull(sinNinguno.fechaLevantamiento)
+        assertNull(sinNinguno.entrega)
+        assertNull(sinNinguno.vinculoMetodo)
+        assertNull(sinNinguno.vinculoRevisado)
+        assertNull(sinNinguno.cuc)
+        assertNull(sinNinguno.codigoReferenciaCatastral)
+
+        server.removeContext("/api/catastro/valuaciones")
+        server.createContext("/api/catastro/valuaciones") { ex ->
+            responder(ex, 200, """{"anio":2026,"version":"valuacion-v1","page":0,"size":500,"total":1,"items":[$ITEM_LEVANTADO]}""")
+        }
+        val conTodos = runBlocking { cliente().valuaciones(2026) }.items[0]
+        assertEquals(SIN_LEVANTAR, conTodos.estadoLevantamiento)
+        assertEquals("2026-08-01", conTodos.fechaLevantamiento)
+        assertEquals("E-2026-01", conTodos.entrega)
+        assertEquals(MANUAL, conTodos.vinculoMetodo)
+        assertEquals(true, conTodos.vinculoRevisado)
+        assertEquals("0101", conTodos.cuc)
+        assertEquals("1101010001010001", conTodos.codigoReferenciaCatastral)
+    }
+
+    @Test
+    fun `the titulares, every page`() {
+        val titulares = runBlocking { cliente().titulares() }
+        assertEquals(listOf("PM-1", "PM-2", "PM-3"), titulares.map { it.codigoMunicipal })
+        val a = titulares[0]
+        assertEquals("DNI", a.tipoDocumento)
+        assertEquals("12345678", a.numeroDocumento)
+        assertEquals("PEREZ JUAN", a.nombre)
+        assertEquals(BigDecimal("100.00"), a.porcentaje)
+        assertEquals("PROPIETARIO", a.condicion)
+        assertEquals(listOf("page=0&size=500 Bearer t1", "page=1&size=500 Bearer t1"), pedidos.drop(1).map { it.removePrefix("GET ") })
+    }
+
+    @Test
+    fun `a catastro without titulares fails with its status`() {
+        server.removeContext("/api/catastro/titulares")
+        server.createContext("/api/catastro/titulares") { ex -> responder(ex, 404, "{}") }
+        val e = assertThrows(CatastroException::class.java) { runBlocking { cliente().titulares() } }
+        assertEquals(404, e.estado)
+        assertTrue(!e.message!!.contains("secreto"))
     }
 
     @Test
@@ -272,5 +327,21 @@ class ClienteCatastroTest {
             """{"codigoMunicipal":"PM-2","codigoCpu":null,"sector":"S01","manzana":"M01","lote":"L01","uso":"010101",
             "areaTerreno":200,"areaConstruida":100,"longitudFrente":null,"terreno":null,"construccion":null,"obras":null,"autoavaluo":null,
             "motivo":"La celda es .....","llave":"VU_SIN_VALOR:TECHOS:J","loteGeom":null}"""
+
+        // #204: an item with every levantamiento and vínculo key set
+        val ITEM_LEVANTADO =
+            ITEM_VALORADO.dropLast(1) +
+                ""","estadoLevantamiento":"SIN_LEVANTAR","fechaLevantamiento":"2026-08-01","entrega":"E-2026-01",
+                "vinculoMetodo":"MANUAL","vinculoRevisado":true,"cuc":"0101","codigoReferenciaCatastral":"1101010001010001"}"""
+
+        val TITULAR_1 =
+            """{"codigoMunicipal":"PM-1","tipoDocumento":"DNI","numeroDocumento":"12345678","nombre":"PEREZ JUAN",
+            "porcentaje":100.00,"condicion":"PROPIETARIO"}"""
+        val TITULAR_2 =
+            """{"codigoMunicipal":"PM-2","tipoDocumento":"DNI","numeroDocumento":"87654321","nombre":"LOPEZ MARIA",
+            "porcentaje":50.00,"condicion":"COPROPIETARIO"}"""
+        val TITULAR_3 =
+            """{"codigoMunicipal":"PM-3","tipoDocumento":"RUC","numeroDocumento":"20123456789","nombre":"EMPRESA SAC",
+            "porcentaje":100.00,"condicion":"PROPIETARIO"}"""
     }
 }

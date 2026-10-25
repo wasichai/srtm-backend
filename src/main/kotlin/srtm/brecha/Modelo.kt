@@ -18,6 +18,13 @@ val ACTIVAS = setOf(PENDIENTE, EN_CURSO)
 // one, even with a ficha. used by the autoavalúo sugerido and the brecha (task 6)
 const val PREDIO_RUSTICO = "PREDIO_RUSTICO"
 
+// #204: an item's estadoLevantamiento when its ficha has no levantamiento yet (autoavaluo is null, motivo is this)
+const val SIN_LEVANTAR = "SIN_LEVANTAR"
+
+// #204: an item's vinculoMetodo when catastro matched it to the padrón by the predio's codigo_rentas, or by hand
+const val CODIGO_RENTAS = "CODIGO_RENTAS"
+const val MANUAL = "MANUAL"
+
 // what a catastro item is next to the padrón (D7, D10): never in the padrón (OMISO), a padrón predio the catastro
 // lacks (SIN_CATASTRO), crossed but not valued (SIN_VALOR), or crossed and valued above, below or within ±5 % of its
 // declared autoavalúo
@@ -41,7 +48,17 @@ data class ValuacionCatastral(
     val autoavaluo: BigDecimal? = null,
     val motivo: String? = null,
     val llave: String? = null,
-    val loteGeom: Map<String, Any?>? = null
+    val loteGeom: Map<String, Any?>? = null,
+    // #204: its ficha's levantamiento (SIN_LEVANTAR, PARCIAL, COMPLETO) and when, and the entrega that last touched it
+    val estadoLevantamiento: String? = null,
+    val fechaLevantamiento: String? = null,
+    val entrega: String? = null,
+    // #204: how it was crossed to the padrón (CODIGO_RENTAS, LLAVE_HU_MZ_LOTE, GEOMETRICO, MANUAL), whether a person
+    // checked it, and its cuc and codigoReferenciaCatastral (the catastro's own ids, not the padrón's)
+    val vinculoMetodo: String? = null,
+    val vinculoRevisado: Boolean? = null,
+    val cuc: String? = null,
+    val codigoReferenciaCatastral: String? = null
 )
 
 // every valued item of a year, and the version of the engine that valued them
@@ -49,6 +66,17 @@ data class Valuaciones(
     val anio: Int,
     val version: String?,
     val items: List<ValuacionCatastral>
+)
+
+// one titular of GET /api/catastro/titulares: a padrón predio may have several, each its share (porcentaje) and
+// condicion (e.g. PROPIETARIO)
+data class TitularCatastral(
+    val codigoMunicipal: String?,
+    val tipoDocumento: String?,
+    val numeroDocumento: String?,
+    val nombre: String?,
+    val porcentaje: BigDecimal?,
+    val condicion: String?
 )
 
 // the brecha_corrida record as core keeps it
