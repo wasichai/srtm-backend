@@ -330,8 +330,8 @@ con el `valor_autoavaluo` guardado. Sin ninguna, `[]`.
 |200; 404 sin DJ vigente; 409 con `titulares` si hay varios y falta `contribuyente`.
 
 |`GET /contribuyentes/{id}/hr?anio`
-|HR del contribuyente en PDF, con las mismas cifras de `/liquidacion`. No imprime los `avisos`, ni la emisión masiva
-los cuenta como errores: se consultan en `/liquidacion`.
+|HR del contribuyente en PDF, con las mismas cifras de `/liquidacion`. No imprime los `avisos`; la emisión masiva no
+los cuenta como errores y la caja no los muestra: se consultan en `/liquidacion`.
 |200; 404 sin DJ vigente; 422 con `faltan`.
 |===
 
