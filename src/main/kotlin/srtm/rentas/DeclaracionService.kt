@@ -477,18 +477,18 @@ class DeclaracionService(
             registros.create(
                 PREDIO,
                 Predio::class.java,
-                Records.attributes(body.copy(codigo = codigo, numeroRegistro = numero, direccion = describirUbicacion(body)))
+                Records.attributes(body.copy(codigo = codigo, numeroRegistro = numero, direccion = describirUbicacion(body))) - CODIGO_ORIGEN
             )
         }
 
-    // code and registration number stay what they are
+    // code and registration number stay what they are. codigo_origen too (#195 pattern): the padrón de origen's, read-only
     suspend fun actualizarPredio(
         id: UUID,
         body: Predio
     ): Predio {
         val stored = registros.get(PREDIO, Predio::class.java, id)
         val next = body.copy(codigo = stored.codigo, numeroRegistro = stored.numeroRegistro, direccion = describirUbicacion(body))
-        return registros.replace(PREDIO, Predio::class.java, id, Records.attributes(next))
+        return registros.replace(PREDIO, Predio::class.java, id, Records.attributes(next) - CODIGO_ORIGEN)
     }
 
     // only while no declaración, vigente or annulled, and no cuota de arbitrio or anulación of one names it. one
