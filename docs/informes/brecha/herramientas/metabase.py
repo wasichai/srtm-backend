@@ -212,7 +212,7 @@ def provisionar(mb, orgs, tableros, ruta_datos="/datos"):
         }
         grupos = mb.get("/api/permissions/group")
         resultado[org] = {
-            "base": _asegurar_base(mb, f"{PREFIJO}{nombre}", detalles),
+            "base": _asegurar_base(mb, f"{PREFIJO}{nombre}", detalles, todos),
             "grupo": _asegurar_por_nombre(mb, "/api/permissions/group", grupos, f"{PREFIJO}{org}"),
             "coleccion": _asegurar_coleccion(mb, f"{PREFIJO}{nombre}"),
         }
@@ -225,23 +225,39 @@ def provisionar(mb, orgs, tableros, ruta_datos="/datos"):
 
 
 def agregar_usuario(mb, org, email, nombre, apellido, clave):
-    """Creates the user if no active one has `email` (POST /api/user, with its password) and puts it in the group
+    """Creates the user if nobody has `email` (POST /api/user, with its password) and puts it in the group
     `Brecha <org>` if it is not there yet (POST /api/permissions/membership). An existing user keeps its password.
-    Returns the user's id."""
+    Returns the user's id.
+
+    One user, one organization: an email already in another `Brecha …` group is refused (a member of two groups
+    sees both organizations' tableros), and so is a deactivated user's email (POST /api/user would answer a bare
+    400; reactivating someone is an administrator's decision, made in Metabase's own admin). Both are an
+    ErrorMetabase whose one line names the email and the reason, before anything is written."""
     comun.validar_org(org)
-    grupo = _buscar(mb.get("/api/permissions/group"), f"{PREFIJO}{org}")
+    grupos = mb.get("/api/permissions/group") or []
+    grupo = _buscar(grupos, f"{PREFIJO}{org}")
     if grupo is None:
         falta = f"no existe el grupo {PREFIJO}{org} (corre provisionar.py)"
         raise ErrorMetabase("GET", "/api/permissions/group", falta)
-    consulta = urllib.parse.urlencode({"query": email})
+    # status=all (admin only, users_rest/api.clj GET /) also lists deactivated users, which a plain query omits
+    consulta = urllib.parse.urlencode({"query": email, "status": "all"})
     usuarios = (mb.get(f"/api/user?{consulta}") or {}).get("data") or []
     usuario = next((u for u in usuarios if str(u.get("email", "")).lower() == email.lower()), None)
+    if usuario is not None and usuario.get("is_active") is False:
+        raise ErrorMetabase("GET", "/api/user", f"{email} es de un usuario desactivado (reactívalo en Metabase)")
     if usuario is None:
         usuario = mb.post(
             "/api/user", {"email": email, "first_name": nombre, "last_name": apellido, "password": clave}
         )
     uid = usuario["id"]
     membresias = (mb.get("/api/permissions/membership") or {}).get(str(uid)) or []
+    otros = sorted(
+        g["name"] for g in grupos
+        if g["id"] != grupo["id"] and str(g.get("name", "")).startswith(PREFIJO)
+        and any(m.get("group_id") == g["id"] for m in membresias)
+    )
+    if otros:
+        raise ErrorMetabase("GET", "/api/permissions/membership", f"{email} ya está en {', '.join(otros)}")
     if not any(m.get("group_id") == grupo["id"] for m in membresias):
         mb.post("/api/permissions/membership", {"group_id": grupo["id"], "user_id": uid})
     return uid
@@ -271,13 +287,16 @@ def _grupo_todos(mb):
     return todos["id"]
 
 
-def _asegurar_base(mb, nombre, detalles):
+def _asegurar_base(mb, nombre, detalles, todos):
     """GET /api/database is {"data": [...], "total"} (warehouses_rest/api.clj); an admin sees `details`. A database
-    whose engine or any of our four details differ (someone edited it by hand) is PUT back."""
+    whose engine or any of our four details differ (someone edited it by hand) is PUT back. A new one is closed
+    at once (_cerrar_base), before anything else in the run can fail."""
     bases = (mb.get("/api/database") or {}).get("data") or []
     existente = _buscar(bases, nombre)
     if existente is None:
-        return mb.post("/api/database", {"name": nombre, "engine": "duckdb", "details": detalles})["id"]
+        base_id = mb.post("/api/database", {"name": nombre, "engine": "duckdb", "details": detalles})["id"]
+        _cerrar_base(mb, base_id, todos)
+        return base_id
     actuales = existente.get("details") or {}
     if existente.get("engine") != "duckdb" or any(actuales.get(k) != v for k, v in detalles.items()):
         mb.put(f"/api/database/{existente['id']}", {"engine": "duckdb", "details": {**actuales, **detalles}})
@@ -301,6 +320,21 @@ def _asegurar_coleccion(mb, nombre):
 
 def _brecha(elementos):
     return {e["id"] for e in elementos if isinstance(e.get("id"), int) and str(e.get("name", "")).startswith(PREFIJO)}
+
+
+def _cerrar_base(mb, base_id, todos):
+    """Right after POST /api/database: All Users and every `Brecha …` group get AJENA on the new database.
+    Metabase gives a non-admin group its most restrictive level elsewhere on a new database, and native SQL when
+    it has none (permissions/models/data_permissions.clj set-default-database-permissions!), so the first
+    database is open to All Users with native SQL until a graph says otherwise. _grafo_de_datos only runs after
+    every organization's database exists: without this, a later failure (another organization's .duckdb
+    missing, a 409 on the graph) would leave this one open to everyone. Its own group gets PROPIA there later."""
+    grupos = {todos} | _brecha(mb.get("/api/permissions/group") or [])
+    grafo = mb.get("/api/permissions/graph")
+    mb.put(
+        "/api/permissions/graph",
+        {"revision": grafo.get("revision"), "groups": {str(g): {str(base_id): AJENA} for g in sorted(grupos)}},
+    )
 
 
 def _grafo_de_datos(mb, resultado, todos):

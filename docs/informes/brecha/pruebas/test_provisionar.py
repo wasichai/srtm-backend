@@ -167,6 +167,34 @@ class ProvisionarTests(ConMetabase, unittest.TestCase):
         self.assertEqual(self.falso.grafo_colecciones[b["grupo"]][coleccion_a], "none")
         self.assertEqual(self.falso.grafo_datos[grupo_a][base_a]["create-queries"], "query-builder")
 
+    def test_una_base_nueva_queda_cerrada_aunque_la_provision_se_corte(self):
+        # Metabase gives All Users native SQL on a new database: if the run stops after POSTing a base (here the
+        # second organization's .duckdb does not exist, a 400), the bases already created must be closed anyway
+        self.falso.archivos_inexistentes = {"/datos/ficticia-b.duckdb"}
+        with self.assertRaises(metabase.ErrorMetabase) as error:
+            self._provisionar()
+        self.assertEqual(error.exception.estado, 400)
+        base_a = self._por_nombre(self.falso.bases, "Brecha Ficticia A")["id"]
+        self.assertEqual(self.falso.grafo_datos[TODOS][base_a]["create-queries"], "no")
+        for gid, grupo in self.falso.grupos.items():
+            if grupo["name"].startswith("Brecha "):
+                self.assertEqual(self.falso.grafo_datos[gid][base_a]["create-queries"], "no", grupo["name"])
+        # seen by a user who is only in All Users: no database at all
+        self.falso._crear_usuario("solo-todos@ejemplo.pe", "clave-solo-1", "Solo", "Todos")
+        solo = metabase.Metabase(self.falso.url)
+        solo.sesion("solo-todos@ejemplo.pe", "clave-solo-1")
+        self.assertEqual(solo.get("/api/database")["data"], [])
+
+    def test_una_base_nueva_se_cierra_tambien_a_los_otros_grupos_brecha(self):
+        # a "Brecha …" group made by hand, with no permission rows yet, gets Metabase's default (native SQL) on a
+        # new database: provisioning closes it at once too, not only at the end of the run
+        a_mano = self.mb.post("/api/permissions/group", {"name": "Brecha a-mano"})["id"]
+        self.falso.archivos_inexistentes = {"/datos/ficticia-b.duckdb"}
+        with self.assertRaises(metabase.ErrorMetabase):
+            self._provisionar()
+        base_a = self._por_nombre(self.falso.bases, "Brecha Ficticia A")["id"]
+        self.assertEqual(self.falso.grafo_datos[a_mano][base_a]["create-queries"], "no")
+
     def test_aislamiento_visto_por_un_usuario(self):
         r = self._provisionar()
         metabase.agregar_usuario(self.mb, "ficticia-a", "ana@ejemplo.pe", "Ana", "A", "clave-ana-1")
@@ -278,6 +306,33 @@ class UsuarioTests(ConMetabase, unittest.TestCase):
         self.assertEqual(sum(1 for m in self.falso.membresias if m["user_id"] == uid and m["group_id"] == grupo), 1)
         self.assertNotIn(ADMINISTRADORES, self.falso.grupos_de(uid))
 
+    def test_agregar_usuario_de_otra_organizacion(self):
+        # one user, one organization: an email already in another "Brecha …" group is refused, never added to a
+        # second group (it would see both organizations' tableros)
+        self._provisionar()
+        metabase.agregar_usuario(self.mb, "ficticia-a", "ana@ejemplo.pe", "Ana", "A", "clave-ana-1")
+        desde = len(self.falso.peticiones)
+        with self.assertRaises(metabase.ErrorMetabase) as error:
+            metabase.agregar_usuario(self.mb, "ficticia-b", "ana@ejemplo.pe", "Ana", "A", "clave-ana-1")
+        mensaje = str(error.exception)
+        self.assertIn("Brecha ficticia-a", mensaje)
+        self.assertEqual(len(mensaje.splitlines()), 1)
+        self.assertNotIn("clave-ana-1", mensaje)
+        self.assertEqual(self._escrituras(desde), [])
+
+    def test_agregar_usuario_desactivado(self):
+        self._provisionar()
+        uid = metabase.agregar_usuario(self.mb, "ficticia-a", "ana@ejemplo.pe", "Ana", "A", "clave-ana-1")
+        self.falso.usuarios[uid]["is_active"] = False
+        desde = len(self.falso.peticiones)
+        with self.assertRaises(metabase.ErrorMetabase) as error:
+            metabase.agregar_usuario(self.mb, "ficticia-a", "ana@ejemplo.pe", "Ana", "A", "clave-ana-1")
+        mensaje = str(error.exception)
+        self.assertIn("desactivad", mensaje)
+        self.assertIn("ana@ejemplo.pe", mensaje)
+        self.assertEqual(len(mensaje.splitlines()), 1)
+        self.assertEqual(self._escrituras(desde), [])
+
     def test_agregar_usuario_sin_grupo(self):
         with self.assertRaises(metabase.ErrorMetabase) as error:
             metabase.agregar_usuario(self.mb, "ficticia-z", "z@ejemplo.pe", "Z", "Z", "clave-z-1")
@@ -372,6 +427,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(codigo, 0, error)
         self.getpass.assert_called_once()
         metabase.Metabase(self.falso.url).sesion("bea@ejemplo.pe", "clave-bea-1")
+
+    def test_usuario_de_otra_organizacion_sale_con_1(self):
+        self._cli(["--org", "ficticia-a:Ficticia A", "--org", "ficticia-b:Ficticia B"])
+        entorno = {**self.entorno, "METABASE_CLAVE_USUARIO": "clave-ana-1"}
+        comun_argv = ["--email", "ana@ejemplo.pe", "--nombre", "Ana", "--apellido", "A"]
+        self.assertEqual(self._cli(["usuario", "--org", "ficticia-a", *comun_argv], entorno=entorno)[0], 0)
+        codigo, _, error = self._cli(["usuario", "--org", "ficticia-b", *comun_argv], entorno=entorno)
+        self.assertEqual(codigo, 1)
+        self.assertEqual(len(error.strip().splitlines()), 1, error)
+        self.assertIn("Brecha ficticia-a", error)
 
     def test_usuario_sin_clave(self):
         argv = ["usuario", "--org", "ficticia-a", "--email", "c@ejemplo.pe", "--nombre", "C", "--apellido", "C"]

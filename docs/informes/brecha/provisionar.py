@@ -8,7 +8,8 @@ docs/superpowers/plans/2026-10-25-corte-analitico.md; srtm-backend#206).
 Without --org, the organizations of parametros.json; a clave without :nombre takes its nombre from there. The
 first form also finishes Metabase's first-run setup with the administrator below when nobody did it yet; run it
 again whenever tableros.json changes (it only creates what is missing and updates what differs). `usuario`
-creates a user (if no active one has that email) in the organization's group; its password comes from
+creates a user (if nobody has that email) in the organization's group; an email already in another
+organization's group, or a deactivated user's, is refused (exit 1). Its password comes from
 METABASE_CLAVE_USUARIO or, without it, is asked for without echo.
 
 The connection comes from the environment: METABASE_URL (e.g. http://localhost:3310 through the SSH tunnel),

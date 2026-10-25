@@ -7,9 +7,13 @@ each one): a session in the `X-Metabase-Session` header, the v2 data permissions
 `dataset_query` comes back as MBQL 5 unless `?legacy-mbql=true`, dashboards updated with `dashcards` (negative
 ids are new ones, the ones left out are deleted).
 
-It keeps Metabase's defaults that matter for isolation: a new database gives "All Users" native SQL on it, a new
-collection copies the root's permissions (where "All Users" can write), and a new group has no access - so a
-provisioning that forgot to take something away shows in a test. A non-admin session sees only what its groups'
+It keeps Metabase's defaults that matter for isolation (permissions/models/data_permissions.clj): a new database
+gives each non-admin group the most restrictive `create-queries` it already has on another database, and
+"query-builder-and-native" to a group that has none - so "All Users" gets native SQL on the first one
+(set-default-database-permissions!); a new group copies "All Users"' current data permissions
+(set-default-group-permissions!, called by permissions_group.clj's after-insert); a new collection copies the
+root's permissions (where "All Users" can write) - so a provisioning that forgot to take something away shows in
+a test. A non-admin session sees only what its groups'
 graphs grant: the databases it can query, the cards and dashboards of the collections it can read, native SQL
 only with `create-queries` "query-builder-and-native". Test helper only; never imported by the scripts.
 
@@ -129,6 +133,9 @@ class MetabaseFalso:
         self.tarjetas_fallidas = set()
         self.permitir_lectura_ajena = False
         self.permitir_acceso_externo = False
+        # database_file values whose connection test fails: POST /api/database answers 400 and creates nothing
+        # (warehouses_rest/api.clj POST /), as with a <org>.duckdb that `make duckdb` never built
+        self.archivos_inexistentes = set()
 
         self.usuarios = {}
         self.sesiones = {}
@@ -306,11 +313,14 @@ class MetabaseFalso:
         self._solo_admin(uid)
         if metodo == "GET" and not partes:
             consulta = (params.get("query") or [""])[0].lower()
-            # like users_rest/api.clj: active users only, `query` matched against first name, last name and email
+            # like users_rest/api.clj GET /: active users unless `status` is "all" or "deactivated" (an admin-only
+            # parameter), `query` matched against first name, last name and email
+            estado = (params.get("status") or ["active"])[0]
+            activos = {"active": (True,), "deactivated": (False,), "all": (True, False)}.get(estado, (True,))
             datos = [
                 self._usuario_publico(u)
                 for u in self.usuarios.values()
-                if u["is_active"]
+                if u["is_active"] in activos
                 and consulta in " ".join((u["email"], u["first_name"] or "", u["last_name"] or "")).lower()
             ]
             return 200, {"data": datos, "total": len(datos), "limit": None, "offset": None}
@@ -341,8 +351,11 @@ class MetabaseFalso:
                 return 400, {"errors": {"name": "value must be a non-blank string."}}
             gid = next(self._siguiente_grupo)
             self.grupos[gid] = {"id": gid, "name": nombre, "magic_group_type": None}
-            # a new group can do nothing until a graph says so
-            self.grafo_datos[gid] = {b: {"view-data": "unrestricted", "create-queries": "no"} for b in self.bases}
+            # a new group's data permissions are a copy of All Users' (wherever All Users can still write native
+            # SQL, so can it); it has no collection until a graph says so
+            self.grafo_datos[gid] = {
+                b: {"view-data": "unrestricted", "create-queries": self._todos_consulta(b)} for b in self.bases
+            }
             self.grafo_colecciones[gid] = {"root": "none", **{cid: "none" for cid in self.colecciones}}
             return 200, self.grupos[gid]
         if partes == ["membership"] and metodo == "GET":
@@ -362,6 +375,15 @@ class MetabaseFalso:
         if partes == ["graph"] and metodo == "PUT":
             return self._poner_grafo_datos(cuerpo)
         return 404, "API endpoint does not exist."
+
+    def _todos_consulta(self, base_id):
+        return self.grafo_datos.get(TODOS, {}).get(base_id, {}).get("create-queries", "query-builder-and-native")
+
+    def _consulta_por_omision(self, gid):
+        """A new database's create-queries for group `gid`: the most restrictive it has on any database, or
+        native SQL when it has none (data_permissions.clj set-default-database-permissions!)."""
+        niveles = [p.get("create-queries", "no") for p in self.grafo_datos.get(gid, {}).values()]
+        return min(niveles, key=_CONSULTAS.index, default="query-builder-and-native")
 
     def _grafo_datos_publico(self):
         grupos = {str(g): {str(b): dict(p) for b, p in bases.items()} for g, bases in self.grafo_datos.items()}
@@ -484,19 +506,19 @@ class MetabaseFalso:
             self._solo_admin(uid)
             if not cuerpo.get("name") or not cuerpo.get("engine") or not isinstance(cuerpo.get("details"), dict):
                 return 400, {"errors": {"name": "name, engine y details son obligatorios"}}
+            if cuerpo["details"].get("database_file") in self.archivos_inexistentes:
+                return 400, {"message": "No se pudo conectar", "errors": {"database_file": "no existe"}}
             base_id = next(self._siguiente_base)
             self.bases[base_id] = {
                 "id": base_id, "name": cuerpo["name"], "engine": cuerpo["engine"], "details": dict(cuerpo["details"]),
                 "is_full_sync": cuerpo.get("is_full_sync", True),
             }
-            # Metabase's default for a new database: All Users can query it, even with native SQL
-            self.grafo_datos.setdefault(TODOS, {})[base_id] = {
-                "view-data": "unrestricted", "create-queries": "query-builder-and-native",
-            }
+            # Metabase's default for a new database, per non-admin group (All Users included): its most restrictive
+            # level elsewhere, native SQL when it has none
             for gid in self.grupos:
-                if gid not in (TODOS, ADMINISTRADORES):
+                if gid != ADMINISTRADORES:
                     self.grafo_datos.setdefault(gid, {})[base_id] = {
-                        "view-data": "unrestricted", "create-queries": "no",
+                        "view-data": "unrestricted", "create-queries": self._consulta_por_omision(gid),
                     }
             return 200, self.bases[base_id]
         if not partes:
