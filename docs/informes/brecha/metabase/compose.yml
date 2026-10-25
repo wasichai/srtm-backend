@@ -1,17 +1,26 @@
-# Metabase sobre el corte analítico (srtm-backend#206, task 9): base de aplicación en Postgres, cada
-# organización como una conexión DuckDB de solo lectura al archivo que arma `make duckdb` (armar_duckdb.py
-# --org). Plan § Rulings: acceso solo por túnel SSH (el puerto queda en 127.0.0.1 del VPS, sin proxy en este
-# carril); versiones fijas (Dockerfile) porque el driver solo declara compatible esta combinación.
+# Metabase sobre el corte analítico (srtm-backend#206, task 9): una instancia por organización (plan, Decisión
+# 2026-10-25: en Metabase OSS los usuarios de una instancia ven el nombre y el email de todos los demás, así que
+# dos municipalidades nunca comparten una). Cada instancia es su propio proyecto de compose, metabase-<org>: su
+# Metabase, su base de aplicación en Postgres (volumen propio) y, montada de solo lectura, solo la carpeta con
+# el archivo DuckDB de su organización (el que arma `make duckdb ORG=<org>`). La imagen se construye una vez y
+# la comparten todas (`image:` fijo). Plan § Rulings: acceso solo por túnel SSH (el puerto queda en 127.0.0.1
+# del VPS, sin proxy en este carril); versiones fijas (Dockerfile) porque el driver solo declara compatible
+# esta combinación.
 #
-#   docker compose -p srtm-metabase -f metabase/compose.yml --env-file /srv/srtm-metabase/metabase.env up -d --build
+#   make metabase-up ORG=<org>
 #
-# Con un Docker remoto (DOCKER_HOST por ssh), el puerto queda en el loopback del servidor:
-#   ssh -fN -L 3310:localhost:3310 <servidor>
+# que corre (METABASE_ORG nombra el proyecto y la carpeta montada; el resto sale del archivo de la organización)
 #
-# metabase.env sale de metabase.env.example (nunca se versiona; va a B/.gitignore). metabase/respaldo.sh y
-# metabase/restaurar.sh operan sobre metabase-postgres, la única base que guarda tableros, usuarios y
-# colecciones - el archivo DuckDB de cada organización se reconstruye solo con `make duckdb`.
-name: srtm-metabase
+#   METABASE_ORG=<org> docker compose -p metabase-<org> -f metabase/compose.yml \
+#     --env-file ~/.config/srtm-analitica/<org>.env up -d --build
+#
+# Con un Docker remoto, el puerto de cada organización queda en el loopback del servidor:
+#   ssh -fN -L <puerto>:localhost:<puerto> <servidor>
+#
+# Las claves METABASE_* y MB_* del archivo de la organización salen de metabase.env.example. metabase/respaldo.sh
+# y metabase/restaurar.sh operan sobre el metabase-postgres de una organización, la única base que guarda sus
+# tableros, usuarios y colecciones - el archivo DuckDB se reconstruye solo con `make duckdb`.
+name: metabase-${METABASE_ORG:?falta METABASE_ORG (usa make metabase-up ORG=<org>)}
 
 services:
   metabase-postgres:
@@ -19,8 +28,8 @@ services:
     environment:
       POSTGRES_DB: metabase
       POSTGRES_USER: metabase
-      POSTGRES_PASSWORD: ${METABASE_PG_PASSWORD:?falta METABASE_PG_PASSWORD en metabase.env}
-    # sin ports: solo el servicio metabase la alcanza, por la red interna del compose
+      POSTGRES_PASSWORD: ${METABASE_PG_PASSWORD:?falta METABASE_PG_PASSWORD en el archivo de la organización}
+    # sin ports: solo el servicio metabase de este proyecto la alcanza, por la red interna del compose
     volumes:
       - metabase-pg-data:/var/lib/postgresql
     healthcheck:
@@ -31,6 +40,8 @@ services:
     restart: unless-stopped
 
   metabase:
+    # una sola imagen para todas las organizaciones: la primera `up --build` la construye, las demás la reusan
+    image: srtm-metabase:0.63.19-duckdb-1.5.5.0
     build:
       context: .
       args:
@@ -39,25 +50,27 @@ services:
       metabase-postgres:
         condition: service_healthy
     ports:
-      # solo loopback del servidor de Docker; el acceso real es por túnel SSH (plan § Rulings)
-      - '127.0.0.1:${METABASE_PUERTO:-3310}:3000'
+      # solo loopback del servidor de Docker; el acceso real es por túnel SSH (plan § Rulings). Sin valor por
+      # omisión: cada organización tiene el suyo, y dos con el mismo puerto no deben poder arrancar las dos
+      - '127.0.0.1:${METABASE_PUERTO:?falta METABASE_PUERTO en el archivo de la organización}:3000'
     volumes:
-      # los .duckdb que make duckdb arma, uno por organización; de solo lectura, como pide el aislamiento
-      # (herramientas/base.py INIT_SQL ya bloquea el acceso externo dentro de cada conexión DuckDB)
-      - '${METABASE_DUCKDB_DIR:?falta METABASE_DUCKDB_DIR en metabase.env}:/datos:ro'
+      # solo la carpeta de esta organización (make duckdb ORG=<org> deja ahí <org>.duckdb), de solo lectura;
+      # herramientas/base.py INIT_SQL además bloquea el acceso externo dentro de la conexión DuckDB
+      - '/srv/srtm-metabase/${METABASE_ORG:?falta METABASE_ORG}/duckdb:/datos:ro'
     environment:
       MB_DB_TYPE: postgres
       MB_DB_HOST: metabase-postgres
       MB_DB_PORT: '5432'
       MB_DB_DBNAME: metabase
       MB_DB_USER: metabase
-      MB_DB_PASS: ${METABASE_PG_PASSWORD:?falta METABASE_PG_PASSWORD en metabase.env}
-      MB_ENCRYPTION_SECRET_KEY: ${MB_ENCRYPTION_SECRET_KEY:?falta MB_ENCRYPTION_SECRET_KEY en metabase.env}
-      MB_SITE_URL: ${METABASE_SITE_URL:-http://localhost:3310}
+      MB_DB_PASS: ${METABASE_PG_PASSWORD:?falta METABASE_PG_PASSWORD en el archivo de la organización}
+      MB_ENCRYPTION_SECRET_KEY: ${MB_ENCRYPTION_SECRET_KEY:?falta MB_ENCRYPTION_SECRET_KEY en <org>.env}
+      MB_SITE_URL: ${METABASE_SITE_URL:-http://localhost:${METABASE_PUERTO}}
       MB_ANON_TRACKING_ENABLED: 'false'
       MB_CHECK_FOR_UPDATES: 'false'
       MB_LOAD_SAMPLE_CONTENT: 'false'
       MB_REPORT_TIMEZONE: America/Lima
+      # un techo, no lo que usa: en reposo cada instancia ronda los 600 MB (docs/develop/metabase-cortes.md)
       JAVA_TOOL_OPTIONS: -Xmx2g
     mem_limit: 3g
     healthcheck:
@@ -71,4 +84,5 @@ services:
     restart: unless-stopped
 
 volumes:
+  # uno por proyecto (metabase-<org>_metabase-pg-data): nunca compartido entre organizaciones
   metabase-pg-data:

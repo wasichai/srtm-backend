@@ -311,35 +311,38 @@ bytes de los cortes nuevos; por eso van fijos en `requirements.txt`.
 
 == Metabase
 
-Cada organización tiene su propio archivo DuckDB (`make duckdb ORG=…`, a partir de su último corte publicado) y
-su propia base, grupo, colección y tableros en una instancia de Metabase compartida (`metabase/`), con el
-driver DuckDB comunitario y la base de aplicación en Postgres (srtm-backend#206). El aislamiento entre
-organizaciones es el que trae Metabase OSS (sin «Blocked», sin sandboxing): un grupo y una colección por
-organización, y la conexión DuckDB va de solo lectura y sin acceso externo (`herramientas/base.py`,
-`INIT_SQL`), así que ni una consulta nativa puede abrir el archivo de otra. Nadie tiene SQL nativo: las
-preguntas son las tarjetas de `metabase/tableros.json`.
+Cada organización tiene su propia instancia de Metabase (`metabase/`, con el driver DuckDB comunitario y su
+propia base de aplicación en Postgres; srtm-backend#206): un proyecto de compose `metabase-<org>` con su puerto
+en `127.0.0.1`, su volumen de Postgres, sus respaldos y, montada de solo lectura, solo la carpeta con su archivo
+DuckDB (`make duckdb ORG=…`, a partir de su último corte publicado). La imagen se construye una vez y la
+comparten todas. Se decidió así el 2026-10-25 porque en Metabase OSS los usuarios de una instancia ven el
+nombre y el email de todos los demás (`GET /api/user/recipients`; restringirlo es una función de pago): con una
+instancia compartida, el personal de una municipalidad vería al de las otras.
 
-Cómo desplegarla, el primer alta, qué hacer después de cada corte, los respaldos y la prueba de humo con dos
-organizaciones ficticias están en
+Dentro de su instancia, la organización tiene una base, un grupo, una colección y los tableros de
+`metabase/tableros.json`; «All Users» no ve nada de eso, la conexión DuckDB va de solo lectura y sin acceso
+externo (`herramientas/base.py`, `INIT_SQL`) y nadie tiene SQL nativo. Cada instancia se configura con el
+mismo archivo de la organización que ya usa el corte, `~/.config/srtm-analitica/<org>.env`, al que se le
+agregan las claves de `metabase/metabase.env.example` (su `METABASE_PUERTO`, su clave de Postgres y su
+`MB_ENCRYPTION_SECRET_KEY`). En reposo, cada instancia ocupa unos 600 MB de RAM.
+
+Cómo desplegarlas, el primer alta, qué hacer después de cada corte, los respaldos y la prueba de humo con una
+organización ficticia están en
 link:../../develop/metabase-cortes.md[«Metabase sobre los cortes», docs/develop/metabase-cortes.md]. En breve:
 
 [source,bash]
 ----
-make duckdb ORG=perene        # baja el último corte publicado completo y arma su .duckdb
-docker compose -p srtm-metabase -f metabase/compose.yml --env-file /srv/srtm-metabase/metabase.env \
-  restart metabase            # para que Metabase vuelva a abrir el archivo
-make humo USUARIOS="perene:humo-perene@<dominio>"   # aislamiento y que cada tablero siga corriendo
+make metabase-up ORG=perene          # su instancia, en el METABASE_PUERTO de perene.env
+make duckdb ORG=perene               # baja el último corte publicado completo y arma su .duckdb
+make metabase-reiniciar ORG=perene   # para que Metabase vuelva a abrir el archivo
+make humo ORG=perene USUARIO=humo-perene@<dominio>   # la instancia solo ve su DuckDB; cada tablero corre
+make respaldo ORG=perene             # respaldo de su metabase-postgres (un cron por organización)
 ----
 
-`make humo` entra con un usuario dedicado a la prueba de humo de cada organización (`humo-<org>@…`, creado con
+`make humo` entra con un usuario dedicado a la prueba de humo de la organización (`humo-<org>@…`, creado con
 `provisionar.py usuario`, clave en `METABASE_CLAVE_USUARIO`), nunca con la cuenta ni la clave de una persona
-real. Nunca corre contra datos reales por sí solo: la organización se prueba primero con dos ficticias
-(`make corte-ficticio`), como describe esa guía.
-
-Límite conocido, pendiente de decisión: en Metabase OSS 0.63.19, `GET /api/user/recipients` devuelve nombre y
-email de todos los usuarios activos (`user-visibility` vale `:all` y restringirlo es una función de pago), así
-que un usuario de una organización ve a los usuarios de Metabase de las otras, por ejemplo al elegir
-destinatarios de una suscripción. Se acepta así o se pasa a un Metabase por organización; la guía lo detalla.
+real. Nunca corre contra datos reales por sí solo: el despliegue se prueba primero con una organización
+ficticia (`make corte-ficticio`), como describe esa guía.
 
 == Requisitos
 

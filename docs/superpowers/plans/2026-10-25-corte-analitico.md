@@ -616,3 +616,41 @@ progreso para que el código pueda citarlas: «plan, Rulings de la ejecución, R
 - Ruling R28: INIT_SQL becomes "SET enable_external_access = false;" without `SET lock_configuration = true` — the DuckDB driver runs init_sql twice (describe-database on a duplicate connection) and the lock makes the second run fail and blocks its TimeZone setting; enable_external_access cannot be re-enabled while running and users have no native SQL — if some other setting needs locking, a native-SQL user could change it (none have native SQL).
 - Ruling R29: accepted Task 10 extras — All Users `none` on the root collection; every run denies all "Brecha …" group/base cross pairs; tableros.json layout is the implementer's — stricter isolation — none.
 - Ruling R30: DuckDB temp_directory sits in the read-only /datos mount, so spills fail; left as a documented limitation (Task 11) — cortes are small (~20k predios) — a large query errors instead of spilling.
+
+## Decisión 2026-10-25: un Metabase por organización
+
+Enmienda a § Rulings (aislamiento, acceso por túnel, respaldo) y a R29, decidida por el usuario el 2026-10-25.
+Ata igual que § Rulings y prevalece sobre ellos donde chocan.
+
+- Ruling D1: cada organización tiene su propia instancia de Metabase — un proyecto de compose
+  `metabase-<org>` (`METABASE_ORG=<org> docker compose -p metabase-<org>`, `make metabase-up ORG=<org>`) con su
+  Metabase, su `metabase-postgres` y su volumen, y que monta de solo lectura solo
+  `/srv/srtm-metabase/<org>/duckdb` — en Metabase OSS 0.63.19 `GET /api/user/recipients` muestra a cualquier
+  usuario el nombre y el email de todos los demás de la instancia y `user-visibility` es de pago, así que una
+  instancia compartida expone al personal de una municipalidad ante las otras — unos 600 MB de RAM por
+  instancia y una provisión, una prueba de humo y un respaldo por organización.
+- Ruling D2: la configuración de la instancia va en el archivo de la organización que ya usa el corte,
+  `~/.config/srtm-analitica/<org>.env` (claves de `B/metabase/metabase.env.example`): `METABASE_PUERTO` propio,
+  sin valor por omisión, publicado en `127.0.0.1`; su clave de Postgres y su `MB_ENCRYPTION_SECRET_KEY`.
+  `provisionar.py` y `humo.py` toman la URL solo de ese archivo (`METABASE_URL` o `127.0.0.1:<puerto>`), nunca
+  del entorno — una `METABASE_URL` exportada de otra sesión no puede apuntar una organización a la instancia
+  de otra — el archivo de la organización también tiene que existir donde se provisiona.
+- Ruling D3: la imagen se construye una vez y se comparte (`image: srtm-metabase:0.63.19-duckdb-1.5.5.0` en
+  el compose) — misma versión fija para todas — subir Metabase sube todas las instancias a la vez al
+  reconstruirlas.
+- Ruling D4: la provisión es de una sola organización por instancia y se niega (sin escribir nada) si la
+  instancia ya tiene la base o el grupo `Brecha …` de otra, o la propia sobre otro archivo; se retiran la
+  lógica de permisos cruzados entre grupos `Brecha …` (R29, «every run denies all cross pairs») y la regla
+  «un usuario, una organización» de `agregar_usuario`, que ya no tienen otra organización a la que mirar; se
+  mantienen «All Users» con `no`/`none` en la base, la colección y la raíz (R29) — una cuenta fuera del grupo
+  no ve nada — ninguno.
+- Ruling D5: la prueba de humo corre por instancia (`make humo ORG=<org> USUARIO=<email>`) y comprueba que la
+  instancia tiene una sola base, sobre `/datos/<org>.duckdb`, que `duckdb_databases()` muestra abierto solo
+  ese archivo y que `corte_manifiesto.organizacion` es `<org>`, además de la sincronización, las tarjetas,
+  `enable_external_access` y la falta de SQL nativo del usuario; se retira el `ATTACH` al archivo de otra
+  organización, que ya no está montado — la instancia solo ve su DuckDB, por nombre y por contenido — la
+  prueba con dos organizaciones ficticias pasa a ser con una, en su propia instancia.
+- Ruling D6: los respaldos son por organización (`metabase/respaldo.sh <org>`, un cron por organización),
+  con nombre `metabase-<org>-<sello>.dump`, rotación de 14 por organización y `restaurar.sh` que se niega a
+  restaurar el dump de otra — un dump trae usuarios y tableros — ninguno.
+

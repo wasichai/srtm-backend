@@ -12,6 +12,7 @@ import stat
 import subprocess
 import tempfile
 import unittest
+import unittest.mock
 from decimal import Decimal
 from pathlib import Path
 
@@ -170,6 +171,20 @@ class ArmarDuckdbCliTests(ConCorte, unittest.TestCase):
         self.assertEqual(codigo, 2)
         self.assertIn("organización inválida", error)
         self.assertFalse((self.tmp / "duckdb").exists())
+
+    def test_armar_org_por_omision_arma_en_la_carpeta_de_su_instancia(self):
+        # one Metabase per organization (plan, Decisión 2026-10-25): its compose mounts only
+        # /srv/srtm-metabase/<org>/duckdb, so that is where `make duckdb ORG=<org>` must leave the file
+        with unittest.mock.patch.object(armar_duckdb, "_armar_org", return_value=0) as armar:
+            self.assertEqual(_cli(armar_duckdb.main, ["--org", "ica"])[0], 0)
+        armar.assert_called_once_with(
+            "ica", Path("/srv/srtm-metabase/cortes"), Path("/srv/srtm-metabase/ica/duckdb")
+        )
+
+    def test_armar_org_rechaza_una_organizacion_invalida_antes_de_la_carpeta(self):
+        codigo, _, error = _cli(armar_duckdb.main, ["--org", "../x"])
+        self.assertEqual(codigo, 2)
+        self.assertIn("organización inválida", error)
 
     def test_armar_duckdb_rechaza_cortes_y_destino_dir_con_corte(self):
         carpeta = self._corte(minimos())

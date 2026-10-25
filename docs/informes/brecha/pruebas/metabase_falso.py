@@ -29,7 +29,11 @@ Task 11's smoke test turns knobs to simulate a broken isolation or a broken card
 whose query fails with a 400), `permitir_lectura_ajena` (any session can read any card or dashboard, ignoring the
 collection graph) and `permitir_acceso_externo` (a native ATTACH/read_parquet/etc. "succeeds" instead of failing).
 `SELECT current_setting('enable_external_access')` answers from the database's own `details.init_sql`: false only
-when it sets `enable_external_access = false`, as base.INIT_SQL does.
+when it sets `enable_external_access = false`, as base.INIT_SQL does. The smoke test's two checks that an instance
+holds only its organization's DuckDB (plan, Decisión 2026-10-25) answer from the database too: a query on
+`duckdb_databases()` lists its `details.database_file` plus `adjuntos_extra` (paths of files simulated as also
+open), and one on `corte_manifiesto` gives the file's stem as the corte's organizacion unless
+`organizacion_del_corte` (database id -> org) says otherwise.
 """
 
 import itertools
@@ -54,6 +58,8 @@ _LLAVES_PERMISOS = {"view-data", "create-queries", "download", "data-model", "de
 _SIN_ACCESO_EXTERNO = re.compile(r"\b(ATTACH|read_parquet|read_csv\w*|read_json\w*|COPY|INSTALL|LOAD)\b", re.I)
 # the smoke test's positive check of INIT_SQL, and what makes it answer false
 _CONSULTA_ACCESO_EXTERNO = re.compile(r"current_setting\(\s*'enable_external_access'\s*\)", re.I)
+_CONSULTA_ARCHIVOS = re.compile(r"\bduckdb_databases\(\)", re.I)
+_CONSULTA_ORGANIZACION = re.compile(r"\bcorte_manifiesto\b", re.I)
 _INIT_SQL_SIN_ACCESO = re.compile(r"\bSET\s+enable_external_access\s*=\s*false\b", re.I)
 
 _NO_PERMITIDO = "You don't have permissions to do that."
@@ -133,6 +139,8 @@ class MetabaseFalso:
         self.tarjetas_fallidas = set()
         self.permitir_lectura_ajena = False
         self.permitir_acceso_externo = False
+        self.adjuntos_extra = []
+        self.organizacion_del_corte = {}
         # database_file values whose connection test fails: POST /api/database answers 400 and creates nothing
         # (warehouses_rest/api.clj POST /), as with a <org>.duckdb that `make duckdb` never built
         self.archivos_inexistentes = set()
@@ -618,6 +626,15 @@ class MetabaseFalso:
                 init_sql = self.bases[base_id]["details"].get("init_sql") or ""
                 valor = not _INIT_SQL_SIN_ACCESO.search(init_sql)
                 datos = {"rows": [[valor]], "cols": [{"name": "v"}]}
+                return 202, {"status": "completed", "row_count": 1, "data": datos}
+            archivo = self.bases[base_id]["details"].get("database_file") or ""
+            if _CONSULTA_ARCHIVOS.search(sql):
+                filas = [[ruta] for ruta in sorted([archivo, *self.adjuntos_extra])]
+                datos = {"rows": filas, "cols": [{"name": "path"}]}
+                return 202, {"status": "completed", "row_count": len(filas), "data": datos}
+            if _CONSULTA_ORGANIZACION.search(sql):
+                org = self.organizacion_del_corte.get(base_id) or archivo.rsplit("/", 1)[-1].removesuffix(".duckdb")
+                datos = {"rows": [[org]], "cols": [{"name": "organizacion"}]}
                 return 202, {"status": "completed", "row_count": 1, "data": datos}
             if not self.permitir_acceso_externo and _SIN_ACCESO_EXTERNO.search(sql):
                 return 400, _fallida("Permission Error: file system operations are disabled by configuration")

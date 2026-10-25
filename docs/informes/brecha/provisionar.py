@@ -1,19 +1,23 @@
-"""Provisions Metabase for the corte's organizations: one DuckDB database, group and collection each, the
-permission graphs that isolate them, and the tableros of metabase/tableros.json (herramientas/metabase.py;
+"""Provisions one organization's own Metabase instance (plan, Decisión 2026-10-25: one instance per
+organization): its DuckDB database, group and collection, the permission graphs that keep "All Users" out of
+them, and the tableros of metabase/tableros.json (herramientas/metabase.py;
 docs/superpowers/plans/2026-10-25-corte-analitico.md; srtm-backend#206).
 
-    python3 -I provisionar.py [--org clave[:nombre]]...
-    python3 -I provisionar.py usuario --org ORG --email EMAIL --nombre NOMBRE --apellido APELLIDO
+    python3 -I provisionar.py --org clave[:nombre] [--entorno ARCHIVO]
+    python3 -I provisionar.py usuario --org ORG [--entorno ARCHIVO] --email EMAIL --nombre NOMBRE --apellido APELLIDO
 
-Without --org, the organizations of parametros.json; a clave without :nombre takes its nombre from there. The
-first form also finishes Metabase's first-run setup with the administrator below when nobody did it yet; run it
-again whenever tableros.json changes (it only creates what is missing and updates what differs). `usuario`
-creates a user (if nobody has that email) in the organization's group; an email already in another
-organization's group, or a deactivated user's, is refused (exit 1). Its password comes from
+A clave without :nombre takes its nombre from parametros.json. The first form also finishes Metabase's first-run
+setup with the administrator below when nobody did it yet; run it again whenever tableros.json changes (it only
+creates what is missing and updates what differs). An instance that already holds another organization's
+database or group is refused (exit 1). `usuario` creates a user (if nobody has that email) in the
+organization's group; a deactivated user's email is refused (exit 1). Its password comes from
 METABASE_CLAVE_USUARIO or, without it, is asked for without echo.
 
-The connection comes from the environment: METABASE_URL (e.g. http://localhost:3310 through the SSH tunnel),
-METABASE_ADMIN_EMAIL and METABASE_ADMIN_PASSWORD. Errors are one line, never with a password or the session.
+The instance comes from the organization's own file, --entorno (by omission ~/.config/srtm-analitica/<org>.env,
+mode 0600): METABASE_URL if it has one, else http://127.0.0.1:<METABASE_PUERTO> (the SSH tunnel forwards the
+same port). Never from the shell's environment: a METABASE_URL left over from another organization's session
+must not point this one at the wrong instance. METABASE_ADMIN_EMAIL and METABASE_ADMIN_PASSWORD come from the
+environment or, without them, from that file. Errors are one line, never with a password or the session.
 Exit codes: 0 ok, 2 bad usage or configuration (nothing was sent), 1 a Metabase API error.
 """
 
@@ -30,7 +34,6 @@ if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
 from herramientas import comun, metabase  # noqa: E402
 
 TABLEROS = comun.INFORME / "metabase" / "tableros.json"
-ENTORNO = ("METABASE_URL", "METABASE_ADMIN_EMAIL", "METABASE_ADMIN_PASSWORD")
 
 
 class _ErrorUso(Exception):
@@ -39,15 +42,21 @@ class _ErrorUso(Exception):
 
 def _argumentos_provision():
     parser = argparse.ArgumentParser(
-        prog="provisionar.py", description="Crea o actualiza en Metabase las bases, grupos, colecciones y tableros."
+        prog="provisionar.py",
+        description="Crea o actualiza, en el Metabase de una organización, su base, grupo, colección y tableros.",
     )
+    # append, not store: a second --org is an error (one instance, one organization), never a silent override
     parser.add_argument(
-        "--org",
-        action="append",
-        default=[],
-        help="clave[:nombre] de una organización (repetible; sin --org, las de parametros.json)",
+        "--org", action="append", required=True, help="clave[:nombre] de la organización dueña de la instancia"
     )
+    _argumento_entorno(parser)
     return parser
+
+
+def _argumento_entorno(parser):
+    parser.add_argument(
+        "--entorno", help="archivo <org>.env de la organización (por omisión ~/.config/srtm-analitica/<org>.env)"
+    )
 
 
 def _argumentos_usuario():
@@ -55,37 +64,25 @@ def _argumentos_usuario():
         prog="provisionar.py usuario", description="Crea un usuario de Metabase en el grupo de su organización."
     )
     parser.add_argument("--org", required=True, help="clave de la organización (su grupo es «Brecha <org>»)")
+    _argumento_entorno(parser)
     parser.add_argument("--email", required=True)
     parser.add_argument("--nombre", required=True)
     parser.add_argument("--apellido", required=True)
     return parser
 
 
-def _organizaciones(valores):
-    """{clave: nombre} from the --org values, or parametros.json's organizations when there are none."""
-    conocidas = {clave: datos["nombre"] for clave, datos in comun.parametros()["organizaciones"].items()}
-    if not valores:
-        return conocidas
-    orgs = {}
-    for valor in valores:
-        clave, _, nombre = valor.partition(":")
-        clave, nombre = clave.strip(), nombre.strip()
-        try:
-            comun.validar_org(clave)
-        except comun.ErrorCorte as e:
-            raise _ErrorUso(str(e)) from None
-        nombre = nombre or conocidas.get(clave)
-        if not nombre:
-            raise _ErrorUso(f"{clave} no está en parametros.json: usa --org {clave}:<nombre>")
-        orgs[clave] = nombre
-    return orgs
-
-
-def _conexion():
-    faltan = [nombre for nombre in ENTORNO if not os.environ.get(nombre)]
-    if faltan:
-        raise _ErrorUso(f"falta {', '.join(faltan)} en el entorno")
-    return (os.environ[nombre] for nombre in ENTORNO)
+def _organizacion(valor):
+    """(clave, nombre) from --org clave[:nombre]; without :nombre, parametros.json's."""
+    clave, _, nombre = valor.partition(":")
+    clave, nombre = clave.strip(), nombre.strip()
+    try:
+        comun.validar_org(clave)
+    except comun.ErrorCorte as e:
+        raise _ErrorUso(str(e)) from None
+    nombre = nombre or comun.parametros()["organizaciones"].get(clave, {}).get("nombre")
+    if not nombre:
+        raise _ErrorUso(f"{clave} no está en parametros.json: usa --org {clave}:<nombre>")
+    return clave, nombre
 
 
 def _tableros():
@@ -99,19 +96,20 @@ def _tableros():
 
 def _provisionar(argv):
     args = _argumentos_provision().parse_args(argv)
-    orgs = _organizaciones(args.org)
+    if len(args.org) != 1:
+        raise _ErrorUso("una sola --org: cada organización tiene su propia instancia de Metabase")
+    org, nombre = _organizacion(args.org[0])
     tableros = _tableros()
-    url, email, clave = _conexion()
+    url, email, clave = metabase.conexion(org, args.entorno)
     mb = metabase.Metabase(url)
     if metabase.asegurar_setup(mb, email, clave):
         print(f"setup inicial hecho: administrador {email}")
     mb.sesion(email, clave)
-    resultado = metabase.provisionar(mb, orgs, tableros)
-    for org, ids in resultado.items():
-        print(
-            f"{org}: base {ids['base']}, grupo {ids['grupo']}, colección {ids['coleccion']}, "
-            f"{len(ids['tarjetas'])} tarjetas, {len(ids['tableros'])} tableros"
-        )
+    ids = metabase.provisionar(mb, org, nombre, tableros)
+    print(
+        f"{org} ({url}): base {ids['base']}, grupo {ids['grupo']}, colección {ids['coleccion']}, "
+        f"{len(ids['tarjetas'])} tarjetas, {len(ids['tableros'])} tableros"
+    )
     return 0
 
 
@@ -121,7 +119,7 @@ def _usuario(argv):
         comun.validar_org(args.org)
     except comun.ErrorCorte as e:
         raise _ErrorUso(str(e)) from None
-    url, email, clave = _conexion()
+    url, email, clave = metabase.conexion(args.org, args.entorno)
     clave_usuario = os.environ.get("METABASE_CLAVE_USUARIO") or getpass.getpass(f"clave para {args.email}: ")
     if not clave_usuario:
         raise _ErrorUso("falta la clave del usuario (METABASE_CLAVE_USUARIO o tecleada)")
@@ -143,7 +141,7 @@ def main(argv=None):
     except _ErrorUso as e:
         print(f"provisionar: {e}", file=sys.stderr)
         return 2
-    except comun.ErrorCorte as e:  # an invalid org caught by metabase.provisionar itself
+    except comun.ErrorCorte as e:  # the <org>.env file (metabase.conexion), or an invalid org
         print(f"provisionar: {e}", file=sys.stderr)
         return 2
     except metabase.ErrorMetabase as e:

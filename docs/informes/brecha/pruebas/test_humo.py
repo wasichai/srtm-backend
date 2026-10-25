@@ -1,10 +1,14 @@
-"""#206 task 11: herramientas.metabase.humo against pruebas.metabase_falso.MetabaseFalso, and humo.py's CLI."""
+"""#206 task 11: herramientas.metabase.humo against pruebas.metabase_falso.MetabaseFalso, and humo.py's CLI - one
+Metabase instance per organization (plan, Decisión 2026-10-25): the smoke test checks the instance holds only its
+organization's DuckDB, and that its user sees it without native SQL."""
 
 import contextlib
 import io
 import json
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import humo
@@ -12,7 +16,8 @@ from herramientas import comun, metabase
 from pruebas.metabase_falso import MetabaseFalso
 
 ADMIN = ("admin@ejemplo.pe", "clave-admin-1")
-ORGS = {"ficticia-a": "Ficticia A", "ficticia-b": "Ficticia B"}
+ORG, NOMBRE = "ficticia-a", "Ficticia A"
+EMAIL = "humo-ficticia-a@ejemplo.pe"
 CLAVE_USUARIO = "clave-usuario-1"
 
 
@@ -21,136 +26,129 @@ def _tableros():
 
 
 class ConHumo(unittest.TestCase):
-    """A fresh MetabaseFalso, provisioned for ficticia-a/b, with one user per organization sharing
-    CLAVE_USUARIO - the same shape humo.py's --usuario expects."""
+    """A fresh MetabaseFalso, provisioned for ficticia-a alone, with its smoke-test user - the same shape
+    humo.py's --org/--usuario expect."""
 
     def setUp(self):
         self.falso = MetabaseFalso({ADMIN[0]: ADMIN[1]})
         self.addCleanup(self.falso.cerrar)
         self.mb = metabase.Metabase(self.falso.url)
         self.mb.sesion(*ADMIN)
-        self.resultado = metabase.provisionar(self.mb, ORGS, _tableros())
-        self.usuarios = {}
-        for org in ORGS:
-            email = f"{org}@ejemplo.pe"
-            metabase.agregar_usuario(self.mb, org, email, "Prueba", org, CLAVE_USUARIO)
-            self.usuarios[org] = (email, CLAVE_USUARIO)
+        self.resultado = metabase.provisionar(self.mb, ORG, NOMBRE, _tableros())
+        metabase.agregar_usuario(self.mb, ORG, EMAIL, "Humo", ORG, CLAVE_USUARIO)
+        self.usuario = (EMAIL, CLAVE_USUARIO)
+
+    def _humo(self):
+        return metabase.humo(self.falso.url, ADMIN, ORG, self.usuario, espera=1)
 
 
 class HumoTests(ConHumo):
-    def test_humo_pasa_con_aislamiento(self):
-        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
+    def test_humo_pasa(self):
+        fallas = self._humo()
         self.assertEqual(fallas, [])
         self.assertGreater(fallas.comprobaciones, 0)
 
-    def test_humo_detecta_una_base_visible(self):
-        self.falso.listar_todas_las_bases = True
-        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
-        self.assertTrue(
-            any("ficticia-a" in f and "Brecha Ficticia B" in f for f in fallas), fallas
-        )
+    def test_humo_detecta_otra_base_en_la_instancia(self):
+        detalles = dict(self.falso.bases[self.resultado["base"]]["details"], database_file="/datos/ficticia-b.duckdb")
+        self.mb.post("/api/database", {"name": "Brecha Ficticia B", "engine": "duckdb", "details": detalles})
+        fallas = self._humo()
+        self.assertTrue(any("Brecha Ficticia B" in f for f in fallas), fallas)
+
+    def test_humo_detecta_una_base_sin_prefijo(self):
+        # any other database counts, not only a `Brecha …` one: the instance is the organization's alone
+        self.mb.post("/api/database", {"name": "Otra", "engine": "postgres", "details": {"host": "x"}})
+        fallas = self._humo()
+        self.assertTrue(any("Otra" in f for f in fallas), fallas)
+
+    def test_humo_detecta_que_falta_su_base(self):
+        self.falso.bases.clear()
+        fallas = self._humo()
+        self.assertTrue(any("ninguna base" in f for f in fallas), fallas)
+
+    def test_humo_detecta_una_base_sobre_otro_archivo(self):
+        self.falso.bases[self.resultado["base"]]["details"]["database_file"] = "/datos/ficticia-b.duckdb"
+        fallas = self._humo()
+        self.assertTrue(any("/datos/ficticia-b.duckdb" in f for f in fallas), fallas)
+
+    def test_humo_detecta_otro_archivo_abierto_en_duckdb(self):
+        self.falso.adjuntos_extra = ["/datos/ficticia-b.duckdb"]
+        fallas = self._humo()
+        self.assertTrue(any("duckdb_databases" in f and "ficticia-b" in f for f in fallas), fallas)
+
+    def test_humo_detecta_el_corte_de_otra_organizacion(self):
+        # the file has the right name but holds another organization's corte (copied by hand, say)
+        self.falso.organizacion_del_corte = {self.resultado["base"]: "ficticia-b"}
+        fallas = self._humo()
+        self.assertTrue(any("corte_manifiesto" in f and "ficticia-b" in f for f in fallas), fallas)
+
+    def test_humo_comprueba_el_archivo_y_el_corte_con_sql(self):
+        self._humo()
+        consultas = [
+            str((cuerpo or {}).get("native")) for m, ruta, cuerpo in self.falso.peticiones if ruta == "/api/dataset"
+        ]
+        self.assertTrue(any("duckdb_databases()" in c for c in consultas), consultas)
+        self.assertTrue(any("corte_manifiesto" in c for c in consultas), consultas)
 
     def test_humo_detecta_sql_nativo(self):
         self.falso.permitir_nativo = True
-        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
+        fallas = self._humo()
         self.assertTrue(any("sql nativo" in f.lower() for f in fallas), fallas)
 
     def test_humo_detecta_tarjeta_rota(self):
-        alguna = next(iter(self.resultado["ficticia-a"]["tarjetas"]))
+        alguna = self.resultado["tarjetas"][0]
         nombre = self.falso.tarjetas[alguna]["name"]
         self.falso.tarjetas_fallidas = {alguna}
-        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
+        fallas = self._humo()
         self.assertTrue(any(nombre in f for f in fallas), fallas)
 
     def test_humo_detecta_que_el_usuario_no_ve_su_propia_base(self):
-        # a membership mistake (the user was never put in its own group), not a graph mistake: _base_propia
-        # (admin side, by group) still finds the base; the user's own session does not
-        uid = next(u["id"] for u in self.falso.usuarios.values() if u["email"] == self.usuarios["ficticia-a"][0])
-        grupo_a = self.resultado["ficticia-a"]["grupo"]
+        # a membership mistake (the user was never put in its group): the admin still sees the base, the
+        # user's own session does not
+        uid = next(u["id"] for u in self.falso.usuarios.values() if u["email"] == EMAIL)
         self.falso.membresias = [
-            m for m in self.falso.membresias if not (m["user_id"] == uid and m["group_id"] == grupo_a)
+            m for m in self.falso.membresias if not (m["user_id"] == uid and m["group_id"] == self.resultado["grupo"])
         ]
-        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
-        self.assertTrue(any("ficticia-a no ve su propia base" in f for f in fallas), fallas)
-
-    def test_humo_detecta_tarjeta_ajena_legible(self):
-        self.falso.permitir_lectura_ajena = True
-        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
-        self.assertTrue(any("pudo leer una tarjeta" in f for f in fallas), fallas)
-
-    def test_humo_detecta_attach_que_no_falla(self):
-        self.falso.permitir_acceso_externo = True
-        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
-        self.assertTrue(any("ATTACH" in f for f in fallas), fallas)
-
-    def test_humo_attach_rechazado_con_400_no_es_falla(self):
-        # Metabase 0.63.19 answers a refused query with an HTTP error status (400 for DuckDB's "file system
-        # operations are disabled"), not 202 + status "failed": that is the expected outcome of the ATTACH check
-        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
-        self.assertEqual(fallas, [])
-        attach = [
-            (m, ruta) for m, ruta, cuerpo in self.falso.peticiones
-            if ruta == "/api/dataset" and "ATTACH" in str((cuerpo or {}).get("native"))
-        ]
-        self.assertEqual(len(attach), 2)
+        fallas = self._humo()
+        self.assertTrue(any(f"{ORG} no ve su propia base" in f for f in fallas), fallas)
 
     def test_humo_tarjeta_que_falla_con_400_es_una_falla_y_sigue(self):
-        normal = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
-        alguna = self.resultado["ficticia-a"]["tarjetas"][0]
+        normal = self._humo()
+        alguna = self.resultado["tarjetas"][0]
         nombre = self.falso.tarjetas[alguna]["name"]
         self.falso.tarjetas_fallidas = {alguna}
-        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
+        fallas = self._humo()
         self.assertEqual(len(fallas), 1, fallas)
         self.assertIn(nombre, fallas[0])
         self.assertIn("400", fallas[0])
-        # every other comprobación still ran (isolation, ATTACH...): a broken card does not stop the run
+        # every other comprobación still ran: a broken card does not stop the run
         self.assertEqual(fallas.comprobaciones, normal.comprobaciones)
 
     def test_humo_detecta_acceso_externo_activo(self):
-        # the positive check: current_setting('enable_external_access') must be false on every base, so the
-        # ATTACH check can never pass just because the query failed for some other reason
-        base_a = self.resultado["ficticia-a"]["base"]
-        self.falso.bases[base_a]["details"]["init_sql"] = ""
-        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
-        self.assertTrue(
-            any("Brecha Ficticia A" in f and "enable_external_access" in f for f in fallas), fallas
-        )
-        self.assertFalse(any("Brecha Ficticia B" in f for f in fallas), fallas)
-
-    def test_humo_comprueba_enable_external_access_en_cada_base(self):
-        metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
-        consultadas = {
-            cuerpo["database"] for m, ruta, cuerpo in self.falso.peticiones
-            if ruta == "/api/dataset" and "current_setting" in str((cuerpo or {}).get("native"))
-        }
-        self.assertEqual(consultadas, {r["base"] for r in self.resultado.values()})
-
-    def test_humo_no_truena_si_una_base_se_renombro_fuera_del_prefijo(self):
-        # the admin's permissions graph (where humo finds an organization's "own" base, by group) and
-        # GET /api/database (where it resolves a base id back to a name) can disagree - a renamed base must
-        # not raise an uncaught StopIteration out of humo()
-        base_a = self.resultado["ficticia-a"]["base"]
-        self.falso.bases[base_a]["name"] = "renombrada a mano, sin el prefijo Brecha"
-        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
-        self.assertIsInstance(fallas, list)
+        # the positive check of INIT_SQL: current_setting('enable_external_access') must be false
+        self.falso.bases[self.resultado["base"]]["details"]["init_sql"] = ""
+        fallas = self._humo()
+        self.assertTrue(any("enable_external_access" in f for f in fallas), fallas)
 
     def test_humo_detecta_una_base_que_no_sincroniza(self):
-        base_id = self.resultado["ficticia-a"]["base"]
-        with mock.patch.object(metabase, "_esperar_vista", side_effect=lambda mb, bid, vista, espera: bid != base_id):
-            fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
-        self.assertTrue(any("Brecha Ficticia A" in f and "v_segmentos" in f for f in fallas), fallas)
+        with mock.patch.object(metabase, "_esperar_vista", return_value=False):
+            fallas = self._humo()
+        self.assertTrue(any(f"Brecha {NOMBRE}" in f and "v_segmentos" in f for f in fallas), fallas)
 
 
 class CliTests(ConHumo):
     def setUp(self):
         super().setUp()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.archivo = Path(tmp.name) / f"{ORG}.env"
+        self.archivo.write_text(f"METABASE_PUERTO={self.falso.url.rsplit(':', 1)[1]}\n", encoding="utf-8")
+        self.archivo.chmod(0o600)
         self.entorno = {
-            "METABASE_URL": self.falso.url,
             "METABASE_ADMIN_EMAIL": ADMIN[0],
             "METABASE_ADMIN_PASSWORD": ADMIN[1],
             "METABASE_CLAVE_USUARIO": CLAVE_USUARIO,
         }
-        self.argv = [arg for org in self.usuarios for arg in ("--usuario", f"{org}:{self.usuarios[org][0]}")]
+        self.argv = ["--org", ORG, "--usuario", EMAIL, "--entorno", str(self.archivo)]
 
     def _cli(self, argv, entorno=None):
         salida, error = io.StringIO(), io.StringIO()
@@ -168,11 +166,18 @@ class CliTests(ConHumo):
         self.assertIn("humo: OK", salida)
 
     def test_humo_cli_falla_imprime_cada_una_y_sale_con_1(self):
-        self.falso.tarjetas_fallidas = {next(iter(self.resultado["ficticia-a"]["tarjetas"]))}
+        self.falso.tarjetas_fallidas = {self.resultado["tarjetas"][0]}
         codigo, salida, error = self._cli(self.argv)
         self.assertEqual(codigo, 1)
         self.assertEqual(salida, "")
         self.assertTrue(error.strip())
+
+    def test_humo_cli_ignora_metabase_url_del_entorno(self):
+        otro = MetabaseFalso({})
+        self.addCleanup(otro.cerrar)
+        codigo, _, error = self._cli(self.argv, entorno={**self.entorno, "METABASE_URL": otro.url})
+        self.assertEqual(codigo, 0, error)
+        self.assertEqual(otro.peticiones, [])
 
     def test_humo_cli_falta_la_clave_de_usuario(self):
         entorno = {k: v for k, v in self.entorno.items() if k != "METABASE_CLAVE_USUARIO"}
@@ -180,10 +185,10 @@ class CliTests(ConHumo):
         self.assertEqual(codigo, 2)
         self.assertIn("METABASE_CLAVE_USUARIO", error)
 
-    def test_humo_cli_usuario_mal_escrito(self):
-        codigo, _, error = self._cli(["--usuario", "sin-dos-puntos"])
+    def test_humo_cli_org_invalida(self):
+        codigo, _, error = self._cli(["--org", "../x", "--usuario", EMAIL, "--entorno", str(self.archivo)])
         self.assertEqual(codigo, 2)
-        self.assertIn("sin-dos-puntos", error)
+        self.assertIn("../x", error)
 
     def test_humo_cli_sin_configuracion(self):
         entorno = {k: v for k, v in self.entorno.items() if k != "METABASE_ADMIN_PASSWORD"}
@@ -191,6 +196,13 @@ class CliTests(ConHumo):
         self.assertEqual(codigo, 2)
         self.assertIn("METABASE_ADMIN_PASSWORD", error)
 
+    def test_humo_cli_falta_el_puerto(self):
+        self.archivo.write_text("OTRA=1\n", encoding="utf-8")
+        desde = len(self.falso.peticiones)
+        codigo, _, error = self._cli(self.argv)
+        self.assertEqual(codigo, 2)
+        self.assertIn("METABASE_PUERTO", error)
+        self.assertEqual(self.falso.peticiones[desde:], [])
 
 if __name__ == "__main__":
     unittest.main()

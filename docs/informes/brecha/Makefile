@@ -11,12 +11,18 @@
 #   make duckdb     ORG=<org>                                    downloads <org>'s latest corte and rebuilds its
 #                                                                 Metabase DuckDB file atomically (#206, task 8)
 #   make corte-ficticio ORG=<org> SEMILLA=<n> [SALIDA=<carpeta>]  a corte of a fictitious org, no real network
-#   make provisionar [ORGS="<org> <org>..."]                     creates or updates Metabase's databases, groups,
-#                                                                 collections and tableros (#206, task 10)
-#   make humo        USUARIOS="<org>:<email> ..."                smoke test: isolation and every tablero's card
-#                                                                 (#206, task 11); METABASE_CLAVE_USUARIO is their
-#                                                                 shared password
-#   make respaldo    METABASE_ENV=<archivo .env de Metabase>     backs up metabase-postgres (metabase/respaldo.sh)
+#
+# Metabase: one instance per organization (plan, Decisión 2026-10-25), the compose project metabase-<org>, all
+# configured from the organization's own ENTORNO_ORG (by omission ~/.config/srtm-analitica/<org>.env):
+#   make metabase-up       ORG=<org>                             builds the shared image, starts <org>'s instance
+#   make metabase-reiniciar ORG=<org>                            restarts its metabase (after make duckdb)
+#   make metabase-detener  ORG=<org>                             stops its metabase, keeps its metabase-postgres
+#   make provisionar ORG=<org> [NOMBRE=<nombre>]                 creates or updates <org>'s database, group,
+#                                                                 collection and tableros (#206, task 10)
+#   make humo        ORG=<org> USUARIO=<email>                   smoke test of <org>'s instance (#206, task 11);
+#                                                                 METABASE_CLAVE_USUARIO is the user's password
+#   make respaldo    ORG=<org>                                   backs up <org>'s metabase-postgres
+#                                                                 (metabase/respaldo.sh)
 #
 # FECHA defaults to today in America/Lima (herramientas.comun.hoy_lima()). SALIDA defaults to
 # $(HOME)/cortes/analitica (corte.py's own default) and can be moved with SALIDA=<carpeta base>; verificar and
@@ -28,7 +34,8 @@
 # Requirements: besides venv (duckdb, pyarrow), the AWS CLI to publicar and to duckdb (it downloads the
 # corte). VERSION_SRTM and VERSION_CATASTRO come from the environment or the make command line; without them
 # the manifest keeps them null, with a notice.
-# provisionar reads METABASE_URL, METABASE_ADMIN_EMAIL and METABASE_ADMIN_PASSWORD from the environment.
+# provisionar and humo take the instance's URL only from ENTORNO_ORG (METABASE_URL, else 127.0.0.1 and its
+# METABASE_PUERTO), and METABASE_ADMIN_EMAIL/METABASE_ADMIN_PASSWORD from the environment or ENTORNO_ORG.
 
 SHELL := /bin/bash
 PYTHON ?= python3
@@ -47,6 +54,14 @@ CARPETA_BASE := $(call sin_tilde,$(SALIDA))
 # environment) is honored for corte-ficticio too, like every other target
 CARPETA_BASE_FICTICIO := $(if $(filter file,$(origin SALIDA)),$(call sin_tilde,$(HOME)/cortes/ficticio),$(CARPETA_BASE))
 CARPETA_CORTE := $(patsubst %/,%,$(call sin_tilde,$(CORTE)))
+# the organization's own env file: the corte's secrets and, on the VPS, its Metabase instance's keys
+# (metabase/metabase.env.example)
+ENTORNO_ORG ?= $(HOME)/.config/srtm-analitica/$(ORG).env
+ARCHIVO_ORG = $(call sin_tilde,$(ENTORNO_ORG))
+# METABASE_ORG names the compose project and the one DuckDB folder it mounts (metabase/compose.yml); it comes
+# from ORG, never from the env file, so the project, the folder and the file always name the same organization
+COMPOSE_ORG = METABASE_ORG="$(ORG)" docker compose -p "metabase-$(ORG)" -f metabase/compose.yml \
+	--env-file "$(ARCHIVO_ORG)"
 # computed once (:=, not a recursively-expanded ?=), so a single `make corte` never asks twice and risks two
 # different dates; skipped entirely when FECHA already comes from the command line or the environment
 ifeq ($(origin FECHA),undefined)
@@ -61,7 +76,7 @@ DESTINO := $(S3)/$(ORG)/$(FECHA)/
 MANIFIESTO_S3 := $(patsubst /%,%,$(S3_PREFIJO)/$(ORG)/$(FECHA)/manifiesto.json)
 
 .PHONY: venv pruebas comprobar-org comprobar-org-fecha extraer verificar publicar corte local duckdb corte-ficticio \
-	provisionar humo respaldo
+	metabase-up metabase-reiniciar metabase-detener provisionar humo respaldo
 
 # a stamp, not .venv/bin/python (a symlink: -nt would compare against the system interpreter and always
 # reinstall); an existing .venv is reused as is, never rebuilt with another $(PYTHON)
@@ -118,7 +133,8 @@ local: venv
 
 # #206 task 8: downloads ORG's latest published corte and rebuilds its Metabase file atomically
 # (herramientas.base.construir_atomico); --cortes/--destino-dir keep armar_duckdb.py's own defaults
-# (/srv/srtm-metabase/{cortes,duckdb}), the VPS paths docs/develop/metabase-cortes.md (#206, task 11) sets up.
+# (/srv/srtm-metabase/cortes and /srv/srtm-metabase/<org>/duckdb, the one folder <org>'s Metabase instance
+# mounts), the VPS paths docs/develop/metabase-cortes.md (#206, task 11) sets up.
 duckdb: comprobar-org venv
 	$(VPY) armar_duckdb.py --org "$(ORG)"
 
@@ -129,23 +145,32 @@ corte-ficticio: comprobar-org venv
 	@test -n "$(SEMILLA)" || { echo "falta SEMILLA=<entero>"; exit 2; }
 	$(VPY) ficticio.py --org "$(ORG)" --semilla "$(SEMILLA)" --fecha "$(FECHA)" --salida "$(CARPETA_BASE_FICTICIO)"
 
-# #206 task 10: Metabase's databases, groups, collections and tableros (provisionar.py, metabase/tableros.json),
-# idempotent by name. ORGS is a space-separated list of claves whose nombre is in parametros.json (without it,
-# every organization there); an organization outside parametros.json goes straight to the script with
-# --org clave:"Nombre". The connection comes from METABASE_URL/METABASE_ADMIN_EMAIL/METABASE_ADMIN_PASSWORD.
-provisionar: venv
-	$(VPY) provisionar.py $(foreach org,$(ORGS),--org "$(org)")
+# One Metabase per organization (plan, Decisión 2026-10-25). The image is shared (compose.yml `image:`): the
+# first metabase-up builds it, the rest find it cached.
+metabase-up: comprobar-org
+	$(COMPOSE_ORG) up -d --build
 
-# #206 task 11: smoke test of an already provisioned Metabase (humo.py). USUARIOS is a space-separated list of
-# org:email pairs (one user per organization, already created with `provisionar.py usuario`); they all share
-# METABASE_CLAVE_USUARIO. Run after `make provisionar` and after every `make duckdb` + the Metabase restart it
-# needs (docs/develop/metabase-cortes.md).
-humo: venv
-	@test -n "$(USUARIOS)" || { echo "falta USUARIOS=\"<org>:<email> ...\""; exit 2; }
-	$(VPY) humo.py $(foreach usuario,$(USUARIOS),--usuario "$(usuario)")
+# after `make duckdb ORG=<org>`: Metabase's pool keeps the old file open until it restarts (plan § Rulings)
+metabase-reiniciar: comprobar-org
+	$(COMPOSE_ORG) restart metabase
 
-# Daily backup of metabase-postgres (metabase/respaldo.sh); METABASE_ENV is metabase.env on the VPS. Not ENV:
+metabase-detener: comprobar-org
+	$(COMPOSE_ORG) stop metabase
+
+# #206 task 10: <org>'s database, group, collection and tableros in its own instance (provisionar.py,
+# metabase/tableros.json), idempotent by name. NOMBRE is needed only for an organization outside
+# parametros.json (ficticia-a, say).
+provisionar: comprobar-org venv
+	$(VPY) provisionar.py --org "$(ORG)$(if $(NOMBRE),:$(NOMBRE))" --entorno "$(ARCHIVO_ORG)"
+
+# #206 task 11: smoke test of <org>'s instance (humo.py) as USUARIO, its smoke-test user (created with
+# `provisionar.py usuario`, password in METABASE_CLAVE_USUARIO). Run after `make provisionar` and after every
+# `make duckdb` + `make metabase-reiniciar` (docs/develop/metabase-cortes.md).
+humo: comprobar-org venv
+	@test -n "$(USUARIO)" || { echo "falta USUARIO=<email del usuario de humo>"; exit 2; }
+	$(VPY) humo.py --org "$(ORG)" --usuario "$(USUARIO)" --entorno "$(ARCHIVO_ORG)"
+
+# Daily backup of <org>'s metabase-postgres (metabase/respaldo.sh). The env file is ENTORNO_ORG, never ENV:
 # that one is the shell's startup file (POSIX sh sources $ENV), and an exported ENV would leak into it.
-respaldo:
-	@test -n "$(METABASE_ENV)" || { echo "falta METABASE_ENV=<archivo .env de Metabase>"; exit 2; }
-	metabase/respaldo.sh "$(METABASE_ENV)"
+respaldo: comprobar-org
+	metabase/respaldo.sh "$(ORG)" "$(ARCHIVO_ORG)"
