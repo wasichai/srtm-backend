@@ -189,7 +189,9 @@ class SeguimientoCatastro(
     }
 
     // Seguimiento.disparo on the last automatic corrida: when it says so, the corrida of the year (Lima's) starts and
-    // pendientes go back to 0. one still alive (409) leaves everything as it is: the next pass decides again
+    // pendientes go back to 0, in the corrida's own transaction (#223): a failed write of the sincronizacion rolls the
+    // corrida back too, none runs, and the pass fails (vuelta logs it). one still alive (409) leaves everything as it
+    // is: the next pass decides again
     private suspend fun disparar(
         organizacion: UUID,
         catastro: Catastro,
@@ -207,19 +209,18 @@ class SeguimientoCatastro(
             }
         val disparo = Seguimiento.disparo(ahora, hora, s.pendientes ?: 0, ultima?.iniciado?.let(::instante), ultima?.estado == FALLIDA)
         if (disparo == Disparo.NINGUNO) return
-        val corrida =
-            try {
-                brechas.lanzarAutomatica(organizacion, catastro, ahora.withZoneSameInstant(Seguimiento.LIMA).year, OrigenCorrida.valueOf(disparo.name))
-            } catch (e: ConflictException) {
-                log.info("el seguimiento del catastro de {} no lanzó su corrida: {}", organizacion, e.message)
-                return
+        try {
+            brechas.lanzarAutomatica(organizacion, catastro, ahora.withZoneSameInstant(Seguimiento.LIMA).year, OrigenCorrida.valueOf(disparo.name)) {
+                registros.replace(
+                    SINCRONIZACION_CATASTRO,
+                    RegistroSincronizacion::class.java,
+                    UUID.fromString(s.id),
+                    mapOf("ultima_corrida" to it.id, "pendientes" to 0)
+                )
             }
-        registros.replace(
-            SINCRONIZACION_CATASTRO,
-            RegistroSincronizacion::class.java,
-            UUID.fromString(s.id),
-            mapOf("ultima_corrida" to corrida.id, "pendientes" to 0)
-        )
+        } catch (e: ConflictException) {
+            log.info("el seguimiento del catastro de {} no lanzó su corrida: {}", organizacion, e.message)
+        }
     }
 
     private companion object {

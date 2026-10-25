@@ -104,25 +104,30 @@ class BrechaService(
 
     // #203: the automatic corrida (Seguimiento's schedule picks origen and catastro, already inside asPlatform for
     // organizacion). no permission is checked: a background job, never a request, reaches here. same candado and
-    // active check as lanzar; it runs as the platform too, since the launched coroutine starts its own context
+    // active check as lanzar; it runs as the platform too, since the launched coroutine starts its own context.
+    // #223: alCrear (the sincronizacion's ultima_corrida and pendientes) is written in the corrida's own transaction:
+    // when it fails the corrida is rolled back with it and never runs; the run starts only once both are committed
     suspend fun lanzarAutomatica(
         organizacion: UUID,
         catastro: Catastro,
         anio: Int,
-        origen: OrigenCorrida
+        origen: OrigenCorrida,
+        alCrear: suspend (RegistroCorrida) -> Unit
     ): Corrida {
-        val creada = crearCorrida(organizacion, anio, origen)
+        val creada = crearCorrida(organizacion, anio, origen, alCrear)
         val id = UUID.fromString(creada.id)
         scope.launch { records.asPlatform(organizacion, "srtm:brecha-automatica") { correr(id, anio, catastro) } }
         return corridaDe(creada)
     }
 
     // lanzar's and lanzarAutomatica's transaction: the candado, abandoning a dead active corrida (409 when one is
-    // still alive), and the PENDIENTE row with its origen
+    // still alive), the PENDIENTE row with its origen and then alCrear's writes, all or none (#223). the caller
+    // launches the run after it returns, so a rolled back corrida never runs
     private suspend fun crearCorrida(
         organizacion: UUID,
         anio: Int,
-        origen: OrigenCorrida
+        origen: OrigenCorrida,
+        alCrear: suspend (RegistroCorrida) -> Unit = {}
     ): RegistroCorrida =
         transaccion.executeAndAwait {
             candados.bloquear(Candado.BRECHA, Candados.clave(organizacion, "$anio"))
@@ -131,19 +136,20 @@ class BrechaService(
                 if (viva(activa, ahora)) throw ConflictException("Ya hay una corrida de la brecha de $anio en curso: espere a que termine")
                 actualizar(UUID.fromString(activa.id), abandono(activa, ahora))
             }
-            registros.create(
-                BRECHA_CORRIDA,
-                RegistroCorrida::class.java,
-                mapOf(
-                    "anio" to anio,
-                    "estado" to PENDIENTE,
-                    "total_predios" to 0,
-                    "procesados" to 0,
-                    "iniciado" to ahora.toString(),
-                    "latido" to ahora.toString(),
-                    "origen" to origen.name
-                )
-            )
+            registros
+                .create(
+                    BRECHA_CORRIDA,
+                    RegistroCorrida::class.java,
+                    mapOf(
+                        "anio" to anio,
+                        "estado" to PENDIENTE,
+                        "total_predios" to 0,
+                        "procesados" to 0,
+                        "iniciado" to ahora.toString(),
+                        "latido" to ahora.toString(),
+                        "origen" to origen.name
+                    )
+                ).also { alCrear(it) }
         }
 
     suspend fun lista(anio: Int?): List<Corrida> {

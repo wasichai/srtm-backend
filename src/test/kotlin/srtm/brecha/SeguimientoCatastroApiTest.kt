@@ -12,8 +12,11 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
+import org.springframework.r2dbc.core.DatabaseClient
+import org.springframework.r2dbc.core.awaitRowsUpdated
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
+import srtm.emision.TablasCore
 import srtm.impuesto.Parametros
 import srtm.rentas.SrtmApiTest
 import tools.jackson.databind.JsonNode
@@ -41,6 +44,12 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
 
     @Autowired
     private lateinit var directorio: TenantDirectory
+
+    @Autowired
+    private lateinit var tablas: TablasCore
+
+    @Autowired
+    private lateinit var db: DatabaseClient
 
     // a new organization of `falso`'s catastro, with the model and the verified predial parameters (a corrida reads
     // them): its admin's token and its id
@@ -331,6 +340,46 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
     }
 
     @Test
+    fun `a corrida whose ultima_corrida cannot be written is rolled back with it and never runs`() {
+        val falso = FALSOS.getValue("atomica")
+        val (org, id) = organizacion(falso)
+        falso.paginas.set(mapOf("" to pagina("c1", false, cambio("A-1", "2026-10-20T15:00:00Z"))))
+        // hora 24: the cambio is read and nothing is decided yet
+        vuelta(ahora(), hora = 24)
+        assertEquals(1, sincronizacion(org)["pendientes"].asInt())
+
+        // the db refuses any ultima_corrida of this organization's sincronizacion: the pass's write after the corrida
+        // fails, as a lost connection or a refused write would
+        val t = runBlocking { tablas.de(SINCRONIZACION_CATASTRO, listOf("ultima_corrida")) }.single { it.organizacion == id }
+        val restriccion = "sin_ultima_corrida_${id.toString().take(8)}"
+        runBlocking {
+            db.sql("ALTER TABLE ${t.tabla} ADD CONSTRAINT $restriccion CHECK (${t.columna("ultima_corrida")} IS NULL) NOT VALID").fetch().awaitRowsUpdated()
+        }
+        try {
+            // hora 0 with a pendiente: the pass decides the corrida of the hour
+            vuelta(ahora(), hora = 0)
+
+            // no corrida was left, none ran, and the sincronizacion is as it was: the next pass decides again
+            assertTrue(corridas(org, ahora().year).isEmpty())
+            Thread.sleep(1000)
+            assertEquals(0, falso.valuaciones.get())
+            val s = sincronizacion(org)
+            assertEquals(1, s["pendientes"].asInt())
+            assertTrue(s["ultima_corrida"]?.isNull ?: true, s.toString())
+        } finally {
+            runBlocking { db.sql("ALTER TABLE ${t.tabla} DROP CONSTRAINT $restriccion").fetch().awaitRowsUpdated() }
+        }
+
+        // once the write goes through, the same pass launches it and keeps it
+        vuelta(ahora(), hora = 0)
+        val lanzada = corridas(org, ahora().year).single()
+        assertEquals(TERMINADA, terminada(org, lanzada["id"].asString())["estado"].asString())
+        val s = sincronizacion(org)
+        assertEquals(0, s["pendientes"].asInt())
+        assertEquals(lanzada["id"].asString(), s["ultima_corrida"].asString())
+    }
+
+    @Test
     fun `a page that does not move the cursor is an error, never a loop`() {
         val falso = FALSOS.getValue("cursor")
         val (org, _) = organizacion(falso)
@@ -424,6 +473,9 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
         val items = AtomicReference<List<String>>(emptyList())
         val estado = AtomicInteger(200)
         val llamadas = AtomicInteger()
+
+        // the /valuaciones it answered: a corrida that ran asked them
+        val valuaciones = AtomicInteger()
         val desdes = CopyOnWriteArrayList<String>()
         val server: HttpServer =
             HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
@@ -443,6 +495,7 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
                     responder(ex, 200, paginas.get()[desde] ?: """{"items":[],"cursor":$cursor,"hayMas":false}""")
                 }
                 createContext("/api/catastro/valuaciones") { ex ->
+                    valuaciones.incrementAndGet()
                     val anio = parametros(ex)["anio"]
                     val todos = items.get()
                     responder(
@@ -474,7 +527,8 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
                 "aviso",
                 "sincodigo",
                 "escritura",
-                "cursor"
+                "cursor",
+                "atomica"
             ).associateWith { CatastroFalso(it) }
 
         private fun cambio(
