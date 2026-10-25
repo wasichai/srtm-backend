@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.context.ApplicationContext
 import org.springframework.core.io.ByteArrayResource
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
@@ -15,11 +16,15 @@ import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.test.context.TestPropertySource
 import org.springframework.test.web.reactive.server.WebTestClient
 import org.springframework.web.reactive.function.BodyInserters
+import srtm.emision.DocumentosDeEmision
+import srtm.emision.GrupoTrabajadores
 import srtm.emision.IdentidadEmision
+import srtm.emision.LotesDelTest
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 import wasichai.test.WasichaiIntegrationTest
 import java.io.File
+import java.nio.file.Path
 import java.util.Base64
 import java.util.UUID
 
@@ -36,6 +41,11 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
 
     @Autowired
     private lateinit var identidad: IdentidadEmision
+
+    @Autowired
+    private lateinit var contexto: ApplicationContext
+
+    private val lotesDelTest by lazy { LotesDelTest(contexto) }
 
     // in-process, as the seeded admin (the token's subject): runs `bloque` with their Authentication, to call the services (Registros, ...) from a test the way
     // a request would: same pattern as TrabajoDeterminacion
@@ -215,6 +225,31 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
         aplicarModelo(suyo)
         return suyo
     }
+
+    // the organization of a token's user: its jwt's org
+    protected fun organizacionDe(token: String): UUID {
+        val carga = String(Base64.getUrlDecoder().decode(token.removePrefix("Bearer ").split('.')[1]))
+        return UUID.fromString(tree(carga)["org"].asString())
+    }
+
+    // every lote and job still to run of `organizaciones` (the test's, by default) is failed, of the emission and of
+    // the determination: a test's own groups then take only what it creates (LotesDelTest)
+    protected fun soloLasDelTest(organizaciones: Set<UUID> = setOf(organizacionDe(token))) = lotesDelTest.soloLasDelTest(organizaciones)
+
+    // a group of this context playing an instance, that takes only the lotes of `organizaciones` (the test's, by
+    // default). not started
+    protected fun grupoDelTest(
+        instancia: String,
+        cantidad: Int,
+        temporales: Path,
+        organizaciones: Set<UUID> = setOf(organizacionDe(token)),
+        documentos: DocumentosDeEmision? = null
+    ): GrupoTrabajadores =
+        if (documentos == null) {
+            lotesDelTest.grupo(instancia, cantidad, temporales, organizaciones)
+        } else {
+            lotesDelTest.grupo(instancia, cantidad, temporales, organizaciones, documentos)
+        }
 
     // the documents' header
 

@@ -6,13 +6,11 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.http.HttpStatus
-import org.springframework.r2dbc.core.awaitRowsUpdated
 import org.springframework.test.context.TestPropertySource
 import srtm.impuesto.ParametroTributario
 import srtm.impuesto.ParametrosTributarios
@@ -33,9 +31,6 @@ import java.util.concurrent.atomic.AtomicInteger
     ]
 )
 class ParametrosPorLoteApiTest : ConEscenarioApiTest() {
-    @Autowired
-    lateinit var trabajadores: TrabajadoresEmision
-
     private val grupos = mutableListOf<GrupoTrabajadores>()
 
     @TestConfiguration
@@ -54,25 +49,9 @@ class ParametrosPorLoteApiTest : ConEscenarioApiTest() {
         }
     }
 
-    // nothing of another class is left for the group to take: only this test's emission runs
+    // nothing of the test's organization is left for the group to take: only this test's emission runs
     @BeforeEach
-    fun soloLaDelTest() {
-        runBlocking {
-            for (t in tablas.de(EMISION_LOTE, listOf("estado"))) {
-                db
-                    .sql("UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDO' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO')")
-                    .fetch()
-                    .awaitRowsUpdated()
-            }
-            for (t in tablas.de(EMISION_MASIVA, listOf("estado"))) {
-                db
-                    .sql(
-                        "UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDA' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO', 'ENSAMBLANDO')"
-                    ).fetch()
-                    .awaitRowsUpdated()
-            }
-        }
-    }
+    fun sinLotesAjenos() = soloLasDelTest()
 
     @AfterEach
     fun detener() {
@@ -88,7 +67,7 @@ class ParametrosPorLoteApiTest : ConEscenarioApiTest() {
         esperar(id) { it["estado"].asString() == "EN_PROCESO" }
         lecturas.set(0)
 
-        val grupo = trabajadores.grupo("parametros", 1, Path.of("build/emisiones-test-grupos", "parametros"))
+        val grupo = grupoDelTest("parametros", 1, Path.of("build/emisiones-test-grupos", "parametros"))
         grupos += grupo
         grupo.iniciar()
 

@@ -7,13 +7,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
-import org.springframework.r2dbc.core.awaitRowsUpdated
 import srtm.emision.EMISION_LOTE
 import srtm.emision.EMISION_MASIVA
-import srtm.emision.TablasCore
-import srtm.emision.TrabajadoresEmision
 import tools.jackson.databind.JsonNode
 import java.math.BigDecimal
 import java.nio.file.Path
@@ -23,12 +19,6 @@ import java.util.UUID
 // #163: the cuotas de predial and of arbitrios of a contribuyente as ordenes de cobro of its organization's caja, and
 // what each answer of the caja does to them (D6)
 class CajaApiTest : ConCajaApiTest() {
-    @Autowired
-    lateinit var tablas: TablasCore
-
-    @Autowired
-    lateinit var trabajadores: TrabajadoresEmision
-
     @Test
     fun `unPredioDa4PredialesYLasCuotasDeArbitrios`() {
         val e = Escenario()
@@ -239,13 +229,13 @@ class CajaApiTest : ConCajaApiTest() {
         val e = Escenario()
         conPredial(e)
         send("POST", e.determinar(), pedido(e.anio), HttpStatus.CREATED)
-        soloLaDelTest()
+        soloLasDelTest()
         val (estado, cuerpo) = exchange("POST", "/api/srtm/emisiones", mapOf("anio" to e.anio, "formato" to "PDF", "enviar_a_caja" to true))
         assertEquals(HttpStatus.ACCEPTED, estado, cuerpo)
         val id = tree(cuerpo)["id"].asString()
         esperar(id) { it["estado"].asString() == "EN_PROCESO" }
 
-        val grupo = trabajadores.grupo("caja", 1, Path.of("build/emisiones-test-grupos", "caja"))
+        val grupo = grupoDelTest("caja", 1, Path.of("build/emisiones-test-grupos", "caja"))
         grupo.iniciar()
         try {
             val terminada = esperar(id) { it["estado"].asString() in setOf("TERMINADA", "FALLIDA") }
@@ -479,25 +469,6 @@ class CajaApiTest : ConCajaApiTest() {
         enviar(sus.contribuyente, sus.anio)
 
         return v(1) to v(3)
-    }
-
-    // nothing of another class or run is left for this test's group to take: only its emission runs
-    private fun soloLaDelTest() {
-        runBlocking {
-            for (t in tablas.de(EMISION_LOTE, listOf("estado"))) {
-                db
-                    .sql("UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDO' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO')")
-                    .fetch()
-                    .awaitRowsUpdated()
-            }
-            for (t in tablas.de(EMISION_MASIVA, listOf("estado"))) {
-                db
-                    .sql(
-                        "UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDA' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO', 'ENSAMBLANDO')"
-                    ).fetch()
-                    .awaitRowsUpdated()
-            }
-        }
     }
 
     private fun esperar(

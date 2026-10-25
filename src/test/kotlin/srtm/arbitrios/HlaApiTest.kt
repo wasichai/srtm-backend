@@ -6,17 +6,11 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
-import org.springframework.r2dbc.core.awaitRowsUpdated
 import org.springframework.test.context.TestPropertySource
-import srtm.emision.EMISION_LOTE
-import srtm.emision.EMISION_MASIVA
 import srtm.emision.GrupoTrabajadores
-import srtm.emision.TablasCore
-import srtm.emision.TrabajadoresEmision
 import srtm.emision.texto
 import java.io.ByteArrayInputStream
 import java.nio.file.Files
@@ -36,32 +30,11 @@ import java.util.zip.ZipInputStream
     ]
 )
 class HlaApiTest : ConArbitriosApiTest() {
-    @Autowired
-    lateinit var trabajadores: TrabajadoresEmision
-
-    @Autowired
-    lateinit var tablas: TablasCore
-
     private val grupos = mutableListOf<GrupoTrabajadores>()
 
-    // nothing of another class is left for the group to take: only this test's emission runs
+    // nothing of the test's organization is left for the group to take: only this test's emission runs
     @BeforeEach
-    fun soloLasDelTest() {
-        runBlocking {
-            for (t in tablas.de(EMISION_LOTE, listOf("estado"))) {
-                db
-                    .sql("UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDO' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO')")
-                    .fetch()
-                    .awaitRowsUpdated()
-            }
-            for (t in tablas.de(EMISION_MASIVA, listOf("estado"))) {
-                db
-                    .sql("UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDA' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO', 'ENSAMBLANDO')")
-                    .fetch()
-                    .awaitRowsUpdated()
-            }
-        }
-    }
+    fun sinLotesAjenos() = soloLasDelTest()
 
     @AfterEach
     fun detener() {
@@ -148,7 +121,7 @@ class HlaApiTest : ConArbitriosApiTest() {
         val job = tree(send("POST", "/api/srtm/emisiones", mapOf("anio" to e.anio, "formato" to "ZIP", "documentos" to listOf("HLA")), HttpStatus.ACCEPTED))
         assertEquals(listOf("HLA"), lista(job["documentos"]) { it.asString() })
         val id = job["id"].asString()
-        trabajadores.grupo("instancia-hla", 2, Files.createTempDirectory("hla")).also {
+        grupoDelTest("instancia-hla", 2, Files.createTempDirectory("hla")).also {
             it.iniciar()
             grupos += it
         }

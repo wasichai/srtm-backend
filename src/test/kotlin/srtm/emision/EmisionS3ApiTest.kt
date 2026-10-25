@@ -44,9 +44,6 @@ import java.util.zip.ZipInputStream
 )
 class EmisionS3ApiTest : ConEscenarioApiTest() {
     @Autowired
-    lateinit var trabajadores: TrabajadoresEmision
-
-    @Autowired
     lateinit var documentosPrediales: DocumentosPrediales
 
     @Autowired
@@ -81,8 +78,9 @@ class EmisionS3ApiTest : ConEscenarioApiTest() {
             ) = documentosPrediales.pu(predioId, contribuyenteId, anio)
         }
 
+    // nothing of the test's organization is left for the groups to take: only this test's emissions run
     @BeforeEach
-    fun soloLaDelTest() = soloLasDelTest()
+    fun sinLotesAjenos() = soloLasDelTest()
 
     @AfterEach
     fun detener() {
@@ -232,8 +230,7 @@ class EmisionS3ApiTest : ConEscenarioApiTest() {
 
     // a started group of this context playing an instance, with its own work dir
     private fun grupo(instancia: String): GrupoTrabajadores =
-        trabajadores
-            .grupo(instancia, 1, Path.of("build/emisiones-s3-grupos", instancia), documentos)
+        grupoDelTest(instancia, 1, Path.of("build/emisiones-s3-grupos", instancia), documentos = documentos)
             .also {
                 grupos += it
                 it.iniciar()

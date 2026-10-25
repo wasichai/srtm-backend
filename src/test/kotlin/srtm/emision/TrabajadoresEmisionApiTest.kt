@@ -45,9 +45,6 @@ import kotlin.io.path.writeText
 )
 class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
     @Autowired
-    lateinit var trabajadores: TrabajadoresEmision
-
-    @Autowired
     lateinit var documentosPrediales: DocumentosPrediales
 
     @Autowired
@@ -94,9 +91,9 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
             ) = documentosPrediales.pu(predioId, contribuyenteId, anio)
         }
 
-    // nothing of another class is left for the groups to take or assemble: only this test's emission runs
+    // nothing of the test's organization is left for the groups to take or assemble: only this test's emission runs
     @BeforeEach
-    fun soloLaDelTest() = soloLasDelTest()
+    fun sinLotesAjenos() = soloLasDelTest()
 
     @AfterEach
     fun detener() {
@@ -280,7 +277,7 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
         propios.forEachIndexed { i, c -> loteNuevo(propia, i + 1, listOf(c)) }
         ajenos.forEachIndexed { i, c -> loteNuevo(ajena, i + 1, listOf(c), otra) }
 
-        grupo("sola", cantidad = 1)
+        grupo("sola", cantidad = 1, organizaciones = setOf(organizacionDe(token), organizacionDe(otra)))
 
         assertEquals("TERMINADA", esperar(propia)["estado"].asString())
         assertEquals("TERMINADA", esperar(ajena, otra)["estado"].asString())
@@ -290,6 +287,38 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
         // each one's first lote is taken before the other one's last
         assertTrue(orden.indexOf("ajena") < orden.lastIndexOf("propia"), "$orden")
         assertTrue(orden.indexOf("propia") < orden.lastIndexOf("ajena"), "$orden")
+    }
+
+    // #173: a test fails and takes only its own organization's lotes. another organization's pending one (another
+    // class's, or another run's on the same db) is neither failed by soloLasDelTest nor taken by the test's group
+    @Test
+    fun `a pending lote of another organization is left untouched by the test's cleanup and its group`() {
+        val anio = anio()
+        val otra = otraOrganizacion()
+        val propia = enProceso(anio, 1)
+        loteNuevo(propia, 1, listOf(ficticio()))
+        val ajeno = ficticio()
+        val ajena = enProceso(anio, 1, otra)
+        loteNuevo(ajena, 1, listOf(ajeno), otra)
+
+        soloLasDelTest()
+
+        assertEquals(listOf("FALLIDO"), lotesDe(propia).map { it.estado })
+        assertEquals("FALLIDA", esperar(propia)["estado"].asString())
+        assertEquals(listOf("PENDIENTE"), lotesDe(ajena).map { it.estado })
+        assertEquals("EN_PROCESO", esperar(ajena, otra) { true }["estado"].asString())
+
+        val nueva = enProceso(anio, 1)
+        loteNuevo(nueva, 1, listOf(ficticio()))
+        grupo("propia", cantidad = 1)
+        assertEquals("TERMINADA", esperar(nueva)["estado"].asString())
+        // a few more cycles of the group (srtm.emision.espera=200ms): it still leaves the other one alone
+        Thread.sleep(1000)
+        assertEquals(listOf("PENDIENTE"), lotesDe(ajena).map { it.estado })
+        assertTrue(ajeno.id !in pedidas, "$pedidas")
+
+        // nothing of it is left for a later class
+        soloLasDelTest(setOf(organizacionDe(otra)))
     }
 
     @Test
@@ -372,13 +401,14 @@ class TrabajadoresEmisionApiTest : ConEscenarioApiTest() {
     // a contribuyente of no padrón
     private fun ficticio() = ContribuyenteAEmitir(UUID.randomUUID(), uniqueDocumento(), "FICTICIO", emptyList())
 
-    // a started group of this context playing an instance, with its own work dir
+    // a started group of this context playing an instance, with its own work dir, that takes the lotes of
+    // `organizaciones` only (the test's, by default)
     private fun grupo(
         instancia: String,
-        cantidad: Int = 1
+        cantidad: Int = 1,
+        organizaciones: Set<UUID> = setOf(organizacionDe(token))
     ): GrupoTrabajadores =
-        trabajadores
-            .grupo(instancia, cantidad, Path.of("build/emisiones-test-grupos", instancia), documentos)
+        grupoDelTest(instancia, cantidad, Path.of("build/emisiones-test-grupos", instancia), organizaciones, documentos)
             .also {
                 grupos += it
                 it.iniciar()
