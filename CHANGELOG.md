@@ -1,5 +1,32 @@
 # Changelog
 
+## [2.1.0](https://github.com/wasichai/srtm-backend/compare/v2.0.0...v2.1.0) (2026-10-25)
+
+
+### Features
+
+* **analitica:** un Metabase por municipalidad ([#220](https://github.com/wasichai/srtm-backend/issues/220)) ([32f4295](https://github.com/wasichai/srtm-backend/commit/32f4295dc4ae4ea4ae41cb02fed960f57c1d247d))
+* **brecha:** corte analítico en Parquet con manifiesto ([#205](https://github.com/wasichai/srtm-backend/issues/205)) ([#213](https://github.com/wasichai/srtm-backend/issues/213)) ([0b7b3ed](https://github.com/wasichai/srtm-backend/commit/0b7b3ede8af9aff5af2418a5429d81f9b5cd2de5))
+* **brecha:** la brecha con la confianza del vínculo ([#204](https://github.com/wasichai/srtm-backend/issues/204)) ([#217](https://github.com/wasichai/srtm-backend/issues/217)) ([71482fe](https://github.com/wasichai/srtm-backend/commit/71482fe8c9b8fecfc2eedc9de6841c6df6d3f9e0))
+* **brecha:** srtm sigue los cambios del catastro y avisa de los que pasan 5 UIT ([#203](https://github.com/wasichai/srtm-backend/issues/203)) ([#225](https://github.com/wasichai/srtm-backend/issues/225)) ([b802c3a](https://github.com/wasichai/srtm-backend/commit/b802c3a5eb1bb8fed7f7c942b687aeab30d4ebf0))
+* **impuesto:** la liquidación avisa cuando una DJ está por revisar ([#242](https://github.com/wasichai/srtm-backend/issues/242)) ([6edf3a7](https://github.com/wasichai/srtm-backend/commit/6edf3a7529f8bc7fc47510948698c9aec66085f7))
+* **modelo:** migrar los códigos compartidos ya cargados con 100/n ([#219](https://github.com/wasichai/srtm-backend/issues/219)) ([#232](https://github.com/wasichai/srtm-backend/issues/232)) ([5437d60](https://github.com/wasichai/srtm-backend/commit/5437d600bd0c933de11cca40a6d8000d8c76a8df))
+* **modelo:** rol ANALITICA y cuenta del corte analítico, versionados ([#228](https://github.com/wasichai/srtm-backend/issues/228)) ([#229](https://github.com/wasichai/srtm-backend/issues/229)) ([22a170d](https://github.com/wasichai/srtm-backend/commit/22a170d3cce97f0c4a1a3155aaada00ac0f68707))
+* **normativa:** el predio toma el arancel de su vía ([#226](https://github.com/wasichai/srtm-backend/issues/226)) ([#227](https://github.com/wasichai/srtm-backend/issues/227)) ([6648dcc](https://github.com/wasichai/srtm-backend/commit/6648dcc6f57501ca67b5126719b62a5a3c0cab05))
+* **rentas:** la clasificación del nivel en la API del portal ([#244](https://github.com/wasichai/srtm-backend/issues/244)) ([70a450c](https://github.com/wasichai/srtm-backend/commit/70a450c47844c117dcdcdf34d03e1dc5a680712c))
+
+
+### Bug Fixes
+
+* **brecha:** el aviso de cambios lista objetos y entregas sin repetir ([#224](https://github.com/wasichai/srtm-backend/issues/224)) ([#234](https://github.com/wasichai/srtm-backend/issues/234)) ([38a9498](https://github.com/wasichai/srtm-backend/commit/38a9498adeb62d59b60d8c3c3365efa189de7532))
+* **brecha:** la corrida automática y su ultima_corrida en una sola transacción ([#223](https://github.com/wasichai/srtm-backend/issues/223)) ([#233](https://github.com/wasichai/srtm-backend/issues/233)) ([e1fc4d7](https://github.com/wasichai/srtm-backend/commit/e1fc4d7d271653c9603d69420697be2c6bb8796a))
+* **brecha:** la paginación del catastro falla si una página no avanza ([#222](https://github.com/wasichai/srtm-backend/issues/222)) ([#231](https://github.com/wasichai/srtm-backend/issues/231)) ([baae797](https://github.com/wasichai/srtm-backend/commit/baae797daba6641c8e158fd55530de57a94c3348))
+* **modelo:** un código del SAT con predios distintos da un predio por cada uno ([#207](https://github.com/wasichai/srtm-backend/issues/207)) ([#216](https://github.com/wasichai/srtm-backend/issues/216)) ([c640723](https://github.com/wasichai/srtm-backend/commit/c64072335768b686596d7a490348f673c86edf17))
+* **rentas:** la DJ y la brecha reconocen los predios rústicos ([#209](https://github.com/wasichai/srtm-backend/issues/209)) ([#215](https://github.com/wasichai/srtm-backend/issues/215)) ([1bc5864](https://github.com/wasichai/srtm-backend/commit/1bc5864882930777e4185d9517815e7294be6647))
+* **rentas:** la rectificatoria conserva lo que el padrón externo trajo de la DJ ([#243](https://github.com/wasichai/srtm-backend/issues/243)) ([75f5ca9](https://github.com/wasichai/srtm-backend/commit/75f5ca9c692159c670770635bd40c2dd499e4b37))
+* **rentas:** obras del padrón de origen en el motor y en la brecha ([#208](https://github.com/wasichai/srtm-backend/issues/208)) ([#210](https://github.com/wasichai/srtm-backend/issues/210)) ([7da0159](https://github.com/wasichai/srtm-backend/commit/7da0159a2c071c451c5ce9e9598cf08ad0c711c6))
+* **rentas:** sin uso, la DJ se valoriza con el código de su sub clase o su clase ([#240](https://github.com/wasichai/srtm-backend/issues/240)) ([955efe4](https://github.com/wasichai/srtm-backend/commit/955efe4dadd852c65075932fd39e3369f3c87027))
+
 ## [2.0.0](https://github.com/wasichai/srtm-backend/compare/v1.0.0...v2.0.0) (2026-10-24)
 
 
