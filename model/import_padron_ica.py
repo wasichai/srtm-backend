@@ -214,6 +214,48 @@ def codigos_derivados(rows):
     return srtm, compartidos
 
 
+# the regla para varios códigos de vía (#226): a predio whose rows name several, all of one value / not
+MISMO_VALOR = "varios_codigos_mismo_valor"
+VALORES_DISTINTOS = "varios_codigos_valores_distintos"
+URBANO = "1"
+
+
+def regla_varios_codigos(filas):
+    """The regla para varios códigos de vía (#226) over the rows of one predio: (codigo_via, regla, cuantos, valores).
+
+    The urbano rows (tipo_predio 1) with a codigo_de_via are its frentes (the SAT code goes by frente de vía: RM
+    514-2025-EF/15). One code, or none: regla None and codigo_via the first row's, as always. Several, each with one
+    arancel > 0 and the same for all: MISMO_VALOR, and codigo_via the most frequent (of a tie, the lowest). Otherwise
+    (values that differ, or a code without one): VALORES_DISTINTOS, codigo_via the first row's, left as it is and
+    marked (predio.varios_codigos_via) for review. cuantos: code -> its rows; valores: code -> its arancel values."""
+    primera = codigo(filas[0].get("codigo_de_via")) if filas else None
+    cuantos, valores = Counter(), defaultdict(set)
+    for fila in filas:
+        cod_via = codigo(fila.get("codigo_de_via"))
+        if cod_via is None or codigo(fila.get("tipo_predio")) != URBANO:
+            continue
+        cuantos[cod_via] += 1
+        valor = _arancel(fila.get("arancel"))
+        if valor is not None and valor > 0:
+            valores[cod_via].add(valor)
+    if len(cuantos) < 2:
+        return primera, None, cuantos, valores
+    if all(len(valores[c]) == 1 for c in cuantos) and len(set().union(*(valores[c] for c in cuantos))) == 1:
+        return sorted(cuantos.items(), key=lambda kv: (-kv[1], _orden(kv[0])))[0][0], MISMO_VALOR, cuantos, valores
+    return primera, VALORES_DISTINTOS, cuantos, valores
+
+
+def _arancel(value):
+    """The padrón's arancel as Decimal with two decimals (the xlsx carries float noise); None when blank or not a number."""
+    text = clean_text(value)
+    if text is None:
+        return None
+    try:
+        return Decimal(text).quantize(CENTIMO, rounding=ROUND_HALF_UP)
+    except InvalidOperation:
+        return None
+
+
 def valores_condominio(autoavaluo, porcentaje):
     """(valor_condominio, valor_afecto) as Condominio.kt: the % of the autoavalúo to the cent, half up; with deducción
     0, valor_afecto is the same."""
@@ -492,12 +534,25 @@ class _Builder:
         return par, self.srtm.get(par)
 
     def predios(self, rows):
+        filas_de = defaultdict(list)  # srtm code -> its rows, for the regla para varios códigos de vía
+        for row in rows:
+            code = self.par(row)[1]
+            if code is not None:
+                filas_de[code].append(row)
         for row in rows:
             (origen, _), code = self.par(row)
             self.catalogos(row)
             if code is None or ("predio", code) in self.data.filas or code in self.rechazados:
                 continue
             attributes = self.predio(row, code, origen)
+            cod_via, regla, cuantos, _ = regla_varios_codigos(filas_de[code])
+            attributes["codigo_via"] = cod_via
+            if regla == VALORES_DISTINTOS:
+                attributes["varios_codigos_via"] = True
+            if regla is not None:
+                self.report(regla, "padron", row["_fila"], code, None,
+                            f"{len(cuantos)} códigos de vía: " + (f"toma {cod_via}, el más frecuente" if regla == MISMO_VALOR
+                                                                 else "valores distintos, no toma el arancel de su vía"))
             valid = self.valid("predio", attributes, "padron", row, code, None)
             if valid is None:
                 self.rechazados.add(code)

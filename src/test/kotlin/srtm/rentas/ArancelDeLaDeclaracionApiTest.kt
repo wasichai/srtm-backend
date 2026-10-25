@@ -12,8 +12,8 @@ import java.math.BigDecimal
 
 // #188: a declaración names the tramo de vía its predio fronts (id_aranc), and its arancel is the valor_m2 of that
 // tramo's VIGENTE arancel in the DJ's year (Normativa). none VIGENTE: a 400 on id_aranc when the user names it; a
-// recalculation, a copy to another year or one annulled without a replacement keep the number stored. without
-// id_aranc, the arancel stays as it is (an external padrón's). FICTITIOUS figures
+// recalculation or one annulled without a replacement keep the number stored; a copy to another year takes that
+// year's, or none (#226). without id_aranc, the arancel stays as it is (an external padrón's). FICTITIOUS figures
 class ArancelDeLaDeclaracionApiTest : SrtmApiTest() {
     @Test
     fun `a DJ with the id_aranc of a VIGENTE arancel takes its valor_m2 - one that names none is a 400 on id_aranc`() {
@@ -83,7 +83,7 @@ class ArancelDeLaDeclaracionApiTest : SrtmApiTest() {
     }
 
     @Test
-    fun `the rectificatoria and the copy to another year take id_aranc - the copy keeps the number without an arancel that year`() {
+    fun `the rectificatoria and the copy to another year take id_aranc - the copy has no arancel without one that year`() {
         val t = tramo()
         importarAranceles("$t,2026,30,ANA,BETO")
         val contribuyente = inscribir()
@@ -101,7 +101,8 @@ class ArancelDeLaDeclaracionApiTest : SrtmApiTest() {
                 mapOf("predio_id" to predio, "desde" to r, "declaracion" to mapOf("anio" to 2027))
             )["declaracion"]
         assertEquals(t, copia["id_aranc"].asString())
-        assertArancel("30", copia["id"].asString())
+        // #226: a DJ of 2027 never carries 2026's arancel: none VIGENTE in 2027, none
+        assertTrue(registro(copia["id"].asString())["arancel"].isNull, copia.toString())
         // with that year's arancel, Recalcular takes it
         importarAranceles("$t,2027,33,ANA,BETO")
         recalcular(copia["id"].asString())
@@ -246,6 +247,8 @@ class ArancelDeLaDeclaracionApiTest : SrtmApiTest() {
     private fun declarar(vararg extra: Pair<String, Any?>): JsonNode = post("/api/srtm/declaraciones", cuerpo(*extra))
 
     private fun declaracion(id: String): JsonNode = tree(send("GET", "/api/srtm/declaraciones/$id", null, HttpStatus.OK))["declaracion"]
+
+    private fun registro(id: String): JsonNode = tree(send("GET", "/api/objects/$DECLARACION/records/$id", null, HttpStatus.OK))["attributes"]
 
     private fun recalcular(id: String) = send("POST", "/api/srtm/declaraciones/$id/recalcular", null, HttpStatus.OK)
 

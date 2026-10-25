@@ -65,6 +65,10 @@ class Client:
     def put(self, path, body):
         return self._call("PUT", path, body)
 
+    def patch(self, path, body):
+        """Core's JSON merge on a record's attributes: only the keys sent are written (ADR-051)."""
+        return self._call("PATCH", path, body)
+
     def delete(self, path):
         return self._call("DELETE", path)
 

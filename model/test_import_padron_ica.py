@@ -657,6 +657,52 @@ class BuildNivelesTests(unittest.TestCase):
         self.assertEqual(categorias(data)["rechazada"], 3)
 
 
+class VariosCodigosTests(unittest.TestCase):
+    """The regla para varios códigos de vía (#226): a predio whose urbano rows name several codigo_de_via."""
+
+    def test_one_code_is_the_first_rows_as_always(self):
+        cod_via, regla, _, _ = ipi.regla_varios_codigos(numbered([padron(codigo_de_via="501"), padron(codigo_de_via="501")]))
+        self.assertEqual((cod_via, regla), ("501", None))
+
+    def test_several_of_one_value_take_the_most_frequent_code(self):
+        filas = numbered([padron(codigo_de_via="501", arancel="20"), padron(codigo_de_via="502", arancel="20.00"),
+                          padron(codigo_de_via="502", arancel="20")])
+        cod_via, regla, cuantos, _ = ipi.regla_varios_codigos(filas)
+        self.assertEqual((cod_via, regla, dict(cuantos)), ("502", ipi.MISMO_VALOR, {"501": 1, "502": 2}))
+        # a tie: the lowest code
+        cod_via, _, _, _ = ipi.regla_varios_codigos(numbered([padron(codigo_de_via="502", arancel="20"),
+                                                              padron(codigo_de_via="501", arancel="20")]))
+        self.assertEqual(cod_via, "501")
+
+    def test_several_of_different_values_keep_the_first_rows_code_and_are_marked(self):
+        filas = numbered([padron(codigo_de_via="501", arancel="20"), padron(codigo_de_via="502", arancel="21"),
+                          padron(codigo_de_via="502", arancel="21")])
+        self.assertEqual(ipi.regla_varios_codigos(filas)[:2], ("501", ipi.VALORES_DISTINTOS))
+        # a code without a value cannot be the same value
+        filas = numbered([padron(codigo_de_via="501", arancel="20"), padron(codigo_de_via="502", arancel="0")])
+        self.assertEqual(ipi.regla_varios_codigos(filas)[1], ipi.VALORES_DISTINTOS)
+
+    def test_rustico_rows_are_no_frentes(self):
+        filas = numbered([padron(codigo_de_via="501", arancel="20"), padron(codigo_de_via="502", tipo_predio="2", arancel="0")])
+        self.assertEqual(ipi.regla_varios_codigos(filas)[:2], ("501", None))
+
+    def test_the_import_stores_the_chosen_code_and_marks_the_predio(self):
+        uno, dos = "000000001-0001-0001", "000000002-0001-0001"
+        data = ipi.build_dataset(numbered([
+            padron(codigo_de_via="501", arancel="20"),
+            padron(codigo_contribuyente="900002", nro_documento="40000002", codigo_de_via="502", arancel="20"),
+            padron(codigo_contribuyente="900003", nro_documento="40000003", codigo_de_via="502", arancel="20"),
+            padron(codigo_predio=dos, codigo_de_via="501", arancel="20"),
+            padron(codigo_predio=dos, codigo_contribuyente="900002", nro_documento="40000002", codigo_de_via="502", arancel="30"),
+        ]), [], 2026, MODEL, CODIGOS, USOS, RNT)
+        self.assertEqual(data.predios[uno]["codigo_via"], "502")
+        self.assertNotIn("varios_codigos_via", data.predios[uno])
+        self.assertEqual(data.predios[dos]["codigo_via"], "501")
+        self.assertIs(data.predios[dos]["varios_codigos_via"], True)
+        categorias = Counter(r["categoria"] for r in data.reporte)
+        self.assertEqual((categorias[ipi.MISMO_VALOR], categorias[ipi.VALORES_DISTINTOS]), (1, 1))
+
+
 class SchemaTests(unittest.TestCase):
     def test_a_model_without_the_new_fields_is_an_error(self):
         model = json.loads(json.dumps(MODEL))

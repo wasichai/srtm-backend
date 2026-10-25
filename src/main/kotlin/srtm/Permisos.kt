@@ -37,13 +37,16 @@ class Permisos(
     ) = exigir(Actions.READ, "lectura", objeto, acto)
 
     // whether the caller may read `objeto`: for what srtm reads of it outside RecordService (an aggregate in sql), which
-    // only who could read its records gets. an object the organization lacks is no
+    // only who could read its records gets. an object the organization lacks is no, and so is one the caller may not
+    // read: definitionOf itself refuses it (#226: a recálculo by a user without the aranceles was a 403)
     suspend fun puedeLeer(objeto: String): Boolean {
         val usuario = currentUser.require()
         val definicion =
             try {
                 metadata.definitionOf(objeto)
             } catch (_: NotFoundException) {
+                return false
+            } catch (_: ForbiddenException) {
                 return false
             }
         return currentUser.hasPermission(usuario, Actions.READ, definicion.obj.id)

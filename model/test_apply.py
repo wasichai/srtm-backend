@@ -94,7 +94,7 @@ OBJECT_RULES = {
     "orden_caja": {"indexes": [["anio", "contribuyente"], ["estado"]]},
     "pago_caja": {"appendOnly": True, "indexes": [["fecha_pago"]]},
     "pago_caja_detalle": {"appendOnly": True},
-    "arancel": {"indexes": [["id_aranc", "anio"]]},
+    "arancel": {"indexes": [["id_aranc", "anio"], ["cod_via", "anio"]]},
     "cambio_catastro": {"appendOnly": True, "indexes": [["en"], ["codigo_municipal"]]},
 }
 RULES_OFF = {"appendOnly": False, "indexes": []}
@@ -346,7 +346,7 @@ class DiffTests(ApplyCliTestCase):
             'would PUT /api/objects/orden_caja {"indexes": [["anio", "contribuyente"], ["estado"]]}',
             'would PUT /api/objects/pago_caja {"indexes": [["fecha_pago"]], "appendOnly": true}',
             'would PUT /api/objects/pago_caja_detalle {"appendOnly": true}',
-            'would PUT /api/objects/arancel {"indexes": [["id_aranc", "anio"]]}',
+            'would PUT /api/objects/arancel {"indexes": [["id_aranc", "anio"], ["cod_via", "anio"]]}',
             'would PUT /api/objects/cambio_catastro {"indexes": [["en"], ["codigo_municipal"]], "appendOnly": true}',
         ])
         self.assertIn(f"diff: {len(OBJECT_RULES)} writes pending, none sent", out)
