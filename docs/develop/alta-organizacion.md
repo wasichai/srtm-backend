@@ -202,29 +202,32 @@ El corte analítico (`docs/informes/brecha`) lee srtm y catastro con cuentas de 
 una foto de la organización en Parquet, seudonimizada. Los pasos van como administrador de la organización, en
 el Core de srtm.
 
-**El rol `ANALITICA`:** solo lee las diez tablas que el corte necesita, nada de escritura.
+**El rol `ANALITICA`:** solo lee los diez objetos que el corte necesita, nada de escritura. Está en
+`model/roles.json`; `apply_roles.py` lo crea o lo deja al día en la organización del login y no toca los demás
+roles (`CAJA`, los de la demo).
 
 ```bash
-curl -X POST "$SRTM/api/roles" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"name": "ANALITICA", "label": "Corte analítico (solo lectura)"}'
-curl -X PUT "$SRTM/api/roles/ANALITICA/permissions" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"permissions": [
-  {"objectName": "predio", "action": "READ"}, {"objectName": "contribuyente", "action": "READ"},
-  {"objectName": "declaracion_predial", "action": "READ"}, {"objectName": "nivel_construccion", "action": "READ"},
-  {"objectName": "obra_complementaria", "action": "READ"}, {"objectName": "cuota_predial", "action": "READ"},
-  {"objectName": "brecha_corrida", "action": "READ"}, {"objectName": "brecha_predio", "action": "READ"},
-  {"objectName": "parametro_tributario", "action": "READ"}, {"objectName": "arancel", "action": "READ"}]}'
+cd srtm-backend/model
+export WASICHAI_EMAIL=$ICA_ADMIN_EMAIL WASICHAI_PASSWORD=$ICA_ADMIN_PASSWORD
+python3 -I apply_roles.py --diff                  # el rol pendiente; nada escrito
+python3 -I apply_roles.py                         # done: 1 created, 0 updated, 0 skipped
+python3 -I apply_roles.py --diff                  # diff: nothing pending
 ```
 
 **La cuenta de servicio `analitica`:**
 
 ```bash
-curl -X POST "$SRTM/api/service-accounts" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"name": "analitica", "roles": ["ANALITICA"]}'
+python3 -I crear_cuenta_analitica.py --dry-run
+python3 -I crear_cuenta_analitica.py --salida ~/.config/srtm-analitica/ica.env
 ```
 
-- **El secreto:** la respuesta trae `clientId` y `clientSecret`, y el secreto se muestra **una sola vez**. La
-  salida se redirige a un archivo con `chmod 600`, como la de `crear_cuenta_srtm.py` y la de `caja`.
-- **Si se filtra:** `POST /api/service-accounts/{id}/secret` lo rota. Los tokens ya emitidos viven 15 minutos
+- **El secreto:** core muestra `clientId` y `clientSecret` **una sola vez**. Con `--salida` van al archivo de
+  secretos del corte, en modo `0600`, como `SRTM_CLIENT_ID` y `SRTM_CLIENT_SECRET` (y `SRTM_URL` si falta); las
+  demás líneas del archivo quedan. Sin `--salida` se imprimen: la salida no va a una terminal compartida.
+- **Si la cuenta ya existe:** el script no la toca más que para darle el rol si le falta, y el secreto ya no se
+  puede leer.
+- **Si se filtra:** `crear_cuenta_analitica.py --rotar --salida <archivo>` lo rota
+  (`POST /api/service-accounts/{id}/secret`) y anula el anterior. Los tokens ya emitidos viven 15 minutos
   (wasichai ADR-043): el cliente del corte vuelve a pedir uno ante un 401 y sigue.
 
 **En catastro:** el corte no abre una cuenta nueva; lee con la cuenta `srtm` que ya existe (`SRTM_LECTOR`,

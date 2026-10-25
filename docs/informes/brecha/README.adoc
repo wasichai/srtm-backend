@@ -20,10 +20,13 @@ seudonimización van en un archivo de secretos fuera del repositorio, nunca en `
 
 El corte lee las dos APIs con cuentas de servicio de solo lectura, cada una acotada a lo que necesita:
 
-* *srtm*, con una cuenta de servicio `analitica` y un rol nuevo `ANALITICA` (`READ` sobre `predio`,
+* *srtm*, con una cuenta de servicio `analitica` y el rol `ANALITICA` (`READ` sobre `predio`,
   `contribuyente`, `declaracion_predial`, `nivel_construccion`, `obra_complementaria`, `cuota_predial`,
-  `brecha_corrida`, `brecha_predio`, `parametro_tributario` y `arancel`; cómo se da de alta, en
-  link:../../develop/alta-organizacion.md#9-corte-analítico-205[«Alta de una organización», sección 9]).
+  `brecha_corrida`, `brecha_predio`, `parametro_tributario` y `arancel`). El rol está versionado en
+  `model/roles.json` y lo crea `model/apply_roles.py`; la cuenta, `model/crear_cuenta_analitica.py`, en cada
+  organización (cómo, en
+  link:../../develop/alta-organizacion.md#9-corte-analítico-205[«Alta de una organización», sección 9]). Una
+  prueba de `model/` falla si los objetos del rol dejan de ser los que lee `herramientas/srtm.py`.
 * *catastro*, con la cuenta de servicio `srtm` que ya existe (`SRTM_LECTOR`), la misma que usa srtm para leer
   fichas, construcciones, obras, titulares y valuaciones. Este corte no agrega una cuenta nueva en catastro; si
   catastro necesita distinguir en su auditoría el corte de la lectura normal de la brecha, hace falta otra
@@ -129,6 +132,10 @@ CATASTRO_CLIENT_ID=<clientId de la cuenta srtm en catastro>
 CATASTRO_CLIENT_SECRET=<clientSecret de la cuenta srtm en catastro>
 CLAVE_SEUDONIMO=<64 caracteres hexadecimales, al menos 32 bytes>
 ----
+
+`python3 -I model/crear_cuenta_analitica.py --salida ~/.config/srtm-analitica/<org>.env` escribe ahí
+`SRTM_CLIENT_ID` y `SRTM_CLIENT_SECRET` de la cuenta `analitica` (y `SRTM_URL` si falta), en modo `0600` y sin
+tocar las demás líneas; con `--rotar` cambia el secreto de una cuenta que ya existe.
 
 Dos claves son opcionales: `SRTM_TIMEOUT` y `CATASTRO_TIMEOUT`, el tiempo máximo de cada petición en segundos
 (por omisión 60), para una organización cuyo catastro tarda más en valuar una página, como srtm ya permite

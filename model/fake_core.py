@@ -1,5 +1,6 @@
 """A scripted fake wasichai Core for the tests: metadata routes plus in-memory records, and srtm's
-POST /api/srtm/infracciones/cuis and /cuis/derogacion (what import_cuis.py calls) as the service does it.
+POST /api/srtm/infracciones/cuis and /cuis/derogacion (what import_cuis.py calls) as the service does it, and Core's
+roles and service accounts (what apply_roles.py and crear_cuenta_analitica.py call), taken from catastro-backend's.
 
 Adapted from wasichai's examples/gis-sample/perene/test_apply.py. Test helper only.
 """
@@ -18,6 +19,10 @@ OBJECT = re.compile(r"^/api/objects/([a-z0-9_]+)$")
 CUIS = "/api/srtm/infracciones/cuis"
 SUGERIDO = re.compile(r"^/api/srtm/declaraciones/([^/]+)/autoavaluo-sugerido$")
 RECALCULAR = re.compile(r"^/api/srtm/declaraciones/([^/]+)/recalcular$")
+ROLE = re.compile(r"^/api/roles/([A-Z0-9_]+)$")
+ROLE_PERMISSIONS = re.compile(r"^/api/roles/([A-Z0-9_]+)/permissions$")
+SERVICE_ACCOUNT = re.compile(r"^/api/service-accounts/([0-9a-f-]+)$")
+SERVICE_ACCOUNT_SECRET = re.compile(r"^/api/service-accounts/([0-9a-f-]+)/secret$")
 
 
 def _meta(label, plural_label=None, description=None, enabled=True):
@@ -66,7 +71,8 @@ class FakeCore:
     def __init__(self, existing_objects=(), existing_relationships=(), fail_on_post_object=None,
                  fail_put=False, fail_put_status=500, login_response=None, fail_on_record=None, existing_fields=None,
                  fail_on_update=None, fail_on_delete=None, object_rules=None, fail_object_put=None, object_meta=None,
-                 conflict_on_update=None, organization=None, sugeridos=None):
+                 conflict_on_update=None, organization=None, sugeridos=None,
+                 fail_on_role=None, fail_on_service_account=None):
         self.existing_objects = set(existing_objects)
         # object name -> its object-level rules ({"indexes", "appendOnly"}), as Core stores them; none by default
         self.object_rules = {n: dict((object_rules or {}).get(n, {})) for n in self.existing_objects}
@@ -87,6 +93,11 @@ class FakeCore:
         self.sugeridos = dict(sugeridos or {})  # declaración id -> its autoavaluo-sugerido dict, or 404 if missing
         # GET /api/organizations/current: the login's organization
         self.organization = organization or {"id": "00000000-0000-0000-0000-000000000001", "name": "Perené", "slug": "perene"}
+        self.fail_on_role = fail_on_role  # role name -> its POST /api/roles answers 500
+        self.roles = {}  # role name -> {"name", "label", "permissions": [{"objectName", "action", "allowed"}]}
+        self.fail_on_service_account = fail_on_service_account  # POST /api/service-accounts -> this status
+        self.service_accounts = {}  # id -> ServiceAccountResponse without the secret
+        self.rotations = 0  # how many POST /api/service-accounts/{id}/secret it answered
         self.requests = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeCoreHandler)
         self.server.requests = self.requests
@@ -218,8 +229,72 @@ class FakeCore:
         vigente["attributes"].update(vigencia_hasta=body["vigencia_hasta"], clave_vigente=None)
         return 200, {"id": vigente["id"], **vigente["attributes"]}
 
+    def _roles(self, method, path, body):
+        """Core's role routes, addressed by name: list, create, relabel and replace the permissions."""
+        if path == "/api/roles" and method == "GET":
+            return 200, list(self.roles.values())
+        if path == "/api/roles" and method == "POST":
+            name = body["name"]
+            if name == self.fail_on_role:
+                return 500, {"message": "boom-role"}
+            if name in self.roles:
+                return 409, {"detail": f"Role '{name}' already exists"}
+            self.roles[name] = {"name": name, "label": body["label"], "permissions": []}
+            return 201, self.roles[name]
+        match = ROLE_PERMISSIONS.match(path) or ROLE.match(path)
+        role = self.roles.get(match.group(1)) if match and method == "PUT" else None
+        if role is None:
+            return 404, {"detail": "no such role"}
+        if ROLE_PERMISSIONS.match(path):
+            role["permissions"] = [{**p, "allowed": p.get("allowed", True)} for p in body["permissions"]]
+        else:
+            role["label"] = body.get("label", role["label"])
+        return 200, role
+
+    def add_service_account(self, name, roles=(), enabled=True):
+        account = {"id": str(uuid.uuid4()), "clientId": str(uuid.uuid4()), "name": name, "enabled": enabled,
+                   "roles": list(roles)}
+        self.service_accounts[account["id"]] = account
+        return account
+
+    def _service_accounts(self, method, path, body):
+        """ServiceAccountController: list, create and rotate (the secret only in those two answers), update roles. A
+        name core already has is a 409, an unknown role a 400."""
+        if path == "/api/service-accounts" and method == "GET":
+            return 200, list(self.service_accounts.values())
+        if path == "/api/service-accounts" and method == "POST":
+            if self.fail_on_service_account:
+                return self.fail_on_service_account, {"detail": "boom-service-account"}
+            name = body["name"].strip().lower()
+            if any(a["name"] == name for a in self.service_accounts.values()):
+                return 409, {"detail": f"Service account '{name}' already exists"}
+            unknown = [r for r in body.get("roles", []) if r not in self.roles]
+            if unknown:
+                return 400, {"detail": f"Unknown role {unknown[0]}"}
+            return 201, {**self.add_service_account(name, body.get("roles", [])), "clientSecret": "secreto-" + name}
+        rotate = SERVICE_ACCOUNT_SECRET.match(path)
+        if rotate and method == "POST":
+            account = self.service_accounts.get(rotate.group(1))
+            if account is None:
+                return 404, {"detail": "no such service account"}
+            self.rotations += 1
+            return 200, {**account, "clientSecret": f"rotado-{self.rotations}-{account['name']}"}
+        match = SERVICE_ACCOUNT.match(path)
+        account = self.service_accounts.get(match.group(1)) if match and method == "PUT" else None
+        if account is None:
+            return 404, {"detail": "no such service account"}
+        if body.get("roles") is not None:
+            account["roles"] = list(body["roles"])
+        if body.get("enabled") is not None:
+            account["enabled"] = body["enabled"]
+        return 200, account
+
     def _script(self, method, full_path, body):
         path, _, query = full_path.partition("?")
+        if path == "/api/roles" or path.startswith("/api/roles/"):
+            return self._roles(method, path, body)
+        if path == "/api/service-accounts" or path.startswith("/api/service-accounts/"):
+            return self._service_accounts(method, path, body)
         if path == CUIS and method == "POST":
             return self._cuis(body)
         if path == CUIS + "/derogacion" and method == "POST":
