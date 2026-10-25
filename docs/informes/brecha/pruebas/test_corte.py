@@ -41,7 +41,10 @@ class _CatastroRoto(CatastroFalso):
         return super().manejar(metodo, ruta, query, cuerpo)
 
 
-class CorteTests(unittest.TestCase):
+class ConCorte:
+    """setUp and helpers to take a corte against the fakes; mixed into a TestCase here and in
+    test_vistas.py."""
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="corte-prueba-"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
@@ -109,6 +112,8 @@ class CorteTests(unittest.TestCase):
     def _manifiesto(carpeta):
         return json.loads((carpeta / "manifiesto.json").read_text(encoding="utf-8"))
 
+
+class CorteTests(ConCorte, unittest.TestCase):
     # --- the brief's scenarios -----------------------------------------------------------------------------
 
     def test_dos_cortes_dan_los_mismos_sha256(self):
