@@ -103,6 +103,14 @@ interface Catastro {
     // CatastroException.estado carries it, and that is no failure of the corrida
     suspend fun titulares(porPagina: suspend () -> Unit = {}): List<TitularCatastral>
 
+    // one page of catastro's cambios since desde (#203; null reads from the start), oldest first: the caller keeps
+    // paging with the cursor it gets back until hayMas is false. an older catastro without GET /cambios answers 404
+    // or 403: CatastroException.estado carries it, as titulares does
+    suspend fun cambios(
+        desde: String?,
+        size: Int = ClienteCatastro.TAMANIO_PAGINA
+    ): PaginaDeCambios
+
     // a declaración's autoavalúo sugerido (#149): nothing is stored on either side
     suspend fun valuar(insumos: InsumosValuacion): ValuacionDeInsumos
 
@@ -268,6 +276,25 @@ class ClienteCatastro(
         return items
     }
 
+    override suspend fun cambios(
+        desde: String?,
+        size: Int
+    ): PaginaDeCambios {
+        val pagina = paginaDeCambios(desde, size)
+        val items =
+            pagina
+                .path("items")
+                .iterator()
+                .asSequence()
+                .map(::cambio)
+                .toList()
+        return PaginaDeCambios(
+            items = items,
+            cursor = pagina.path("cursor").texto(),
+            hayMas = pagina.path("hayMas").booleano() ?: false
+        )
+    }
+
     override suspend fun valuar(insumos: InsumosValuacion): ValuacionDeInsumos {
         val uri = cuenta.url.trimEnd('/') + "/api/catastro/valuacion"
         val cuerpo = DECIMALES.writeValueAsString(insumos)
@@ -408,6 +435,41 @@ class ClienteCatastro(
         return DECIMALES.readTree(body.orEmpty())
     }
 
+    // one page of GET /api/catastro/cambios (#203): desde null reads from the start (no desde at all); desde is the
+    // opaque cursor of a previous page, url-encoded exactly once (encode() before the template is expanded, never
+    // after: that would encode it twice)
+    private suspend fun paginaDeCambios(
+        desde: String?,
+        size: Int
+    ): JsonNode {
+        val builder =
+            UriComponentsBuilder
+                .fromUriString(cuenta.url.trimEnd('/'))
+                .path("/api/catastro/cambios")
+                .queryParam("size", size)
+        val uri =
+            if (desde == null) {
+                builder.build().toUri()
+            } else {
+                builder
+                    .queryParam("desde", "{desde}")
+                    .encode()
+                    .buildAndExpand(desde)
+                    .toUri()
+            }
+        val body =
+            autorizado("los cambios") { token ->
+                client
+                    .get()
+                    .uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer $token")
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(String::class.java)
+            }
+        return DECIMALES.readTree(body.orEmpty())
+    }
+
     // a request as the service account; a 401 means the cached token is no longer good: once more with a new one.
     // que names it in the error
     private suspend fun autorizado(
@@ -495,6 +557,17 @@ class ClienteCatastro(
                 nombre = n.path("nombre").texto(),
                 porcentaje = n.path("porcentaje").decimal(),
                 condicion = n.path("condicion").texto()
+            )
+
+        // one item of GET /api/catastro/cambios (#203)
+        fun cambio(n: JsonNode) =
+            CambioCatastral(
+                codigoMunicipal = n.path("codigoMunicipal").texto(),
+                objeto = n.path("objeto").texto(),
+                operacion = n.path("operacion").texto(),
+                campos = n.path("campos").values().mapNotNull { it.texto() },
+                en = n.path("en").texto(),
+                entrega = n.path("entrega").texto()
             )
 
         // catastro's arancel says what a does: a number by its value, an empty text as null

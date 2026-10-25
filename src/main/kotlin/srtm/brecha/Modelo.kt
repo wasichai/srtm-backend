@@ -79,6 +79,26 @@ data class TitularCatastral(
     val condicion: String?
 )
 
+// one item of GET /api/catastro/cambios (#203): what catastro's objeto (predio_catastral, construccion,
+// obra_complementaria or titular_catastral) did since desde (CREATE, UPDATE or DELETE), which campos changed, en
+// (when, ISO-8601) and the entrega that carried it (or null)
+data class CambioCatastral(
+    val codigoMunicipal: String?,
+    val objeto: String?,
+    val operacion: String?,
+    val campos: List<String>,
+    val en: String?,
+    val entrega: String?
+)
+
+// one page of GET /api/catastro/cambios, oldest first: cursor is opaque (pass it back as desde for the next page),
+// hayMas says whether there is more after this page
+data class PaginaDeCambios(
+    val items: List<CambioCatastral>,
+    val cursor: String?,
+    val hayMas: Boolean
+)
+
 // the brecha_corrida record as core keeps it
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class RegistroCorrida(
