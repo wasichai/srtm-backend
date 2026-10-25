@@ -246,6 +246,7 @@ class ClienteCatastro(
         val items = mutableListOf<ValuacionCatastral>()
         var version: String? = null
         var page = 0
+        var anterior: JsonNode? = null
         while (true) {
             val pagina = pagina(anio, page)
             version = version ?: pagina.path("version").texto()
@@ -261,7 +262,10 @@ class ClienteCatastro(
             val total = pagina.path("total").takeIf { it.isNumber }?.asLong() ?: items.size.toLong()
             // the size catastro served (it may cap the one asked)
             val size = pagina.path("size").takeIf { it.isNumber }?.asInt() ?: TAMANIO_PAGINA
-            if (suyos.size < size || items.size >= total) break
+            if (items.size >= total) break
+            avanza("las valuaciones de $anio", page, pagina, anterior, size)
+            if (suyos.size < size) break
+            anterior = pagina.path("items")
             page++
         }
         return Valuaciones(anio, version, items)
@@ -270,6 +274,7 @@ class ClienteCatastro(
     override suspend fun titulares(porPagina: suspend () -> Unit): List<TitularCatastral> {
         val items = mutableListOf<TitularCatastral>()
         var page = 0
+        var anterior: JsonNode? = null
         while (true) {
             val pagina = paginaDeTitulares(page)
             val suyos =
@@ -283,10 +288,33 @@ class ClienteCatastro(
             porPagina()
             val total = pagina.path("total").takeIf { it.isNumber }?.asLong() ?: items.size.toLong()
             val size = pagina.path("size").takeIf { it.isNumber }?.asInt() ?: TAMANIO_PAGINA
-            if (suyos.size < size || items.size >= total) break
+            if (items.size >= total) break
+            avanza("los titulares", page, pagina, anterior, size)
+            if (suyos.size < size) break
+            anterior = pagina.path("items")
             page++
         }
         return items
+    }
+
+    // a page with items still pending that brings none, is served with size 0 or repeats the previous one would
+    // loop for ever: fail instead
+    private fun avanza(
+        que: String,
+        page: Int,
+        pagina: JsonNode,
+        anterior: JsonNode?,
+        size: Int
+    ) {
+        val items = pagina.path("items")
+        val motivo =
+            when {
+                size <= 0 -> "catastro sirvió páginas de tamaño $size"
+                items.size() == 0 -> "la página vino vacía y faltan elementos"
+                anterior != null && items == anterior -> "la página repite la anterior"
+                else -> return
+            }
+        throw CatastroException("catastro no avanza al leer $que: página $page, $motivo")
     }
 
     override suspend fun cambios(

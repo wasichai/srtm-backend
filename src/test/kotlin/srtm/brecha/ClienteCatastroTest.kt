@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.Timeout
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.net.InetSocketAddress
@@ -175,6 +176,51 @@ class ClienteCatastroTest {
         val e = assertThrows(CatastroException::class.java) { runBlocking { cliente().titulares() } }
         assertEquals(404, e.estado)
         assertTrue(!e.message!!.contains("secreto"))
+    }
+
+    private fun sustituir(
+        ruta: String,
+        cuerpo: (page: Int) -> String
+    ) {
+        server.removeContext(ruta)
+        server.createContext(ruta) { ex ->
+            val page = Regex("page=(\\d+)").find(ex.requestURI.query)!!.groupValues[1].toInt()
+            responder(ex, 200, cuerpo(page))
+        }
+    }
+
+    @Test
+    @Timeout(10)
+    fun `valuaciones served with size 0 and a total pending fail, never loop`() {
+        sustituir("/api/catastro/valuaciones") { """{"anio":2026,"page":$it,"size":0,"total":3,"items":[]}""" }
+        val e = assertThrows(CatastroException::class.java) { runBlocking { cliente().valuaciones(2026) } }
+        assertTrue(e.message!!.contains("las valuaciones de 2026"), e.message)
+    }
+
+    @Test
+    @Timeout(10)
+    fun `valuaciones that repeat a page fail, never loop`() {
+        sustituir("/api/catastro/valuaciones") {
+            """{"anio":2026,"page":$it,"size":2,"total":5,"items":[$ITEM_VALORADO,$ITEM_SIN_VALOR]}"""
+        }
+        val e = assertThrows(CatastroException::class.java) { runBlocking { cliente().valuaciones(2026) } }
+        assertTrue(e.message!!.contains("página 1") && e.message!!.contains("repite"), e.message)
+    }
+
+    @Test
+    @Timeout(10)
+    fun `titulares served with size 0 and a total pending fail, never loop`() {
+        sustituir("/api/catastro/titulares") { """{"page":$it,"size":0,"total":3,"items":[]}""" }
+        val e = assertThrows(CatastroException::class.java) { runBlocking { cliente().titulares() } }
+        assertTrue(e.message!!.contains("los titulares"), e.message)
+    }
+
+    @Test
+    @Timeout(10)
+    fun `titulares that repeat a page fail, never loop`() {
+        sustituir("/api/catastro/titulares") { """{"page":$it,"size":2,"total":5,"items":[$TITULAR_1,$TITULAR_2]}""" }
+        val e = assertThrows(CatastroException::class.java) { runBlocking { cliente().titulares() } }
+        assertTrue(e.message!!.contains("página 1") && e.message!!.contains("repite"), e.message)
     }
 
     @Test
