@@ -17,6 +17,7 @@ OPCIONALES = {
     "papeleta_notificacion_previa", "resolucion_descargo", "notif_resolucion_plazo", "anuncio_predio",
     "movimiento_parametro", "brecha_predio_predio", "orden_caja_cuota_arbitrio", "orden_caja_cuota_predial",
     "pago_caja_contribuyente", "pago_caja_detalle_orden", "pago_caja_detalle_contribuyente",
+    "sincronizacion_catastro_corrida",
 }
 
 # #156: the fields each object gained for the derivados of the declaración, in order (field -> type)
@@ -111,8 +112,8 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 47)
-        self.assertEqual(len(self.model["relationships"]), 52)
+        self.assertEqual(len(names), 49)
+        self.assertEqual(len(self.model["relationships"]), 53)
 
     def test_the_municipalidad_holds_the_documents_header(self):
         # the PU and HR's header, one record per organization edited in the admin, its escudo an image of wasichai-files
@@ -259,7 +260,8 @@ class ShippedModelTests(unittest.TestCase):
         # srtm.normativa (#188): the valor arancelario of a tramo de vía in a year. srtm owns it and catastro-backend
         # copies it (sincronizado_en, error_sincronizacion). clave is id_aranc|anio, not unique: an ANULADO keeps it
         names = [o["name"] for o in self.model["objects"]]
-        self.assertEqual(names[-1], "arancel")
+        # the last object of #188; #203 appends sincronizacion_catastro and cambio_catastro after it
+        self.assertEqual(names[-3], "arancel")
         arancel = next(o for o in self.model["objects"] if o["name"] == "arancel")
         self.assertEqual((arancel["label"], arancel["pluralLabel"]), ("Arancel", "Aranceles"))
         for palabra in ("catastro", "POR_VERIFICAR", "doble firma"):
@@ -394,10 +396,12 @@ class ShippedModelTests(unittest.TestCase):
         relaciones = {r["fieldName"]: r["target"] for r in self.model["relationships"] if r["source"] == "anulacion_cuota_arbitrio"}
         self.assertEqual(relaciones, {"cuota": "cuota_arbitrio", "predio": "predio"})
 
-    def test_only_the_cuotas_anulaciones_and_pagos_are_append_only(self):
-        # Core refuses their update and delete, for everyone, and the delete of what a cuota points at (ADR-040)
+    def test_only_the_cuotas_anulaciones_pagos_and_cambios_are_append_only(self):
+        # Core refuses their update and delete, for everyone, and the delete of what a cuota points at (ADR-040);
+        # cambio_catastro too, as a feed nothing should ever edit or drop (#203)
         self.assertEqual([o["name"] for o in self.model["objects"] if o.get("appendOnly")],
-                         ["cuota_arbitrio", "anulacion_cuota_arbitrio", "cuota_predial", "pago_caja", "pago_caja_detalle"])
+                         ["cuota_arbitrio", "anulacion_cuota_arbitrio", "cuota_predial", "pago_caja", "pago_caja_detalle",
+                          "cambio_catastro"])
 
     def test_the_masiva_de_arbitrios_is_a_twin_of_the_emision(self):
         # the same lotes, lease and attempts as emision_masiva / emision_lote; it writes cuotas, never a file
@@ -419,7 +423,7 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(list(corrida), ["anio", "estado", "version_catastro", "iniciado", "terminado", "total_predios", "procesados",
                                          "mensaje", "declarado", "catastro", "delta_impuesto", "delta_arbitrios", "latido",
                                          "predios_confiables", "predios_dudosos", "predios_sin_levantar",
-                                         "delta_impuesto_confiable", "delta_impuesto_dudoso", "delta_impuesto_sin_levantar"])
+                                         "delta_impuesto_confiable", "delta_impuesto_dudoso", "delta_impuesto_sin_levantar", "origen"])
         self.assertEqual({n for n, f in corrida.items() if f.get("required")}, {"anio", "estado"})
         self.assertEqual(self.model["enums"]["estado_brecha"], ["PENDIENTE", "EN_CURSO", "TERMINADA", "FALLIDA"])
         predio = self.campos("brecha_predio")
@@ -438,6 +442,21 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(dj["valor_obras"]["type"], "DECIMAL")
         self.assertFalse(dj["valor_obras"].get("required"))
         self.assertEqual(self.campos("brecha_predio")["obras_dj"]["type"], "DECIMAL")
+
+    def test_the_seguimiento_keeps_its_cursor_and_its_cambios(self):
+        # #203: the background reader's state (one row per organization) and the cambios it appends from catastro
+        s = self.campos("sincronizacion_catastro")
+        self.assertEqual(list(s), ["cursor", "ultimo_cambio_en", "pendientes", "error"])
+        self.assertEqual(self.relaciones("sincronizacion_catastro"), {"ultima_corrida": ("brecha_corrida", False)})
+        c = self.campos("cambio_catastro")
+        self.assertEqual(list(c), ["codigo_municipal", "objeto", "operacion", "campos", "en", "entrega"])
+        self.assertEqual((c["objeto"]["type"], c["operacion"]["enum"], c["en"]["type"], c["campos"]["type"]),
+                         ("TEXT", "operacion_catastro", "DATETIME", "LONG_TEXT"))
+        self.assertEqual(self.model["enums"]["operacion_catastro"], ["CREATE", "UPDATE", "DELETE"])
+        self.assertEqual(self.model["enums"]["origen_corrida"], ["MANUAL", "CAMBIOS", "SEMANAL"])
+        self.assertEqual(self.campos("brecha_corrida")["origen"]["enum"], "origen_corrida")
+        o = next(o for o in self.model["objects"] if o["name"] == "cambio_catastro")
+        self.assertEqual((o["indexes"], o["appendOnly"]), ([["en"], ["codigo_municipal"]], True))
 
     def campos(self, objeto):
         return {f["name"]: f for f in next(o for o in self.model["objects"] if o["name"] == objeto)["fields"]}

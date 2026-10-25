@@ -354,6 +354,8 @@
     "estado_brecha": ["PENDIENTE", "EN_CURSO", "TERMINADA", "FALLIDA"],
     "categoria_brecha": ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE", "SIN_LEVANTAR"],
     "confianza_brecha": ["CONFIABLE", "DUDOSO", "SIN_LEVANTAR"],
+    "origen_corrida": ["MANUAL", "CAMBIOS", "SEMANAL"],
+    "operacion_catastro": ["CREATE", "UPDATE", "DELETE"],
     "estado_orden_caja": ["POR_ENVIAR", "ENVIADA", "POR_RETIRAR", "RETIRADA", "CANCELADA", "PAGADA_EN_CAJA", "CONFLICTO", "ERROR"],
     "tipo_orden_caja": ["PREDIAL", "ARBITRIO"],
     "tipo_pago_caja": ["PAGO_REGISTRADO", "PAGO_ANULADO"]
@@ -1362,7 +1364,9 @@
         {"name": "delta_impuesto_dudoso", "label": "Δ impuesto predial dudoso (S/)", "type": "DECIMAL",
           "description": "Δ impuesto de los predios dudosos (#204)."},
         {"name": "delta_impuesto_sin_levantar", "label": "Δ impuesto predial sin levantar (S/)", "type": "DECIMAL",
-          "description": "Δ impuesto de los predios sin levantar (#204)."}
+          "description": "Δ impuesto de los predios sin levantar (#204)."},
+        {"name": "origen", "label": "Origen", "type": "ENUM", "enum": "origen_corrida",
+          "description": "Quién la lanzó: MANUAL (POST .../corridas) o, en automático, CAMBIOS o SEMANAL; vacío, una MANUAL de antes de este campo (#203)."}
       ]
     },
     {
@@ -1513,6 +1517,41 @@
           "description": "Cuándo catastro-backend recibió la última versión. Cambia en cualquier estado."},
         {"name": "error_sincronizacion", "label": "Error de sincronización", "type": "LONG_TEXT",
           "description": "Por qué falló la última copia a catastro-backend. Cambia en cualquier estado."}
+      ]
+    },
+    {
+      "name": "sincronizacion_catastro",
+      "label": "Sincronización con catastro",
+      "pluralLabel": "Sincronizaciones con catastro",
+      "description": "Una fila por organización: el cursor de lectura de GET /api/catastro/cambios, la última corrida automática que disparó y el error de la última pasada. La escribe el lector en segundo plano, bajo ClusterLock, como un solo escritor (#203).",
+      "fields": [
+        {"name": "cursor", "label": "Cursor", "type": "TEXT",
+          "description": "El `desde` de la próxima lectura de /api/catastro/cambios; vacío: lee desde el principio."},
+        {"name": "ultimo_cambio_en", "label": "Último cambio en", "type": "DATETIME",
+          "description": "La fecha `en` del último cambio leído."},
+        {"name": "pendientes", "label": "Pendientes", "type": "INTEGER",
+          "description": "Cambios leídos desde la última corrida automática; vuelve a 0 cuando esa corrida se lanza."},
+        {"name": "error", "label": "Error", "type": "LONG_TEXT",
+          "description": "Por qué falló la última lectura de cambios; esa pasada no decide ninguna corrida."}
+      ]
+    },
+    {
+      "name": "cambio_catastro",
+      "label": "Cambio del catastro",
+      "pluralLabel": "Cambios del catastro",
+      "description": "Un cambio leído de GET /api/catastro/cambios: qué predio, qué objeto y qué operación, para disparar la corrida automática de la hora configurada (#203).",
+      "indexes": [["en"], ["codigo_municipal"]],
+      "appendOnly": true,
+      "fields": [
+        {"name": "codigo_municipal", "label": "Código municipal", "type": "TEXT", "required": true},
+        {"name": "objeto", "label": "Objeto", "type": "TEXT", "required": true,
+          "description": "predio_catastral, construccion, obra_complementaria o titular_catastral, tal como lo nombra catastro-backend; un objeto nuevo nunca detiene la lectura."},
+        {"name": "operacion", "label": "Operación", "type": "ENUM", "enum": "operacion_catastro", "required": true},
+        {"name": "campos", "label": "Campos", "type": "LONG_TEXT",
+          "description": "Los nombres de los campos que cambiaron, separados por \", \"."},
+        {"name": "en", "label": "En", "type": "DATETIME", "required": true},
+        {"name": "entrega", "label": "Entrega", "type": "TEXT",
+          "description": "El código de la entrega que originó el cambio (wasichai/catastro-backend#23); vacío en otro caso."}
       ]
     }
   ],
@@ -1983,6 +2022,15 @@
       "source": "pago_caja_detalle",
       "target": "contribuyente",
       "fieldName": "contribuyente",
+      "required": false
+    },
+    {
+      "name": "sincronizacion_catastro_corrida",
+      "label": "Última corrida",
+      "inverseLabel": "Sincronización",
+      "source": "sincronizacion_catastro",
+      "target": "brecha_corrida",
+      "fieldName": "ultima_corrida",
       "required": false
     }
   ]
