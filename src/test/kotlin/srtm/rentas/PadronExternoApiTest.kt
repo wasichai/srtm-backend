@@ -43,13 +43,29 @@ class PadronExternoApiTest : SrtmApiTest() {
             )
         for ((objeto, registro, ica) in cambios) importar(objeto, registro["id"].asString(), ica)
 
-        put("/api/srtm/predios/${predio["id"].asString()}", fields(predio) + ("referencia" to "FRENTE AL MERCADO"))
+        // #207: codigo_origen is read-only too, like the rest of PREDIO_ICA: a save that tries to overwrite it keeps
+        // what the padrón gave
+        put(
+            "/api/srtm/predios/${predio["id"].asString()}",
+            fields(predio) + ("referencia" to "FRENTE AL MERCADO") + ("codigo_origen" to "OTRO")
+        )
         put("/api/srtm/declaraciones/${declaracion["id"].asString()}", fields(declaracion) + ("area_terreno" to 200))
         put("/api/srtm/niveles/${nivel["id"].asString()}", fields(nivel) + ("area_construida" to 150))
 
         for ((objeto, registro, ica) in cambios) assertImportado(objeto, registro["id"].asString(), ica)
         assertEquals("FRENTE AL MERCADO", registro(PREDIO, predio["id"].asString())["referencia"].asString())
         assertEquals(150.0, registro(NIVEL_CONSTRUCCION, nivel["id"].asString())["area_construida"].asDouble())
+        val ficha = tree(send("GET", "/api/srtm/predios/${predio["id"].asString()}", null, HttpStatus.OK))
+        assertEquals("000000001-0001-0001", ficha["valuacion_origen"]["predio"]["codigo_origen"].asString(), ficha.toString())
+
+        // a predio registered through the portal never stores it, even when the body sends one
+        val registrado =
+            post(
+                "/api/srtm/predios",
+                mapOf("codigo" to "T-${uniqueDocumento()}", "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO", "codigo_origen" to "ALGO")
+            )
+        val guardado = registro(PREDIO, registrado["id"].asString())
+        assertTrue(guardado["codigo_origen"] == null || guardado["codigo_origen"].isNull, guardado.toString())
     }
 
     // a condómino's declaración copies what the source declares of the predio: the padrón's valuation and its niveles'
@@ -323,7 +339,13 @@ class PadronExternoApiTest : SrtmApiTest() {
             )
         val FRENTE = mapOf("tipo_via" to "AVENIDA", "via" to "ANDRES AVELINO CACERES", "frontis" to 7, "lado" to "IMPAR")
         val PREDIO_ICA =
-            mapOf("codigo_via" to "V0123", "codigo_unidad_urbana" to "U045", "codigo_hu_armonizacion" to "HU-01", "codigo_via_armonizacion" to "VA-02")
+            mapOf(
+                "codigo_via" to "V0123",
+                "codigo_unidad_urbana" to "U045",
+                "codigo_hu_armonizacion" to "HU-01",
+                "codigo_via_armonizacion" to "VA-02",
+                "codigo_origen" to "000000001-0001-0001"
+            )
         val DECLARACION_ICA =
             mapOf(
                 "arancel" to BigDecimal("35.50"),

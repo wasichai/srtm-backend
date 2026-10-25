@@ -215,6 +215,17 @@ class ShippedModelTests(unittest.TestCase):
         self.assertFalse(self.campos("nivel_construccion")["mes_construccion"].get("required"))
         self.assertTrue(self.campos("obra_complementaria")["mes_construccion"]["required"])
 
+    def test_the_predio_keeps_its_code_of_origin(self):
+        # #207: the SAT code of a predio in Ica's padrón, kept right after codigo (not at the end, unlike the padrón
+        # externo fields above) because the importer may split a shared bare code into several predios and the
+        # brecha needs this one to still cross
+        nombres = list(self.campos("predio"))
+        self.assertEqual(nombres.index("codigo_origen"), nombres.index("codigo") + 1)
+        campo = self.campos("predio")["codigo_origen"]
+        self.assertEqual(campo["type"], "TEXT")
+        self.assertFalse(campo.get("required"))
+        self.assertFalse(campo.get("unique"))
+
     def test_parametro_tributario_has_the_columns_of_the_published_csv(self):
         # normativa's publicacion/parametros-2026.csv, by the names of the issue. the natural key is (tipo, clave,
         # vigencia_desde), which import_parametros.py keeps: clave is empty for a tipo of one value (the UIT)

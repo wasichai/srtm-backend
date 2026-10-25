@@ -162,8 +162,12 @@ fun padronExterno(declaracion: Map<*, *>): Map<String, Any> {
 // the declaración's mark that it changed after that valuation was imported (DeclaracionService.marcarOrigenModificado)
 const val ORIGEN_MODIFICADO = "origen_modificado"
 
+// the predio's code in the padrón de origen (#207): distinct from codigo when the padrón shares a bare code between
+// several predios, e.g. Ica's SAT. the brecha cruza por él
+const val CODIGO_ORIGEN = "codigo_origen"
+
 // the predio's codes in the source catastro and in the Formato Padrón Municipal Armonización: only read, never copied
-val PADRON_EXTERNO_PREDIO = listOf("codigo_via", "codigo_unidad_urbana", "codigo_hu_armonizacion", "codigo_via_armonizacion")
+val PADRON_EXTERNO_PREDIO = listOf("codigo_via", "codigo_unidad_urbana", "codigo_hu_armonizacion", "codigo_via_armonizacion", CODIGO_ORIGEN)
 
 // of a stored record, the fields of `campos` that have a value, in that order: null and blank text are none
 fun conValor(

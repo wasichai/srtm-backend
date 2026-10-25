@@ -408,6 +408,8 @@
       "description": "Predio urbano o rústico del distrito, identificado por su código: sector-manzana-número, el código municipal de su lote o P-NNNNNN.",
       "fields": [
         {"name": "codigo", "label": "Código de predio", "type": "TEXT", "required": true, "unique": true, "source": "codigo_predio"},
+        {"name": "codigo_origen", "label": "Código de origen", "type": "TEXT",
+          "description": "El código del predio en el padrón de origen (Ica: el del SAT). Distinto de codigo cuando el padrón da un mismo código a predios distintos (#207): la brecha cruza por él."},
         {"name": "sector_catastral", "label": "Sector catastral", "type": "TEXT", "source": "sector_manzana"},
         {"name": "manzana_catastral", "label": "Manzana catastral", "type": "TEXT", "source": "sector_manzana"},
         {"name": "tipo_predio", "label": "Tipo de predio", "type": "ENUM", "enum": "tipo_predio", "source": "tipo_pupr_desc",
