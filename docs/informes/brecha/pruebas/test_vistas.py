@@ -188,7 +188,8 @@ class VistasTests(ConCorte, unittest.TestCase):
                 "SELECT view_name FROM duckdb_views() WHERE NOT internal ORDER BY view_name"
             ).fetchall()
         ]
-        self.assertEqual(len(vistas), 8)
+        # the 8 views of task 6 plus the 5 tablero-only views of #206 task 8
+        self.assertEqual(len(vistas), 13)
         for vista in vistas:
             with self.subTest(vista=vista):
                 con.execute(f"SELECT * FROM {vista}").fetchall()

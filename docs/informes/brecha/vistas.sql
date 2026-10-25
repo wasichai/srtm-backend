@@ -183,3 +183,39 @@ CREATE OR REPLACE VIEW v_predial_tres_columnas AS
 SELECT count(*) AS contribuyentes, sum(declarado) AS declarado, sum(motor_rentas) AS motor_rentas,
        sum(motor_catastro) AS motor_catastro
 FROM v_predial_contribuyente;
+
+-- The five tablero-only views of #206 task 8 (plan § Rulings: "las vistas que solo usan los tableros ... se
+-- agregan a vistas.sql en #206").
+
+-- v_brecha_por_clase restricted to CONFIABLE, like v_brecha_confiable_por_categoria over v_segmentos.
+CREATE OR REPLACE VIEW v_brecha_confiable_por_clase AS
+SELECT clase, predios, delta_impuesto, delta_autoavaluo
+FROM v_brecha_por_clase
+WHERE confianza = 'CONFIABLE'
+ORDER BY clase;
+
+-- The catastro cambios feed grouped by month, objeto and operación, for the "Cambios del catastro" line chart.
+CREATE OR REPLACE VIEW v_cambios_por_mes AS
+SELECT date_trunc('month', en)::DATE AS mes, objeto, operacion, count(*) AS cambios
+FROM catastro_cambio
+GROUP BY mes, objeto, operacion
+ORDER BY mes, objeto, operacion;
+
+-- The 500 most recent cambios, for the same tablero's detail table.
+CREATE OR REPLACE VIEW v_cambios_recientes AS
+SELECT *
+FROM catastro_cambio
+ORDER BY en DESC NULLS LAST
+LIMIT 500;
+
+-- Each lote's point (catastro_lote already carries lon/lat as DOUBLE; no polygon map in Metabase OSS, plan §
+-- Rulings) with its brecha, for the "Mapa de lotes" tablero; a lote whose código has no brecha_predio (not
+-- yet run, or SIN_LEVANTAR) still shows, with NULL categoria/confianza/delta_impuesto.
+CREATE OR REPLACE VIEW v_lotes_mapa AS
+SELECT l.codigo_municipal, l.lat, l.lon, b.categoria, b.confianza, b.delta_impuesto
+FROM catastro_lote l
+LEFT JOIN v_brecha_predio b ON b.codigo_catastro = l.codigo_municipal
+ORDER BY l.codigo_municipal;
+
+-- The corte's manifest at a glance, for the scalar card above each tablero.
+CREATE OR REPLACE VIEW v_corte AS SELECT * FROM corte_manifiesto;

@@ -8,15 +8,20 @@
 #   make publicar   ORG=<org>  FECHA=AAAA-MM-DD [REEMPLAZAR=1]   verifies, then syncs it to S3
 #   make corte      ORG=<org> [FECHA=AAAA-MM-DD] [REEMPLAZAR=1]  extraer + publicar
 #   make local      CORTE=<carpeta>                              builds <carpeta>.duckdb to read it with DuckDB
+#   make duckdb     ORG=<org>                                    downloads <org>'s latest corte and rebuilds its
+#                                                                 Metabase DuckDB file atomically (#206, task 8)
+#   make corte-ficticio ORG=<org> SEMILLA=<n> [SALIDA=<carpeta>]  a corte of a fictitious org, no real network
 #
 # FECHA defaults to today in America/Lima (herramientas.comun.hoy_lima()). SALIDA defaults to
 # $(HOME)/cortes/analitica (corte.py's own default) and can be moved with SALIDA=<carpeta base>; verificar and
-# publicar read the same <SALIDA>/<ORG>/<FECHA> folder that extraer just wrote.
+# publicar read the same <SALIDA>/<ORG>/<FECHA> folder that extraer just wrote. corte-ficticio's own SALIDA
+# default is $(HOME)/cortes/ficticio instead (ficticio.py's cortes never belong under cortes/analitica).
 #
 # publicar uploads the Parquet files first and manifiesto.json last, so a manifest in S3 means a complete corte.
 #
-# Requirements: besides venv (duckdb, pyarrow), the AWS CLI to publish. VERSION_SRTM and VERSION_CATASTRO come
-# from the environment or the make command line; without them the manifest keeps them null, with a notice.
+# Requirements: besides venv (duckdb, pyarrow), the AWS CLI to publicar and to duckdb (it downloads the
+# corte). VERSION_SRTM and VERSION_CATASTRO come from the environment or the make command line; without them
+# the manifest keeps them null, with a notice.
 
 SHELL := /bin/bash
 PYTHON ?= python3
@@ -30,6 +35,10 @@ SALIDA ?= $(HOME)/cortes/analitica
 # name). CORTE also loses a trailing /, or `make local` would write <corte>/.duckdb inside the corte.
 sin_tilde = $(patsubst ~/%,$(HOME)/%,$(patsubst ~,$(HOME),$(1)))
 CARPETA_BASE := $(call sin_tilde,$(SALIDA))
+# corte-ficticio's own default ($(HOME)/cortes/ficticio) only applies when SALIDA was never set by the caller
+# (its origin is still this file's own ?= above, line 27); an explicit SALIDA=... (command line or
+# environment) is honored for corte-ficticio too, like every other target
+CARPETA_BASE_FICTICIO := $(if $(filter file,$(origin SALIDA)),$(call sin_tilde,$(HOME)/cortes/ficticio),$(CARPETA_BASE))
 CARPETA_CORTE := $(patsubst %/,%,$(call sin_tilde,$(CORTE)))
 # computed once (:=, not a recursively-expanded ?=), so a single `make corte` never asks twice and risks two
 # different dates; skipped entirely when FECHA already comes from the command line or the environment
@@ -44,7 +53,7 @@ CARPETA := $(CARPETA_BASE)/$(ORG)/$(FECHA)
 DESTINO := $(S3)/$(ORG)/$(FECHA)/
 MANIFIESTO_S3 := $(patsubst /%,%,$(S3_PREFIJO)/$(ORG)/$(FECHA)/manifiesto.json)
 
-.PHONY: venv pruebas comprobar-org comprobar-org-fecha extraer verificar publicar corte local
+.PHONY: venv pruebas comprobar-org comprobar-org-fecha extraer verificar publicar corte local duckdb corte-ficticio
 
 # a stamp, not .venv/bin/python (a symlink: -nt would compare against the system interpreter and always
 # reinstall); an existing .venv is reused as is, never rebuilt with another $(PYTHON)
@@ -98,3 +107,16 @@ corte: extraer publicar
 local: venv
 	@test -n "$(CARPETA_CORTE)" || { echo "falta CORTE=<carpeta del corte>"; exit 2; }
 	$(VPY) armar_duckdb.py --corte "$(CARPETA_CORTE)" --destino "$(CARPETA_CORTE).duckdb"
+
+# #206 task 8: downloads ORG's latest published corte and rebuilds its Metabase file atomically
+# (herramientas.base.construir_atomico); --cortes/--destino-dir keep armar_duckdb.py's own defaults
+# (/srv/srtm-metabase/{cortes,duckdb}), the VPS paths docs/develop/metabase-cortes.md (#206, task 11) sets up.
+duckdb: comprobar-org venv
+	$(VPY) armar_duckdb.py --org "$(ORG)"
+
+# A corte of a fictitious organization, read from two in-process fakes (ficticio.py) - no secrets file, no
+# real network; feeds the Metabase isolation smoke test (plan § Rulings). SEMILLA also derives the HMAC key,
+# so the same SEMILLA and FECHA always write the same Parquet bytes.
+corte-ficticio: comprobar-org venv
+	@test -n "$(SEMILLA)" || { echo "falta SEMILLA=<entero>"; exit 2; }
+	$(VPY) ficticio.py --org "$(ORG)" --semilla "$(SEMILLA)" --fecha "$(FECHA)" --salida "$(CARPETA_BASE_FICTICIO)"
