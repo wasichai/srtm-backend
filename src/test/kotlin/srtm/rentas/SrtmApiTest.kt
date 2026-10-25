@@ -232,8 +232,6 @@ abstract class SrtmApiTest : WasichaiIntegrationTest() {
         return UUID.fromString(tree(carga)["org"].asString())
     }
 
-    // the lotes and the groups of workers of a masiva
-
     // every lote and job still to run of `organizaciones` (the test's, by default) is failed, of the emission and of
     // the determination: a test's own groups then take only what it creates (LotesDelTest)
     protected fun soloLasDelTest(organizaciones: Set<UUID> = setOf(organizacionDe(token))) = lotesDelTest.soloLasDelTest(organizaciones)

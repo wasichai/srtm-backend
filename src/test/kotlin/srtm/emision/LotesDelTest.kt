@@ -30,7 +30,9 @@ class TablasDeOrganizaciones(
 // a test's lotes and its groups of workers, limited to its organizations (#173). the test db is shared by every class
 // of a run, one after the other, and maybe by another run: a test fails what is still to run of its organizations
 // only, and its groups take, assemble and fail the abandoned jobs of those organizations only, of every kind (the
-// emission's and the determination's). another organization's pending lote is left as it is.
+// emission's and the determination's). another organization's pending lote is left as it is. the group's other
+// collaborators are the context's: the caja and the parámetros act on the organization of the lote taken, and the
+// retention sweeps the emissions past their retention of every organization, as in production
 //
 // two runs at once on the same db still share the seeded organization (and ConCajaApiTest's, of a fixed slug), and the
 // context's own workers (EmisionMasivaApiTest's) take any organization's lotes: each run keeps a db of its own
