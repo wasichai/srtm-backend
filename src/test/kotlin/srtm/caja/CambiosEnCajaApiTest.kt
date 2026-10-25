@@ -5,14 +5,8 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
-import org.springframework.r2dbc.core.awaitRowsUpdated
-import srtm.arbitrios.DETERMINACION_LOTE
-import srtm.arbitrios.DETERMINACION_MASIVA
 import srtm.arbitrios.Llaves
-import srtm.emision.TablasCore
-import srtm.emision.TrabajadoresEmision
 import tools.jackson.databind.JsonNode
 import java.math.BigDecimal
 import java.nio.file.Files
@@ -21,12 +15,6 @@ import java.nio.file.Files
 // or withdraws them, at once, and says what it did in the Srtm-Caja header. a contribuyente without ordenes of the year
 // is not synced, and the write never fails for caja
 class CambiosEnCajaApiTest : ConCajaApiTest() {
-    @Autowired
-    lateinit var tablas: TablasCore
-
-    @Autowired
-    lateinit var trabajadores: TrabajadoresEmision
-
     // with the escenario's first servicio charged per m² construido and a piso of 100 m², a nivel of 20 m² more
     // changes its twelve months: only those are replaced, the other servicio's are not touched
     @Test
@@ -164,12 +152,12 @@ class CambiosEnCajaApiTest : ConCajaApiTest() {
         val e = Escenario()
         conPredial(e)
         enviar(e.contribuyente, e.anio)
-        soloLaDelTest()
+        soloLasDelTest()
         PEDIDOS.clear()
 
         val id = tree(send("POST", MASIVAS, pedido(e.anio), HttpStatus.ACCEPTED))["id"].asString()
         esperar(id) { it["estado"].asString() == "EN_PROCESO" }
-        val grupo = trabajadores.grupo("caja-masiva", 1, Files.createTempDirectory("caja-masiva"))
+        val grupo = grupoDelTest("caja-masiva", 1, Files.createTempDirectory("caja-masiva"))
         grupo.iniciar()
         try {
             esperar(id) { it["estado"].asString() == "TERMINADA" }
@@ -284,25 +272,6 @@ class CambiosEnCajaApiTest : ConCajaApiTest() {
 
         val o = ordenes(e.contribuyente, e.anio)
         assertEquals(List(4) { EstadoOrdenCaja.ENVIADA }, referencias(e.contribuyente, e.anio, 2).map { o.getValue(it)["estado"].asString() })
-    }
-
-    // nothing of another class or run is left for this test's group to take: only its masiva runs
-    private fun soloLaDelTest() {
-        runBlocking {
-            for (t in tablas.de(DETERMINACION_LOTE, listOf("estado"))) {
-                db
-                    .sql("UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDO' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO')")
-                    .fetch()
-                    .awaitRowsUpdated()
-            }
-            for (t in tablas.de(DETERMINACION_MASIVA, listOf("estado"))) {
-                db
-                    .sql(
-                        "UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDA' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO', 'ENSAMBLANDO')"
-                    ).fetch()
-                    .awaitRowsUpdated()
-            }
-        }
     }
 
     private fun esperar(

@@ -11,8 +11,6 @@ import org.springframework.http.HttpStatus
 import org.springframework.r2dbc.core.awaitRowsUpdated
 import org.springframework.test.context.TestPropertySource
 import srtm.emision.GrupoTrabajadores
-import srtm.emision.TablasCore
-import srtm.emision.TrabajadoresEmision
 import tools.jackson.databind.JsonNode
 import wasichai.core.platform.WasichaiSchemas
 import java.math.BigDecimal
@@ -35,37 +33,16 @@ import java.util.UUID
 )
 class DeterminacionMasivaApiTest : ConArbitriosApiTest() {
     @Autowired
-    lateinit var trabajadores: TrabajadoresEmision
-
-    @Autowired
     lateinit var maquina: MaquinaDeterminacion
-
-    @Autowired
-    lateinit var tablas: TablasCore
 
     @Autowired
     lateinit var schemas: WasichaiSchemas
 
     private val grupos = mutableListOf<GrupoTrabajadores>()
 
-    // nothing of another class is left for the groups to take: only this test's masivas run
+    // nothing of the test's organization is left for the groups to take: only this test's masivas run
     @BeforeEach
-    fun soloLasDelTest() {
-        runBlocking {
-            for (t in tablas.de(DETERMINACION_LOTE, listOf("estado"))) {
-                db
-                    .sql("UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDO' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO')")
-                    .fetch()
-                    .awaitRowsUpdated()
-            }
-            for (t in tablas.de(DETERMINACION_MASIVA, listOf("estado"))) {
-                db
-                    .sql("UPDATE ${t.tabla} SET ${t.columna("estado")} = 'FALLIDA' WHERE ${t.columna("estado")} IN ('PENDIENTE', 'EN_PROCESO', 'ENSAMBLANDO')")
-                    .fetch()
-                    .awaitRowsUpdated()
-            }
-        }
-    }
+    fun sinLotesAjenos() = soloLasDelTest()
 
     @AfterEach
     fun detener() {
@@ -395,7 +372,7 @@ class DeterminacionMasivaApiTest : ConArbitriosApiTest() {
 
     // an instance of `nombre`, with two workers and a work dir of its own
     private fun grupo(nombre: String) {
-        val g = trabajadores.grupo(nombre, 2, Files.createTempDirectory("determinacion-$nombre"))
+        val g = grupoDelTest(nombre, 2, Files.createTempDirectory("determinacion-$nombre"))
         g.iniciar()
         grupos += g
     }
