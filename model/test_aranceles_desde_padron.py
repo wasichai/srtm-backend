@@ -26,7 +26,7 @@ def numerados(filas):
 
 class PadronTests(unittest.TestCase):
     def test_one_arancel_per_codigo_de_via_of_the_urbano_rows_with_an_arancel(self):
-        aranceles, conflictos, cuentas = adp.desde_padron(numerados([
+        aranceles, conflictos, cuentas, _ = adp.desde_padron(numerados([
             padron(codigo_de_via="0010000401-01", arancel="356"),
             padron(codigo_de_via="0010000401-01", arancel="356.0000000001"),
             padron(codigo_de_via="0010000401-02", arancel="340"),
@@ -48,7 +48,7 @@ class PadronTests(unittest.TestCase):
         self.assertEqual(cuentas["sin_tipo_urbano"], 1)
 
     def test_a_code_with_two_values_is_a_conflict_out_of_the_aranceles(self):
-        aranceles, conflictos, _ = adp.desde_padron(numerados([
+        aranceles, conflictos, _, _ = adp.desde_padron(numerados([
             padron(codigo_de_via="0010000401-01", arancel="356"),
             padron(codigo_de_via="0010000401-01", arancel="300"),
             padron(codigo_de_via="0010000401-02", arancel="340"),
@@ -58,8 +58,28 @@ class PadronTests(unittest.TestCase):
 
     def test_the_code_is_read_as_import_padron_ica_reads_predio_codigo_via(self):
         # 501.0 is how the xlsx may carry 501: the predio's codigo_via is 501, and so is the arancel's
-        aranceles, _, _ = adp.desde_padron(numerados([padron(codigo_de_via="501.0", arancel="20")]))
+        aranceles, _, _, _ = adp.desde_padron(numerados([padron(codigo_de_via="501.0", arancel="20")]))
         self.assertEqual(list(aranceles), ["501"])
+
+    def test_a_predio_with_several_codes_of_one_value_takes_the_most_frequent(self):
+        _, _, cuentas, varios = adp.desde_padron(numerados([
+            padron(codigo_predio="P1", codigo_de_via="V-02", arancel="20"),
+            padron(codigo_predio="P1", codigo_de_via="V-01", arancel="20"),
+            padron(codigo_predio="P1", codigo_de_via="V-02", arancel="20"),
+            padron(codigo_predio="P2", codigo_de_via="V-01", arancel="20"),
+        ]))
+        self.assertEqual(varios, [{"codigo_predio": "P1", "codigos": "V-01x1 V-02x2", "valores": "V-01=20.00 V-02=20.00",
+                                   "regla": adp.MISMO_VALOR, "codigo_elegido": "V-02"}])
+        self.assertEqual((cuentas[adp.MISMO_VALOR], cuentas[adp.VALORES_DISTINTOS]), (1, 0))
+
+    def test_a_predio_with_several_codes_of_different_values_is_left_for_review(self):
+        _, _, cuentas, varios = adp.desde_padron(numerados([
+            padron(codigo_predio="P1", codigo_de_via="V-01", arancel="20"),
+            padron(codigo_predio="P1", codigo_de_via="V-02", arancel="21"),
+            padron(codigo_predio="P1", codigo_de_via="V-02", arancel="21"),
+        ]))
+        self.assertEqual([(v["regla"], v["codigo_elegido"]) for v in varios], [(adp.VALORES_DISTINTOS, "")])
+        self.assertEqual((cuentas[adp.MISMO_VALOR], cuentas[adp.VALORES_DISTINTOS]), (0, 1))
 
     def test_the_csv_rows_are_normativas_columns_with_id_aranc_the_code(self):
         filas = adp.filas_csv({"B": Decimal("2.00"), "A": Decimal("1.50")}, 2026, adp.NORMA_2026, "padron.xlsx")
@@ -106,6 +126,10 @@ class ExcelCliTests(CliTestCase):
         conflictos = self.leer(os.path.join(self.tmp.name, "aranceles.conflictos.csv"))
         self.assertEqual(conflictos, [{"cod_via": "0010000401-02", "valores": "340.00 341.00", "filas": "3 4"}])
         self.assertIn("aranceles: 1 códigos de vía de 2026, conflictos: 1", out)
+        # the default padrón row is one predio: its two codes (one in conflict) are for review
+        varios = self.leer(os.path.join(self.tmp.name, "aranceles.varios_codigos.csv"))
+        self.assertEqual([v["regla"] for v in varios], [adp.VALORES_DISTINTOS])
+        self.assertIn(f"{adp.VALORES_DISTINTOS}: 1", out)
         # counts only: neither a code nor a value of the padrón on the screen
         self.assertNotIn("0010000401", out)
         self.assertNotIn("356", out)

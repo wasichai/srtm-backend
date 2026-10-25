@@ -1566,6 +1566,17 @@ python3 -I asignar_arancel_por_via.py --org ica --anio 2026
   que no cambian ni revalida la ficha importada. Las DJ de otros años no se tocan. `--reporte` (fuera del repo) lista
   cada DJ con su destino. Sale con `0`; `1` si Core rechaza algo o una DJ recalculada no quedó con su tramo; `2` si el
   usuario es de otra organización.
+- **Regla para varios códigos de vía.** El arancel urbano va por frente de vía (cuadra y lado), no por sector
+  (RM 514-2025-EF/15, notas 2 y 3 del plano predial), y un predio o ficha puede quedar vinculado a varios
+  `codigo_de_via`, uno por frente: si todos tienen el mismo valor en el año, toma el código más frecuente; si
+  difieren, se deja como está y se reporta para revisión (la misma regla de `deLaVia` para los tramos de una vía).
+  `aranceles_desde_padron.py --excel` agrupa las filas urbanas del padrón por `codigo_predio` y cuenta
+  `varios_codigos_mismo_valor` y `varios_codigos_valores_distintos`; los lista en `--varios-codigos` (default
+  `<salida>.varios_codigos.csv`, fuera del repo: `codigo_predio, codigos, valores, regla, codigo_elegido`). El predio
+  de srtm guarda **un** `codigo_via` (el de su primera fila del padrón, `import_padron_ica.py`), así que
+  `asignar_arancel_por_via.py` no ve los otros códigos: esos predios cuentan según el código que guardó el predio.
+  Antes de aplicarlo, los de `varios_codigos_valores_distintos` se revisan a mano, y los de
+  `varios_codigos_mismo_valor` toman el mismo valor con el código que sea.
 - **Cuando cambia el valor de un año** (se anula y se registra otro), `asignar_arancel_por_via.py --anio N` vuelve a
   resolver las DJ de ese año: también recalcula las que ya tienen `id_aranc` y cuyo arancel no es el VIGENTE de su
   tramo (`valor_nuevo` en el reporte). Las de otros años no se tocan.

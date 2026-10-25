@@ -6,7 +6,8 @@
   514-2025-EF/15). id_aranc = cod_via = that code, read as import_padron_ica.py reads predio.codigo_via, so a predio
   finds it (DeclaracionService.arancelDeLaVia). Only urbano rows (tipo_predio 1): the rústico arancel is per hectárea
   (#209). A 0 or blank arancel is left out. A code with more than one value is a conflict: left out of the CSV and
-  listed in --conflictos.
+  listed in --conflictos. A predio whose rows name several codes (one per frente) follows the regla para varios
+  códigos de vía (varios_codigos) and is listed in --varios-codigos.
 - --copiar-de AÑO: the VIGENTE aranceles of that year in the Core, copied to --anio, to prepare a new year: Normativa
   corrects or verifies them.
 
@@ -39,6 +40,10 @@ from import_predios import read_xlsx  # noqa: E402
 REPO = os.path.dirname(HERE)
 COLUMNAS = ["id_aranc", "anio", "valor_m2", "cod_via", "cuadra", "lado", "norma", "fuente"]
 COLUMNAS_CONFLICTO = ["cod_via", "valores", "filas"]
+COLUMNAS_VARIOS = ["codigo_predio", "codigos", "valores", "regla", "codigo_elegido"]
+# a predio with several codigo_de_via: all with one value, or not (varios_codigos)
+MISMO_VALOR = "varios_codigos_mismo_valor"
+VALORES_DISTINTOS = "varios_codigos_valores_distintos"
 URBANO = "1"
 RUSTICO = "2"
 NORMA_2026 = "RM 514-2025-EF/15"
@@ -64,11 +69,13 @@ def valor(texto):
 
 
 def desde_padron(filas):
-    """The padrón's rows -> (aranceles, conflictos, cuentas). aranceles: cod_via -> its one valor_m2, of the urbano
-    rows with an arancel > 0. conflictos: cod_via -> (its values, its rows' numbers), of the codes with more than one.
-    cuentas: a Counter of every row's fate."""
+    """The padrón's rows -> (aranceles, conflictos, cuentas, varios). aranceles: cod_via -> its one valor_m2, of the
+    urbano rows with an arancel > 0. conflictos: cod_via -> (its values, its rows' numbers), of the codes with more
+    than one. cuentas: a Counter of every row's fate, and of the predios with several codes (MISMO_VALOR,
+    VALORES_DISTINTOS). varios: those predios (varios_codigos)."""
     valores = defaultdict(set)
     filas_de = defaultdict(list)
+    codigos_de = defaultdict(Counter)
     cuentas = Counter()
     for fila in filas:
         cuentas["filas"] += 1
@@ -90,9 +97,33 @@ def desde_padron(filas):
         cuentas["urbanas_con_arancel"] += 1
         valores[cod_via].add(v)
         filas_de[cod_via].append(fila.get("_fila"))
+        codigos_de[codigo(fila.get("codigo_predio"))][cod_via] += 1
     aranceles = {c: next(iter(v)) for c, v in valores.items() if len(v) == 1}
     conflictos = {c: (sorted(v), filas_de[c]) for c, v in valores.items() if len(v) > 1}
-    return aranceles, conflictos, cuentas
+    varios = varios_codigos({p: c for p, c in codigos_de.items() if p is not None and len(c) > 1}, valores)
+    cuentas[MISMO_VALOR] = sum(1 for v in varios if v["regla"] == MISMO_VALOR)
+    cuentas[VALORES_DISTINTOS] = sum(1 for v in varios if v["regla"] == VALORES_DISTINTOS)
+    return aranceles, conflictos, cuentas, varios
+
+
+def varios_codigos(por_predio, valores):
+    """The regla para varios códigos de vía, for a predio (its SAT codigo_predio) whose urbano rows name more than one
+    codigo_de_via (one per frente): if every code has one and the same arancel, it takes the most frequent code (of a
+    tie, the lowest); if their values differ (or a code has two), it is left as it is and listed for review. Rows of
+    COLUMNAS_VARIOS, sorted by predio."""
+    filas = []
+    for predio, cuantos in sorted(por_predio.items()):
+        de_cada = {c: valores[c] for c in cuantos}
+        unico = len(set().union(*de_cada.values())) == 1
+        mas_frecuente = sorted(cuantos.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+        filas.append({
+            "codigo_predio": predio,
+            "codigos": " ".join(f"{c}x{n}" for c, n in sorted(cuantos.items())),
+            "valores": " ".join(f"{c}={'/'.join(str(v) for v in sorted(de_cada[c]))}" for c in sorted(cuantos)),
+            "regla": MISMO_VALOR if unico else VALORES_DISTINTOS,
+            "codigo_elegido": mas_frecuente if unico else "",
+        })
+    return filas
 
 
 def filas_csv(aranceles, anio, norma, fuente):
@@ -151,6 +182,7 @@ def _parse_args(argv):
     p.add_argument("--anio", type=int, default=2026, help="year of the aranceles written (default 2026)")
     p.add_argument("--salida", required=True, help="the CSV written: outside the repo")
     p.add_argument("--conflictos", help="the codes with more than one value (--excel); default: <salida>.conflictos.csv")
+    p.add_argument("--varios-codigos", help="the predios with several codigo_de_via (--excel); default: <salida>.varios_codigos.csv")
     p.add_argument("--norma", help=f"the norma of every row (default {NORMA_2026!r} for 2026, blank otherwise)")
     p.add_argument("--core", default=os.environ.get("WASICHAI_CORE", "http://localhost:8090"))
     p.add_argument("--email", default=os.environ.get("WASICHAI_EMAIL", "admin@wasichai.local"))
@@ -161,8 +193,10 @@ def _parse_args(argv):
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     args = _parse_args(argv)
-    conflictos_path = args.conflictos or os.path.splitext(os.path.expanduser(args.salida))[0] + ".conflictos.csv"
-    for path in (args.salida, conflictos_path):
+    base = os.path.splitext(os.path.expanduser(args.salida))[0]
+    conflictos_path = args.conflictos or base + ".conflictos.csv"
+    varios_path = args.varios_codigos or base + ".varios_codigos.csv"
+    for path in (args.salida, conflictos_path, varios_path):
         if dentro_del_repo(path):
             print(f"error: {path} está dentro del repo: los aranceles salen de datos reales, escríbalos fuera", file=sys.stderr)
             return 2
@@ -172,12 +206,13 @@ def main(argv=None):
     norma = args.norma if args.norma is not None else (NORMA_2026 if args.anio == 2026 else "")
 
     if args.excel:
-        aranceles, conflictos, cuentas = desde_padron(read_xlsx(args.excel, "padron"))
+        aranceles, conflictos, cuentas, varios = desde_padron(read_xlsx(args.excel, "padron"))
         filas = filas_csv(aranceles, args.anio, norma, os.path.basename(args.excel))
         escribir(args.salida, COLUMNAS, filas)
         escribir(conflictos_path, COLUMNAS_CONFLICTO,
                  [{"cod_via": c, "valores": " ".join(str(v) for v in vs), "filas": " ".join(str(f) for f in fs)}
                   for c, (vs, fs) in sorted(conflictos.items())])
+        escribir(varios_path, COLUMNAS_VARIOS, varios)
         print(f"filas: {cuentas['filas']}, urbanas con arancel: {cuentas['urbanas_con_arancel']}, "
               f"rústicas: {cuentas['rusticas']}, sin tipo urbano: {cuentas['sin_tipo_urbano']}, "
               f"sin código de vía: {cuentas['sin_codigo_de_via']}, arancel 0 o vacío: {cuentas['arancel_cero_o_vacio']}")
@@ -185,6 +220,8 @@ def main(argv=None):
         print(f"csv: {len(filas)} filas -> {args.salida}")
         if conflictos:
             print(f"conflictos: {len(conflictos)} códigos con más de un valor, fuera del csv -> {conflictos_path}")
+        print(f"predios con varios códigos de vía: {len(varios)} ({MISMO_VALOR}: {cuentas[MISMO_VALOR]}, "
+              f"{VALORES_DISTINTOS}: {cuentas[VALORES_DISTINTOS]}, a revisar) -> {varios_path}")
         return 0
 
     client = Client(args.core)

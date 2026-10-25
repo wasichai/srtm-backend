@@ -151,6 +151,18 @@ la declaración guarda su _Identificador de arancel_ y desde entonces se comport
 * la declaración lo toma al grabarse o al pulsar btn:[Recalcular]. Para las declaraciones ya importadas, quien
   administra el sistema lo hace para todo un año a la vez.
 
+El arancel urbano se fija por frente de vía (cuadra y lado), no por sector: así lo aprueba la RM 514-2025-EF/15 y lo
+dicen las notas 2 y 3 del plano predial (el valor al centro de la calle rige para los dos frentes; el que está dentro
+de la manzana, o bajo o sobre el nombre de la vía, solo para ese frente). Por eso el código de vía del SAT va por
+frente (`…-01`, `…-02`) y un predio con varios frentes puede tener varios.
+
+*Regla para varios códigos de vía.* Un predio o ficha vinculado a varios códigos de vía (uno por frente):
+
+* si todos esos códigos tienen el mismo valor arancelario en el año, toma el código más frecuente;
+* si sus valores difieren, se deja como está y se reporta para revisión.
+
+Es la misma regla de una vía con varios tramos: si sus valores difieren, la declaración no toma ninguno.
+
 *Importar aranceles.* El CSV lleva las columnas `id_aranc`, `anio`, `valor_m2`, `cod_via`, `cuadra`, `lado`, `norma`,
 `fuente`, `transcribio` y `verifico`, con las mismas reglas que el de parámetros (<<normativa-importar>>): con las dos
 firmas entra vigente; con una o ninguna, por verificar; una fila igual no se vuelve a cargar; una que cambia un
