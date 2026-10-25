@@ -325,13 +325,21 @@ link:../../develop/metabase-cortes.md[«Metabase sobre los cortes», docs/develo
 
 [source,bash]
 ----
-make duckdb ORG=perene                            # baja el último corte publicado y arma su .duckdb
-docker compose -p srtm-metabase restart metabase   # para que Metabase vuelva a abrir el archivo
-make humo USUARIOS="perene:ana@ejemplo.pe"         # aislamiento y que cada tablero siga corriendo
+make duckdb ORG=perene        # baja el último corte publicado completo y arma su .duckdb
+docker compose -p srtm-metabase -f metabase/compose.yml --env-file /srv/srtm-metabase/metabase.env \
+  restart metabase            # para que Metabase vuelva a abrir el archivo
+make humo USUARIOS="perene:humo-perene@<dominio>"   # aislamiento y que cada tablero siga corriendo
 ----
 
-`make humo` nunca corre contra datos reales por sí solo: la organización se prueba primero con dos ficticias
+`make humo` entra con un usuario dedicado a la prueba de humo de cada organización (`humo-<org>@…`, creado con
+`provisionar.py usuario`, clave en `METABASE_CLAVE_USUARIO`), nunca con la cuenta ni la clave de una persona
+real. Nunca corre contra datos reales por sí solo: la organización se prueba primero con dos ficticias
 (`make corte-ficticio`), como describe esa guía.
+
+Límite conocido, pendiente de decisión: en Metabase OSS 0.63.19, `GET /api/user/recipients` devuelve nombre y
+email de todos los usuarios activos (`user-visibility` vale `:all` y restringirlo es una función de pago), así
+que un usuario de una organización ve a los usuarios de Metabase de las otras, por ejemplo al elegir
+destinatarios de una suscripción. Se acepta así o se pasa a un Metabase por organización; la guía lo detalla.
 
 == Requisitos
 

@@ -19,6 +19,16 @@ sin acceso externo (`B/herramientas/base.py`, `INIT_SQL`), así que ni una consu
 archivo de otra organización - nadie tiene SQL nativo de todas formas, porque las únicas preguntas son las
 tarjetas fijas de `B/metabase/tableros.json`.
 
+**Límite conocido, pendiente de decisión: los usuarios se ven entre organizaciones.** El aislamiento cubre
+datos, tarjetas y tableros, no la lista de usuarios. En Metabase 0.63.19, `GET /api/user/recipients` devuelve
+el nombre y el email de **todos** los usuarios activos de la instancia cuando el ajuste `user-visibility` vale
+`:all`, que es su valor por omisión (`src/metabase/users_rest/api.clj`); restringirlo (`:group` o `:none`) es
+una función de pago (`:feature :email-restrict-recipients` en `src/metabase/users/settings.clj`), así que en
+OSS no se puede cambiar. Un usuario de una municipalidad ve, por ejemplo en el selector de destinatarios de una
+suscripción, los nombres y emails de los usuarios de Metabase de las otras. Queda como límite aceptado o no por
+decidir: aceptarlo (los usuarios son personal municipal, no contribuyentes) o pasar a un Metabase por
+organización. Mientras tanto no se toca ningún ajuste de Metabase por esto.
+
 ## 1. Carpetas del VPS
 
 ```
@@ -32,13 +42,21 @@ tarjetas fijas de `B/metabase/tableros.json`.
 `duckdb/` es el único volumen que Metabase monta (de solo lectura, `/datos` dentro del contenedor); `cortes/` y
 `respaldos/` solo los usan los scripts de `B/` desde el propio VPS, nunca el contenedor de Metabase.
 
+Los cortes bajados se acumulan en `cortes/<org>/<fecha>/`: `make duckdb` no borra los viejos (el `.duckdb` solo
+depende del último). Para liberar espacio, a mano, dejando los tres más recientes de una organización:
+
+```bash
+ls -d /srv/srtm-metabase/cortes/<org>/*/ | sort | head -n -3 | xargs -r rm -r
+```
+
 ## 2. Primera puesta
 
 ```bash
 cd srtm-backend/docs/informes/brecha
 cp metabase/metabase.env.example /srv/srtm-metabase/metabase.env
 chmod 600 /srv/srtm-metabase/metabase.env
-vi /srv/srtm-metabase/metabase.env   # METABASE_PG_PASSWORD, MB_ENCRYPTION_SECRET_KEY (32+ caracteres), rutas si cambian
+openssl rand -hex 32                 # la MB_ENCRYPTION_SECRET_KEY: se genera una vez y no se cambia después
+vi /srv/srtm-metabase/metabase.env   # METABASE_PG_PASSWORD, MB_ENCRYPTION_SECRET_KEY (la de arriba), rutas si cambian
 
 mkdir -p /srv/srtm-metabase/{duckdb,cortes,respaldos}
 
@@ -56,7 +74,8 @@ ssh -fN -L 3310:localhost:3310 <vps>
 Con el túnel abierto, `http://localhost:3310` es el Metabase del VPS. Antes de provisionar nada, cada
 organización necesita su archivo `<org>.duckdb` en `/srv/srtm-metabase/duckdb/` - `make provisionar` crea la
 base con `POST /api/database`, que prueba la conexión al archivo, así que el orden es siempre: primero
-`make duckdb`, después `make provisionar`.
+`make duckdb`, después `make provisionar`, y solo con las organizaciones cuyo `.duckdb` ya existe (`ORGS=…`;
+sin `ORGS`, `make provisionar` toma todas las de `parametros.json` y se detiene en la primera sin archivo).
 
 ```bash
 make duckdb ORG=perene                              # baja el último corte publicado de perene y arma su .duckdb
@@ -64,15 +83,30 @@ make duckdb ORG=perene                              # baja el último corte publ
 export METABASE_URL=http://localhost:3310
 export METABASE_ADMIN_EMAIL=<administrador de Metabase>
 export METABASE_ADMIN_PASSWORD=<su clave>
-make provisionar                                    # todas las organizaciones de parametros.json; hace el setup
-                                                      # inicial de Metabase si nadie lo hizo todavía
+make provisionar ORGS=perene                        # solo las que ya tienen su .duckdb; hace el setup inicial
+                                                      # de Metabase si nadie lo hizo todavía
 
 export METABASE_CLAVE_USUARIO=<clave temporal>
 .venv/bin/python -I provisionar.py usuario --org perene --email ana@ejemplo.pe --nombre Ana --apellido A
 ```
 
 `make provisionar` es idempotente por nombre: correrlo otra vez (por ejemplo, después de cambiar
-`tableros.json`) solo crea o actualiza lo que falta o cambió.
+`tableros.json`) solo crea o actualiza lo que falta o cambió. Cada base nueva queda cerrada a «All Users» y a
+los demás grupos `Brecha …` en cuanto se crea, antes de seguir: si la corrida se corta después (la base de otra
+organización falla, un 409 en el grafo de permisos), ninguna base queda abierta; basta corregir y correrlo de
+nuevo.
+
+`provisionar.py usuario` crea el usuario en el grupo de su organización. Un email que ya está en el grupo de
+otra organización, o que es de un usuario desactivado, se rechaza con una línea y sale con 1: un usuario es de
+una sola organización, y reactivar a alguien se decide en `Admin → People` de Metabase.
+
+Para la prueba de humo de cada organización hace falta, además, un usuario dedicado solo a ella (por ejemplo
+`humo-perene@…`), creado igual, con una clave que no sea la de ninguna persona:
+
+```bash
+export METABASE_CLAVE_USUARIO=<clave del usuario de humo, solo para eso>
+.venv/bin/python -I provisionar.py usuario --org perene --email humo-perene@<dominio> --nombre Humo --apellido Perene
+```
 
 ## 3. Después de cada corte
 
@@ -81,15 +115,21 @@ ese corte y el contenedor tiene que reabrir el archivo:
 
 ```bash
 make duckdb ORG=<org>
-docker compose -p srtm-metabase restart metabase
-make humo USUARIOS="<org>:<email de un usuario de esa organización>"
+docker compose -p srtm-metabase -f metabase/compose.yml --env-file /srv/srtm-metabase/metabase.env restart metabase
+export METABASE_CLAVE_USUARIO=<clave del usuario de humo de <org>>
+make humo USUARIOS="<org>:humo-<org>@<dominio>"
 ```
 
-`make duckdb` baja el corte publicado y reemplaza el archivo de forma atómica
-(`herramientas.base.construir_atomico`): si algo falla a medio camino, el `.duckdb` anterior queda intacto y
-Metabase sigue sirviendo con él. El `restart` es necesario porque el pool de conexiones de Metabase mantiene
-abierto el archivo viejo (plan § Rulings): sin reiniciar, los tableros seguirían mostrando el corte anterior.
-Unos dos minutos sin tableros mientras reinicia es lo esperado.
+`make humo` entra con el usuario de humo de la organización (sección 2), nunca con la cuenta ni la clave de
+una persona real.
+
+`make duckdb` baja el corte publicado más reciente que esté completo (con su `manifiesto.json`; si la fecha
+más nueva todavía no lo tiene, avisa y usa la anterior), en una carpeta vaciada antes, y reemplaza el archivo
+de forma atómica (`herramientas.base.construir_atomico`): si algo falla a medio camino, el `.duckdb` anterior
+queda intacto y Metabase sigue sirviendo con él. Sale con 2 cuando la organización no tiene ningún corte
+publicado, y con 1 cuando la CLI de AWS falla (credenciales, red). El `restart` es necesario porque el pool de
+conexiones de Metabase mantiene abierto el archivo viejo (plan § Rulings): sin reiniciar, los tableros
+seguirían mostrando el corte anterior. Unos dos minutos sin tableros mientras reinicia es lo esperado.
 
 ## 4. Respaldos: cron y restaurar
 
@@ -165,6 +205,19 @@ make humo USUARIOS="ficticia-a:a@ficticio.pe ficticia-b:b@ficticio.pe"
 escriben los mismos bytes, así que correrlo de nuevo no cambia nada que ya se haya visto. `make humo` sale con
 0 y `humo: OK (<n> comprobaciones)` cuando todo pasa, o imprime cada falla y sale con 1.
 
+Al terminar, se retiran las organizaciones ficticias para que ningún usuario real las vea en Metabase
+(`provisionar.py` no tiene subcomando para borrar; se hace en la interfaz, como administrador):
+
+1. `Admin → People`: desactivar `a@ficticio.pe` y `b@ficticio.pe`.
+2. `Admin → People → Groups`: borrar los grupos `Brecha ficticia-a` y `Brecha ficticia-b`.
+3. En la colección `Brecha Ficticia A` (y en la B): `…` → `Move to trash`, y vaciarla desde la papelera
+   (sus tarjetas y tableros se van con ella).
+4. `Admin → Databases`: `Brecha Ficticia A` y `Brecha Ficticia B` → `Remove this database`.
+5. En el VPS: `rm /srv/srtm-metabase/duckdb/ficticia-{a,b}.duckdb`.
+
+Volver a correr la prueba más adelante es repetir esta sección desde el principio: `provisionar.py` vuelve a
+crear todo por nombre.
+
 ## 7. Si el humo marca una base visible
 
 Una falla de `make humo` que dice que una organización ve, además de la suya, la base de otra (`"<org> ve,
@@ -174,13 +227,20 @@ reintenta. Antes de nada:
 1. Confirmar que `make provisionar` corrió con el `tableros.json` de esta rama y sin errores (su salida lista,
    por organización, la base, el grupo, la colección y cuántas tarjetas y tableros); si no, correrlo de nuevo.
 2. Revisar a mano, como administrador de Metabase, `Admin → Permissions → Data` y `… → Collections`: el grupo
-   de la organización marcada tiene que dar `No self-service` (ningún acceso) en toda base que no sea la suya,
-   y `None` en toda colección que no sea la suya; «All Users» tiene que dar lo mismo en todo lo de esta rama.
+   de la organización marcada tiene que dar, en las columnas de Metabase 0.63, `View data: Can view` y
+   `Create queries: No` en toda base que no sea la suya (en la suya, `Create queries: Query builder only`), y
+   `No access` en toda colección que no sea la suya; «All Users» tiene que dar `Create queries: No` y
+   `No access` en todo lo de esta rama.
 3. Si la API de permisos de Metabase cambió de forma entre versiones (sección 5), `provisionar.py` puede estar
    mandando una forma que esa versión ya no entiende sin que falle de inmediato (el PUT puede aceptar un campo
    que la versión nueva ignora). Repetir `make provisionar` tras corregirlo y volver a correr `make humo`.
-4. Nunca dejar Metabase así mientras se investiga: `docker compose -p srtm-metabase stop metabase` lo apaga sin
-   tocar `metabase-postgres` ni los `.duckdb`.
+4. Nunca dejar Metabase así mientras se investiga:
+   `docker compose -p srtm-metabase -f metabase/compose.yml --env-file /srv/srtm-metabase/metabase.env stop metabase`
+   lo apaga sin tocar `metabase-postgres` ni los `.duckdb`.
+
+Que un usuario vea los **nombres y emails** de usuarios de otras organizaciones (por ejemplo al elegir
+destinatarios de una suscripción) no es esta falla ni la marca `make humo`: es el límite conocido de Metabase
+OSS descrito en la sección 0, pendiente de decisión.
 
 ## Límite conocido: consultas que necesitan disco
 
