@@ -13,6 +13,10 @@
 #   make corte-ficticio ORG=<org> SEMILLA=<n> [SALIDA=<carpeta>]  a corte of a fictitious org, no real network
 #   make provisionar [ORGS="<org> <org>..."]                     creates or updates Metabase's databases, groups,
 #                                                                 collections and tableros (#206, task 10)
+#   make humo        USUARIOS="<org>:<email> ..."                smoke test: isolation and every tablero's card
+#                                                                 (#206, task 11); METABASE_CLAVE_USUARIO is their
+#                                                                 shared password
+#   make respaldo    ENV=<archivo .env de Metabase>              backs up metabase-postgres (metabase/respaldo.sh)
 #
 # FECHA defaults to today in America/Lima (herramientas.comun.hoy_lima()). SALIDA defaults to
 # $(HOME)/cortes/analitica (corte.py's own default) and can be moved with SALIDA=<carpeta base>; verificar and
@@ -57,7 +61,7 @@ DESTINO := $(S3)/$(ORG)/$(FECHA)/
 MANIFIESTO_S3 := $(patsubst /%,%,$(S3_PREFIJO)/$(ORG)/$(FECHA)/manifiesto.json)
 
 .PHONY: venv pruebas comprobar-org comprobar-org-fecha extraer verificar publicar corte local duckdb corte-ficticio \
-	provisionar
+	provisionar humo respaldo
 
 # a stamp, not .venv/bin/python (a symlink: -nt would compare against the system interpreter and always
 # reinstall); an existing .venv is reused as is, never rebuilt with another $(PYTHON)
@@ -131,3 +135,16 @@ corte-ficticio: comprobar-org venv
 # --org clave:"Nombre". The connection comes from METABASE_URL/METABASE_ADMIN_EMAIL/METABASE_ADMIN_PASSWORD.
 provisionar: venv
 	$(VPY) provisionar.py $(foreach org,$(ORGS),--org "$(org)")
+
+# #206 task 11: smoke test of an already provisioned Metabase (humo.py). USUARIOS is a space-separated list of
+# org:email pairs (one user per organization, already created with `provisionar.py usuario`); they all share
+# METABASE_CLAVE_USUARIO. Run after `make provisionar` and after every `make duckdb` + the Metabase restart it
+# needs (docs/develop/metabase-cortes.md).
+humo: venv
+	@test -n "$(USUARIOS)" || { echo "falta USUARIOS=\"<org>:<email> ...\""; exit 2; }
+	$(VPY) humo.py $(foreach usuario,$(USUARIOS),--usuario "$(usuario)")
+
+# Daily backup of metabase-postgres (metabase/respaldo.sh); ENV is metabase.env on the VPS.
+respaldo:
+	@test -n "$(ENV)" || { echo "falta ENV=<archivo .env de Metabase>"; exit 2; }
+	metabase/respaldo.sh "$(ENV)"

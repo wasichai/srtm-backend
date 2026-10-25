@@ -18,11 +18,16 @@ unrestricted it would run for them.
 The tableros are native cards `SELECT * FROM <vista>` (plan § Rulings: "los tableros son tarjetas nativas ...
 idempotentes por nombre dentro de la colección"): a second run finds every database, group, collection, card
 and dashboard by name and only PUTs what differs from the definition.
+
+`humo` (task 11, `humo.py`) checks a provisioned Metabase stays that way: every `Brecha …` database syncs and
+shows its views, every tablero's card still runs, and, logged in as each organization's user, isolation holds
+(plan § Rulings: "si Metabase OSS muestra a un usuario el nombre de otra base, la prueba de humo lo marca").
 """
 
 import http.client
 import json
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -408,3 +413,175 @@ def _asegurar_tablero(mb, nombre, coleccion_id, disposicion, existentes):
         ]
         mb.put(f"/api/dashboard/{did}", {"dashcards": dashcards})
     return did
+
+
+# --- smoke test (task 11, humo.py) ------------------------------------------------------------------------------
+
+
+class Fallas(list):
+    """What `humo` returns: a list[str] of fallas (empty = OK) that also remembers how many comprobaciones it
+    ran, for humo.py's `humo: OK (<n> comprobaciones)` - a plain list has nowhere to carry that count."""
+
+    def __init__(self):
+        super().__init__()
+        self.comprobaciones = 0
+
+
+def _base_propia(mb, org):
+    """The id of the one database the group `Brecha <org>` can query (`create-queries` != "no" on the admin's
+    data permissions graph) - safer than asking the organization's own user, whose GET /api/database is
+    exactly what a broken isolation would lie about. None when the group is missing, or when it can query zero
+    or more than one database (provisionar.py never ran, or ran against a different tableros.json)."""
+    grupo = _buscar(mb.get("/api/permissions/group") or [], f"{PREFIJO}{org}")
+    if grupo is None:
+        return None
+    permisos = (mb.get("/api/permissions/graph") or {}).get("groups") or {}
+    propias = [
+        int(b) for b, p in (permisos.get(str(grupo["id"])) or {}).items() if p.get("create-queries") not in (None, "no")
+    ]
+    return propias[0] if len(propias) == 1 else None
+
+
+def _esperar_vista(mb, base_id, vista, espera):
+    """Polls GET /api/database/:id/metadata until `vista` is one of its tables, or `espera` seconds pass (a
+    real sync_schema runs in the background; MetabaseFalso's is immediate, so the tests never wait)."""
+    limite = time.monotonic() + espera
+    retraso = 0.5
+    while True:
+        tablas = {t.get("name") for t in (mb.get(f"/api/database/{base_id}/metadata") or {}).get("tables") or []}
+        if vista in tablas:
+            return True
+        restante = limite - time.monotonic()
+        if restante <= 0:
+            return False
+        time.sleep(min(retraso, restante))
+        retraso = min(retraso * 2, 5)
+
+
+def humo(url, admin, usuarios, espera=120):
+    """Smoke test of an already provisioned Metabase (plan § Rulings, aislamiento: "si Metabase OSS muestra a
+    un usuario el nombre de otra base, la prueba de humo lo marca"). As the administrator: every `Brecha …`
+    database still syncs and shows `v_segmentos`, every tablero's card still runs, and an ATTACH from one
+    organization's database to another's file fails. Logged in as each organization's user (`usuarios`: org ->
+    (email, clave)): GET /api/database lists only its own database, a foreign tablero's card is 403, and
+    native SQL is 403 everywhere - on a foreign database and on its own (provisioning never grants
+    `create-queries: "query-builder-and-native"` to anyone, plan § Rulings: PROPIA).
+
+    Returns a Fallas (empty = every comprobación passed); only a failed login or request to Metabase itself
+    (ErrorMetabase) propagates, never a comprobación that merely found something wrong."""
+    mb = Metabase(url)
+    mb.sesion(*admin)
+    fallas = Fallas()
+
+    fallas.comprobaciones += 1
+    salud = mb.get("/api/health")
+    if not isinstance(salud, dict) or salud.get("status") != "ok":
+        fallas.append(f"/api/health no respondió ok: {salud!r}")
+
+    bases = {
+        b["name"]: b["id"]
+        for b in (mb.get("/api/database") or {}).get("data") or []
+        if str(b.get("name", "")).startswith(PREFIJO)
+    }
+    for nombre, base_id in bases.items():
+        fallas.comprobaciones += 1
+        try:
+            mb.post(f"/api/database/{base_id}/sync_schema")
+        except ErrorMetabase as e:
+            fallas.append(f"{nombre}: sync_schema -> {e}")
+            continue
+        if not _esperar_vista(mb, base_id, "v_segmentos", espera):
+            fallas.append(f"{nombre}: v_segmentos no aparece en sus metadatos tras sincronizar")
+
+    colecciones = [
+        c for c in mb.get("/api/collection") or []
+        if isinstance(c.get("id"), int) and str(c.get("name", "")).startswith(PREFIJO)
+    ]
+    tarjetas_por_base = {}
+    for c in colecciones:
+        items = (mb.get(f"/api/collection/{c['id']}/items?models=card") or {}).get("data") or []
+        tarjetas_por_base[c["name"]] = [i["id"] for i in items]
+        for item in items:
+            fallas.comprobaciones += 1
+            resultado = mb.post(f"/api/card/{item['id']}/query") or {}
+            if resultado.get("status") != "completed":
+                fallas.append(f"{c['name']}: la tarjeta «{item['name']}» no corrió ({resultado.get('status')!r})")
+
+    bases_por_org = {}
+    for org in usuarios:
+        fallas.comprobaciones += 1
+        base_id = _base_propia(mb, org)
+        if base_id is None:
+            fallas.append(f"{org}: no se encuentra su base (¿corrió provisionar.py con este tableros.json?)")
+        bases_por_org[org] = base_id
+
+    for org, (email, clave) in usuarios.items():
+        propia = bases_por_org.get(org)
+        if propia is None:
+            continue
+        nombre_propia = next(n for n, i in bases.items() if i == propia)
+        otro_org = next((o for o, b in bases_por_org.items() if o != org and b is not None), None)
+
+        mu = Metabase(url)
+        fallas.comprobaciones += 1
+        try:
+            mu.sesion(email, clave)
+        except ErrorMetabase as e:
+            fallas.append(f"{org}: no pudo iniciar sesión ({e})")
+            continue
+
+        fallas.comprobaciones += 1
+        vistas = {b["name"]: b["id"] for b in (mu.get("/api/database") or {}).get("data") or []}
+        ajenas = sorted(n for n, i in vistas.items() if i != propia)
+        if ajenas:
+            fallas.append(f"{org} ve, además de la suya, otra base: {', '.join(ajenas)}")
+
+        if otro_org is not None:
+            base_ajena = bases_por_org[otro_org]
+            nombre_ajena = next(n for n, i in bases.items() if i == base_ajena)
+            tarjeta_ajena = next(iter(tarjetas_por_base.get(nombre_ajena, [])), None)
+            if tarjeta_ajena is not None:
+                fallas.comprobaciones += 1
+                try:
+                    mu.get(f"/api/card/{tarjeta_ajena}")
+                except ErrorMetabase as e:
+                    if e.estado != 403:
+                        fallas.append(f"{org}: leer una tarjeta de {nombre_ajena} dio {e.estado}, no 403")
+                else:
+                    fallas.append(f"{org} pudo leer una tarjeta de {nombre_ajena}")
+
+            fallas.comprobaciones += 1
+            nativa_ajena = {"database": base_ajena, "type": "native", "native": {"query": "SELECT 1"}}
+            try:
+                mu.post("/api/dataset", nativa_ajena)
+            except ErrorMetabase as e:
+                if e.estado != 403:
+                    fallas.append(f"{org}: SQL nativo sobre {nombre_ajena} dio {e.estado}, no 403")
+            else:
+                fallas.append(f"{org} pudo correr SQL nativo sobre {nombre_ajena}")
+
+        fallas.comprobaciones += 1
+        nativa_propia = {"database": propia, "type": "native", "native": {"query": "SELECT 1"}}
+        try:
+            mu.post("/api/dataset", nativa_propia)
+        except ErrorMetabase as e:
+            if e.estado != 403:
+                fallas.append(
+                    f"{org}: SQL nativo sobre {nombre_propia} dio {e.estado}, no 403 (no debería tener SQL nativo)"
+                )
+        else:
+            fallas.append(f"{org} pudo correr SQL nativo sobre su propia base ({nombre_propia}): nadie debería tenerlo")
+
+    for org, propia in bases_por_org.items():
+        if propia is None:
+            continue
+        otro_org = next((o for o, b in bases_por_org.items() if o != org and b is not None), None)
+        if otro_org is None:
+            continue
+        fallas.comprobaciones += 1
+        consulta = {"database": propia, "type": "native", "native": {"query": f"ATTACH '/datos/{otro_org}.duckdb'"}}
+        resultado = mb.post("/api/dataset", consulta) or {}
+        if resultado.get("status") == "completed":
+            fallas.append(f"{org}: ATTACH '/datos/{otro_org}.duckdb' no dio error (aislamiento roto)")
+
+    return fallas

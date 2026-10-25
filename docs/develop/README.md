@@ -181,6 +181,9 @@ Entra con `admin@wasichai.local` / `admin`. El front necesita que el modelo est�
   catastro, hasta su brecha. Es el procedimiento que se siguió con Ica.
 - [develop/pruebas](../../develop/pruebas/README.md): una base, los dos Core y las dos UI en Docker, aparte de dev,
   con un padrón y un catastro ficticios para ensayar.
+- [metabase-cortes.md](metabase-cortes.md): Metabase sobre el corte analítico (`docs/informes/brecha`), un DuckDB
+  por organización; cómo desplegarlo, actualizarlo después de cada corte y probar su aislamiento con dos
+  organizaciones ficticias.
 
 ## Problemas comunes
 
