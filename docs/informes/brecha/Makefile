@@ -11,6 +11,8 @@
 #   make duckdb     ORG=<org>                                    downloads <org>'s latest corte and rebuilds its
 #                                                                 Metabase DuckDB file atomically (#206, task 8)
 #   make corte-ficticio ORG=<org> SEMILLA=<n> [SALIDA=<carpeta>]  a corte of a fictitious org, no real network
+#   make provisionar [ORGS="<org> <org>..."]                     creates or updates Metabase's databases, groups,
+#                                                                 collections and tableros (#206, task 10)
 #
 # FECHA defaults to today in America/Lima (herramientas.comun.hoy_lima()). SALIDA defaults to
 # $(HOME)/cortes/analitica (corte.py's own default) and can be moved with SALIDA=<carpeta base>; verificar and
@@ -22,6 +24,7 @@
 # Requirements: besides venv (duckdb, pyarrow), the AWS CLI to publicar and to duckdb (it downloads the
 # corte). VERSION_SRTM and VERSION_CATASTRO come from the environment or the make command line; without them
 # the manifest keeps them null, with a notice.
+# provisionar reads METABASE_URL, METABASE_ADMIN_EMAIL and METABASE_ADMIN_PASSWORD from the environment.
 
 SHELL := /bin/bash
 PYTHON ?= python3
@@ -53,7 +56,8 @@ CARPETA := $(CARPETA_BASE)/$(ORG)/$(FECHA)
 DESTINO := $(S3)/$(ORG)/$(FECHA)/
 MANIFIESTO_S3 := $(patsubst /%,%,$(S3_PREFIJO)/$(ORG)/$(FECHA)/manifiesto.json)
 
-.PHONY: venv pruebas comprobar-org comprobar-org-fecha extraer verificar publicar corte local duckdb corte-ficticio
+.PHONY: venv pruebas comprobar-org comprobar-org-fecha extraer verificar publicar corte local duckdb corte-ficticio \
+	provisionar
 
 # a stamp, not .venv/bin/python (a symlink: -nt would compare against the system interpreter and always
 # reinstall); an existing .venv is reused as is, never rebuilt with another $(PYTHON)
@@ -120,3 +124,10 @@ duckdb: comprobar-org venv
 corte-ficticio: comprobar-org venv
 	@test -n "$(SEMILLA)" || { echo "falta SEMILLA=<entero>"; exit 2; }
 	$(VPY) ficticio.py --org "$(ORG)" --semilla "$(SEMILLA)" --fecha "$(FECHA)" --salida "$(CARPETA_BASE_FICTICIO)"
+
+# #206 task 10: Metabase's databases, groups, collections and tableros (provisionar.py, metabase/tableros.json),
+# idempotent by name. ORGS is a space-separated list of claves whose nombre is in parametros.json (without it,
+# every organization there); an organization outside parametros.json goes straight to the script with
+# --org clave:"Nombre". The connection comes from METABASE_URL/METABASE_ADMIN_EMAIL/METABASE_ADMIN_PASSWORD.
+provisionar: venv
+	$(VPY) provisionar.py $(foreach org,$(ORGS),--org "$(org)")
