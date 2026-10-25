@@ -107,6 +107,22 @@ class SeguimientoTest {
     }
 
     @Test
+    fun `the aviso lists objetos and entregas without repeats in first-appearance order`() {
+        val cambios =
+            listOf(
+                cambio("A", objeto = "construccion", entrega = "E1"),
+                cambio("A", objeto = "predio_catastral", entrega = "E1"),
+                cambio("A", objeto = "construccion", entrega = "E2")
+            )
+
+        val a = Seguimiento.aviso(cambios, emptyList(), BigDecimal("5500.00")).single()
+
+        assertEquals(3, a.cambios)
+        assertEquals(listOf("construccion", "predio_catastral"), a.objetos)
+        assertEquals(listOf("E1", "E2"), a.entregas)
+    }
+
+    @Test
     fun `the aviso joins by the codigo as llave compares it`() {
         val filas = listOf(fila("1-1-6", "100.00"))
         val aviso = Seguimiento.aviso(listOf(cambio("01-01-0006")), filas, BigDecimal("5500.00"))
