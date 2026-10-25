@@ -25,8 +25,8 @@ from .tablas import ESQUEMAS
 
 VISTAS = comun.INFORME / "vistas.sql"
 
-# Without the plan's `SET lock_configuration = true` (controller ruling at #206 task 10's review: a plan
-# defect). The DuckDB driver 1.5.5.0 runs init_sql once per pooled connection and again on the duplicate()
+# Without the plan's `SET lock_configuration = true` (plan, Rulings de la ejecución, R28). The DuckDB driver
+# 1.5.5.0 runs init_sql once per pooled connection and again on the duplicate()
 # connection to the same instance that describe-database (sync) uses; with the configuration locked that second
 # run fails and sync with it, and so does the driver's own SET TimeZone. Without the lock INIT_SQL can run any
 # number of times, and enable_external_access still cannot be re-enabled (test_init_sql_aisla_la_base).
