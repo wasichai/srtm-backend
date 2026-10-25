@@ -33,7 +33,8 @@ fun copiaDe(origen: Declaracion) =
 // dto does not write. a rectificatoria (the same year) is the same declaración: all of them, the arancel with or
 // without its tramo de vía (id_aranc), and the mark that it changed since (ORIGEN_MODIFICADO), as a condómino's copy.
 // another year keeps the otras instalaciones (#208: a fixed amount, not depreciated again), not the figures of the
-// source's year (its arancel, valor_terreno, valor_construccion): as a nivel's clasificación (nivelesDelPadron)
+// source's year (its arancel, valor_terreno, valor_construccion): as a nivel's clasificación (nivelesDelPadron). the
+// year tells them apart: a rectificatoria never changes it (enSuLugar) and desde is never the same year (desdeOtroAnio)
 fun padronDeLaCopia(
     origen: Declaracion,
     copia: Declaracion
