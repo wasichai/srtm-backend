@@ -192,7 +192,14 @@ class VistasTests(ConCorte, unittest.TestCase):
         self.assertEqual(len(vistas), 13)
         for vista in vistas:
             with self.subTest(vista=vista):
-                con.execute(f"SELECT * FROM {vista}").fetchall()
+                # v_corte carries leido_en as TIMESTAMPTZ; fetching it as is would need duckdb's Python
+                # client to import pytz (plan § Rulings: duckdb/pyarrow are the only pinned dependencies),
+                # so it is cast to text here, like test_corte_manifiesto compares it in SQL instead of
+                # fetching it raw
+                if vista == "v_corte":
+                    con.execute(f"SELECT * REPLACE (leido_en::VARCHAR AS leido_en) FROM {vista}").fetchall()
+                else:
+                    con.execute(f"SELECT * FROM {vista}").fetchall()
         self.assertEqual(con.execute("SELECT count(*) FROM v_segmentos").fetchone()[0], 0)
 
     def test_corte_manifiesto(self):

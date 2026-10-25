@@ -1,5 +1,2 @@
 duckdb==1.5.5
 pyarrow==25.0.1
-# duckdb's Python client needs pytz to materialize a TIMESTAMPTZ value (corte_manifiesto.leido_en, v_corte):
-# task 8's v_corte is the first query in this project that fetches one instead of only comparing it in SQL.
-pytz==2026.5
