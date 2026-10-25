@@ -1,8 +1,9 @@
 """The corte's manifiesto.json: what was read, from where, with which method, and the sha256 of every file.
 
-contexto.md: the manifest carries no clock but `leido_en`; everything else is a function of the data, the
-checkout and the environment, so two cortes of the same data compare with `diff` save that one line.
-`verificar_corte` recomputes every sha256 and row count against it (task 6 loads a corte only after that).
+Plan (docs/superpowers/plans/2026-10-25-corte-analitico.md), § Rulings: the manifest carries no clock but
+`leido_en`; everything else is a function of the data, the checkout and the environment, so two cortes of the
+same data compare with `diff` save that one line. `verificar_corte` recomputes every sha256 and row count
+against it (task 6 loads a corte only after that).
 """
 
 import json

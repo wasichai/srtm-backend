@@ -1,10 +1,10 @@
 -- The views of a corte's DuckDB (base.construir_duckdb runs this file after loading the 17 tables and
 -- corte_manifiesto): the brecha by confianza, categoría and clase de construcción, and the predial in three
--- columns, the figures of the brecha report v3 (contexto.md; srtm-backend#205). Every statement is CREATE OR
--- REPLACE so the file can be run again over the same base.
+-- columns, the figures of the brecha report v3 (docs/superpowers/plans/2026-10-25-corte-analitico.md;
+-- srtm-backend#205). Every statement is CREATE OR REPLACE so the file can be run again over the same base.
 --
 -- Amounts stay DECIMAL: in DuckDB DECIMAL / DECIMAL is a DOUBLE, so a percentage is taken as × 0.01 and nothing
--- divides before a rounding step that has to match srtm to the céntimo (controller ruling R3).
+-- divides before a rounding step that has to match srtm to the céntimo (plan, Rulings de la ejecución, R3).
 
 -- The impuesto predial of a base (TUO LTM art. 13), as srtm's ImpuestoPredial.liquidar computes it: the base to
 -- the céntimo, each tramo's tax to the céntimo, and never less than the mínimo (a % of the UIT) while there is a
@@ -75,8 +75,8 @@ LEFT JOIN predominante p ON p.codigo_municipal = f.codigo_municipal
 ORDER BY f.codigo_municipal;
 
 -- Each brecha_predio with its ficha and clase. The join is on catastro's code (codigo_catastro), never on srtm's
--- predio.codigo, which splits a shared code into <codigo>-<n> (controller ruling R7); one ficha per code (the
--- lowest id) so a repeated code cannot count a predio twice. A NULL confianza (an srtm without #204) shows as
+-- predio.codigo, which splits a shared code into <codigo>-<n> (plan, Rulings de la ejecución, R7); one ficha per
+-- code (the lowest id) so a repeated code cannot count a predio twice. A NULL confianza (an srtm without #204) shows as
 -- SIN_DATO: the confianza rule is srtm's and is never derived here.
 CREATE OR REPLACE VIEW v_brecha_predio AS
 WITH ficha AS (
@@ -114,8 +114,8 @@ FROM v_brecha_predio
 GROUP BY confianza, clase
 ORDER BY confianza, clase;
 
--- The predial in three columns per contribuyente (contexto.md; controller ruling R4), over the vigentes DJ of the
--- año (estado empty or VIGENTE):
+-- The predial in three columns per contribuyente (plan § Rulings; plan, Rulings de la ejecución, R4), over the
+-- vigentes DJ of the año (estado empty or VIGENTE):
 --   declarado: impuesto_predial once over the sum of the contribuyente's bases; a DJ's base is the origin
 --     autoavalúo (valor_terreno + valor_construccion + valor_otras_instalaciones) × porcentaje_condominio / 100
 --     − deduccion, or its valor_afecto when it carries none of the three;

@@ -1,7 +1,8 @@
 """What the corte scripts share: parameters, dates, the corte folder, and the secrets file.
 
-A corte is a folder OUTSIDE the repository (contexto.md: URLs, credentials and the HMAC key go in
-~/.config/srtm-analitica/<org>.env, not in parametros.json). The repository's own path only matters to reject a
+A corte is a folder OUTSIDE the repository (plan: docs/superpowers/plans/2026-10-25-corte-analitico.md,
+§ Rulings: URLs, credentials and the HMAC key go in ~/.config/srtm-analitica/<org>.env, not in
+parametros.json). The repository's own path only matters to reject a
 corte folder that would fall inside it.
 """
 

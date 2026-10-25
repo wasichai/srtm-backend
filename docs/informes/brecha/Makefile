@@ -71,7 +71,7 @@ extraer: comprobar-org venv
 verificar: comprobar-org-fecha venv
 	$(VPY) corte.py --verificar "$(CARPETA)"
 
-# a published manifiesto.json is immutable (plan, Rulings): without REEMPLAZAR=1 an existing one is never
+# a published manifiesto.json is immutable (plan § Rulings): without REEMPLAZAR=1 an existing one is never
 # overwritten. head-object exits 0 when it exists; a 404 means it does not; any other error (credentials,
 # network, bucket) stops the publish instead of passing for "not published". The Parquet files go up first
 # and the manifest last: a cut publish leaves no manifest, so a retry is not refused. With REEMPLAZAR=1 the

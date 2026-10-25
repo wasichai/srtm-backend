@@ -1,12 +1,14 @@
-"""catastro-backend extraction for the corte (contexto.md § Tablas; contratos.md §1-§3; controller ruling R1).
+"""catastro-backend extraction for the corte (plan: docs/superpowers/plans/2026-10-25-corte-analitico.md,
+§ Tablas del corte; contratos.md §1-§3; plan, Rulings de la ejecución, R1).
 
 `extraer_catastro` reads catastro's five sources for one año: the three generic objects it shares with srtm's
 API shape (`predio_catastral`, `construccion`, `obra_complementaria`), and the three dedicated endpoints
-(valuaciones, titulares, cambios). The generic objects are already snake_case (seudonimo.py's own worktree
-DTOs, controller ruling R1); the dedicated endpoints answer camelCase (contratos.md §1-§3), so every item is
-remapped by hand to the table's snake_case column. `construccion`/`obra_complementaria`'s own `codigo_municipal`
-attribute is never trusted: it is looked up from the ficha their `predio` points to, so an orphan (a predio
-that matches no ficha) exports `None` instead of whatever stale value the row happened to carry.
+(valuaciones, titulares, cambios). The generic objects are already snake_case (srtm's ClienteCatastro DTOs,
+src/main/kotlin/srtm/brecha/ClienteCatastro.kt and Modelo.kt; R1); the dedicated endpoints answer camelCase
+(contratos.md §1-§3), so every item is remapped by hand to the table's snake_case column.
+`construccion`/`obra_complementaria`'s own `codigo_municipal` attribute is never trusted: it is looked up from
+the ficha their `predio` points to, so an orphan (a predio that matches no ficha) exports `None` instead of
+whatever stale value the row happened to carry.
 
 Titulares and cambios are tolerated missing (an older catastro-backend without those routes, catastro-backend
 issues #25 and #26): a 404 becomes an empty table and an aviso, like srtm.py's own absence-tolerance. Missing
@@ -21,7 +23,7 @@ from decimal import Decimal
 from .cliente import ErrorApi
 from .seudonimo import seudonimo
 
-# contexto.md § Tablas, in the order given there
+# plan § Tablas del corte, in the order given there
 COLUMNAS = {
     "catastro_ficha": (
         "id",
@@ -178,7 +180,7 @@ def _fila_valuacion(item):
 
 
 def _fila_lote(item):
-    """catastro_lote: only valuaciones that carry a `loteGeom` (contexto.md: the lote's geometry comes from
+    """catastro_lote: only valuaciones that carry a `loteGeom` (plan § Rulings: the lote's geometry comes from
     there). The centroid and the GeoJSON both go through the same float coordinates - `Cliente` parses JSON
     with `parse_float=Decimal`, which `json.dumps` cannot serialize on its own."""
     geometria = item.get("loteGeom")
@@ -250,7 +252,7 @@ def _centroide_anillo(anillo, area):
 
 def centroide(geometria):
     """The area centroid of the exterior ring of the largest polygon in a GeoJSON Polygon or MultiPolygon,
-    rounded to 7 decimals as `(lon, lat)` - Metabase OSS maps points, not polygons (contexto.md), so this is
+    rounded to 7 decimals as `(lon, lat)` - Metabase OSS maps points, not polygons (plan § Rulings), so this is
     all `catastro_lote` needs. `None` for anything else (no geometry, an empty ring, a degenerate polygon)."""
     if not geometria:
         return None
@@ -289,7 +291,8 @@ def extraer_catastro(cliente, anio, clave):
     }
 
     valuaciones = list(cliente.paginas("/api/catastro/valuaciones", _TAMANO_PAGINA, anio=anio))
-    # controller ruling R11: the motor's version/region are the top-level fields of that same call's first page
+    # plan, Rulings de la ejecución, R11: the motor's version/region are the top-level fields of that same
+    # call's first page
     motor = {"version": cliente.ultima_pagina.get("version"), "region": cliente.ultima_pagina.get("region")}
     avisos = [_AVISO_SIN_MOTOR.format(campo=campo) for campo in ("version", "region") if motor[campo] is None]
     tablas["catastro_valuacion"] = [_fila_valuacion(v) for v in valuaciones]

@@ -1,12 +1,13 @@
-"""The corte's 17 tables: columns, Arrow schemas and sort keys (contexto.md § Tablas; controller ruling R13).
+"""The corte's 17 tables: columns, Arrow schemas and sort keys (plan:
+docs/superpowers/plans/2026-10-25-corte-analitico.md, § Tablas del corte; plan, Rulings de la ejecución, R13).
 
 The column whitelists live once, in srtm.py and catastro.py; this module only adds types and order. The types
 are written here, not read from srtm's model at run time: like the pinned pyarrow, a change in a corte's bytes
 must be a deliberate change to this file. srtm's types follow model/model.json (DECIMAL, INTEGER, BOOLEAN,
 DATE, DATETIME; relations are the related record's uuid) and pruebas/test_tablas.py fails if they drift
-apart; the columns the model does not carry (the pseudonym, the per-contributor aggregates, controller ruling
-R6's columns, #204's confianza) and every catastro column are typed by their meaning. A column not named in
-_TIPOS is a string.
+apart; the columns the model does not carry (the pseudonym, the per-contributor aggregates, the columns of
+plan, Rulings de la ejecución, R6, #204's confianza) and every catastro column are typed by their meaning. A
+column not named in _TIPOS is a string.
 """
 
 import pyarrow as pa
@@ -68,7 +69,7 @@ _TIPOS = {
         "catastro": DECIMAL,
         "delta_impuesto": DECIMAL,
         "delta_arbitrios": DECIMAL,
-        # controller ruling R6 (origen stays a string)
+        # plan, Rulings de la ejecución, R6 (origen stays a string)
         "predios_confiable": ENTERO,
         "predios_dudoso": ENTERO,
         "predios_sin_levantar": ENTERO,
@@ -116,7 +117,7 @@ _TIPOS = {
     "catastro_cambio": {"en": INSTANTE},
 }
 
-# contexto.md § Tablas, "Orden"; parquet.escribir breaks any remaining tie with the other columns
+# plan § Tablas del corte, "Orden"; parquet.escribir breaks any remaining tie with the other columns
 ORDEN = {
     "srtm_predio": ("id",),
     "srtm_contribuyente": ("id",),

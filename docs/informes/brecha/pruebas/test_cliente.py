@@ -1,4 +1,4 @@
-"""The HTTP client against the fake srtm/catastro servers (contexto.md: cliente no reintenta salvo un 401)."""
+"""The HTTP client against the fake srtm/catastro servers (plan § Rulings: cliente no reintenta salvo un 401)."""
 
 import unittest
 from decimal import Decimal

@@ -1,4 +1,5 @@
-"""Normalization and pseudonymization of document numbers (HMAC-SHA256, Ruling in contexto.md)."""
+"""Normalization and pseudonymization of document numbers (HMAC-SHA256; plan:
+docs/superpowers/plans/2026-10-25-corte-analitico.md, § Rulings)."""
 
 import unittest
 

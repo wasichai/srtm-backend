@@ -1,5 +1,5 @@
 """A corte loaded into a DuckDB file: one materialized table per Parquet, the manifest's figures in
-`corte_manifiesto`, and the views of vistas.sql (contexto.md: tables, not views over the files, so Metabase opens
+`corte_manifiesto`, and the views of vistas.sql (plan § Rulings: tables, not views over the files, so Metabase opens
 the file read-only with external access off; `duckdb` is pinned to the driver's 1.5.5 for the same storage
 format).
 """

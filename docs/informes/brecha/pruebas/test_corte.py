@@ -123,7 +123,7 @@ class ConCorte:
 
 
 class CorteTests(ConCorte, unittest.TestCase):
-    # --- the brief's scenarios -----------------------------------------------------------------------------
+    # --- the plan's scenarios ------------------------------------------------------------------------------
 
     def test_dos_cortes_dan_los_mismos_sha256(self):
         s = datos(7)

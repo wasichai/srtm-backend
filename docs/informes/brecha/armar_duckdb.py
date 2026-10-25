@@ -1,5 +1,5 @@
 """Loads a corte into a DuckDB file: its 17 tables, corte_manifiesto and the views of vistas.sql
-(herramientas/base.py; contexto.md; srtm-backend#205).
+(herramientas/base.py; docs/superpowers/plans/2026-10-25-corte-analitico.md; srtm-backend#205).
 
     python3 -I armar_duckdb.py --corte CARPETA --destino ARCHIVO
 

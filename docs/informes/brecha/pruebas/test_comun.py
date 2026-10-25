@@ -1,4 +1,5 @@
-"""Shared helpers: parameters, dates, the corte folder, and the secrets file (contexto.md rulings)."""
+"""Shared helpers: parameters, dates, the corte folder, and the secrets file (plan:
+docs/superpowers/plans/2026-10-25-corte-analitico.md, § Rulings)."""
 
 import tempfile
 import unittest

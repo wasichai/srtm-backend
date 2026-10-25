@@ -31,8 +31,8 @@ El corte lee las dos APIs con cuentas de servicio de solo lectura, cada una acot
 
 Cada tabla sale de una sola fuente y con una lista blanca de columnas fija: ni nombres, ni domicilios, ni
 direcciones, ni `partida_registral`, ni `condicion_numero_documento`, ni textos libres, ni fechas personales
-(minimización, Ley 29733). Solo salen los contribuyentes y titulares que aparecen en una declaración jurada o
-en una cuota del año del corte.
+(minimización, Ley 29733). De srtm solo salen los contribuyentes que aparecen en una declaración jurada o en
+una cuota del año del corte; de catastro salen todos los titulares, seudonimizados y sin nombres.
 
 [cols="2,2,4",options="header"]
 |===
@@ -40,8 +40,8 @@ en una cuota del año del corte.
 
 |`srtm_predio`
 |registros `predio`
-|Identificación catastral del predio en srtm; `codigo_origen` (controller ruling R6) cuando el predio viene de
-un padrón de origen distinto del propio.
+|Identificación catastral del predio en srtm; `codigo_origen` cuando el predio viene de un padrón de origen
+distinto del propio (`null` en un srtm que todavía no tiene ese atributo).
 
 |`srtm_contribuyente`
 |registros `contribuyente` (solo los citados)
@@ -64,8 +64,9 @@ cálculo.
 |`srtm_brecha_corrida`
 |registros `brecha_corrida?anio=` (la elegida)
 |La corrida de brecha `TERMINADA` más reciente del año (empate: mayor `id`). Además de sus totales, trae
-`origen` y, desde el controller ruling R6, el desglose por confianza: `predios_confiable`, `predios_dudoso`,
-`predios_sin_levantar`, `delta_impuesto_confiable`, `delta_impuesto_dudoso`, `delta_impuesto_sin_levantar`.
+`origen` y el desglose por confianza: `predios_confiable`, `predios_dudoso`, `predios_sin_levantar`,
+`delta_impuesto_confiable`, `delta_impuesto_dudoso`, `delta_impuesto_sin_levantar` (`null` en un srtm que
+todavía no tiene esas columnas).
 
 |`srtm_brecha_predio`
 |registros `brecha_predio?corrida=`

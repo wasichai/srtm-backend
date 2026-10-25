@@ -1,4 +1,4 @@
-"""One Parquet file per table, byte-identical for the same data (contexto.md: Parquet and decimals rulings).
+"""One Parquet file per table, byte-identical for the same data (plan § Rulings: Parquet, decimals).
 
 Every value is converted to its column's type first (tablas.ESQUEMAS), so a DECIMAL that arrives as an int, as
 text or with more than 10 decimals is quantized ROUND_HALF_EVEN instead of reaching pyarrow as something it
@@ -16,7 +16,7 @@ import pyarrow.parquet as pq
 from . import comun
 from .tablas import COLUMNAS, ESQUEMAS, ORDEN
 
-# contexto.md Parquet ruling; pyarrow is pinned because a new version may change these bytes
+# plan § Rulings, Parquet; pyarrow is pinned because a new version may change these bytes
 OPCIONES = {
     "compression": "zstd",
     "compression_level": 3,

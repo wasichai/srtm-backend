@@ -1,4 +1,5 @@
-"""Normalization and pseudonymization of document numbers (contexto.md: HMAC-SHA256, without the document type).
+"""Normalization and pseudonymization of document numbers (plan § Rulings: HMAC-SHA256, without the
+document type).
 
 The HMAC is computed over the normalized number, never over the raw document or together with its type: srtm and
 catastro write the type differently, and #204 already compares documents without leading zeros.
@@ -12,7 +13,7 @@ from .comun import ErrorCorte
 
 _NO_ALFANUMERICO = re.compile(r"[^0-9A-Z]")
 
-# the rule normalizar_documento applies, in words, for the corte's manifest (contexto.md HMAC ruling)
+# the rule normalizar_documento applies, in words, for the corte's manifest (plan § Rulings, HMAC)
 NORMALIZACION = "sin espacios, en mayúsculas, solo [0-9A-Z], sin ceros a la izquierda; vacío -> null"
 
 

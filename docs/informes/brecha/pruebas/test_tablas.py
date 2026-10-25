@@ -23,7 +23,7 @@ OBJETO_SRTM = {
     "srtm_arancel": "arancel",
 }
 
-# contexto.md § Tablas: model type -> Arrow; every other model type (TEXT, ENUM, UUID, LONG_TEXT...) is a string
+# plan § Tablas del corte: model type -> Arrow; every other model type (TEXT, ENUM, UUID, LONG_TEXT...) is a string
 POR_TIPO_DEL_MODELO = {"DECIMAL": DECIMAL, "INTEGER": ENTERO, "BOOLEAN": LOGICO, "DATE": FECHA, "DATETIME": INSTANTE}
 
 

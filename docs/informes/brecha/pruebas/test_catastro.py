@@ -1,4 +1,4 @@
-"""catastro extraction for the corte, against `CatastroFalso(minimos().catastro, ...)` (task-3-brief.md's fixed
+"""catastro extraction for the corte, against `CatastroFalso(minimos().catastro, ...)` (sinteticos.py's fixed
 fixture) and a couple of variants of it for the two shapes an older catastro-backend can serve (contratos.md
 §1-§3: missing /titulares or /cambios, or missing §1's seven new valuaciones keys)."""
 

@@ -260,7 +260,7 @@ class SrtmFalso(ServidorFalso):
 class CatastroFalso(ServidorFalso):
     """catastro-backend's reads for the corte: the generic record API (like SrtmFalso, for predio_catastral,
     construccion, obra_complementaria) plus the three dedicated endpoints of contratos.md §1-§3. `sin_titulares`
-    and `sin_cambios` simulate an older catastro that lacks those routes (404, contexto.md's tolerance ruling);
+    and `sin_cambios` simulate an older catastro that lacks those routes (404, the plan's tolerance ruling);
     `sin_llaves_nuevas` drops §1's seven new keys from every valuaciones item (an older engine); `tamano_servido`
     caps the `size` valuaciones/titulares serve, whatever was asked (srtm's ClienteCatastro.kt: catastro "may cap
     the one asked"). `barajar` shuffles the record objects, valuaciones and titulares, and cambios only among rows

@@ -2,9 +2,9 @@
 
 Stdlib only (urllib), like model/core_client.py. A service token is fetched with POST {base}/api/auth/token
 {"clientId", "clientSecret"} and cached; the client never retries on its own except once, re-authenticating on a
-401 (contexto.md ruling: "el cliente HTTP no reintenta, salvo volver a pedir el token una vez ante un 401;
+401 (plan § Rulings: "el cliente HTTP no reintenta, salvo volver a pedir el token una vez ante un 401;
 cualquier otro error aborta el corte sin escribir ni publicar nada"). JSON bodies are read with
-parse_float=Decimal (contexto.md: DECIMAL columns must stay exact, never a float).
+parse_float=Decimal (plan § Rulings: DECIMAL columns must stay exact, never a float).
 """
 
 import http.client
@@ -20,7 +20,7 @@ TIMEOUT = 60
 
 class ErrorApi(Exception):
     """An API call that failed. Its message carries only the method, route and status - never a token or a
-    secret, so it is always safe to print or log (contexto.md: "nunca el secreto")."""
+    secret, so it is always safe to print or log (plan § Rulings: "nunca el secreto")."""
 
     def __init__(self, metodo, ruta, estado):
         super().__init__(f"{metodo} {ruta} -> {estado}")

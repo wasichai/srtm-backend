@@ -1,11 +1,11 @@
-"""Synthetic srtm/catastro fixtures for the corte (task-3-brief.md, contexto.md).
+"""Synthetic srtm/catastro fixtures for the corte (docs/superpowers/plans/2026-10-25-corte-analitico.md, task 3).
 
 Two generators, both returning a `Sinteticos`:
-  - `minimos()`: the exact, hand-picked dataset from the brief (fixed ids, fixed figures), built to exercise
+  - `minimos()`: the exact, hand-picked dataset of the plan's task 3 (fixed ids, fixed figures), built to exercise
     every edge case `srtm.extraer_srtm` must handle (a contributor cited by nothing, a declaración with no
     origin values, a brecha_predio with no predio, a parámetro ANULADO, ...). Used by `pruebas/test_srtm.py`.
   - `datos(semilla, contribuyentes=40)`: a larger, seeded-random dataset (same srtm/catastro shape) for a
-    whole corte to run against (task 5); R2 (controller ruling) binds its documents: DNIs of 8 digits and
+    whole corte to run against (task 5); plan, Rulings de la ejecución, R2, binds its documents: DNIs of 8 digits and
     RUCs of 11 digits with a non-zero first digit, all distinct from every exported code.
 
 Every record is `{"id", "attributes"}`, the shape `Cliente.registros()` yields and the fakes
@@ -49,7 +49,7 @@ def _unico(valores):
     return vistos
 
 
-# minimos(): fixed ids, named after the brief so pruebas/test_srtm.py can import them directly
+# minimos(): fixed ids, named after the plan's task 3 so pruebas/test_srtm.py can import them directly
 P1, P2 = "P1", "P2"
 C1, C2, C3 = "C1", "C2", "C3"
 D1, D2, D3, D4 = "D1", "D2", "D3", "D4"
@@ -67,7 +67,7 @@ DOCUMENTO_TITULAR_F1 = "4587963"
 
 
 def minimos():
-    """The brief's exact fixture: two predios, three contribuyentes (one cited by nothing), four declaraciones
+    """Task 3's exact fixture: two predios, three contribuyentes (one cited by nothing), four declaraciones
     across two años, one brecha corrida TERMINADA (plus a decoy of an older one) and a third brecha_predio with
     neither a predio nor a confianza - the two absence-tolerance cases srtm.py must handle."""
     predios = [
@@ -116,7 +116,7 @@ def minimos():
             valor_autoavaluo=95000,
             valor_afecto=95000,
             deduccion=0,
-            # on the whitelist's reject list (contexto.md): must never reach srtm_declaracion
+            # on the whitelist's reject list (plan § Rulings): must never reach srtm_declaracion
             condicion_numero_documento="RES-001-SINTETICA",
             otros_datos="texto libre que tampoco debe salir",
         ),
@@ -222,7 +222,7 @@ def minimos():
             catastro=2600.00,
             delta_impuesto=-35.00,
             delta_arbitrios=0.00,
-            # controller ruling R6: 7 more columns, populated here so srtm.py's pass-through is exercised
+            # plan, Rulings de la ejecución, R6: 7 more columns, populated here so srtm.py's pass-through is exercised
             origen="MANUAL",
             predios_confiable=1,
             predios_dudoso=1,
@@ -569,7 +569,7 @@ def _ruc(rng, usados):
 def datos(semilla, contribuyentes=40):
     """A seeded-random dataset of `contribuyentes` contributors (predio + declaración + nivel + 4 cuotas each,
     one brecha_predio under a single corrida TERMINADA) plus a matching catastro: a ficha, titular and
-    valuación per predio, consistent by código. Documents follow controller ruling R2: 8-digit DNIs and
+    valuación per predio, consistent by código. Documents follow plan, Rulings de la ejecución, R2: 8-digit DNIs and
     11-digit RUCs (first digit non-zero), never repeated and never equal to any predio/ficha código (those
     use a distinct, shorter "0101NNN" shape, so a collision is not just unlikely - it cannot happen)."""
     rng = random.Random(semilla)

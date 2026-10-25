@@ -1,6 +1,6 @@
-"""srtm extraction for the corte, against `SrtmFalso(minimos().srtm)` (task-3-brief.md's fixed fixture) and a
+"""srtm extraction for the corte, against `SrtmFalso(minimos().srtm)` (sinteticos.py's fixed fixture) and a
 couple of trimmed variants of it for the two scenarios minimos() alone cannot show at once (no corrida
-TERMINADA; a corrida missing controller ruling R6's seven columns)."""
+TERMINADA; a corrida missing the seven columns of plan, Rulings de la ejecución, R6)."""
 
 import unittest
 from decimal import Decimal
@@ -118,7 +118,7 @@ class ExtraccionMinimosTests(unittest.TestCase):
         self.assertIs(self.ext.parametros, self.ext.tablas["srtm_parametro"])
 
     def test_columnas_r6_pasan_tal_cual(self):
-        # controller ruling R6: srtm_predio.codigo_origen y los 7 campos nuevos de srtm_brecha_corrida
+        # plan, Rulings de la ejecución, R6: srtm_predio.codigo_origen y los 7 campos nuevos de srtm_brecha_corrida
         predios = _por_id(self.ext.tablas["srtm_predio"])
         self.assertEqual(predios[P1]["codigo_origen"], "0101001-1")
         self.assertIsNone(predios[P2]["codigo_origen"])  # P2 no trae el atributo
@@ -190,7 +190,7 @@ class SinteticosCatastroTests(unittest.TestCase):
 
 
 class DatosTests(unittest.TestCase):
-    """sinteticos.datos(7): controller ruling R2 (documents) plus a smoke run of the whole extraction."""
+    """sinteticos.datos(7): plan, Rulings de la ejecución, R2 (documents) plus a smoke run of the whole extraction."""
 
     def test_documentos_cumplen_la_regla_r2(self):
         documentos = [f["attributes"]["numero_documento"] for f in sinteticos.datos(7).srtm["contribuyente"]]

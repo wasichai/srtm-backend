@@ -1,5 +1,6 @@
 """Takes one organization's corte: srtm and catastro read through their APIs, written as one Parquet file per
-table plus manifiesto.json, in <salida>/<org>/<fecha>/ (contexto.md; srtm-backend#205).
+table plus manifiesto.json, in <salida>/<org>/<fecha>/ (plan: docs/superpowers/plans/2026-10-25-corte-analitico.md;
+srtm-backend#205).
 
     python3 -I corte.py --org perene [--fecha AAAA-MM-DD] [--salida DIR] [--secretos ARCHIVO] [--reemplazar]
     python3 -I corte.py --verificar CARPETA
@@ -85,7 +86,7 @@ def _cliente(secretos, prefijo):
 
 
 def _backends(secretos):
-    # contexto.md: no backend publishes its version through the API; make passes them in the environment
+    # plan § Rulings: no backend publishes its version through the API; make passes them in the environment
     return {
         "srtm": {"url": secretos["SRTM_URL"], "version": os.environ.get("VERSION_SRTM") or None},
         "catastro": {"url": secretos["CATASTRO_URL"], "version": os.environ.get("VERSION_CATASTRO") or None},

@@ -1,7 +1,8 @@
-"""srtm extraction for the corte (contexto.md § Tablas; controller ruling R6 for the two columns it adds).
+"""srtm extraction for the corte (docs/superpowers/plans/2026-10-25-corte-analitico.md § Tablas del corte;
+plan, Rulings de la ejecución, R6, for the columns it adds).
 
 `extraer_srtm` reads the ten `srtm_*` objects of one año and turns each into the exact row shape its table
-needs: a column whitelist (contexto.md's minimization ruling - no names, no addresses, no free text), the
+needs: a column whitelist (the plan's minimization ruling - no names, no addresses, no free text), the
 contributor's document seudonimizado instead of its number, and the brecha corrida chosen by its own ruling
 (TERMINADA, most recent `terminado`, ties broken by the highest `id`). Every column defaults to `None` when
 its attribute is missing - this is what makes confianza/confianza_motivo (srtm-backend#204, not in every
@@ -13,8 +14,8 @@ from dataclasses import dataclass
 
 from .seudonimo import seudonimo
 
-# contexto.md § Tablas, in the order given there; srtm_brecha_corrida's last 7 and srtm_predio's last 1 are
-# controller ruling R6 (contratos.md §5, lane B): present in the row, null until lane B's columns exist
+# plan § Tablas del corte, in the order given there; srtm_brecha_corrida's last 7 and srtm_predio's last 1 are
+# plan, Rulings de la ejecución, R6 (contratos.md §5, lane B): present in the row, null until lane B's columns exist
 COLUMNAS = {
     "srtm_predio": (
         "id",
@@ -169,7 +170,7 @@ class ExtraccionSrtm:
 
 def _fila(columnas, registro):
     """A row with exactly `columnas`: every relation/attribute by its fieldName, `None` when it is absent -
-    this is the whitelist (contexto.md) and the R6/#204 absence-tolerance at the same time."""
+    this is the whitelist (plan § Rulings) and the R6/#204 absence-tolerance at the same time."""
     atributos = registro.get("attributes", {})
     fila = {columna: atributos.get(columna) for columna in columnas}
     fila["id"] = registro["id"]
@@ -190,7 +191,7 @@ def _fila_contribuyente(registro, clave):
 
 
 def _elegir_corrida(corridas):
-    # contexto.md ruling: TERMINADA, terminado más reciente; empate, el id mayor
+    # plan § Rulings: TERMINADA, terminado más reciente; empate, el id mayor
     terminadas = [c for c in corridas if c["attributes"].get("estado") == "TERMINADA"]
     if not terminadas:
         return None
@@ -229,7 +230,7 @@ def _impuesto_por_contribuyente(cuotas):
 
 
 def _parametros_vigentes(parametros, anio):
-    # contexto.md ruling: vigentes al 1 de enero del año, de todos los tipos, estado VIGENTE o vacío
+    # plan § Rulings: vigentes al 1 de enero del año, de todos los tipos, estado VIGENTE o vacío
     primero_enero = f"{anio}-01-01"
     vigentes = []
     for parametro in parametros:
