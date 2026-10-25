@@ -4,6 +4,7 @@ import jakarta.annotation.PreDestroy
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.reactive.awaitFirstOrNull
@@ -31,6 +32,7 @@ import srtm.rentas.PREDIO
 import srtm.rentas.Predio
 import srtm.rentas.Records
 import srtm.rentas.Registros
+import srtm.sanciones.Multas
 import wasichai.core.common.Actions
 import wasichai.core.common.ConflictException
 import wasichai.core.common.ForbiddenException
@@ -39,6 +41,7 @@ import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
 import wasichai.core.common.UnauthorizedException
 import wasichai.core.common.ValidationException
+import wasichai.core.data.RecordCriterion
 import wasichai.core.data.RecordQuery
 import wasichai.core.data.RecordService
 import wasichai.core.identity.AuthenticatedUser
@@ -210,6 +213,37 @@ class BrechaService(
 
     // every row of a corrida
     suspend fun filas(corrida: String): List<FilaBrecha> = registros.all(BRECHA_PREDIO, FilaBrecha::class.java, filters = mapOf("corrida" to corrida))
+
+    // GET /{anio}/cambios (ruling #203): the corrida and its filas are read as the caller (its own permission on
+    // brecha_corrida and brecha_predio), but cambio_catastro as the platform, so no role needs a new permission over
+    // it. `asPlatform` refuses inside a request (ADR-039): the block runs in this service's own background scope,
+    // detached from the request's Reactor context, and the caller awaits it
+    suspend fun cambios(
+        anio: Int,
+        corrida: UUID?,
+        desde: LocalDate?,
+        objeto: String?
+    ): List<CambioDelPredio> {
+        val usuario = currentUser.require()
+        val r = corridaDelAnio(anio, corrida)
+        val filasDeLaCorrida = filas(r.id!!)
+        val resultado = Multas.uit(parametrosTributarios.todos(), LocalDate.of(anio, 1, 1))
+        val uit = resultado.valor ?: throw FaltanBrecha(resultado.faltan)
+        val desdeInstante = (desde ?: LocalDate.of(anio, 1, 1)).atStartOfDay(Seguimiento.LIMA).toInstant()
+        val cambios =
+            scope
+                .async {
+                    records.asPlatform(usuario.organizationId, "srtm:aviso-cambios") {
+                        registros.donde(
+                            CAMBIO_CATASTRO,
+                            RegistroCambio::class.java,
+                            listOf(desdeDe(desdeInstante)),
+                            filters = objeto?.let { mapOf("objeto" to it) } ?: emptyMap()
+                        )
+                    }
+                }.await()
+        return Seguimiento.aviso(cambios, filasDeLaCorrida, uit.valorNumerico!!)
+    }
 
     // a page of a corrida's rows, by categoría, sector and confianza when given, in their orden (Brecha.ordenadas: the
     // padrón's code, then the catastro's; unique, so pages never shuffle)
@@ -431,6 +465,14 @@ class BrechaService(
 
         // a corrida whose latido is older is abandoned (its instance died): generous, the read of catastro beats once
         val LEASE: Duration = Duration.ofMinutes(10)
+
+        // cambio_catastro's `en` (DATETIME) at or after `desde` (ruling #203 R2: Peticiones.entre does not exist;
+        // bound as an Instant, the type the column's timestamptz compares correctly)
+        fun desdeDe(desde: Instant): RecordCriterion =
+            RecordCriterion { definition, bind ->
+                val columna = "\"${definition.fields.first { it.name == "en" }.columnName}\""
+                "$columna >= ${bind(desde)}"
+            }
     }
 }
 

@@ -408,6 +408,8 @@ class BrechaApiTest : SrtmApiTest() {
         send("POST", "/api/srtm/brecha/corridas", mapOf("anio" to 2026), HttpStatus.FORBIDDEN, lector)
         send("GET", "/api/srtm/brecha/2026/panel", null, HttpStatus.FORBIDDEN, lector)
         send("GET", "/api/srtm/brecha/corridas", null, HttpStatus.FORBIDDEN, lector)
+        // #203: the aviso de cambios asks the same read, no role needs a new permission over cambio_catastro
+        send("GET", "/api/srtm/brecha/2026/cambios", null, HttpStatus.FORBIDDEN, lector)
     }
 
     // an item as catastro-backend answered before #204; llavesNuevas adds its keys (string values, or null)

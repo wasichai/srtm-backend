@@ -1175,6 +1175,18 @@ también al consultarla.
 |Fallos
 |Catastro responde 403 (la cuenta no lee alguno de sus objetos), no devuelve valuaciones del año con un padrón no
 vacío, o faltan la UIT, los tramos o el mínimo del año: la corrida queda FALLIDA con el motivo en `mensaje`.
+
+|Seguimiento
+|Con `SRTM_CATASTRO_SEGUIMIENTO_MINUTOS` > 0 (#203), `SeguimientoCatastro` lee cada tantos minutos
+`GET \{url}/api/catastro/cambios` de cada organización con catastro, desde su `cursor` (`sincronizacion_catastro`,
+una fila por organización), y guarda cada cambio en `cambio_catastro` (código municipal, objeto, operación, campos,
+fecha y entrega). Bajo `ClusterLock`, una instancia por organización, y como la plataforma: ningún usuario lanza esta
+corrida. A la hora de Lima `SRTM_CATASTRO_SEGUIMIENTO_HORA` (por defecto 2), como máximo una corrida automática al
+día: `CAMBIOS` si hay cambios pendientes desde la última (o la última automática quedó FALLIDA), o `SEMANAL` si no
+hubo ninguna en los últimos 7 días, aunque no haya cambios (recupera lo que el feed de catastro pudiera perder). Una
+diferencia catastral mayor a 5 UIT (del 1 de enero del año) obliga a presentar DJ (LTM art. 14 b); la fiscalización
+alcanza 4 años, o 6 si no hubo DJ (CT art. 43): por eso `GET /{anio}/cambios` marca `SUPERA_5_UIT`, como lista de
+trabajo. Una lectura fallida deja `error` en `sincronizacion_catastro` y no decide nada esa vuelta.
 |===
 
 NOTE: Las decisiones del cruce y del cálculo las confirmó la municipalidad el 19 de octubre de 2026, salvo D8: D5
@@ -1370,6 +1382,11 @@ programadores externos. El estado vive en PostgreSQL y, para los archivos, en el
 |`POST /api/srtm/brecha/corridas`; un solo trabajador en la instancia que recibió el POST
 |`GET /api/srtm/brecha/corridas/{id}`: `totalPredios`, `procesados`, `mensaje`.
 
+|Seguimiento del catastro
+|Cada `SRTM_CATASTRO_SEGUIMIENTO_MINUTOS` (si es > 0), una instancia por organización bajo `ClusterLock`
+|`GET /api/objects/sincronizacion_catastro/records`: `cursor`, `ultima_corrida`, `pendientes`, `error`; la corrida
+que dispara, en `GET /api/srtm/brecha/corridas?anio` (`origen` CAMBIOS o SEMANAL).
+
 |Recuperación al arrancar
 |`ApplicationReadyEvent` de cada instancia
 |Log: «N emisiones masivas sin quien las corriera pasan a FALLIDA».
@@ -1403,6 +1420,10 @@ programadores externos. El estado vive en PostgreSQL y, para los archivos, en el
 * Un trabajo cuyo creador fue borrado o deshabilitado falla sin reintentos: los lotes corren con sus permisos.
 * La corrida de la brecha no se retoma: si su instancia muere, a los 10 minutos sin latido se informa FALLIDA y se
   puede lanzar otra.
+* El seguimiento del catastro no reintenta solo: una lectura que falla deja `error` en `sincronizacion_catastro` y
+  no decide nada esa vuelta; la siguiente, a los `SRTM_CATASTRO_SEGUIMIENTO_MINUTOS`, lo intenta de nuevo desde el
+  mismo `cursor`. Si la última corrida automática quedó FALLIDA, la siguiente vuelta la reintenta como `CAMBIOS`
+  aunque no haya cambios nuevos.
 
 [[async-instancias]]
 === Varias instancias

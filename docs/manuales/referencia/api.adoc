@@ -727,7 +727,8 @@ Base: `/api/srtm/brecha`. Controlador `BrechaController`. Toda consulta pide ant
 |`GET /corridas?anio`, `GET /corridas/{id}`
 |Corridas (la más reciente primero) y una con su avance. Una activa sin latido por más de 10 minutos se informa
 FALLIDA. Terminada, trae los predios y el Δ impuesto por confianza (`prediosConfiables`, `prediosDudosos`,
-`prediosSinLevantar`, `deltaImpuestoConfiable`, `deltaImpuestoDudoso`, `deltaImpuestoSinLevantar`).
+`prediosSinLevantar`, `deltaImpuestoConfiable`, `deltaImpuestoDudoso`, `deltaImpuestoSinLevantar`) y su `origen`
+(#203: `MANUAL`, `CAMBIOS` o `SEMANAL`; `null` en una corrida anterior, una `MANUAL`).
 |200; 404.
 
 |`GET /{anio}/panel?corrida`
@@ -742,4 +743,12 @@ FALLIDA. Terminada, trae los predios y el Δ impuesto por confianza (`prediosCon
 |`GET /{anio}/lotes?corrida`
 |`FeatureCollection` GeoJSON (EPSG:4326) con `{categoria, codigo, deltaImpuesto}`.
 |200; 404.
+
+|`GET /{anio}/cambios?corrida&desde&marca&objeto&page&size`
+|Predios con cambios en catastro desde `desde` (AAAA-MM-DD, por omisión el 1 de enero del año), con el Δ autoavalúo
+de la última corrida TERMINADA (o de `corrida`) y `marca = SUPERA_5_UIT` cuando |Δ| pasa de 5 UIT del 1 de enero del
+año (#203). Lee `cambio_catastro` como la plataforma: no pide un permiso propio. Página de 25 por omisión, marcados
+primero, luego |Δ| de mayor a menor (los sin corrida al final) y por código municipal.
+|200; 404 sin corrida TERMINADA del año; 422 `desde`, `marca` (solo `SUPERA_5_UIT`), `objeto` (uno de los cuatro de
+catastro), `page` o `size` inválidos, o falta la UIT del año (`faltan`).
 |===

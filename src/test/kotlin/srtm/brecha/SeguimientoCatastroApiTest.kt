@@ -18,6 +18,7 @@ import srtm.rentas.SrtmApiTest
 import tools.jackson.databind.JsonNode
 import wasichai.core.platform.ClusterLock
 import wasichai.core.platform.TenantDirectory
+import java.math.BigDecimal
 import java.net.InetSocketAddress
 import java.time.Instant
 import java.time.ZonedDateTime
@@ -104,6 +105,49 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
     ) = runBlocking { seguimiento.vuelta(ahora, hora) }
 
     private fun ahora() = ZonedDateTime.now(Seguimiento.LIMA)
+
+    // #203: the aviso's fixture, as BrechaApiTest's (a predio with a DJ and catastro's valued item, through the
+    // portal's own api)
+    private fun predio(
+        org: String,
+        codigo: String
+    ) = post(
+        "/api/srtm/predios",
+        mapOf("codigo" to codigo, "direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO", "sector_catastral" to "01"),
+        org
+    )["id"].asString()
+
+    private fun contribuyente(org: String) = post("/api/srtm/contribuyentes", personaNatural(uniqueDocumento()), org)["id"].asString()
+
+    private fun declarar(
+        org: String,
+        contribuyente: String,
+        predio: String,
+        autoavaluo: String,
+        anio: Int
+    ) {
+        val id =
+            post(
+                "/api/srtm/declaraciones",
+                mapOf("contribuyente" to contribuyente, "predio" to predio, "anio" to anio, "secuencia_uso" to "1"),
+                org
+            )["id"].asString()
+        val guardada = tree(send("GET", "/api/objects/declaracion_predial/records/$id", null, HttpStatus.OK, org))["attributes"]
+        val valores =
+            mapOf(
+                "valor_autoavaluo" to autoavaluo.toBigDecimal(),
+                "valor_condominio" to autoavaluo.toBigDecimal(),
+                "valor_afecto" to autoavaluo.toBigDecimal()
+            )
+        send("PUT", "/api/objects/declaracion_predial/records/$id", mapOf("attributes" to fields(guardada) + valores), HttpStatus.OK, org)
+    }
+
+    private fun item(
+        codigo: String,
+        autoavaluo: String
+    ) = """{"codigoMunicipal":"$codigo","codigoCpu":null,"sector":"01","manzana":"A","lote":"1","uso":"010101",
+        "areaTerreno":200,"areaConstruida":100,"longitudFrente":10.5,"terreno":1.00,"construccion":1.00,"obras":0.00,
+        "autoavaluo":$autoavaluo,"motivo":null,"llave":null,"loteGeom":null}"""
 
     @Test
     fun `a change read from catastro leaves its cambio_catastro and moves the cursor`() {
@@ -239,6 +283,57 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
         assertNull(sincronizacion(org)["error"]?.takeUnless { it.isNull })
     }
 
+    // #203: GET /{anio}/cambios, task 19
+    @Test
+    fun `the aviso lists the changed predios with their difference and marks those above 5 UIT`() {
+        val falso = FALSOS.getValue("aviso")
+        val (org, _) = organizacion(falso)
+        val sufijo = uniqueDocumento()
+        val anio = ahora().year
+        val a = "A-$sufijo"
+        val b = "B-$sufijo"
+        val contribuyente = contribuyente(org)
+        declarar(org, contribuyente, predio(org, a), "100000.00", anio)
+        declarar(org, contribuyente, predio(org, b), "100000.00", anio)
+        val uit = Parametros.uit(anio)
+        // A: catastro pasa de 5 UIT la diferencia por 0.01; B: se queda muy por debajo
+        val catastroA = BigDecimal("100000.00").add(uit.multiply(BigDecimal(5))).add(BigDecimal("0.01"))
+        falso.items.set(listOf(item(a, catastroA.toPlainString()), item(b, "101000.00")))
+        falso.paginas.set(
+            mapOf(
+                "" to
+                    pagina(
+                        "c1",
+                        false,
+                        cambio(a, "2026-10-20T15:00:00Z"),
+                        cambio(a, "2026-10-21T15:00:00Z"),
+                        cambio(b, "2026-10-20T16:00:00Z")
+                    )
+            )
+        )
+
+        // pendientes > 0: the hour's pass launches CAMBIOS (hora 0: the pass always reaches it)
+        vuelta(ahora(), hora = 0)
+        val lanzada = corridas(org, anio).single()
+        assertEquals("CAMBIOS", lanzada["origen"].asString())
+        assertEquals(TERMINADA, terminada(org, lanzada["id"].asString())["estado"].asString())
+
+        val resp = tree(send("GET", "/api/srtm/brecha/$anio/cambios", null, HttpStatus.OK, org))
+        assertEquals(2, resp["totalElements"].asInt())
+        val content = resp["content"]
+        assertEquals(a, content[0]["codigoMunicipal"].asString())
+        assertEquals("SUPERA_5_UIT", content[0]["marca"].asString())
+        assertEquals(2, content[0]["cambios"].asInt())
+        assertEquals(b, content[1]["codigoMunicipal"].asString())
+        assertTrue(content[1]["marca"]?.isNull ?: true, content[1].toString())
+
+        val marcados = tree(send("GET", "/api/srtm/brecha/$anio/cambios?marca=SUPERA_5_UIT", null, HttpStatus.OK, org))
+        assertEquals(1, marcados["totalElements"].asInt())
+        assertEquals(a, marcados["content"][0]["codigoMunicipal"].asString())
+
+        send("GET", "/api/srtm/brecha/$anio/cambios?marca=OTRA", null, HttpStatus.UNPROCESSABLE_CONTENT, org)
+    }
+
     // one organization's catastro-backend: a token, its cambios by desde ("" from the start; any other desde answers
     // nothing new with the same cursor back, as catastro does) or `estado` when it is not 200, no valuation (a corrida
     // over an empty padrón ends TERMINADA) and no /titulares (404)
@@ -247,6 +342,9 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
     ) {
         val slug = "seg-$nombre-${UUID.randomUUID().toString().take(8)}"
         val paginas = AtomicReference<Map<String, String>>(emptyMap())
+
+        // #203: the items its /valuaciones answers, for the aviso's test (its corrida needs catastro's autoavalúo)
+        val items = AtomicReference<List<String>>(emptyList())
         val estado = AtomicInteger(200)
         val llamadas = AtomicInteger()
         val desdes = CopyOnWriteArrayList<String>()
@@ -269,7 +367,12 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
                 }
                 createContext("/api/catastro/valuaciones") { ex ->
                     val anio = parametros(ex)["anio"]
-                    responder(ex, 200, """{"anio":$anio,"version":"valuacion-v1","page":0,"size":500,"total":0,"items":[]}""")
+                    val todos = items.get()
+                    responder(
+                        ex,
+                        200,
+                        """{"anio":$anio,"version":"valuacion-v1","page":0,"size":500,"total":${todos.size},"items":[${todos.joinToString(",")}]}"""
+                    )
                 }
                 createContext("/api/catastro/titulares") { ex -> responder(ex, 404, "{}") }
                 start()
@@ -284,7 +387,7 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
     }
 
     companion object {
-        private val FALSOS = listOf("lee", "cambia", "semanal", "falla", "candado").associateWith { CatastroFalso(it) }
+        private val FALSOS = listOf("lee", "cambia", "semanal", "falla", "candado", "aviso").associateWith { CatastroFalso(it) }
 
         private fun cambio(
             codigo: String,

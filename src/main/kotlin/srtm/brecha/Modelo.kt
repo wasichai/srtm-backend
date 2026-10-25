@@ -1,5 +1,6 @@
 package srtm.brecha
 
+import srtm.Faltan
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import java.math.BigDecimal
@@ -7,6 +8,14 @@ import java.math.BigDecimal
 // model/model.json
 const val BRECHA_CORRIDA = "brecha_corrida"
 const val BRECHA_PREDIO = "brecha_predio"
+
+// cambio_catastro's objeto (#203), as catastro-backend names it
+val OBJETOS_CAMBIO_CATASTRO = setOf("predio_catastral", "construccion", "obra_complementaria", "titular_catastral")
+
+// what keeps GET /{anio}/cambios from answering: the UIT of 1 de enero del año, to decide SUPERA_5_UIT
+class FaltanBrecha(
+    faltan: List<String>
+) : Faltan("Faltan parámetros para el aviso de cambios: ${faltan.joinToString("; ")}", faltan)
 
 const val PENDIENTE = "PENDIENTE"
 const val EN_CURSO = "EN_CURSO"

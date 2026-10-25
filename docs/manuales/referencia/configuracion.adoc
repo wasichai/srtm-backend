@@ -251,6 +251,16 @@ configurado».
 |vacío
 |Slug o id de la organización de {sigla} cuyo catastro es. Vacía con el catastro encendido, ninguna corrida empieza
 (409); una corrida de otra organización también es 409.
+
+|`SRTM_CATASTRO_SEGUIMIENTO_MINUTOS`
+|`0`
+|Cada cuántos minutos lee `GET /api/catastro/cambios` de cada organización con catastro. `0` lo apaga: sin
+seguimiento, sin corridas automáticas.
+
+|`SRTM_CATASTRO_SEGUIMIENTO_HORA`
+|`2`
+|Hora de Lima (0-23) a partir de la cual, con cambios pendientes o para la corrida semanal, empieza la corrida
+automática del día.
 |===
 
 [[ref-config-emision]]
