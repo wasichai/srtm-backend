@@ -717,9 +717,10 @@ object Brecha {
     val COMPARADAS = setOf(Categoria.SUBVALUADO.name, Categoria.SOBREVALUADO.name, Categoria.COINCIDE.name, Categoria.OMISO.name)
 
     // GET /brecha/{anio}/panel: the corrida's rows counted (PanelService's way: read, then count in memory). the padrón
-    // is every row but the omisos, the catastro every row but those SIN_CATASTRO. autoavalúo declarado, catastro and Δ
-    // are over COMPARADAS (they reconcile); the *Total ones over every row, for reference. Δ arbitrios is null while no
-    // row has one
+    // is every row but the omisos and the SIN_LEVANTAR ones without a declared autoavalúo (an empty ficha with no predio
+    // of the padrón), the catastro every row but those SIN_CATASTRO. autoavalúo declarado, catastro and Δ are
+    // over COMPARADAS (they reconcile); the *Total ones over every row, for reference. Δ arbitrios is null while no row
+    // has one. porConfianza has every Confianza, over the rows that have one: an older corrida's are all zero
     fun panel(
         corrida: RegistroCorrida,
         filas: List<FilaBrecha>
@@ -736,6 +737,11 @@ object Brecha {
                     suma(suyas.map { it.deltaImpuesto }),
                     sumaONull(suyas.map { it.deltaArbitrios })
                 )
+            }
+        val porConfianza =
+            Confianza.entries.associate { c ->
+                val suyas = filas.filter { it.confianza == c.name }
+                c.name to PorConfianza(suyas.size, suma(suyas.map { it.deltaImpuesto }), suma(suyas.map { it.deltaAutoavaluo }))
             }
         val porSector =
             filas
@@ -755,13 +761,17 @@ object Brecha {
             CorridaDelPanel(corrida.id!!, corrida.terminado, corrida.versionCatastro),
             Kpis(
                 prediosCatastro = filas.size - de(Categoria.SIN_CATASTRO),
-                prediosPadron = filas.size - de(Categoria.OMISO),
+                prediosPadron =
+                    filas.count {
+                        it.categoria != Categoria.OMISO.name && (it.categoria != Categoria.SIN_LEVANTAR.name || it.autoavaluoDeclarado != null)
+                    },
                 omisos = de(Categoria.OMISO),
                 subvaluados = de(Categoria.SUBVALUADO),
                 sobrevaluados = de(Categoria.SOBREVALUADO),
                 coinciden = de(Categoria.COINCIDE),
                 sinCatastro = de(Categoria.SIN_CATASTRO),
                 sinValor = de(Categoria.SIN_VALOR),
+                sinLevantar = de(Categoria.SIN_LEVANTAR),
                 autoavaluoDeclarado = suma(comparadas.map { it.autoavaluoDeclarado }),
                 autoavaluoCatastro = suma(comparadas.map { it.autoavaluoCatastro }),
                 deltaAutoavaluo = suma(comparadas.map { it.deltaAutoavaluo }),
@@ -772,6 +782,7 @@ object Brecha {
                 autoavaluoCatastroTotal = suma(filas.map { it.autoavaluoCatastro })
             ),
             porCategoria,
+            porConfianza,
             porSector
         )
     }

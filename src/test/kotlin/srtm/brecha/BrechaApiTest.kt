@@ -194,6 +194,55 @@ class BrechaApiTest : SrtmApiTest() {
         assertEquals(-75.22, feature["geometry"]["coordinates"][0][0][0].asDouble(), 1e-6)
 
         assertEquals(1, tree(send("GET", "/api/srtm/brecha/corridas?anio=2026", null, HttpStatus.OK, org)).size())
+
+        // #204: this catastro has none of the new keys nor /titulares: every row is DUDOSO, and the corrida says so
+        assertTrue(SIN_TITULARES in corrida["mensaje"].asString(), corrida.toString())
+        val filas = tree(send("GET", "/api/srtm/brecha/2026/predios", null, HttpStatus.OK, org))["content"]
+        assertEquals(List(5) { "DUDOSO" }, filas.mapNotNull { it["confianza"]?.asString() })
+        assertEquals(listOf(0, 5, 0), listOf("prediosConfiables", "prediosDudosos", "prediosSinLevantar").map { corrida[it].asInt() })
+        assertEquals(esperado, dec(corrida["deltaImpuestoDudoso"]))
+        assertEquals(5, panel["porConfianza"]["DUDOSO"]["predios"].asInt())
+        assertEquals(0, k["sinLevantar"].asInt())
+    }
+
+    @Test
+    fun `the corrida stores its confianza counts and the predios filter by it`() {
+        val org = organizacion()
+        val sufijo = uniqueDocumento()
+        val c1 = contribuyente(org)
+        declarar(org, c1, predio(org, "A-$sufijo"), "100000.00", anio = 2023)
+        declarar(org, c1, predio(org, "B-$sufijo"), "100000.00", anio = 2023)
+        ITEMS.set(
+            listOf(
+                item("A-$sufijo", "150000.00", llavesNuevas = mapOf("vinculoMetodo" to CODIGO_RENTAS)),
+                item("B-$sufijo", "100000.00", llavesNuevas = mapOf("vinculoMetodo" to null))
+            )
+        )
+
+        // the stub serves no /titulares (404): no failure
+        val corrida = corrida(org, 2023)
+        assertEquals(TERMINADA, corrida["estado"].asString(), corrida.toString())
+        assertTrue(SIN_TITULARES in corrida["mensaje"].asString(), corrida.toString())
+        assertEquals(listOf(1, 1, 0), listOf("prediosConfiables", "prediosDudosos", "prediosSinLevantar").map { corrida[it].asInt() })
+        // c1's whole difference falls on A, the CONFIABLE one
+        assertEquals(dec(corrida["deltaImpuesto"]), dec(corrida["deltaImpuestoConfiable"]))
+        assertEquals(BigDecimal("0.00"), dec(corrida["deltaImpuestoDudoso"]))
+        assertEquals(BigDecimal("0.00"), dec(corrida["deltaImpuestoSinLevantar"]))
+
+        val panel = tree(send("GET", "/api/srtm/brecha/2023/panel", null, HttpStatus.OK, org))["porConfianza"]
+        assertEquals(listOf("CONFIABLE", "DUDOSO", "SIN_LEVANTAR"), panel.propertyNames().toList())
+        assertEquals(1, panel["CONFIABLE"]["predios"].asInt())
+        assertEquals(dec(corrida["deltaImpuestoConfiable"]), dec(panel["CONFIABLE"]["deltaImpuesto"]))
+        assertEquals(BigDecimal("50000.00"), dec(panel["CONFIABLE"]["deltaAutoavaluo"]))
+
+        val confiables = tree(send("GET", "/api/srtm/brecha/2023/predios?confianza=CONFIABLE", null, HttpStatus.OK, org))
+        assertEquals(1, confiables["totalElements"].asInt())
+        val a = confiables["content"][0]
+        assertEquals("A-$sufijo", a["codigoPredio"].asString())
+        assertEquals("Vínculo por código de rentas", a["confianzaMotivo"].asString())
+        val dudosos = tree(send("GET", "/api/srtm/brecha/2023/predios?confianza=dudoso", null, HttpStatus.OK, org))["content"]
+        assertEquals(listOf("B-$sufijo"), dudosos.mapNotNull { it["codigoPredio"]?.asString() })
+        send("GET", "/api/srtm/brecha/2023/predios?confianza=X", null, HttpStatus.UNPROCESSABLE_CONTENT, org)
     }
 
     // #208: the ficha surveys no obras; the DJ's come from the external padrón's otras instalaciones, read off the records
@@ -360,13 +409,18 @@ class BrechaApiTest : SrtmApiTest() {
         send("GET", "/api/srtm/brecha/corridas", null, HttpStatus.FORBIDDEN, lector)
     }
 
+    // an item as catastro-backend answered before #204; llavesNuevas adds its keys (string values, or null)
     private fun item(
         codigo: String,
         autoavaluo: String,
-        geometria: String = "null"
-    ) = """{"codigoMunicipal":"$codigo","codigoCpu":null,"sector":"01","manzana":"A","lote":"1","uso":"010101",
+        geometria: String = "null",
+        llavesNuevas: Map<String, String?> = emptyMap()
+    ): String {
+        val nuevas = llavesNuevas.entries.joinToString("") { (k, v) -> ",\"$k\":" + (v?.let { "\"$it\"" } ?: "null") }
+        return """{"codigoMunicipal":"$codigo","codigoCpu":null,"sector":"01","manzana":"A","lote":"1","uso":"010101",
         "areaTerreno":200,"areaConstruida":100,"longitudFrente":10.5,"terreno":1.00,"construccion":1.00,"obras":0.00,
-        "autoavaluo":$autoavaluo,"motivo":null,"llave":null,"loteGeom":$geometria}"""
+        "autoavaluo":$autoavaluo,"motivo":null,"llave":null,"loteGeom":$geometria$nuevas}"""
+    }
 
     companion object {
         private val ITEMS = AtomicReference<List<String>>(emptyList())
@@ -386,6 +440,10 @@ class BrechaApiTest : SrtmApiTest() {
 
         // while set, the valuaciones say they were asked (first) and wait (second) before answering
         private val BLOQUEO = AtomicReference<Pair<CountDownLatch, CountDownLatch>?>(null)
+
+        // the aviso of a catastro without GET /titulares (the stubs serve none: 404)
+        private const val SIN_TITULARES =
+            "El catastro no da titulares (GET /api/catastro/titulares respondió 404): la confianza no compara titulares"
 
         private const val CUADRADO =
             """{"type":"Polygon","coordinates":[[[-75.22,-10.95],[-75.2195,-10.95],[-75.2195,-10.9495],[-75.22,-10.9495],[-75.22,-10.95]]]}"""

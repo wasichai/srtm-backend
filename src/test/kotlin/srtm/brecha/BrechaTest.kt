@@ -983,6 +983,49 @@ class BrechaTest {
     }
 
     @Test
+    fun `the panel adds up by confianza, every key present`() {
+        val corrida = RegistroCorrida(id = "c", anio = anio)
+        val filas =
+            listOf(
+                FilaBrecha(categoria = "SUBVALUADO", confianza = "CONFIABLE", deltaAutoavaluo = BigDecimal("100.00"), deltaImpuesto = BigDecimal("10.00")),
+                FilaBrecha(categoria = "SUBVALUADO", confianza = "CONFIABLE", deltaAutoavaluo = BigDecimal("40.00"), deltaImpuesto = BigDecimal("5.00")),
+                FilaBrecha(categoria = "SOBREVALUADO", confianza = "DUDOSO", deltaAutoavaluo = BigDecimal("-30.00"), deltaImpuesto = BigDecimal("-3.00"))
+            )
+        val p = Brecha.panel(corrida, filas).porConfianza
+        assertEquals(listOf("CONFIABLE", "DUDOSO", "SIN_LEVANTAR"), p.keys.toList())
+        assertEquals(PorConfianza(2, BigDecimal("15.00"), BigDecimal("140.00")), p["CONFIABLE"])
+        assertEquals(PorConfianza(1, BigDecimal("-3.00"), BigDecimal("-30.00")), p["DUDOSO"])
+        assertEquals(PorConfianza(0, BigDecimal("0.00"), BigDecimal("0.00")), p["SIN_LEVANTAR"])
+        // an older corrida's rows have no confianza: every key, all zero
+        assertEquals(
+            Confianza.entries.associate { it.name to PorConfianza(0, BigDecimal("0.00"), BigDecimal("0.00")) },
+            Brecha.panel(corrida, listOf(FilaBrecha(categoria = "COINCIDE", deltaImpuesto = BigDecimal("1.00")))).porConfianza
+        )
+    }
+
+    @Test
+    fun `sin levantar rows count apart and only the crossed ones are padron`() {
+        val corrida = RegistroCorrida(id = "c", anio = anio)
+        val filas =
+            listOf(
+                FilaBrecha(categoria = "COINCIDE", confianza = "CONFIABLE", autoavaluoDeclarado = BigDecimal("10.00")),
+                FilaBrecha(categoria = "OMISO", confianza = "DUDOSO"),
+                // crossed with a predio of the padrón: it declares
+                FilaBrecha(categoria = "SIN_LEVANTAR", confianza = "SIN_LEVANTAR", autoavaluoDeclarado = BigDecimal("20.00")),
+                // an empty ficha with no predio: never padrón
+                FilaBrecha(categoria = "SIN_LEVANTAR", confianza = "SIN_LEVANTAR"),
+                FilaBrecha(categoria = "SIN_CATASTRO", confianza = "DUDOSO", autoavaluoDeclarado = BigDecimal("30.00"))
+            )
+        val k = Brecha.panel(corrida, filas).kpis
+        assertEquals(2, k.sinLevantar)
+        // COINCIDE, the crossed SIN_LEVANTAR and SIN_CATASTRO
+        assertEquals(3, k.prediosPadron)
+        assertEquals(4, k.prediosCatastro)
+        assertEquals(1, k.omisos)
+        assertEquals(1, k.coinciden)
+    }
+
+    @Test
     fun `the lotes are a FeatureCollection of the rows with a polygon`() {
         val cuadrado =
             mapOf(

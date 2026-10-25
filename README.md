@@ -790,6 +790,11 @@ empieza: **409** «Catastro no configurado». Si la cuenta no puede leer alguno 
 cuatro objetos del catastro, catastro responde 403 a todo y la corrida queda FALLIDA con ese estado. Si catastro no
 devuelve ningún ítem del año y el padrón tiene predios, la corrida queda FALLIDA («El catastro no devolvió valuaciones
 de 2026…») en vez de dar todo el padrón por SIN_CATASTRO. Los importes se leen como decimales, nunca como `double`.
+Después lee `GET {url}/api/catastro/titulares?page&size` (todas las páginas), los titulares de cada ficha, para la
+[confianza del vínculo](#brecha-de-recaudación). Un catastro anterior, sin esa ruta (**404**), o una cuenta sin
+lectura sobre `titular_catastral` (**403**) no hacen fallar la corrida: la confianza no compara titulares y `mensaje`
+lo dice («El catastro no da titulares (GET /api/catastro/titulares respondió 404): la confianza no compara
+titulares»). Cualquier otro error la deja FALLIDA, como el de `/valuaciones`.
 
 **Un catastro por organización.** Cada organización de srtm lee su propio catastro-backend: el mapa
 `srtm.catastro.organizaciones.<slug-o-id>` con `url`, `client-id`, `client-secret` y, opcional, `timeout` (si no, el
@@ -845,6 +850,26 @@ secuencia de uso, una vez).
 | `SUBVALUADO` | Autoavalúo catastral > declarado × 1.05. |
 | `SOBREVALUADO` | Autoavalúo catastral < declarado × 0.95. |
 | `COINCIDE` | Dentro de ±5 %, ambos extremos incluidos (D10). |
+| `SIN_LEVANTAR` | La ficha del catastro viene con `estadoLevantamiento` = `SIN_LEVANTAR` (#204), haya cruzado o no: no es OMISO ni COINCIDE. No se valoriza aunque traiga autoavalúo ni tiene diferencia; si cruzó con un predio del padrón guarda su autoavalúo e impuesto declarados, y ese predio no sale SIN_CATASTRO. |
+
+**Confianza del vínculo** (#204). Cada fila lleva `confianza` y `confianza_motivo` (`confianzaMotivo` en `/predios`),
+que dicen qué tan seguro es su cruce. Se mira en este orden:
+
+| Confianza | Cuándo | Motivo |
+|---|---|---|
+| `SIN_LEVANTAR` | La ficha está sin levantar. | «Ficha sin levantar» (con su entrega, si la trae) |
+| `CONFIABLE` | Cruzó con un predio y el catastro hizo el vínculo por el código de rentas (`vinculoMetodo` = `CODIGO_RENTAS`), o a mano y revisado (`MANUAL` con `vinculoRevisado`). | «Vínculo por código de rentas», «Vínculo manual revisado» |
+| `CONFIABLE` | Un titular de la ficha (`/titulares`) coincide con un contribuyente de las DJ vigentes del predio: por documento, si no por nombre. | «Un titular de la ficha coincide por documento» (o «por nombre») |
+| `DUDOSO` | Todo lo demás: también una fila sin ficha (SIN_CATASTRO) o un OMISO sin predio. | «Sin ficha del catastro», «Sin predio en el padrón», «Vínculo GEOMETRICO, sin titular en común» |
+
+El documento se compara solo con letras y dígitos, en mayúsculas y sin ceros a la izquierda (`000000000` no es
+ninguno); el nombre, en mayúsculas, sin tildes (la Ñ es N) y con sus palabras en orden alfabético, así «Pérez Gómez,
+Juan» y «JUAN PEREZ GOMEZ» son el mismo. Un catastro sin las llaves nuevas mide como antes (mismas categorías y
+totales) y todo sale `DUDOSO`. El panel suma `porConfianza` (siempre las tres, en ese orden: una corrida anterior las
+da en cero), `/predios` filtra con `?confianza=` y la corrida guarda `predios_confiables`, `predios_dudosos`,
+`predios_sin_levantar`, `delta_impuesto_confiable`, `delta_impuesto_dudoso` y `delta_impuesto_sin_levantar`. Una
+ficha SIN_LEVANTAR que no cruzó no cuenta en `prediosPadron` (solo si trae autoavalúo declarado); el panel las cuenta
+en `sinLevantar`.
 
 **Obras de la DJ** (#208). La ficha catastral no levanta obras complementarias, y la brecha contaría su falta como
 diferencia. Si un ítem valorizado cruza con un predio del padrón y trae `obras` vacío o 0, el lado catastro suma a su
@@ -926,9 +951,9 @@ lectura ve el panel con 403. Lanzar una corrida queda para quien tenga creación
 |---|---|---|
 | POST | `/api/srtm/brecha/corridas` `{anio}` | 202 con la corrida; 400 año inválido; 403; 409 catastro no configurado (para la organización) o corrida en curso. |
 | GET | `/api/srtm/brecha/corridas?anio` | Las corridas, la más reciente primero. |
-| GET | `/api/srtm/brecha/corridas/{id}` | Una corrida, con su avance (`totalPredios`, `procesados`). |
-| GET | `/api/srtm/brecha/{anio}/panel?corrida` | KPIs, por categoría y por sector de la última corrida TERMINADA del año (o de `corrida`); 404 si no hay. |
-| GET | `/api/srtm/brecha/{anio}/predios?categoria&sector&page&size&corrida` | Página de filas por su `orden` (código del predio, luego código catastral); 422 si `categoria` no es una de las seis. |
+| GET | `/api/srtm/brecha/corridas/{id}` | Una corrida, con su avance (`totalPredios`, `procesados`) y, terminada, sus conteos por confianza (`prediosConfiables`, `prediosDudosos`, `prediosSinLevantar`, `deltaImpuestoConfiable`, `deltaImpuestoDudoso`, `deltaImpuestoSinLevantar`; null en una corrida anterior a #204). |
+| GET | `/api/srtm/brecha/{anio}/panel?corrida` | KPIs, por categoría, por confianza (`porConfianza: {CONFIABLE, DUDOSO, SIN_LEVANTAR}`, cada una `{predios, deltaImpuesto, deltaAutoavaluo}`) y por sector de la última corrida TERMINADA del año (o de `corrida`); 404 si no hay. |
+| GET | `/api/srtm/brecha/{anio}/predios?categoria&sector&confianza&page&size&corrida` | Página de filas por su `orden` (código del predio, luego código catastral); 422 si `categoria` no es una de las siete o `confianza` no es una de las tres. |
 | GET | `/api/srtm/brecha/{anio}/lotes?corrida` | GeoJSON `FeatureCollection` (EPSG:4326) con `{categoria, codigo, deltaImpuesto}`. |
 
 **KPIs de autoavalúo.** `autoavaluoDeclarado`, `autoavaluoCatastro` y `deltaAutoavaluo` del panel (y `declarado` y

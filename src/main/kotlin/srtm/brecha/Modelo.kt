@@ -95,7 +95,14 @@ data class RegistroCorrida(
     val catastro: BigDecimal? = null,
     val deltaImpuesto: BigDecimal? = null,
     val deltaArbitrios: BigDecimal? = null,
-    val latido: String? = null
+    val latido: String? = null,
+    // #204: the rows and Δ impuesto of each confianza (PanelBrecha.porConfianza), null before it was measured
+    val prediosConfiables: Int? = null,
+    val prediosDudosos: Int? = null,
+    val prediosSinLevantar: Int? = null,
+    val deltaImpuestoConfiable: BigDecimal? = null,
+    val deltaImpuestoDudoso: BigDecimal? = null,
+    val deltaImpuestoSinLevantar: BigDecimal? = null
 )
 
 // the brecha_predio record: one per catastro item, plus one per padrón predio the catastro lacks. corrida and predio are
@@ -145,7 +152,13 @@ data class Corrida(
     val declarado: BigDecimal?,
     val catastro: BigDecimal?,
     val deltaImpuesto: BigDecimal?,
-    val deltaArbitrios: BigDecimal?
+    val deltaArbitrios: BigDecimal?,
+    val prediosConfiables: Int?,
+    val prediosDudosos: Int?,
+    val prediosSinLevantar: Int?,
+    val deltaImpuestoConfiable: BigDecimal?,
+    val deltaImpuestoDudoso: BigDecimal?,
+    val deltaImpuestoSinLevantar: BigDecimal?
 )
 
 fun corridaDe(r: RegistroCorrida) =
@@ -162,7 +175,13 @@ fun corridaDe(r: RegistroCorrida) =
         declarado = r.declarado,
         catastro = r.catastro,
         deltaImpuesto = r.deltaImpuesto,
-        deltaArbitrios = r.deltaArbitrios
+        deltaArbitrios = r.deltaArbitrios,
+        prediosConfiables = r.prediosConfiables,
+        prediosDudosos = r.prediosDudosos,
+        prediosSinLevantar = r.prediosSinLevantar,
+        deltaImpuestoConfiable = r.deltaImpuestoConfiable,
+        deltaImpuestoDudoso = r.deltaImpuestoDudoso,
+        deltaImpuestoSinLevantar = r.deltaImpuestoSinLevantar
     )
 
 // a row of GET /brecha/{anio}/predios
@@ -219,11 +238,12 @@ data class PedidoCorrida(
     val anio: Int? = null
 )
 
-// GET /brecha/{anio}/panel
+// GET /brecha/{anio}/panel. porConfianza: every Confianza, in its order (#204)
 data class PanelBrecha(
     val corrida: CorridaDelPanel,
     val kpis: Kpis,
     val porCategoria: List<PorCategoria>,
+    val porConfianza: Map<String, PorConfianza>,
     val porSector: List<PorSector>
 )
 
@@ -242,6 +262,8 @@ data class Kpis(
     val coinciden: Int,
     val sinCatastro: Int,
     val sinValor: Int,
+    // #204: the fichas sin levantar, crossed or not
+    val sinLevantar: Int = 0,
     // over the rows compared (valued on both sides, and the omisos): declarado + Δ = catastro
     val autoavaluoDeclarado: BigDecimal,
     val autoavaluoCatastro: BigDecimal,
@@ -263,6 +285,13 @@ data class PorCategoria(
     val deltaAutoavaluo: BigDecimal,
     val deltaImpuesto: BigDecimal,
     val deltaArbitrios: BigDecimal?
+)
+
+// the rows of a confianza (#204)
+data class PorConfianza(
+    val predios: Int,
+    val deltaImpuesto: BigDecimal,
+    val deltaAutoavaluo: BigDecimal
 )
 
 data class PorSector(
