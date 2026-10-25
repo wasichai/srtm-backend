@@ -41,7 +41,9 @@ data class CatastroProperties(
     // each request: catastro values a page on the fly. an entry without its own timeout takes this one
     val timeout: Duration = ClienteCatastro.TIMEOUT,
     val organizacion: String = "",
-    val organizaciones: Map<String, CuentaCatastro> = emptyMap()
+    val organizaciones: Map<String, CuentaCatastro> = emptyMap(),
+    // the background reader of catastro's cambios (#203, SeguimientoCatastro)
+    val seguimiento: SeguimientoProperties = SeguimientoProperties()
 ) {
     // every account by its organization (trimmed, lowercase: a slug matches without case, an id parses either way):
     // the single properties' when organizacion is set, then the map's, which replaces it for the same organization
@@ -73,8 +75,15 @@ data class CatastroProperties(
     // never the secret: this text may end up in a log
     override fun toString() =
         "CatastroProperties(enabled=$enabled, url=$url, clientId=$clientId, timeout=$timeout, organizacion=$organizacion, " +
-            "organizaciones=$organizaciones)"
+            "organizaciones=$organizaciones, seguimiento=$seguimiento)"
 }
+
+// minutos: how often the cambios are read (0, the default: never); hora: from which hour of the day (Lima) the
+// automatic corrida of the day may start
+data class SeguimientoProperties(
+    val minutos: Long = 0,
+    val hora: Int = 2
+)
 
 // one organization's catastro-backend and its service account
 data class CuentaCatastro(

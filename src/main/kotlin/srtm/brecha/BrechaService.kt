@@ -108,7 +108,7 @@ class BrechaService(
     ): Corrida {
         val creada = crearCorrida(organizacion, anio, origen)
         val id = UUID.fromString(creada.id)
-        scope.launch { records.asPlatform(organizacion, "srtm: brecha automática") { correr(id, anio, catastro) } }
+        scope.launch { records.asPlatform(organizacion, "srtm:brecha-automatica") { correr(id, anio, catastro) } }
         return corridaDe(creada)
     }
 
@@ -376,16 +376,6 @@ class BrechaService(
             .all(BRECHA_CORRIDA, RegistroCorrida::class.java, filters = mapOf("anio" to "$anio"))
             .filter { it.estado in ACTIVAS }
 
-    // a DATETIME as core reads it back: an instant, with an offset, or a utc local time
-    private fun instante(texto: String): Instant? =
-        runCatching { Instant.parse(texto) }.getOrNull()
-            ?: runCatching { OffsetDateTime.parse(texto).toInstant() }.getOrNull()
-            ?: runCatching {
-                java.time.LocalDateTime
-                    .parse(texto)
-                    .toInstant(java.time.ZoneOffset.UTC)
-            }.getOrNull()
-
     // its instance still beats: its latido is within LEASE
     private fun viva(
         r: RegistroCorrida,
@@ -443,3 +433,13 @@ class BrechaService(
         val LEASE: Duration = Duration.ofMinutes(10)
     }
 }
+
+// a DATETIME as core reads it back: an instant, with an offset, or a utc local time
+internal fun instante(texto: String): Instant? =
+    runCatching { Instant.parse(texto) }.getOrNull()
+        ?: runCatching { OffsetDateTime.parse(texto).toInstant() }.getOrNull()
+        ?: runCatching {
+            java.time.LocalDateTime
+                .parse(texto)
+                .toInstant(java.time.ZoneOffset.UTC)
+        }.getOrNull()
