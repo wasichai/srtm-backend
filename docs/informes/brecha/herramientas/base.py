@@ -5,8 +5,8 @@ format).
 
 `INIT_SQL` is the `init_sql` Metabase's DuckDB connections run right after opening a file read-only (plan §
 Rulings, aislamiento): it turns off `enable_external_access` (no ATTACH, no read_parquet/read_csv of another
-path) and locks that setting so a later `SET` cannot turn it back on - one organization's native query can
-never reach another organization's file.
+path), and DuckDB refuses to turn it back on while the database runs ("Cannot enable external access while
+database is running") - one organization's native query can never reach another organization's file.
 
 `construir_atomico` is how `armar_duckdb.py --org` (and Metabase's `make duckdb`) rebuild a file in place:
 plan, Rulings de la ejecución, R21, requires a FRESH file on every rebuild, never one opened on top of the
@@ -25,7 +25,14 @@ from .tablas import ESQUEMAS
 
 VISTAS = comun.INFORME / "vistas.sql"
 
-INIT_SQL = "SET enable_external_access = false; SET lock_configuration = true;"
+# Without the plan's `SET lock_configuration = true` (controller ruling at #206 task 10's review: a plan
+# defect). The DuckDB driver 1.5.5.0 runs init_sql once per pooled connection and again on the duplicate()
+# connection to the same instance that describe-database (sync) uses; with the configuration locked that second
+# run fails and sync with it, and so does the driver's own SET TimeZone. Without the lock INIT_SQL can run any
+# number of times, and enable_external_access still cannot be re-enabled (test_init_sql_aisla_la_base).
+# The driver's temp_directory is <database_file>.tmp, inside Metabase's read-only /datos mount: a query that
+# spills to disk fails there (cortes are small; docs/develop/metabase-cortes.md says so).
+INIT_SQL = "SET enable_external_access = false;"
 
 
 def construir_duckdb(carpeta: Path, destino: Path | str) -> duckdb.DuckDBPyConnection:

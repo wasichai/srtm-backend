@@ -177,6 +177,28 @@ class InitSqlTests(ConCorte, unittest.TestCase):
         with self.assertRaises(duckdb.Error):
             con.execute("SET enable_external_access = true")
 
+    def test_init_sql_corre_dos_veces(self):
+        # the driver runs init_sql on each pooled connection and again on a duplicate() of it (same DuckDB
+        # instance) to sync: both must work, and the second one must leave the isolation as it was
+        carpeta = self._corte(minimos())
+        a, b = self.tmp / "a.duckdb", self.tmp / "b.duckdb"
+        base.construir_atomico(carpeta, a)
+        base.construir_atomico(carpeta, b)
+
+        con = duckdb.connect(str(a), read_only=True)
+        self.addCleanup(con.close)
+        con.execute(base.INIT_SQL)
+        con.execute(base.INIT_SQL)
+        duplicada = con.cursor()  # another connection to the same instance, like DuckDBConnection.duplicate()
+        self.addCleanup(duplicada.close)
+        duplicada.execute(base.INIT_SQL)
+        duplicada.execute("SET TimeZone = 'America/Lima'")  # the driver's per-connection report timezone
+
+        self.assertEqual(duplicada.execute("SELECT count(*) FROM v_segmentos").fetchone()[0], 3)
+        for sql in (f"ATTACH '{b}'", "SET enable_external_access = true"):
+            with self.subTest(sql=sql), self.assertRaises(duckdb.Error):
+                duplicada.execute(sql)
+
 
 class VistasDeLosTablerosTests(ConCorte, unittest.TestCase):
     def test_vistas_de_los_tableros(self):
