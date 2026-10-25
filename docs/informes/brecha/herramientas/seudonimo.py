@@ -12,6 +12,9 @@ from .comun import ErrorCorte
 
 _NO_ALFANUMERICO = re.compile(r"[^0-9A-Z]")
 
+# the rule normalizar_documento applies, in words, for the corte's manifest (contexto.md HMAC ruling)
+NORMALIZACION = "sin espacios, en mayúsculas, solo [0-9A-Z], sin ceros a la izquierda; vacío -> null"
+
 
 def normalizar_documento(numero):
     if numero is None:

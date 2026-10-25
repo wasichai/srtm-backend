@@ -100,18 +100,20 @@ class _Manejador(BaseHTTPRequestHandler):
 
 
 class ServidorFalso:
-    """Base of the test doubles: a ThreadingHTTPServer on 127.0.0.1:0 with its own POST /api/auth/token, scripted
-    by a subclass's `manejar`. CLIENT_ID/CLIENT_SECRET are the only credentials it accepts."""
+    """Base of the test doubles: a ThreadingHTTPServer on 127.0.0.1 with its own POST /api/auth/token, scripted
+    by a subclass's `manejar`. CLIENT_ID/CLIENT_SECRET are the only credentials it accepts. `puerto` 0 picks a
+    free port; a fixed one lets a test bring a new fake up at the URL of one it just closed (task 5: two cortes
+    whose manifests must match, backends' URLs included)."""
 
     CLIENT_ID = "cid"
     CLIENT_SECRET = "csec"
 
-    def __init__(self):
+    def __init__(self, puerto=0):
         self._lock = threading.Lock()
         self._tokens_validos = set()
         self._contador_tokens = 0
         self.peticiones = []
-        self._server = ThreadingHTTPServer(("127.0.0.1", 0), _Manejador)
+        self._server = ThreadingHTTPServer(("127.0.0.1", puerto), _Manejador)
         self._server.falso = self
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
@@ -212,8 +214,8 @@ class SrtmFalso(ServidorFalso):
     """wasichai's generic record API only: the objects the corte reads straight from srtm (predio, declaracion,
     cuota_predial, brecha_corrida, parametro_tributario...)."""
 
-    def __init__(self, registros, barajar=None):
-        super().__init__()
+    def __init__(self, registros, barajar=None, puerto=0):
+        super().__init__(puerto)
         self._registros = _Registros(registros, barajar=barajar)
 
     def manejar(self, metodo, ruta, query, cuerpo):
@@ -239,8 +241,9 @@ class CatastroFalso(ServidorFalso):
         sin_cambios=False,
         sin_llaves_nuevas=False,
         barajar=None,
+        puerto=0,
     ):
-        super().__init__()
+        super().__init__(puerto)
         self._registros = _Registros(registros, barajar=barajar)
         self._valuaciones = list(valuaciones)
         self._titulares = list(titulares)
