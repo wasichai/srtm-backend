@@ -10,7 +10,10 @@ from pathlib import Path
 from herramientas import comun
 
 # variables a caller's shell or an outer `make pruebas` could leak into the dry run
-_FUERA = ("SALIDA", "FECHA", "ORG", "CORTE", "REEMPLAZAR", "MAKEFLAGS", "MFLAGS", "MAKELEVEL", "MAKEOVERRIDES")
+_FUERA = (
+    "SALIDA", "FECHA", "ORG", "CORTE", "REEMPLAZAR", "METABASE_ENV", "MAKEFLAGS", "MFLAGS", "MAKELEVEL",
+    "MAKEOVERRIDES",
+)
 
 
 @unittest.skipIf(shutil.which("make") is None, "make no está instalado")
@@ -53,6 +56,16 @@ class MakefileTests(unittest.TestCase):
         texto = self._seco("publicar", "ORG=x", "FECHA=2026-01-01")
         self.assertIn('aws s3api head-object --bucket "sgtm-dev" --key "analitica/x/2026-01-01/manifiesto.json"', texto)
         self.assertNotIn("aws s3 ls", texto)
+
+    def test_respaldo_toma_metabase_env(self):
+        # METABASE_ENV, not ENV: ENV is the shell's own startup-file variable (POSIX sh sources $ENV)
+        texto = self._seco("respaldo", "METABASE_ENV=/srv/srtm-metabase/metabase.env")
+        self.assertIn('metabase/respaldo.sh "/srv/srtm-metabase/metabase.env"', texto)
+
+    def test_respaldo_no_lee_env(self):
+        texto = self._seco("respaldo", "ENV=/srv/srtm-metabase/metabase.env")
+        self.assertNotIn("/srv/srtm-metabase/metabase.env", texto)
+        self.assertIn("METABASE_ENV", texto)
 
     def test_local_sin_barra_final(self):
         texto = self._seco("local", "CORTE=/tmp/cortes/x/2026-01-01/")

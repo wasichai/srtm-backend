@@ -1,0 +1,163 @@
+{
+  "_comentario": "Tableros de partida de cada organización en Metabase (srtm-backend#206). provisionar.py los crea o los actualiza por nombre en la colección «Brecha <nombre>»: cada tarjeta es una pregunta nativa SELECT * FROM <vista> de vistas.sql sobre la base de la organización. Cuadrícula de 24 columnas: fila y col desde 0, ancho y alto en celdas. Una tarjeta con el mismo nombre en varios tableros es una sola tarjeta (la fecha del corte).",
+  "tableros": [
+    {
+      "nombre": "Brecha confiable",
+      "tarjetas": [
+        {
+          "nombre": "Fecha del corte",
+          "vista": "v_corte",
+          "display": "scalar",
+          "visualizacion": { "scalar.field": "fecha_corte" },
+          "fila": 0,
+          "col": 0,
+          "ancho": 6,
+          "alto": 3
+        },
+        {
+          "nombre": "Brecha confiable por categoría",
+          "vista": "v_brecha_confiable_por_categoria",
+          "display": "bar",
+          "visualizacion": { "graph.dimensions": ["categoria"], "graph.metrics": ["delta_impuesto"] },
+          "fila": 3,
+          "col": 0,
+          "ancho": 12,
+          "alto": 8
+        },
+        {
+          "nombre": "Brecha confiable por clase",
+          "vista": "v_brecha_confiable_por_clase",
+          "display": "bar",
+          "visualizacion": { "graph.dimensions": ["clase"], "graph.metrics": ["delta_impuesto"] },
+          "fila": 3,
+          "col": 12,
+          "ancho": 12,
+          "alto": 8
+        }
+      ]
+    },
+    {
+      "nombre": "Segmentos",
+      "tarjetas": [
+        {
+          "nombre": "Fecha del corte",
+          "vista": "v_corte",
+          "display": "scalar",
+          "visualizacion": { "scalar.field": "fecha_corte" },
+          "fila": 0,
+          "col": 0,
+          "ancho": 6,
+          "alto": 3
+        },
+        {
+          "nombre": "Segmentos por confianza y categoría",
+          "vista": "v_segmentos",
+          "display": "table",
+          "visualizacion": {},
+          "fila": 3,
+          "col": 0,
+          "ancho": 24,
+          "alto": 10
+        }
+      ]
+    },
+    {
+      "nombre": "Predial en tres columnas",
+      "tarjetas": [
+        {
+          "nombre": "Fecha del corte",
+          "vista": "v_corte",
+          "display": "scalar",
+          "visualizacion": { "scalar.field": "fecha_corte" },
+          "fila": 0,
+          "col": 0,
+          "ancho": 6,
+          "alto": 3
+        },
+        {
+          "nombre": "Predial: declarado, motor de rentas y motor de catastro",
+          "vista": "v_predial_tres_columnas",
+          "display": "bar",
+          "visualizacion": {
+            "graph.dimensions": ["contribuyentes"],
+            "graph.metrics": ["declarado", "motor_rentas", "motor_catastro"]
+          },
+          "fila": 3,
+          "col": 0,
+          "ancho": 24,
+          "alto": 6
+        },
+        {
+          "nombre": "Predial por contribuyente",
+          "vista": "v_predial_contribuyente",
+          "display": "table",
+          "visualizacion": {},
+          "fila": 9,
+          "col": 0,
+          "ancho": 24,
+          "alto": 10
+        }
+      ]
+    },
+    {
+      "nombre": "Cambios del catastro",
+      "tarjetas": [
+        {
+          "nombre": "Fecha del corte",
+          "vista": "v_corte",
+          "display": "scalar",
+          "visualizacion": { "scalar.field": "fecha_corte" },
+          "fila": 0,
+          "col": 0,
+          "ancho": 6,
+          "alto": 3
+        },
+        {
+          "nombre": "Cambios por mes",
+          "vista": "v_cambios_por_mes",
+          "display": "line",
+          "visualizacion": { "graph.dimensions": ["mes", "objeto"], "graph.metrics": ["cambios"] },
+          "fila": 3,
+          "col": 0,
+          "ancho": 24,
+          "alto": 8
+        },
+        {
+          "nombre": "Cambios recientes",
+          "vista": "v_cambios_recientes",
+          "display": "table",
+          "visualizacion": {},
+          "fila": 11,
+          "col": 0,
+          "ancho": 24,
+          "alto": 10
+        }
+      ]
+    },
+    {
+      "nombre": "Mapa de lotes",
+      "tarjetas": [
+        {
+          "nombre": "Fecha del corte",
+          "vista": "v_corte",
+          "display": "scalar",
+          "visualizacion": { "scalar.field": "fecha_corte" },
+          "fila": 0,
+          "col": 0,
+          "ancho": 6,
+          "alto": 3
+        },
+        {
+          "nombre": "Lotes con su brecha",
+          "vista": "v_lotes_mapa",
+          "display": "map",
+          "visualizacion": { "map.type": "pin", "map.latitude_column": "lat", "map.longitude_column": "lon" },
+          "fila": 3,
+          "col": 0,
+          "ancho": 24,
+          "alto": 12
+        }
+      ]
+    }
+  ]
+}

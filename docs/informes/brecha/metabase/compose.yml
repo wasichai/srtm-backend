@@ -1,0 +1,74 @@
+# Metabase sobre el corte analítico (srtm-backend#206, task 9): base de aplicación en Postgres, cada
+# organización como una conexión DuckDB de solo lectura al archivo que arma `make duckdb` (armar_duckdb.py
+# --org). Plan § Rulings: acceso solo por túnel SSH (el puerto queda en 127.0.0.1 del VPS, sin proxy en este
+# carril); versiones fijas (Dockerfile) porque el driver solo declara compatible esta combinación.
+#
+#   docker compose -p srtm-metabase -f metabase/compose.yml --env-file /srv/srtm-metabase/metabase.env up -d --build
+#
+# Con un Docker remoto (DOCKER_HOST por ssh), el puerto queda en el loopback del servidor:
+#   ssh -fN -L 3310:localhost:3310 <servidor>
+#
+# metabase.env sale de metabase.env.example (nunca se versiona; va a B/.gitignore). metabase/respaldo.sh y
+# metabase/restaurar.sh operan sobre metabase-postgres, la única base que guarda tableros, usuarios y
+# colecciones - el archivo DuckDB de cada organización se reconstruye solo con `make duckdb`.
+name: srtm-metabase
+
+services:
+  metabase-postgres:
+    image: postgres:18.1
+    environment:
+      POSTGRES_DB: metabase
+      POSTGRES_USER: metabase
+      POSTGRES_PASSWORD: ${METABASE_PG_PASSWORD:?falta METABASE_PG_PASSWORD en metabase.env}
+    # sin ports: solo el servicio metabase la alcanza, por la red interna del compose
+    volumes:
+      - metabase-pg-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U metabase -d metabase']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  metabase:
+    build:
+      context: .
+      args:
+        METABASE_VERSION: '0.63.19'
+    depends_on:
+      metabase-postgres:
+        condition: service_healthy
+    ports:
+      # solo loopback del servidor de Docker; el acceso real es por túnel SSH (plan § Rulings)
+      - '127.0.0.1:${METABASE_PUERTO:-3310}:3000'
+    volumes:
+      # los .duckdb que make duckdb arma, uno por organización; de solo lectura, como pide el aislamiento
+      # (herramientas/base.py INIT_SQL ya bloquea el acceso externo dentro de cada conexión DuckDB)
+      - '${METABASE_DUCKDB_DIR:?falta METABASE_DUCKDB_DIR en metabase.env}:/datos:ro'
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_HOST: metabase-postgres
+      MB_DB_PORT: '5432'
+      MB_DB_DBNAME: metabase
+      MB_DB_USER: metabase
+      MB_DB_PASS: ${METABASE_PG_PASSWORD:?falta METABASE_PG_PASSWORD en metabase.env}
+      MB_ENCRYPTION_SECRET_KEY: ${MB_ENCRYPTION_SECRET_KEY:?falta MB_ENCRYPTION_SECRET_KEY en metabase.env}
+      MB_SITE_URL: ${METABASE_SITE_URL:-http://localhost:3310}
+      MB_ANON_TRACKING_ENABLED: 'false'
+      MB_CHECK_FOR_UPDATES: 'false'
+      MB_LOAD_SAMPLE_CONTENT: 'false'
+      MB_REPORT_TIMEZONE: America/Lima
+      JAVA_TOOL_OPTIONS: -Xmx2g
+    mem_limit: 3g
+    healthcheck:
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:3000/api/health']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # Metabase tarda en arrancar (migra su base, carga el driver): sin esto el healthcheck lo marca
+      # unhealthy antes de que termine y depends_on: service_healthy nunca lo vería sano
+      start_period: 180s
+    restart: unless-stopped
+
+volumes:
+  metabase-pg-data:

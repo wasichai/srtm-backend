@@ -309,10 +309,43 @@ escribirse y el Parquet se escribe con las mismas opciones de compresión y de f
 entre dos corridas del mismo corte es `leido_en` en el manifiesto. Subir `duckdb` o `pyarrow` sí cambia los
 bytes de los cortes nuevos; por eso van fijos en `requirements.txt`.
 
+== Metabase
+
+Cada organización tiene su propio archivo DuckDB (`make duckdb ORG=…`, a partir de su último corte publicado) y
+su propia base, grupo, colección y tableros en una instancia de Metabase compartida (`metabase/`), con el
+driver DuckDB comunitario y la base de aplicación en Postgres (srtm-backend#206). El aislamiento entre
+organizaciones es el que trae Metabase OSS (sin «Blocked», sin sandboxing): un grupo y una colección por
+organización, y la conexión DuckDB va de solo lectura y sin acceso externo (`herramientas/base.py`,
+`INIT_SQL`), así que ni una consulta nativa puede abrir el archivo de otra. Nadie tiene SQL nativo: las
+preguntas son las tarjetas de `metabase/tableros.json`.
+
+Cómo desplegarla, el primer alta, qué hacer después de cada corte, los respaldos y la prueba de humo con dos
+organizaciones ficticias están en
+link:../../develop/metabase-cortes.md[«Metabase sobre los cortes», docs/develop/metabase-cortes.md]. En breve:
+
+[source,bash]
+----
+make duckdb ORG=perene        # baja el último corte publicado completo y arma su .duckdb
+docker compose -p srtm-metabase -f metabase/compose.yml --env-file /srv/srtm-metabase/metabase.env \
+  restart metabase            # para que Metabase vuelva a abrir el archivo
+make humo USUARIOS="perene:humo-perene@<dominio>"   # aislamiento y que cada tablero siga corriendo
+----
+
+`make humo` entra con un usuario dedicado a la prueba de humo de cada organización (`humo-<org>@…`, creado con
+`provisionar.py usuario`, clave en `METABASE_CLAVE_USUARIO`), nunca con la cuenta ni la clave de una persona
+real. Nunca corre contra datos reales por sí solo: la organización se prueba primero con dos ficticias
+(`make corte-ficticio`), como describe esa guía.
+
+Límite conocido, pendiente de decisión: en Metabase OSS 0.63.19, `GET /api/user/recipients` devuelve nombre y
+email de todos los usuarios activos (`user-visibility` vale `:all` y restringirlo es una función de pago), así
+que un usuario de una organización ve a los usuarios de Metabase de las otras, por ejemplo al elegir
+destinatarios de una suscripción. Se acepta así o se pasa a un Metabase por organización; la guía lo detalla.
+
 == Requisitos
 
 * Python 3.11 o superior; las dependencias (`duckdb`, `pyarrow`) van fijas en `requirements.txt`, instaladas en
   `.venv` por `make venv`.
-* La CLI de AWS, solo para `make publicar`.
+* La CLI de AWS, solo para `make publicar` y para `make duckdb` (baja el corte de S3).
 * El cliente `duckdb`, para leer el `.duckdb` armado por `make local` (o cualquier herramienta con su driver,
   como Metabase).
+* Docker Compose, solo para `metabase/` (`docs/develop/metabase-cortes.md`).
