@@ -89,6 +89,8 @@ jobs:
       - run: python3 --version
       - run: make venv
       - run: make pruebas
+      # no builds or runs the image, only validates metabase/compose.yml against its own example env (#206)
+      - run: docker compose -f metabase/compose.yml --env-file metabase/metabase.env.example config -q
 
   format:
     name: Format (prettier)
