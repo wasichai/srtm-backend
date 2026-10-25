@@ -942,6 +942,28 @@ y puede lanzar otra.
 Pide creación y edición sobre `brecha_corrida` y creación sobre `brecha_predio` (**403**); consultar pide lectura
 sobre `brecha_corrida`.
 
+**Seguimiento del catastro** (#203). Con `SRTM_CATASTRO_SEGUIMIENTO_MINUTOS` > 0 (por omisión apagado),
+`SeguimientoCatastro` lee cada tantos minutos `GET {url}/api/catastro/cambios` de cada organización con catastro,
+desde su `cursor` (`sincronizacion_catastro`, una fila por organización), y guarda cada cambio en `cambio_catastro`
+(código municipal, objeto, operación, campos, fecha y entrega). Bajo `ClusterLock` (una instancia por organización)
+y como la plataforma (`RecordService.asPlatform`): esta corrida no la lanza ningún usuario, y sus escrituras llevan
+`created_by` y `updated_by` vacíos. A la hora de Lima `SRTM_CATASTRO_SEGUIMIENTO_HORA` (por omisión 2), como máximo
+una corrida automática al día del año corriente: `origen = CAMBIOS` si hay cambios pendientes desde la última
+automática (o esa última quedó FALLIDA), o `origen = SEMANAL` si no hubo ninguna en los últimos 7 días, aunque no
+haya cambios (recupera lo que el feed de catastro-backend pudiera perder: ver wasichai/catastro-backend#26); una
+FALLIDA se reintenta así al día siguiente, a partir de esa hora. Una lectura fallida, una página que no se pudo
+guardar (se deshace entera) o una que no avanza el `cursor` deja `error` en `sincronizacion_catastro` y esa vuelta
+no decide nada; la siguiente lo intenta de nuevo desde el mismo `cursor`. Un cambio sin código municipal se guarda
+igual y el aviso lo omite.
+
+Una diferencia entre el autoavalúo de catastro y el declarado mayor a 5 UIT (del 1 de enero del año) obliga al
+contribuyente a presentar DJ (TUO de la Ley de Tributación Municipal, art. 14 b); la fiscalización alcanza 4 años, o
+6 si no hubo DJ (TUO del Código Tributario, art. 43). Por eso `GET /{anio}/cambios` (abajo) lista, por cada predio
+con cambios desde `desde` (por omisión el 1 de enero del año), su Δ autoavalúo contra la última corrida TERMINADA
+(o `?corrida`) y marca `SUPERA_5_UIT` cuando |Δ| pasa esas 5 UIT: la lista de trabajo de fiscalización. Lee
+`cambio_catastro` directo de su tabla (nunca por `RecordService`, que rehúsa `asPlatform` dentro de una petición),
+sin exigir un permiso nuevo sobre ese objeto: pide la misma lectura de `brecha_corrida` que el resto de la brecha.
+
 **Quién la ve.** La brecha la consulta cualquier usuario de la municipalidad (decisión del 2026-10-19), y eso se da por
 roles, no por código: **todo rol** de srtm lleva lectura sobre `brecha_corrida` y `brecha_predio`. Core revisa la
 lectura de cada fila y wasichai no tiene un permiso para «cualquier usuario autenticado», así que un rol nuevo sin esa
@@ -955,6 +977,7 @@ lectura ve el panel con 403. Lanzar una corrida queda para quien tenga creación
 | GET | `/api/srtm/brecha/{anio}/panel?corrida` | KPIs, por categoría, por confianza (`porConfianza: {CONFIABLE, DUDOSO, SIN_LEVANTAR}`, cada una `{predios, deltaImpuesto, deltaAutoavaluo}`) y por sector de la última corrida TERMINADA del año (o de `corrida`); 404 si no hay. |
 | GET | `/api/srtm/brecha/{anio}/predios?categoria&sector&confianza&page&size&corrida` | Página de filas por su `orden` (código del predio, luego código catastral); 422 si `categoria` no es una de las siete o `confianza` no es una de las tres. |
 | GET | `/api/srtm/brecha/{anio}/lotes?corrida` | GeoJSON `FeatureCollection` (EPSG:4326) con `{categoria, codigo, deltaImpuesto}`. |
+| GET | `/api/srtm/brecha/{anio}/cambios?corrida&desde&marca&objeto&page&size` | Predios con cambios en catastro desde `desde` (AAAA-MM-DD, por omisión el 1 de enero del año), con el Δ autoavalúo de la última corrida TERMINADA (o de `corrida`) y `marca = SUPERA_5_UIT` cuando \|Δ\| pasa de 5 UIT del 1 de enero del año; marcados primero, luego \|Δ\| de mayor a menor y por código municipal; 404 sin corrida TERMINADA del año; 422 si `marca`, `objeto`, `desde`, `page` o `size` son inválidos, o falta la UIT del año (`faltan`). |
 
 **KPIs de autoavalúo.** `autoavaluoDeclarado`, `autoavaluoCatastro` y `deltaAutoavaluo` del panel (y `declarado` y
 `catastro` de la corrida) suman las **mismas filas**: las comparadas (SUBVALUADO, SOBREVALUADO, COINCIDE) y los omisos,

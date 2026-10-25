@@ -41,7 +41,9 @@ data class CatastroProperties(
     // each request: catastro values a page on the fly. an entry without its own timeout takes this one
     val timeout: Duration = ClienteCatastro.TIMEOUT,
     val organizacion: String = "",
-    val organizaciones: Map<String, CuentaCatastro> = emptyMap()
+    val organizaciones: Map<String, CuentaCatastro> = emptyMap(),
+    // the background reader of catastro's cambios (#203, SeguimientoCatastro)
+    val seguimiento: SeguimientoProperties = SeguimientoProperties()
 ) {
     // every account by its organization (trimmed, lowercase: a slug matches without case, an id parses either way):
     // the single properties' when organizacion is set, then the map's, which replaces it for the same organization
@@ -73,7 +75,18 @@ data class CatastroProperties(
     // never the secret: this text may end up in a log
     override fun toString() =
         "CatastroProperties(enabled=$enabled, url=$url, clientId=$clientId, timeout=$timeout, organizacion=$organizacion, " +
-            "organizaciones=$organizaciones)"
+            "organizaciones=$organizaciones, seguimiento=$seguimiento)"
+}
+
+// minutos: how often the cambios are read (0, the default: never); hora: from which hour of the day (Lima) the
+// automatic corrida of the day may start. an hour off the day fails the startup: 24 or more would never run it
+data class SeguimientoProperties(
+    val minutos: Long = 0,
+    val hora: Int = 2
+) {
+    init {
+        require(hora in 0..23) { "srtm.catastro.seguimiento.hora debe ser una hora del día, de 0 a 23: $hora" }
+    }
 }
 
 // one organization's catastro-backend and its service account
@@ -102,6 +115,14 @@ interface Catastro {
     // every titular of the padrón, every page (#204). an older catastro without GET /titulares answers 404 or 403:
     // CatastroException.estado carries it, and that is no failure of the corrida
     suspend fun titulares(porPagina: suspend () -> Unit = {}): List<TitularCatastral>
+
+    // one page of catastro's cambios since desde (#203; null reads from the start), oldest first: the caller keeps
+    // paging with the cursor it gets back until hayMas is false. an older catastro without GET /cambios answers 404
+    // or 403: CatastroException.estado carries it, as titulares does
+    suspend fun cambios(
+        desde: String?,
+        size: Int = ClienteCatastro.TAMANIO_PAGINA
+    ): PaginaDeCambios
 
     // a declaración's autoavalúo sugerido (#149): nothing is stored on either side
     suspend fun valuar(insumos: InsumosValuacion): ValuacionDeInsumos
@@ -268,6 +289,25 @@ class ClienteCatastro(
         return items
     }
 
+    override suspend fun cambios(
+        desde: String?,
+        size: Int
+    ): PaginaDeCambios {
+        val pagina = paginaDeCambios(desde, size)
+        val items =
+            pagina
+                .path("items")
+                .iterator()
+                .asSequence()
+                .map(::cambio)
+                .toList()
+        return PaginaDeCambios(
+            items = items,
+            cursor = pagina.path("cursor").texto(),
+            hayMas = pagina.path("hayMas").booleano() ?: false
+        )
+    }
+
     override suspend fun valuar(insumos: InsumosValuacion): ValuacionDeInsumos {
         val uri = cuenta.url.trimEnd('/') + "/api/catastro/valuacion"
         val cuerpo = DECIMALES.writeValueAsString(insumos)
@@ -408,6 +448,41 @@ class ClienteCatastro(
         return DECIMALES.readTree(body.orEmpty())
     }
 
+    // one page of GET /api/catastro/cambios (#203): desde null reads from the start (no desde at all); desde is the
+    // opaque cursor of a previous page, url-encoded exactly once (encode() before the template is expanded, never
+    // after: that would encode it twice)
+    private suspend fun paginaDeCambios(
+        desde: String?,
+        size: Int
+    ): JsonNode {
+        val builder =
+            UriComponentsBuilder
+                .fromUriString(cuenta.url.trimEnd('/'))
+                .path("/api/catastro/cambios")
+                .queryParam("size", size)
+        val uri =
+            if (desde == null) {
+                builder.build().toUri()
+            } else {
+                builder
+                    .queryParam("desde", "{desde}")
+                    .encode()
+                    .buildAndExpand(desde)
+                    .toUri()
+            }
+        val body =
+            autorizado("los cambios") { token ->
+                client
+                    .get()
+                    .uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer $token")
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(String::class.java)
+            }
+        return DECIMALES.readTree(body.orEmpty())
+    }
+
     // a request as the service account; a 401 means the cached token is no longer good: once more with a new one.
     // que names it in the error
     private suspend fun autorizado(
@@ -495,6 +570,17 @@ class ClienteCatastro(
                 nombre = n.path("nombre").texto(),
                 porcentaje = n.path("porcentaje").decimal(),
                 condicion = n.path("condicion").texto()
+            )
+
+        // one item of GET /api/catastro/cambios (#203)
+        fun cambio(n: JsonNode) =
+            CambioCatastral(
+                codigoMunicipal = n.path("codigoMunicipal").texto(),
+                objeto = n.path("objeto").texto(),
+                operacion = n.path("operacion").texto(),
+                campos = n.path("campos").values().mapNotNull { it.texto() },
+                en = n.path("en").texto(),
+                entrega = n.path("entrega").texto()
             )
 
         // catastro's arancel says what a does: a number by its value, an empty text as null

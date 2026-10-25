@@ -387,6 +387,16 @@ Predio de la brecha. Fila de una corrida: categoría y diferencias de autoavalú
 a|Geometría: `lote_geom` (POLYGON 32718) +
 `corrida` → `brecha_corrida` +
 `predio` → `predio` (opcional)
+a|`sincronizacion_catastro` +
+Sincronización con catastro. Una fila por organización: el cursor de lectura de cambios, la última corrida automática que disparó y el error de la última pasada (#203).
+|4 (0)
+a|Sin campos únicos. +
+`ultima_corrida` → `brecha_corrida` (opcional)
+a|`cambio_catastro` +
+Cambio del catastro. Un cambio leído de `GET /api/catastro/cambios`, para disparar la corrida automática de la hora configurada (#203).
+|6 (4)
+a|Sin campos únicos ni relaciones. +
+`appendOnly`; índices (en), (codigo_municipal)
 |===
 
 [[ref-modelo-relaciones]]

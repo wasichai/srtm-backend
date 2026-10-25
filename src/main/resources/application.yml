@@ -96,6 +96,11 @@ srtm:
     # the srtm organization (its slug or its id) whose catastro the single url and account are. empty: they are no
     # organization's and are not used
     organizacion: ${SRTM_CATASTRO_ORGANIZACION:}
+    # #203: every `minutos` srtm reads each organization's GET /api/catastro/cambios (0: never) and, at or after
+    # `hora` (America/Lima), starts at most one automatic corrida a day: on cambios, or weekly without them
+    seguimiento:
+      minutos: ${SRTM_CATASTRO_SEGUIMIENTO_MINUTOS:0}
+      hora: ${SRTM_CATASTRO_SEGUIMIENTO_HORA:2}
   caja:
     # caja-backend's ordenes de cobro, a caja per organization of srtm, each written as its service account (rentas).
     # off until an entry is complete, and the secrets come from the environment, never here. organizaciones.<slug-or-id>:

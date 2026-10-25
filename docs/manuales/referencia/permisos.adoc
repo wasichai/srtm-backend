@@ -95,7 +95,9 @@ redeterminó. Por eso el perfil `{p-registrador}` sugerido los tiene (<<ref-perm
 
 |Consultar la brecha +
 `GET /api/srtm/brecha/**`
-|`READ` sobre `brecha_corrida` (y `RecordService` exige `READ` sobre `brecha_predio` al servir las filas).
+|`READ` sobre `brecha_corrida` (y `RecordService` exige `READ` sobre `brecha_predio` al servir las filas). El aviso
+de cambios (`GET /{anio}/cambios`, #203) pide esta misma lectura; `cambio_catastro` se lee directo de su tabla, sin
+pasar por `RecordService`, así que ningún rol necesita un permiso nuevo sobre ese objeto.
 
 |Enviar a caja las deudas de un contribuyente +
 `POST /api/srtm/contribuyentes/{id}/caja`

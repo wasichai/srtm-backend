@@ -1,5 +1,6 @@
 package srtm.brecha
 
+import srtm.Faltan
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import java.math.BigDecimal
@@ -8,11 +9,23 @@ import java.math.BigDecimal
 const val BRECHA_CORRIDA = "brecha_corrida"
 const val BRECHA_PREDIO = "brecha_predio"
 
+// cambio_catastro's objeto (#203), as catastro-backend names it
+val OBJETOS_CAMBIO_CATASTRO = setOf("predio_catastral", "construccion", "obra_complementaria", "titular_catastral")
+
+// what keeps GET /{anio}/cambios from answering: the UIT of 1 de enero del año, to decide SUPERA_5_UIT
+class FaltanBrecha(
+    faltan: List<String>
+) : Faltan("Faltan parámetros para el aviso de cambios: ${faltan.joinToString("; ")}", faltan)
+
 const val PENDIENTE = "PENDIENTE"
 const val EN_CURSO = "EN_CURSO"
 const val TERMINADA = "TERMINADA"
 const val FALLIDA = "FALLIDA"
 val ACTIVAS = setOf(PENDIENTE, EN_CURSO)
+
+// who launched a corrida (#203): a POST (MANUAL), or an automatic one from the catastro feed's cambios (CAMBIOS) or
+// its weekly fallback (SEMANAL)
+enum class OrigenCorrida { MANUAL, CAMBIOS, SEMANAL }
 
 // catastro's motivo for a rústico predio (#209): it has no rústico aranceles (per hectárea) yet, so it never values
 // one, even with a ficha. used by the autoavalúo sugerido and the brecha (task 6)
@@ -79,6 +92,26 @@ data class TitularCatastral(
     val condicion: String?
 )
 
+// one item of GET /api/catastro/cambios (#203): what catastro's objeto (predio_catastral, construccion,
+// obra_complementaria or titular_catastral) did since desde (CREATE, UPDATE or DELETE), which campos changed, en
+// (when, ISO-8601) and the entrega that carried it (or null)
+data class CambioCatastral(
+    val codigoMunicipal: String?,
+    val objeto: String?,
+    val operacion: String?,
+    val campos: List<String>,
+    val en: String?,
+    val entrega: String?
+)
+
+// one page of GET /api/catastro/cambios, oldest first: cursor is opaque (pass it back as desde for the next page),
+// hayMas says whether there is more after this page
+data class PaginaDeCambios(
+    val items: List<CambioCatastral>,
+    val cursor: String?,
+    val hayMas: Boolean
+)
+
 // the brecha_corrida record as core keeps it
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class RegistroCorrida(
@@ -102,7 +135,9 @@ data class RegistroCorrida(
     val prediosSinLevantar: Int? = null,
     val deltaImpuestoConfiable: BigDecimal? = null,
     val deltaImpuestoDudoso: BigDecimal? = null,
-    val deltaImpuestoSinLevantar: BigDecimal? = null
+    val deltaImpuestoSinLevantar: BigDecimal? = null,
+    // #203: who launched it (null is an older MANUAL, from before this field)
+    val origen: String? = null
 )
 
 // the brecha_predio record: one per catastro item, plus one per padrón predio the catastro lacks. corrida and predio are
@@ -158,7 +193,8 @@ data class Corrida(
     val prediosSinLevantar: Int?,
     val deltaImpuestoConfiable: BigDecimal?,
     val deltaImpuestoDudoso: BigDecimal?,
-    val deltaImpuestoSinLevantar: BigDecimal?
+    val deltaImpuestoSinLevantar: BigDecimal?,
+    val origen: String?
 )
 
 fun corridaDe(r: RegistroCorrida) =
@@ -181,7 +217,8 @@ fun corridaDe(r: RegistroCorrida) =
         prediosSinLevantar = r.prediosSinLevantar,
         deltaImpuestoConfiable = r.deltaImpuestoConfiable,
         deltaImpuestoDudoso = r.deltaImpuestoDudoso,
-        deltaImpuestoSinLevantar = r.deltaImpuestoSinLevantar
+        deltaImpuestoSinLevantar = r.deltaImpuestoSinLevantar,
+        origen = r.origen
     )
 
 // a row of GET /brecha/{anio}/predios

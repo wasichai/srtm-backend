@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component
 import srtm.EscrituraDeSrtm
 import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
+import wasichai.core.data.PlatformRun
 import wasichai.core.data.RecordCriterion
 import wasichai.core.data.RecordQuery
 import wasichai.core.data.RecordRequest
@@ -114,7 +115,7 @@ class Registros(
         attributes: List<Map<String, Any?>>
     ): List<T> {
         if (attributes.isEmpty()) return emptyList()
-        val definition = metadata.definitionOf(objectName)
+        val definition = definicion(objectName)
         return withContext(EscrituraDeSrtm) {
             attributes.map { read(type, records.create(objectName, request(soloEscribibles(definition, it)))) }
         }
@@ -198,7 +199,12 @@ class Registros(
     private suspend fun escribibles(
         objectName: String,
         attributes: Map<String, Any?>
-    ) = soloEscribibles(metadata.definitionOf(objectName), attributes)
+    ) = soloEscribibles(definicion(objectName), attributes)
+
+    // the object as the caller sees it. the platform (RecordService.asPlatform, #203) has no user to see it with
+    // (definitionOf would answer 401): it writes the organization's object as the model has it
+    private suspend fun definicion(objectName: String): ObjectDefinition =
+        PlatformRun.current()?.let { metadata.loadDefinition(it.organizationId, objectName) } ?: metadata.definitionOf(objectName)
 
     private fun request(attributes: Map<String, Any?>): RecordRequest {
         val (plain, geometries) = separarGeometrias(attributes)

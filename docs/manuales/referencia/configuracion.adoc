@@ -251,7 +251,22 @@ configurado».
 |vacío
 |Slug o id de la organización de {sigla} cuyo catastro es. Vacía con el catastro encendido, ninguna corrida empieza
 (409); una corrida de otra organización también es 409.
+
+|`SRTM_CATASTRO_SEGUIMIENTO_MINUTOS`
+|`0`
+|Cada cuántos minutos lee `GET /api/catastro/cambios` de cada organización con catastro. `0` lo apaga: sin
+seguimiento, sin corridas automáticas.
+
+|`SRTM_CATASTRO_SEGUIMIENTO_HORA`
+|`2`
+|Hora de Lima (0-23) a partir de la cual, con cambios pendientes o para la corrida semanal, empieza la corrida
+automática del día. Fuera de 0-23, {sigla} no arranca.
 |===
+
+NOTE: La primera vuelta del seguimiento, con `sincronizacion_catastro` aún sin `cursor`, lee toda la historia de
+cambios del catastro desde el principio. Por eso el primer aviso del año (`GET /api/srtm/brecha/\{anio}/cambios`)
+lista todos los predios de la carga inicial del catastro, no solo los que cambiaron después: revíselo como la línea
+de base, o consúltelo con `?desde=` (AAAA-MM-DD) posterior a esa carga.
 
 [[ref-config-emision]]
 === Emisión masiva y trabajadores

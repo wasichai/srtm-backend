@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.net.InetSocketAddress
+import java.net.URLDecoder
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 
@@ -53,6 +55,20 @@ class ClienteCatastroTest {
             // 3 titulares in pages of 2 (the stub ignores size=500 to make paging visible)
             val items = listOf(TITULAR_1, TITULAR_2, TITULAR_3).drop(page * 2).take(2)
             responder(ex, 200, """{"page":$page,"size":2,"total":3,"items":[${items.joinToString(",")}]}""")
+        }
+        server.createContext("/api/catastro/cambios") { ex ->
+            val auth = ex.requestHeaders.getFirst("Authorization")
+            pedidos += "GET ${ex.requestURI.rawQuery} $auth"
+            val desde =
+                ex.requestURI.rawQuery
+                    ?.split('&')
+                    ?.firstOrNull { it.startsWith("desde=") }
+                    ?.removePrefix("desde=")
+            if (desde == null) {
+                responder(ex, 200, """{"items":[$CAMBIO_1,$CAMBIO_2],"cursor":"c2","hayMas":true}""")
+            } else {
+                responder(ex, 200, """{"items":[],"cursor":"c2","hayMas":false}""")
+            }
         }
         server.createContext("/api/catastro/valuacion") { ex ->
             val auth = ex.requestHeaders.getFirst("Authorization")
@@ -157,6 +173,55 @@ class ClienteCatastroTest {
         server.removeContext("/api/catastro/titulares")
         server.createContext("/api/catastro/titulares") { ex -> responder(ex, 404, "{}") }
         val e = assertThrows(CatastroException::class.java) { runBlocking { cliente().titulares() } }
+        assertEquals(404, e.estado)
+        assertTrue(!e.message!!.contains("secreto"))
+    }
+
+    @Test
+    fun `the cambios from a cursor, as the contract prints them`() {
+        val c = cliente()
+        val primera = runBlocking { c.cambios(null) }
+        val a = primera.items[0]
+        assertEquals("PM-1", a.codigoMunicipal)
+        assertEquals("predio_catastral", a.objeto)
+        assertEquals("UPDATE", a.operacion)
+        assertEquals(listOf("areaTerreno", "uso"), a.campos)
+        assertEquals("2026-10-20T10:00:00Z", a.en)
+        assertEquals("E-2026-01", a.entrega)
+        val b = primera.items[1]
+        assertEquals("PM-2", b.codigoMunicipal)
+        assertEquals("titular_catastral", b.objeto)
+        assertEquals("CREATE", b.operacion)
+        assertEquals(emptyList<String>(), b.campos)
+        assertNull(b.entrega)
+        assertEquals("c2", primera.cursor)
+        assertTrue(primera.hayMas)
+
+        val segunda = runBlocking { c.cambios("c2") }
+        assertEquals(emptyList<CambioCatastral>(), segunda.items)
+        assertEquals("c2", segunda.cursor)
+        assertFalse(segunda.hayMas)
+
+        assertEquals(listOf("size=500", "size=500&desde=c2"), pedidos.drop(1).map { it.removePrefix("GET ").substringBefore(" Bearer") })
+    }
+
+    @Test
+    fun `a cursor is sent encoded`() {
+        val desde = "a+b/="
+        runBlocking { cliente().cambios(desde) }
+        val rawQuery = pedidos.last().removePrefix("GET ").substringBefore(" Bearer")
+        val rawDesde = rawQuery.split('&').first { it.startsWith("desde=") }.removePrefix("desde=")
+        // encoded exactly once: decodes back to the cursor, but never sent as-is
+        assertEquals(desde, URLDecoder.decode(rawDesde, Charsets.UTF_8))
+        assertTrue(rawDesde != desde, rawDesde)
+        assertFalse(rawDesde.contains("%25"), rawDesde)
+    }
+
+    @Test
+    fun `a catastro without cambios fails with its status`() {
+        server.removeContext("/api/catastro/cambios")
+        server.createContext("/api/catastro/cambios") { ex -> responder(ex, 404, "{}") }
+        val e = assertThrows(CatastroException::class.java) { runBlocking { cliente().cambios(null) } }
         assertEquals(404, e.estado)
         assertTrue(!e.message!!.contains("secreto"))
     }
@@ -333,6 +398,14 @@ class ClienteCatastroTest {
             ITEM_VALORADO.dropLast(1) +
                 ""","estadoLevantamiento":"SIN_LEVANTAR","fechaLevantamiento":"2026-08-01","entrega":"E-2026-01",
                 "vinculoMetodo":"MANUAL","vinculoRevisado":true,"cuc":"0101","codigoReferenciaCatastral":"1101010001010001"}"""
+
+        // GET /api/catastro/cambios (#203)
+        val CAMBIO_1 =
+            """{"codigoMunicipal":"PM-1","objeto":"predio_catastral","operacion":"UPDATE","campos":["areaTerreno","uso"],
+            "en":"2026-10-20T10:00:00Z","entrega":"E-2026-01"}"""
+        val CAMBIO_2 =
+            """{"codigoMunicipal":"PM-2","objeto":"titular_catastral","operacion":"CREATE","campos":[],
+            "en":"2026-10-21T08:30:00Z","entrega":null}"""
 
         val TITULAR_1 =
             """{"codigoMunicipal":"PM-1","tipoDocumento":"DNI","numeroDocumento":"12345678","nombre":"PEREZ JUAN",
