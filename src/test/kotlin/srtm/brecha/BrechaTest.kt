@@ -12,6 +12,7 @@ import srtm.impuesto.ImpuestoPredial
 import srtm.impuesto.ParametroTributario
 import srtm.impuesto.Parametros
 import srtm.rentas.ANULADA
+import srtm.rentas.Contribuyente
 import srtm.rentas.Declaracion
 import srtm.rentas.Predio
 import srtm.rentas.SUSTITUIDA
@@ -453,21 +454,25 @@ class BrechaTest {
         assertEquals(liquidar("120000.00") - liquidar("110000.00"), fila.deltaImpuesto)
     }
 
+    // a subvaluado, an omiso never in the padrón, an omiso whose only DJ is annulled and a predio the catastro lacks, from
+    // a catastro without #204's keys (no levantamiento, no vínculo, no titulares)
+    private fun medirSinLlaves() =
+        Brecha.medir(
+            anio,
+            listOf(
+                item(municipal = "01-01-0001", autoavaluo = "120000.00"),
+                item(municipal = "NUEVO", sector = "03", manzana = "B", lote = "4", autoavaluo = "50000.00"),
+                item(municipal = "01-02-0001", autoavaluo = null, motivo = "Sin arancel")
+            ),
+            padron(dj("1", "a", "p1", "100000.00"), dj("2", "a", "p2", "20000.00"), dj("3", "b", "p3", "1.00").copy(estado = ANULADA)),
+            parametros,
+            null,
+            hoy
+        )
+
     @Test
     fun `one row per catastro item and per padron predio the catastro lacks`() {
-        val m =
-            Brecha.medir(
-                anio,
-                listOf(
-                    item(municipal = "01-01-0001", autoavaluo = "120000.00"),
-                    item(municipal = "NUEVO", sector = "03", manzana = "B", lote = "4", autoavaluo = "50000.00"),
-                    item(municipal = "01-02-0001", autoavaluo = null, motivo = "Sin arancel")
-                ),
-                padron(dj("1", "a", "p1", "100000.00"), dj("2", "a", "p2", "20000.00"), dj("3", "b", "p3", "1.00").copy(estado = ANULADA)),
-                parametros,
-                null,
-                hoy
-            )
+        val m = medirSinLlaves()
         assertEquals(emptyList<String>(), m.faltan)
         val porCodigo = m.filas.associateBy { it.codigoPredio ?: it.codigoCatastro }
         val sub = porCodigo.getValue("01-01-0001")
@@ -673,6 +678,123 @@ class BrechaTest {
             "1 predios rústicos sin valor: el catastro aún no valúa terrenos rústicos (PREDIO_RUSTICO)" in m.avisos,
             m.avisos.toString()
         )
+    }
+
+    // #204: a ficha sin levantar, and each row's confianza
+
+    private fun sinLevantar(
+        municipal: String,
+        autoavaluo: String? = null,
+        entrega: String? = null
+    ) = item(municipal = municipal, autoavaluo = autoavaluo, motivo = "SIN_LEVANTAMIENTO").copy(estadoLevantamiento = SIN_LEVANTAR, entrega = entrega)
+
+    @Test
+    fun `a ficha sin levantar is its own category, never OMISO nor COINCIDE`() {
+        val m =
+            Brecha.medir(
+                anio,
+                listOf(
+                    // a value on a ficha sin levantar is none: it never reaches the contribuyente's impuesto
+                    sinLevantar("01-01-0001", autoavaluo = "90000.00", entrega = "E-2026-01"),
+                    item(municipal = "01-01-0002", autoavaluo = "30000.00"),
+                    sinLevantar("NUEVO")
+                ),
+                padron(dj("1", "a", "p1", "100000.00"), dj("2", "a", "p2", "20000.00")),
+                parametros,
+                null,
+                hoy
+            )
+        val porCodigo = m.filas.associateBy { it.codigoPredio ?: it.codigoCatastro }
+        assertEquals(3, m.filas.size)
+        assertTrue(m.filas.none { it.categoria == Categoria.SIN_CATASTRO.name }, m.filas.toString())
+
+        val cruzada = porCodigo.getValue("01-01-0001")
+        assertEquals(Categoria.SIN_LEVANTAR.name, cruzada.categoria)
+        assertEquals("p1", cruzada.predio)
+        assertEquals(BigDecimal("100000.00"), cruzada.autoavaluoDeclarado)
+        assertTrue(cruzada.impuestoDeclarado!!.signum() > 0, cruzada.toString())
+        assertNull(cruzada.autoavaluoCatastro)
+        assertNull(cruzada.deltaAutoavaluo)
+        assertNull(cruzada.impuestoCatastro)
+        assertNull(cruzada.deltaImpuesto)
+        assertNull(cruzada.deltaArbitrios)
+        assertEquals(false, cruzada.estimado)
+        assertEquals("SIN_LEVANTAMIENTO", cruzada.motivo)
+        assertEquals(Confianza.SIN_LEVANTAR.name, cruzada.confianza)
+        assertEquals("Ficha sin levantar (entrega E-2026-01)", cruzada.confianzaMotivo)
+
+        // p1 moves nothing: the contribuyente's difference is p2's alone
+        val sub = porCodigo.getValue("01-01-0002")
+        assertEquals(Categoria.SUBVALUADO.name, sub.categoria)
+        assertEquals(liquidar("130000.00") - liquidar("120000.00"), sub.deltaImpuesto)
+
+        val suelta = porCodigo.getValue("NUEVO")
+        assertEquals(Categoria.SIN_LEVANTAR.name, suelta.categoria)
+        assertNull(suelta.predio)
+        assertNull(suelta.deltaAutoavaluo)
+        assertNull(suelta.deltaImpuesto)
+        assertEquals(false, suelta.estimado)
+        assertEquals(Confianza.SIN_LEVANTAR.name, suelta.confianza)
+        assertEquals("Ficha sin levantar", suelta.confianzaMotivo)
+    }
+
+    @Test
+    fun `a catastro without the new keys measures as before and every row is DUDOSO`() {
+        val m = medirSinLlaves()
+        val porCodigo = m.filas.associateBy { it.codigoPredio ?: it.codigoCatastro }
+        assertEquals(
+            mapOf(
+                "01-01-0001" to Categoria.SUBVALUADO.name,
+                "NUEVO" to Categoria.OMISO.name,
+                "01-02-0001" to Categoria.OMISO.name,
+                "01-01-0002" to Categoria.SIN_CATASTRO.name
+            ),
+            porCodigo.mapValues { it.value.categoria }
+        )
+        val sub = porCodigo.getValue("01-01-0001")
+        assertEquals(BigDecimal("20000.00"), sub.deltaAutoavaluo)
+        // contribuyente a: p1 moves 20 000 over its 120 000 (p2 not valued)
+        assertEquals(liquidar("140000.00") - liquidar("120000.00"), sub.deltaImpuesto)
+        assertEquals(liquidar("50000.00"), porCodigo.getValue("NUEVO").deltaImpuesto)
+        assertEquals(
+            liquidar("140000.00") - liquidar("120000.00") + liquidar("50000.00"),
+            m.filas.mapNotNull { it.deltaImpuesto }.fold(BigDecimal.ZERO, BigDecimal::add)
+        )
+        assertTrue(m.filas.all { it.confianza == Confianza.DUDOSO.name }, m.filas.toString())
+        assertEquals(
+            mapOf(
+                "01-01-0001" to "Vínculo sin método, sin titular en común",
+                "NUEVO" to "Sin predio en el padrón",
+                "01-02-0001" to "Vínculo sin método, sin titular en común",
+                "01-01-0002" to "Sin ficha del catastro"
+            ),
+            porCodigo.mapValues { it.value.confianzaMotivo }
+        )
+        // no titulares compared: nothing else to say
+        assertEquals(1, m.avisos.size, m.avisos.toString())
+    }
+
+    @Test
+    fun `the rows carry the titulares' confianza`() {
+        val sinTitulares = "El catastro no da titulares (GET /api/catastro/titulares respondió 404): la confianza no compara titulares"
+        val m =
+            Brecha.medir(
+                anio,
+                listOf(item(municipal = "01-01-0001", autoavaluo = "120000.00").copy(vinculoMetodo = "GEOMETRICO")),
+                padron(dj("1", "a", "p1", "100000.00")).copy(
+                    contribuyentes = mapOf("a" to Contribuyente(id = "a", tipoDocumento = "DNI", numeroDocumento = "40000001"))
+                ),
+                parametros,
+                null,
+                hoy,
+                titulares = listOf(TitularCatastral("1-1-1", "DNI", "00040000001", "OTRO NOMBRE", BigDecimal(100), "PROPIETARIO")),
+                sinTitulares = sinTitulares
+            )
+        val fila = m.filas.single()
+        assertEquals(Categoria.SUBVALUADO.name, fila.categoria)
+        assertEquals(Confianza.CONFIABLE.name, fila.confianza)
+        assertEquals("Un titular de la ficha coincide por documento", fila.confianzaMotivo)
+        assertTrue(sinTitulares in m.avisos, m.avisos.toString())
     }
 
     @Test

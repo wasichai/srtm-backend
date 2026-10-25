@@ -6,6 +6,7 @@ import srtm.arbitrios.InafectacionArbitrio
 import srtm.arbitrios.PredioArbitrios
 import srtm.impuesto.ImpuestoPredial
 import srtm.impuesto.ParametroTributario
+import srtm.rentas.Contribuyente
 import srtm.rentas.Declaracion
 import srtm.rentas.Predio
 import srtm.rentas.UsoPredio
@@ -22,13 +23,15 @@ import srtm.rentas.vigente as declaracionVigente
 // what a corrida reads of srtm: every predio of the organization (the candidates of the cruce), every declaración of
 // the year (an annulled one too: arbitrios may charge the months before a sale; the impuesto counts only the vigentes),
 // and for the arbitrios the contribuyentes' codes (the titular principal's tie-break) and the inafectaciones.
-// obrasDelPadron: declaración id -> the otras instalaciones an external padrón brought (> 0), which no dto reads
+// obrasDelPadron: declaración id -> the otras instalaciones an external padrón brought (> 0), which no dto reads.
+// contribuyentes: id -> the DJs' titulares, whose documento and nombre the confianza compares with the ficha's (#204)
 data class Padron(
     val predios: List<Predio>,
     val declaraciones: List<Declaracion>,
     val codigos: Map<String, String?> = emptyMap(),
     val inafectaciones: List<InafectacionArbitrio> = emptyList(),
-    val obrasDelPadron: Map<String, BigDecimal> = emptyMap()
+    val obrasDelPadron: Map<String, BigDecimal> = emptyMap(),
+    val contribuyentes: Map<String, Contribuyente> = emptyMap()
 )
 
 // the rows of a corrida, or what the year lacks to liquidate (then no row). avisos are what could not be computed
@@ -456,8 +459,12 @@ object Brecha {
 
     // a corrida's rows: one per catastro item (crossed or OMISO) and one per padrón predio the catastro lacks
     // (SIN_CATASTRO). the padrón is the predios with a vigente declaración of the year: a catastro item crossed with a
-    // predio without one is an OMISO too (it keeps the predio). without the year's impuesto parameters, faltan and no
-    // row. contexto null (or a year without what Arbitrios needs): no Δ arbitrios, and avisos says why
+    // predio without one is an OMISO too (it keeps the predio). #204: an item whose ficha is sin levantar is
+    // SIN_LEVANTAR, crossed or not, never valued (whatever autoavalúo it carries) and with no difference; its predio has
+    // no SIN_CATASTRO row. every row gets its confianza (Confiabilidad.de), with the ficha's titulares (titulares, by
+    // código municipal) against its predio's DJ's (padron.contribuyentes); sinTitulares: why there are none, an aviso.
+    // without the year's impuesto parameters, faltan and no row. contexto null (or a year without what Arbitrios
+    // needs): no Δ arbitrios, and avisos says why
     fun medir(
         anio: Int,
         items: List<ValuacionCatastral>,
@@ -465,7 +472,9 @@ object Brecha {
         parametros: List<ParametroTributario>,
         contexto: ContextoArbitrios?,
         hoy: LocalDate,
-        sinArbitrios: String? = null
+        sinArbitrios: String? = null,
+        titulares: List<TitularCatastral> = emptyList(),
+        sinTitulares: String? = null
     ): Medicion {
         val faltan = ImpuestoPredial.liquidar(anio, BigDecimal.ZERO, parametros).faltan
         if (faltan.isNotEmpty()) return Medicion(emptyList(), faltan)
@@ -481,6 +490,7 @@ object Brecha {
         val pares =
             cruzar(items, padron.predios, vigentesPorPredio.keys)
                 .map { (item, predio) ->
+                    if (sinLevantar(item)) return@map item to predio
                     if (predio?.tipoPredio == "PREDIO RUSTICO") rusticos++
                     val sinRustico = sinValorSiRustico(item, predio)
                     val obras = predio?.id?.let(vigentesPorPredio::get)?.let { obrasDeLaDj(it, padron.obrasDelPadron) }
@@ -491,6 +501,7 @@ object Brecha {
         val valuados =
             pares
                 .mapNotNull { (item, predio) ->
+                    if (sinLevantar(item)) return@mapNotNull null
                     val valor = item.autoavaluo ?: return@mapNotNull null
                     predio?.id?.takeIf { it in vigentesPorPredio }?.let { it to valor }
                 }.toMap()
@@ -523,6 +534,7 @@ object Brecha {
         if (rusticos > 0) {
             avisos += "$rusticos predios rústicos sin valor: el catastro aún no valúa terrenos rústicos ($PREDIO_RUSTICO)"
         }
+        if (sinTitulares != null) avisos += sinTitulares
         val inafectaciones = padron.inafectaciones.filter { it.predio != null }.groupBy { it.predio!! }
         val sinDelta = linkedMapOf<String, Int>()
 
@@ -541,9 +553,29 @@ object Brecha {
             }
         }
 
+        val fichas = titulares.mapNotNull { t -> llave(t.codigoMunicipal)?.let { it to t } }.groupBy({ it.first }, { it.second })
+
+        // the row's confianza: the item's ficha titulares against the contribuyentes of its predio's vigente DJs
+        fun confianza(
+            item: ValuacionCatastral?,
+            predio: Predio?
+        ): ConfianzaDeFila {
+            val suyos = item?.let { llave(it.codigoMunicipal) }?.let(fichas::get).orEmpty()
+            val djs =
+                predio
+                    ?.id
+                    ?.let(vigentesPorPredio::get)
+                    .orEmpty()
+                    .mapNotNull { it.contribuyente }
+                    .distinct()
+                    .mapNotNull(padron.contribuyentes::get)
+            return Confiabilidad.de(item, predio, suyos, djs)
+        }
+
         val filas = mutableListOf<FilaBrecha>()
         val cruzados = HashSet<String>()
         for ((item, predio) in pares) {
+            val conf = confianza(item, predio)
             val base =
                 FilaBrecha(
                     predio = predio?.id,
@@ -554,9 +586,26 @@ object Brecha {
                     lote = item.lote ?: predio?.lote,
                     uso = item.uso,
                     autoavaluoCatastro = item.autoavaluo,
-                    motivo = item.motivo
+                    motivo = item.motivo,
+                    confianza = conf.confianza.name,
+                    confianzaMotivo = conf.motivo
                 )
             val suyas = predio?.id?.let(vigentesPorPredio::get)
+            if (sinLevantar(item)) {
+                // no value to compare: what the padrón declares of its predio, if any, and nothing else
+                val delPadron = predio?.id?.takeIf { suyas != null }
+                if (delPadron != null) cruzados += delPadron
+                filas +=
+                    base.copy(
+                        categoria = Categoria.SIN_LEVANTAR.name,
+                        autoavaluoCatastro = null,
+                        autoavaluoDeclarado = suyas?.let { totalesDePredio(it).autoavaluo.setScale(2, RoundingMode.HALF_UP) },
+                        impuestoDeclarado = delPadron?.let { impuestos.porPredio[it]?.declarado ?: cero },
+                        estimado = false,
+                        loteGeom = poligono(predio?.loteGeom) ?: poligono(item.loteGeom)
+                    )
+                continue
+            }
             if (predio == null || suyas == null) {
                 val impuesto = item.autoavaluo?.let { estimado(anio, it, parametros) }
                 filas +=
@@ -593,6 +642,7 @@ object Brecha {
         for ((id, suyas) in vigentesPorPredio.toSortedMap()) {
             if (id in cruzados) continue
             val predio = porId[id]
+            val conf = confianza(null, predio)
             filas +=
                 FilaBrecha(
                     predio = id,
@@ -604,7 +654,9 @@ object Brecha {
                     autoavaluoDeclarado = totalesDePredio(suyas).autoavaluo.setScale(2, RoundingMode.HALF_UP),
                     impuestoDeclarado = impuestos.porPredio[id]?.declarado ?: cero,
                     estimado = false,
-                    loteGeom = poligono(predio?.loteGeom)
+                    loteGeom = poligono(predio?.loteGeom),
+                    confianza = conf.confianza.name,
+                    confianzaMotivo = conf.motivo
                 )
         }
         if (sinDelta.isNotEmpty()) {
@@ -613,6 +665,8 @@ object Brecha {
         }
         return Medicion(filas, emptyList(), avisos)
     }
+
+    private fun sinLevantar(item: ValuacionCatastral) = item.estadoLevantamiento == SIN_LEVANTAR
 
     // catastro answered no item at all while the padrón has predios of the year: an empty or misconfigured catastro,
     // not a district of omisos. measuring it would call every predio SIN_CATASTRO: the corrida fails with why instead

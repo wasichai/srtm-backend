@@ -171,7 +171,7 @@ class BrechaApiTest : SrtmApiTest() {
         assertEquals(esperado, dec(k["deltaImpuesto"]))
         assertTrue(k["deltaArbitrios"].isNull)
         assertEquals(esperado, dec(corrida["deltaImpuesto"]))
-        assertEquals(6, panel["porCategoria"].size())
+        assertEquals(Categoria.entries.size, panel["porCategoria"].size())
         assertEquals("01", panel["porSector"][0]["sector"].asString())
 
         val omisos = tree(send("GET", "/api/srtm/brecha/2026/predios?categoria=OMISO", null, HttpStatus.OK, org))

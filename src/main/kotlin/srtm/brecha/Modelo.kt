@@ -27,8 +27,8 @@ const val MANUAL = "MANUAL"
 
 // what a catastro item is next to the padrón (D7, D10): never in the padrón (OMISO), a padrón predio the catastro
 // lacks (SIN_CATASTRO), crossed but not valued (SIN_VALOR), or crossed and valued above, below or within ±5 % of its
-// declared autoavalúo
-enum class Categoria { OMISO, SIN_CATASTRO, SIN_VALOR, SUBVALUADO, SOBREVALUADO, COINCIDE }
+// declared autoavalúo. #204: a ficha sin levantar is SIN_LEVANTAR, crossed or not, with no difference
+enum class Categoria { OMISO, SIN_CATASTRO, SIN_VALOR, SUBVALUADO, SOBREVALUADO, COINCIDE, SIN_LEVANTAR }
 
 // one item of catastro-backend's GET /api/catastro/valuaciones: a predio catastral valued for the year. autoavaluo is
 // null when it could not be valued (motivo says why); loteGeom is its lote, GeoJSON in EPSG:4326
@@ -125,7 +125,10 @@ data class FilaBrecha(
     // its position in /predios (Brecha.ordenadas)
     val orden: Int? = null,
     // #208: the DJ's obras the catastro side added, its ficha without obras (Brecha.conObrasDeLaDj)
-    val obrasDj: BigDecimal? = null
+    val obrasDj: BigDecimal? = null,
+    // #204: how sure its cruce is (Confianza) and why (Confiabilidad.de)
+    val confianza: String? = null,
+    val confianzaMotivo: String? = null
 )
 
 // the corrida as the portal shows it (camelCase, like /liquidacion)
@@ -182,7 +185,9 @@ data class PredioBrecha(
     val deltaArbitrios: BigDecimal?,
     val estimado: Boolean,
     val motivo: String?,
-    val obrasDj: BigDecimal?
+    val obrasDj: BigDecimal?,
+    val confianza: String?,
+    val confianzaMotivo: String?
 )
 
 fun predioBrechaDe(f: FilaBrecha) =
@@ -205,7 +210,9 @@ fun predioBrechaDe(f: FilaBrecha) =
         deltaArbitrios = f.deltaArbitrios,
         estimado = f.estimado == true,
         motivo = f.motivo,
-        obrasDj = f.obrasDj
+        obrasDj = f.obrasDj,
+        confianza = f.confianza,
+        confianzaMotivo = f.confianzaMotivo
     )
 
 data class PedidoCorrida(
