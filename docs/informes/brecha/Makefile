@@ -18,10 +18,17 @@
 
 SHELL := /bin/bash
 PYTHON ?= python3
+# PY (bare, stdlib-only) reads parametros.json and hoy_lima() at parse time, before .venv may even exist
+# (recaudacion/Makefile:19); VPY (the venv's python) is only for recipes that need duckdb or pyarrow.
+PY := python3 -I
 VPY := .venv/bin/python -I
 SALIDA ?= ~/cortes/analitica
-FECHA ?= $(shell $(VPY) -c "import sys; sys.path.insert(0, '.'); from herramientas import comun; print(comun.hoy_lima())")
-S3 := $(shell $(VPY) -c "import sys, json; sys.path.insert(0, '.'); print(json.load(open('parametros.json'))['publicacion']['s3'])")
+# computed once (:=, not a recursively-expanded ?=), so a single `make corte` never asks twice and risks two
+# different dates; skipped entirely when FECHA already comes from the command line or the environment
+ifeq ($(origin FECHA),undefined)
+FECHA := $(shell $(PY) -c "import sys; sys.path.insert(0, '.'); from herramientas import comun; print(comun.hoy_lima())")
+endif
+S3 := $(shell $(PY) -c "import sys, json; sys.path.insert(0, '.'); print(json.load(open('parametros.json'))['publicacion']['s3'])")
 
 .PHONY: venv pruebas comprobar-org comprobar-org-fecha extraer verificar publicar corte local
 
@@ -50,6 +57,10 @@ verificar: comprobar-org-fecha venv
 
 # a manifiesto.json ya publicado es inmutable (contexto.md): sin REEMPLAZAR=1 no se pisa uno que ya exista
 publicar: verificar
+	@case "$(S3)" in \
+		s3://*) ;; \
+		*) echo "S3 inválido: '$(S3)' (revisa parametros.json y PY=$(PY)); no se publica nada"; exit 2;; \
+	esac
 	@if [ -z "$(REEMPLAZAR)" ] && aws s3 ls "$(S3)/$(ORG)/$(FECHA)/manifiesto.json" >/dev/null 2>&1; then \
 		echo "ya existe $(S3)/$(ORG)/$(FECHA)/manifiesto.json (usa REEMPLAZAR=1 para sobrescribirlo)"; exit 2; \
 	fi
