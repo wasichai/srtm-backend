@@ -11,9 +11,9 @@ const val SUSTITUIDA = "SUSTITUIDA"
 const val RECTIFICACION = "RECTIFICACION"
 
 // what a copy takes of a declaración: what it declares and its titular's data (the same contribuyente), not its
-// number, estado, motivo, anulación, sustitución nor presentation (a copy is presented anew). the external padrón's
-// valuation of the declaración stays in the source (the dto's arancel is read-only, #195: copiar copies it with
-// id_aranc); its niveles' is copied apart (DeclaracionService.nivelesDelPadron)
+// number, estado, motivo, anulación, sustitución nor presentation (a copy is presented anew). what the external
+// padrón brought of the declaración (the dto's arancel is read-only, #195) is copied apart (padronDeLaCopia), of its
+// niveles too (DeclaracionService.nivelesDelPadron)
 fun copiaDe(origen: Declaracion) =
     origen.copy(
         id = null,
@@ -28,6 +28,16 @@ fun copiaDe(origen: Declaracion) =
         sustituye = null,
         fechaSustitucion = null
     )
+
+// #237: what a copy takes of the external padrón's fields of the declaración (PADRON_EXTERNO_DECLARACION), which the
+// dto does not write. a rectificatoria (the same year) is the same declaración: all of them, the arancel with or
+// without its tramo de vía (id_aranc), and the mark that it changed since (ORIGEN_MODIFICADO), as a condómino's copy.
+// another year keeps the otras instalaciones (#208: a fixed amount, not depreciated again), not the figures of the
+// source's year (its arancel, valor_terreno, valor_construccion): as a nivel's clasificación (nivelesDelPadron)
+fun padronDeLaCopia(
+    origen: Declaracion,
+    copia: Declaracion
+): List<String> = if (copia.anio == origen.anio) PADRON_EXTERNO_DECLARACION + ORIGEN_MODIFICADO else listOf(OTRAS_INSTALACIONES)
 
 // the declaración its rectificatoria replaces, on the day
 fun sustituida(

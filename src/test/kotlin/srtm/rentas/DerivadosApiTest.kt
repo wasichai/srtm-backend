@@ -634,6 +634,50 @@ class DerivadosApiTest : SrtmApiTest() {
         }
     }
 
+    // #237: an Ica DJ with the padrón's arancel (no tramo de vía) and otras instalaciones (#208), rectified and recomputed:
+    // catastro still gets that arancel and the obras are still added. another year keeps the obras, not the arancel
+    @Test
+    fun `a rectificatoria keeps the padron's arancel and otras instalaciones, another year only the obras`() {
+        val org = conCatastro()
+        val id = declarar(org)
+        piso(id, org, 1, 100)
+        send(
+            "PUT",
+            "/api/objects/declaracion_predial/records/$id",
+            mapOf("attributes" to fields(registro("declaracion_predial", id, org)) + PADRON_ICA),
+            HttpStatus.OK,
+            org
+        )
+        send("POST", "/api/srtm/declaraciones/$id/recalcular", null, HttpStatus.OK, org)
+        assertDec("15000", declaracion(id, org)["valor_autoavaluo"])
+        assertDec("35.50", JSON.readTree(PEDIDO.get())["arancelM2"])
+
+        val rid = tree(send("POST", "/api/srtm/declaraciones/$id/rectificar", null, HttpStatus.CREATED, org))["declaracion"]["id"].asString()
+        assertDec("15000", declaracion(rid, org)["valor_autoavaluo"])
+        send("POST", "/api/srtm/declaraciones/$rid/recalcular", null, HttpStatus.OK, org)
+
+        assertDec("35.50", JSON.readTree(PEDIDO.get())["arancelM2"])
+        declaracion(rid, org).let {
+            assertDec("15000", it["valor_autoavaluo"])
+            assertDec("3000", it["valor_obras"])
+        }
+
+        val contribuyente = declaracion(rid, org)["contribuyente"].asString()
+        val siguiente =
+            post(
+                "/api/srtm/contribuyentes/$contribuyente/declaraciones-juradas",
+                mapOf("predio_id" to declaracion(rid, org)["predio"].asString(), "desde" to rid, "declaracion" to mapOf("anio" to 2027)),
+                org
+            )["declaracion"]["id"].asString()
+        send("POST", "/api/srtm/declaraciones/$siguiente/recalcular", null, HttpStatus.OK, org)
+
+        assertDec(null, JSON.readTree(PEDIDO.get())["arancelM2"])
+        declaracion(siguiente, org).let {
+            assertDec("15000", it["valor_autoavaluo"])
+            assertDec("3000", it["valor_obras"])
+        }
+    }
+
     @Test
     fun `a fila is the backend's`() {
         val org = conCatastro()
@@ -678,6 +722,10 @@ class DerivadosApiTest : SrtmApiTest() {
             )
         val OBRA = AutoavaluoSugeridoApiTest.OBRA
         val FRENTE = mapOf("tipo_via" to "JIRON", "via" to "AREQUIPA", "numero" to "45", "frontis" to 4)
+
+        // what Ica's padrón brings of a declaración (fictitious): its arancel, without a tramo de vía, and its obras
+        val PADRON_ICA =
+            mapOf("arancel" to BigDecimal("35.50"), "valor_terreno" to BigDecimal("7100"), "valor_otras_instalaciones" to BigDecimal("3000"))
 
         private const val SIN_VALOR =
             """{"anio":2026,"version":"valuacion-v2","region":"SELVA","autoavaluo":null,

@@ -251,6 +251,7 @@ Base: `/api/srtm`. Controlador `RentasController`.
 |`POST /contribuyentes/{id}/declaraciones-juradas`
 |Presenta una DJ: `{declaracion, predio_id}` sobre un predio existente o `{declaracion, predio}` registrándolo. Con
 `desde` (el id de una DJ de otro año del mismo predio y contribuyente), la copia con sus listas al año del cuerpo.
+Del padrón externo lleva solo lo que no es del año de partida (<<ref-api-copia-padron>>).
 |201; 400 por campo; 400 si `desde` es del mismo año.
 
 |`GET`, `PUT`, `DELETE /declaraciones/{id}`
@@ -265,8 +266,9 @@ SUSTITUIDA, o si cambia el año de una DJ con valuación de un padrón externo.
 
 |`POST /declaraciones/{id}/rectificar` +
 `{medio_presentacion, fecha_presentacion}`
-|Rectificatoria: una DJ nueva, numerada, con motivo RECTIFICACION y lo que declara esta (con sus listas, sin la
-valuación del padrón externo); esta queda SUSTITUIDA, de solo lectura. Devuelve la ficha de la nueva.
+|Rectificatoria: una DJ nueva, numerada, con motivo RECTIFICACION y lo que declara esta, con sus listas y la
+valuación del padrón externo (<<ref-api-copia-padron>>); esta queda SUSTITUIDA, de solo lectura. Devuelve la ficha
+de la nueva.
 |201; 400 si está ANULADA o SUSTITUIDA.
 
 |`POST /declaraciones/{id}/condominos` +
@@ -292,6 +294,16 @@ valuación del padrón externo); esta queda SUSTITUIDA, de solo lectura. Devuelv
 * *Solo lectura.* Un `arancel` en el cuerpo del alta, la edición o la presentación se ignora, con `id_aranc` o sin
   él. Así, leer la DJ y reenviarla, con o sin `arancel`, no lo borra ni lo pisa. Un usuario sin permiso de lectura
   sobre el campo lo recibe `null`.
+
+[[ref-api-copia-padron]]
+*Lo que una copia lleva del padrón externo.* La DJ guarda lo que trajo un padrón externo (Ica): `arancel`,
+`valor_terreno`, `valor_construccion` y `valor_otras_instalaciones`, y de cada nivel su `clasificacion` y sus cifras.
+
+* *La rectificatoria (el mismo año)* lo lleva todo, también la marca de que la DJ cambió desde entonces. Con eso
+  conserva el arancel del padrón sin `id_aranc`, y el recálculo sigue sumando las otras instalaciones como obras.
+* *Una DJ de otro año (`desde`)* lleva `valor_otras_instalaciones`, un monto fijo que no se vuelve a depreciar, y la
+  `clasificacion` de los niveles. No lleva el arancel ni las cifras del año de partida. Esos dos datos solos no son
+  una valuación de origen: no se muestran en `/valuacion-origen`, no marcan la DJ y no impiden cambiar su año.
 
 [[ref-api-redeterminacion]]
 Una escritura de la DJ o de sus listas que cambia lo que leen los arbitrios redetermina el año de su predio, si ya
