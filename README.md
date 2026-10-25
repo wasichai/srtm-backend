@@ -821,16 +821,17 @@ salta (con un aviso en el log al arrancar). Una organización sin catastro respo
 veces (por su slug y por su id, o por dos entradas del mapa) **409** «Catastro configurado dos veces para esta
 organización», con las claves que la nombran: nunca se cruza el padrón de una organización con el catastro de otra.
 
-**Cruce** (D7). Cada ítem del catastro busca su predio: por código municipal (`predio.codigo`), si no por código CPU
+**Cruce** (D7). Cada ítem del catastro busca su predio: por código municipal (`predio.codigo`), si no por el
+`codigo_origen` de un predio (#207: el código del SAT que Ica partió en `X-1`, `X-2`, ...), si no por código CPU
 (`codigo_cpu`), si no por sector, manzana y lote (`sector_catastral`, `manzana_catastral`, `lote`), sin distinguir
 mayúsculas, espacios en los extremos ni ceros a la izquierda de cada tramo de números: `01-01-0006` y `1-1-6` son la
 misma llave, como un lote `08` y `8` (el padrón de Perené escribe los dos). El cruce va **por pasadas sobre todos los ítems**, así el orden de los ítems no
-cambia nada: primero todos por código municipal, luego los que quedan por CPU, luego los que quedan por sector, manzana
-y lote. Una llave de respaldo nunca le quita a otro ítem el predio que este nombra por una llave más fuerte. Un predio
-cruza una sola vez. En las dos primeras pasadas, entre varios predios de la misma llave gana el que tiene DJ del año y
-luego el de código menor. Sector, manzana y lote no identifican: cruzan solo cuando a la llave le quedan **un** ítem y
-**un** predio; si la comparten varios ítems o varios predios, ninguno cruza (los ítems quedan OMISO y los predios
-SIN_CATASTRO) antes que emparejarlos al azar.
+cambia nada: primero todos por código municipal, luego los que quedan por `codigo_origen`, luego por CPU, luego por
+sector, manzana y lote. Una llave de respaldo nunca le quita a otro ítem el predio que este nombra por una llave más
+fuerte. Un predio cruza una sola vez. En las tres primeras pasadas, entre varios predios de la misma llave gana el que
+tiene DJ del año y luego el de código menor. Sector, manzana y lote no identifican: cruzan solo cuando a la llave le
+quedan **un** ítem y **un** predio; si la comparten varios ítems o varios predios, ninguno cruza (los ítems quedan
+OMISO y los predios SIN_CATASTRO) antes que emparejarlos al azar.
 
 **Categorías** (una fila de `brecha_predio` por ítem del catastro y por predio del padrón sin catastro). El padrón son
 los predios con alguna DJ **vigente** del año; su autoavalúo declarado es el de `totalesDePredio` (el mayor de cada

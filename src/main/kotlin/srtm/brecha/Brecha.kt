@@ -112,14 +112,16 @@ object Brecha {
         return if (partes.any { it == null }) null else partes.joinToString("|")
     }
 
-    // D7: each catastro item to the padrón's predio of its código municipal (predio.codigo), else of its código CPU,
-    // else of its sector, manzana and lote (sector_catastral, manzana_catastral, lote). in passes over every item, so
-    // an item's fallback key never takes a predio another item names by a stronger one, whatever their order: first
-    // every código municipal, then the CPU of the items still alone, then their sector-manzana-lote. a predio crosses
-    // once. in the first two passes, among several predios of the same key, those with a declaración of the year
-    // (preferidos) go first, then by código. sector-manzana-lote is not an identity: it crosses only when one item and
-    // one predio left share it; when several items or several predios share it, none of them crosses (the items are
-    // OMISO and the predios SIN_CATASTRO) rather than pair them at random. null: an omiso
+    // D7: each catastro item to the padrón's predio of its código municipal (predio.codigo), else of a predio's
+    // codigo_origen (#207: Ica's shared SAT code, split into X-1, X-2, ... each keeping the SAT code as origen), else
+    // of its código CPU, else of its sector, manzana and lote (sector_catastral, manzana_catastral, lote). in passes
+    // over every item, so an item's fallback key never takes a predio another item names by a stronger one, whatever
+    // their order: first every código municipal, then codigo_origen, then the CPU of the items still alone, then
+    // their sector-manzana-lote. a predio crosses once. in the first three passes, among several predios of the same
+    // key, those with a declaración of the year (preferidos) go first, then by código. sector-manzana-lote is not an
+    // identity: it crosses only when one item and one predio left share it; when several items or several predios
+    // share it, none of them crosses (the items are OMISO and the predios SIN_CATASTRO) rather than pair them at
+    // random. null: an omiso
     fun cruzar(
         items: List<ValuacionCatastral>,
         predios: List<Predio>,
@@ -144,6 +146,7 @@ object Brecha {
             tomados += predio.id!!
         }
         pasada({ llave(it.codigoMunicipal) }, indice { llave(it.codigo) })
+        pasada({ llave(it.codigoMunicipal) }, indice { llave(it.codigoOrigen) })
         pasada({ llave(it.codigoCpu) }, indice { llave(it.codigoCpu) })
 
         val solos = items.indices.filter { cruce[it] == null }.groupBy { sml(items[it].sector, items[it].manzana, items[it].lote) }
