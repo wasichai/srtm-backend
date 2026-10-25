@@ -572,6 +572,84 @@ class BrechaTest {
         assertTrue("1 predios sin obras en la ficha: se sumaron S/ 10000.00 de obras de sus DJ" in m.avisos, m.avisos.toString())
     }
 
+    // #209: a rústico predio is SIN_VALOR even when catastro valued it as if it were urban (no rústico aranceles yet),
+    // and an omiso crossed to one gets no estimate either
+
+    private val rustico = propio.copy(tipoPredio = "PREDIO RUSTICO")
+
+    private fun padronRustico(vararg ds: Declaracion) = Padron(listOf(rustico, sinCatastro, sinDj), ds.toList())
+
+    @Test
+    fun `a rustico predio catastro did not value is SIN_VALOR`() {
+        val m =
+            Brecha.medir(
+                anio,
+                listOf(item(municipal = "01-01-0001", autoavaluo = null, motivo = PREDIO_RUSTICO)),
+                padronRustico(dj("1", "a", "p1", "12800.00")),
+                parametros,
+                null,
+                hoy
+            )
+        val fila = m.filas.single { it.predio == "p1" }
+        assertEquals(Categoria.SIN_VALOR.name, fila.categoria)
+        assertNull(fila.deltaImpuesto)
+    }
+
+    @Test
+    fun `a rustico predio catastro valued as urban is SIN_VALOR with PREDIO_RUSTICO, not SUBVALUADO`() {
+        val ds = listOf(dj("1", "a", "p1", "12800.00"))
+        val m =
+            Brecha.medir(
+                anio,
+                listOf(item(municipal = "01-01-0001", autoavaluo = "636000.00")),
+                padronRustico(*ds.toTypedArray()),
+                parametros,
+                null,
+                hoy
+            )
+        val fila = m.filas.single { it.predio == "p1" }
+        assertEquals(Categoria.SIN_VALOR.name, fila.categoria)
+        assertEquals(PREDIO_RUSTICO, fila.motivo)
+        assertNull(fila.deltaImpuesto)
+        // excluded from the catastro's valued map: impuestos.porPredio keeps the predio, but moves nothing on it
+        val i = Brecha.impuestos(anio, ds, emptyMap(), parametros)
+        assertEquals(BigDecimal("0.00"), i.porPredio.getValue("p1").delta)
+    }
+
+    @Test
+    fun `an omiso crossed to a rustico predio has no estimate`() {
+        val m =
+            Brecha.medir(
+                anio,
+                listOf(item(municipal = "01-02-0001", autoavaluo = "500000.00")),
+                Padron(listOf(propio, sinCatastro, sinDj.copy(tipoPredio = "PREDIO RUSTICO")), listOf(dj("1", "a", "p1", "1.00"))),
+                parametros,
+                null,
+                hoy
+            )
+        val fila = m.filas.single { it.codigoPredio == "01-02-0001" }
+        assertEquals(Categoria.OMISO.name, fila.categoria)
+        assertNull(fila.impuestoCatastro)
+        assertEquals(false, fila.estimado)
+    }
+
+    @Test
+    fun `the corrida counts the rusticos without value`() {
+        val m =
+            Brecha.medir(
+                anio,
+                listOf(item(municipal = "01-01-0001", autoavaluo = "636000.00")),
+                padronRustico(dj("1", "a", "p1", "12800.00")),
+                parametros,
+                null,
+                hoy
+            )
+        assertTrue(
+            "1 predios rústicos sin valor: el catastro aún no valúa terrenos rústicos (PREDIO_RUSTICO)" in m.avisos,
+            m.avisos.toString()
+        )
+    }
+
     @Test
     fun `without the year's parameters there is no row, and faltan names them`() {
         val m = Brecha.medir(2099, listOf(item(municipal = "01-01-0001")), padron(dj("1", "a", "p1", "1.00").copy(anio = 2099)), parametros, null, hoy)
