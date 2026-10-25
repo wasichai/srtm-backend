@@ -1,0 +1,21 @@
+{
+  "roles": [
+    {
+      "name": "ANALITICA",
+      "label": "Corte analítico (solo lectura)",
+      "description": "El rol de la cuenta de servicio analitica, con la que el corte analítico (docs/informes/brecha, srtm-backend#205) lee la organización: READ sobre los diez objetos que su extracción pide (herramientas/srtm.py), nada de escritura. El corte deja fuera nombres, direcciones y texto libre con su propia lista blanca de columnas (herramientas/tablas.py); el rol acota los objetos. Los demás roles de srtm (CAJA, los perfiles de la demo de los manuales) no se declaran aquí y apply_roles.py no los toca.",
+      "permisos": {
+        "predio": ["READ"],
+        "contribuyente": ["READ"],
+        "declaracion_predial": ["READ"],
+        "cuota_predial": ["READ"],
+        "nivel_construccion": ["READ"],
+        "obra_complementaria": ["READ"],
+        "brecha_corrida": ["READ"],
+        "brecha_predio": ["READ"],
+        "parametro_tributario": ["READ"],
+        "arancel": ["READ"]
+      }
+    }
+  ]
+}
