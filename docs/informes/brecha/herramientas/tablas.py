@@ -1,13 +1,13 @@
 """The corte's 17 tables: columns, Arrow schemas and sort keys (contexto.md § Tablas; controller ruling R13).
 
-The column whitelists live once, in srtm.py and catastro.py; this module only adds types and order. srtm's
-columns take their type from srtm's own model (model/model.json, read-only): a relation is the related
-record's uuid, so a string, and the few columns the model does not carry (the pseudonym, the per-contributor
-aggregates, controller ruling R6's columns, #204's confianza) are typed here by hand. catastro's model is not
-in this repository, so its columns are typed by their meaning; every column not named below is a string.
+The column whitelists live once, in srtm.py and catastro.py; this module only adds types and order. The types
+are written here, not read from srtm's model at run time: like the pinned pyarrow, a change in a corte's bytes
+must be a deliberate change to this file. srtm's types follow model/model.json (DECIMAL, INTEGER, BOOLEAN,
+DATE, DATETIME; relations are the related record's uuid) and pruebas/test_tablas.py fails if they drift
+apart; the columns the model does not carry (the pseudonym, the per-contributor aggregates, controller ruling
+R6's columns, #204's confianza) and every catastro column are typed by their meaning. A column not named in
+_TIPOS is a string.
 """
-
-import json
 
 import pyarrow as pa
 
@@ -23,30 +23,52 @@ TEXTO = pa.string()
 
 COLUMNAS = {**srtm.COLUMNAS, **catastro.COLUMNAS}
 
-# model.json field types -> Arrow; TEXT, ENUM, UUID, LONG_TEXT... are all strings
-_POR_TIPO_DEL_MODELO = {"DECIMAL": DECIMAL, "INTEGER": ENTERO, "BOOLEAN": LOGICO, "DATE": FECHA, "DATETIME": INSTANTE}
-
-# the srtm object each srtm_* table is read from
-_OBJETO_SRTM = {
-    "srtm_predio": "predio",
-    "srtm_contribuyente": "contribuyente",
-    "srtm_declaracion": "declaracion_predial",
-    "srtm_nivel": "nivel_construccion",
-    "srtm_obra": "obra_complementaria",
-    "srtm_impuesto_contribuyente": "cuota_predial",
-    "srtm_brecha_corrida": "brecha_corrida",
-    "srtm_brecha_predio": "brecha_predio",
-    "srtm_parametro": "parametro_tributario",
-    "srtm_arancel": "arancel",
-}
-
-# srtm columns that model.json does not (yet) carry; a type the model gives later wins over these
-_SRTM_FUERA_DEL_MODELO = {
-    "srtm_predio": {"codigo_origen": TEXTO},
-    "srtm_contribuyente": {"documento_hmac": TEXTO},
-    "srtm_impuesto_contribuyente": {"impuesto_anual": DECIMAL, "cuotas": ENTERO},
+# the non-string columns of each table
+_TIPOS = {
+    "srtm_predio": {},
+    "srtm_contribuyente": {},
+    "srtm_declaracion": {
+        "anio": ENTERO,
+        "porcentaje_condominio": DECIMAL,
+        "area_terreno": DECIMAL,
+        "area_construida": DECIMAL,
+        "valor_terreno": DECIMAL,
+        "valor_construccion": DECIMAL,
+        "valor_otras_instalaciones": DECIMAL,
+        "valor_autoavaluo": DECIMAL,
+        "valor_condominio": DECIMAL,
+        "deduccion": DECIMAL,
+        "valor_afecto": DECIMAL,
+        "arancel": DECIMAL,
+        "autoavaluo_por_revisar": LOGICO,
+    },
+    "srtm_nivel": {
+        "numero_piso": ENTERO,
+        "anio_construccion": ENTERO,
+        "area_construida": DECIMAL,
+        "area_comun": DECIMAL,
+        "valor_unitario": DECIMAL,
+        "porcentaje_depreciacion": DECIMAL,
+        "valor_total": DECIMAL,
+    },
+    "srtm_obra": {"anio_construccion": ENTERO, "cantidad": DECIMAL, "total_metrado": DECIMAL, "valor": DECIMAL},
+    # impuesto_anual and cuotas are srtm.py's aggregates, not model fields
+    "srtm_impuesto_contribuyente": {
+        "anio": ENTERO,
+        "impuesto_anual": DECIMAL,
+        "cuotas": ENTERO,
+        "fecha_calculo": FECHA,
+    },
     "srtm_brecha_corrida": {
-        "origen": TEXTO,
+        "anio": ENTERO,
+        "iniciado": INSTANTE,
+        "terminado": INSTANTE,
+        "total_predios": ENTERO,
+        "declarado": DECIMAL,
+        "catastro": DECIMAL,
+        "delta_impuesto": DECIMAL,
+        "delta_arbitrios": DECIMAL,
+        # controller ruling R6 (origen stays a string)
         "predios_confiable": ENTERO,
         "predios_dudoso": ENTERO,
         "predios_sin_levantar": ENTERO,
@@ -54,13 +76,21 @@ _SRTM_FUERA_DEL_MODELO = {
         "delta_impuesto_dudoso": DECIMAL,
         "delta_impuesto_sin_levantar": DECIMAL,
     },
-    "srtm_brecha_predio": {"confianza": TEXTO, "confianza_motivo": TEXTO},
-}
-
-# catastro's non-string columns: areas, amounts, porcentaje and longitud_frente are DECIMAL; piso, seccion and
-# anio_construccion are whole numbers in the fixtures and the API; cantidad stays DECIMAL like srtm's own
-# obra_complementaria.cantidad (a metrado can be fractional)
-_CATASTRO = {
+    "srtm_brecha_predio": {
+        "autoavaluo_declarado": DECIMAL,
+        "autoavaluo_catastro": DECIMAL,
+        "delta_autoavaluo": DECIMAL,
+        "impuesto_declarado": DECIMAL,
+        "impuesto_catastro": DECIMAL,
+        "delta_impuesto": DECIMAL,
+        "delta_arbitrios": DECIMAL,
+        "estimado": LOGICO,
+        "orden": ENTERO,
+    },
+    "srtm_parametro": {"vigencia_desde": FECHA, "vigencia_hasta": FECHA, "valor_numerico": DECIMAL},
+    "srtm_arancel": {"anio": ENTERO, "valor_m2": DECIMAL},
+    # catastro: areas, amounts, porcentaje and longitud_frente are DECIMAL; piso and seccion stay strings
+    # (catastro writes floor codes as text); cantidad is DECIMAL like srtm's obra_complementaria.cantidad
     "catastro_ficha": {
         "area_terreno": DECIMAL,
         "longitud_frente": DECIMAL,
@@ -68,13 +98,7 @@ _CATASTRO = {
         "fecha_levantamiento": FECHA,
         "vinculo_revisado": LOGICO,
     },
-    "catastro_construccion": {
-        "piso": ENTERO,
-        "seccion": ENTERO,
-        "area_construida": DECIMAL,
-        "anio_construccion": ENTERO,
-        "techo_incluido": LOGICO,
-    },
+    "catastro_construccion": {"area_construida": DECIMAL, "anio_construccion": ENTERO, "techo_incluido": LOGICO},
     "catastro_obra": {"cantidad": DECIMAL, "anio_construccion": ENTERO},
     "catastro_titular": {"porcentaje": DECIMAL},
     "catastro_valuacion": {
@@ -114,40 +138,15 @@ ORDEN = {
 }
 
 
-def _tipos_srtm():
-    """{tabla: {columna: tipo}} for the srtm tables, from model.json's fields and relationships."""
-    modelo = json.loads((comun.REPO / "model" / "model.json").read_text(encoding="utf-8"))
-    objetos = {objeto["name"]: objeto for objeto in modelo["objects"]}
-    tipos = {}
-    for tabla, nombre in _OBJETO_SRTM.items():
-        campos = {campo["name"]: campo["type"] for campo in objetos[nombre]["fields"]}
-        relaciones = {r["fieldName"] for r in modelo["relationships"] if r["source"] == nombre}
-        extra = _SRTM_FUERA_DEL_MODELO.get(tabla, {})
-        tipos[tabla] = {}
-        for columna in COLUMNAS[tabla]:
-            if columna in campos:
-                tipos[tabla][columna] = _POR_TIPO_DEL_MODELO.get(campos[columna], TEXTO)
-            elif columna == "id" or columna in relaciones:
-                tipos[tabla][columna] = TEXTO
-            elif columna in extra:
-                tipos[tabla][columna] = extra[columna]
-            else:
-                # a new whitelist column must be typed on purpose, never fall back to a guess
-                raise comun.ErrorCorte(f"{tabla}.{columna}: no está en model.json ni tiene tipo en tablas.py")
-    return tipos
-
-
 def _esquemas():
-    # a typo in the hand-typed maps would silently leave a column as a string
-    for mapa in (_SRTM_FUERA_DEL_MODELO, _CATASTRO):
-        for tabla, columnas in mapa.items():
-            sobrantes = set(columnas) - set(COLUMNAS[tabla])
-            if sobrantes:
-                raise comun.ErrorCorte(f"{tabla}: columnas tipadas que no exporta: {', '.join(sorted(sobrantes))}")
-    tipos = _tipos_srtm()
-    for tabla, columnas in catastro.COLUMNAS.items():
-        tipos[tabla] = {columna: _CATASTRO.get(tabla, {}).get(columna, TEXTO) for columna in columnas}
-    return {tabla: pa.schema([pa.field(c, tipos[tabla][c]) for c in COLUMNAS[tabla]]) for tabla in COLUMNAS}
+    esquemas = {}
+    for tabla, columnas in COLUMNAS.items():
+        # a typo in _TIPOS would silently leave a column as a string
+        sobrantes = set(_TIPOS[tabla]) - set(columnas)
+        if sobrantes:
+            raise comun.ErrorCorte(f"{tabla}: columnas tipadas que no exporta: {', '.join(sorted(sobrantes))}")
+        esquemas[tabla] = pa.schema([pa.field(c, _TIPOS[tabla].get(c, TEXTO)) for c in columnas])
+    return esquemas
 
 
 ESQUEMAS = _esquemas()

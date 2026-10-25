@@ -270,8 +270,14 @@ class CorteTests(unittest.TestCase):
         self.assertIn("srtm_declaracion", str(error.exception))
         self.assertIn("valor_afecto", str(error.exception))
         with self.assertRaises(ErrorCorte) as error:
-            parquet.escribir("catastro_construccion", [{"id": "a", "piso": "S1"}], self.tmp)
-        self.assertIn("catastro_construccion.piso", str(error.exception))
+            parquet.escribir("catastro_construccion", [{"id": "a", "anio_construccion": "S1"}], self.tmp)
+        self.assertIn("catastro_construccion.anio_construccion", str(error.exception))
+
+    def test_piso_de_catastro_acepta_texto_y_numeros(self):
+        filas = [{"id": "a", "piso": "S1"}, {"id": "b", "piso": 2}, {"id": "c", "piso": "1"}]
+        parquet.escribir("catastro_construccion", filas, self.tmp)
+        leida = pq.read_table(self.tmp / "catastro_construccion.parquet")
+        self.assertEqual(leida.column("piso").to_pylist(), ["1", "2", "S1"])
 
     def test_orden_con_none_primero(self):
         comun_a_todas = {"objeto": "construccion", "operacion": "CREATE", "campos": ""}

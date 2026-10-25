@@ -115,7 +115,8 @@ class ServidorFalso:
         self.peticiones = []
         self._server = ThreadingHTTPServer(("127.0.0.1", puerto), _Manejador)
         self._server.falso = self
-        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        # a short poll keeps cerrar() from waiting the default half second for serve_forever to notice
+        self._thread = threading.Thread(target=self._server.serve_forever, args=(0.01,), daemon=True)
         self._thread.start()
 
     @property
