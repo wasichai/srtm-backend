@@ -1146,7 +1146,9 @@ organización con el catastro de otra.
 |Lectura del catastro
 |`POST \{url}/api/auth/token` con la cuenta de servicio (token guardado hasta un minuto antes de vencer, o hasta un
 401) y `GET \{url}/api/catastro/valuaciones?anio&page&size=500`, todas las páginas. Respuestas de hasta 32 MiB por
-página; importes como decimales, nunca como `double`.
+página; importes como decimales, nunca como `double`. Luego `GET \{url}/api/catastro/titulares?page&size`, todas las
+páginas: los titulares de cada ficha, para la confianza. Si responde 404 (un catastro anterior) o 403 (la cuenta no
+lee `titular_catastral`), la corrida sigue sin comparar titulares y lo dice en `mensaje`; otro error la deja FALLIDA.
 
 |Cruce
 |Por pasadas sobre todos los ítems: código municipal, luego `codigo_origen` (el código del SAT que Ica partió en
@@ -1154,7 +1156,16 @@ página; importes como decimales, nunca como `double`.
 predio).
 
 |Categorías
-|OMISO, SIN_CATASTRO, SIN_VALOR, SUBVALUADO (> declarado × 1,05), SOBREVALUADO (< × 0,95), COINCIDE.
+|OMISO, SIN_CATASTRO, SIN_VALOR, SUBVALUADO (> declarado × 1,05), SOBREVALUADO (< × 0,95), COINCIDE y
+SIN_LEVANTAR (la ficha viene sin levantar, haya cruzado o no: sin valor ni diferencia, nunca OMISO ni COINCIDE; solo
+cuenta en el padrón si cruzó con un predio con DJ del año).
+
+|Confianza
+|Cada fila lleva `confianza` y su motivo, en este orden: SIN_LEVANTAR (ficha sin levantar); CONFIABLE si cruzó y el
+catastro la vinculó por código de rentas, o a mano y revisada, o si un titular de la ficha coincide con uno de las DJ
+del predio por documento (sin ceros a la izquierda) o por nombre (sin tildes, con las palabras ordenadas); DUDOSO
+todo lo demás. Un catastro sin las llaves nuevas mide igual que antes y todo sale DUDOSO. El panel suma
+`porConfianza`, `/predios` filtra por `confianza` y la corrida guarda los predios y el Δ impuesto de cada una.
 
 |Corrida
 |Un solo trabajador en segundo plano, como quien la lanzó; escribe las filas en lotes de 200. Una activa por

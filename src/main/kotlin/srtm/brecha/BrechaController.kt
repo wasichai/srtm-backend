@@ -62,6 +62,7 @@ class BrechaController(
         @RequestParam(required = false) corrida: UUID?,
         @RequestParam(required = false) categoria: String?,
         @RequestParam(required = false) sector: String?,
+        @RequestParam(required = false) confianza: String?,
         @RequestParam(required = false, defaultValue = "0") page: Int,
         @RequestParam(required = false, defaultValue = "25") size: Int
     ): PageResponse<PredioBrecha> {
@@ -71,10 +72,15 @@ class BrechaController(
                 Categoria.entries.firstOrNull { it.name == c.uppercase() }
                     ?: throw ParametroInvalido("categoria", "debe ser una de ${Categoria.entries.joinToString()}")
             }
+        val deConfianza =
+            confianza?.trim()?.ifEmpty { null }?.let { c ->
+                Confianza.entries.firstOrNull { it.name == c.uppercase() }
+                    ?: throw ParametroInvalido("confianza", "debe ser una de ${Confianza.entries.joinToString()}")
+            }
         if (page < 0) throw ParametroInvalido("page", "debe ser 0 o más")
         if (size !in 1..PageRequest.MAX_SIZE) throw ParametroInvalido("size", "debe ser de 1 a ${PageRequest.MAX_SIZE}")
         val r = brechas.corridaDelAnio(anio, corrida)
-        return brechas.pagina(r.id!!, deCategoria, sector?.trim()?.ifEmpty { null }, page, size)
+        return brechas.pagina(r.id!!, deCategoria, sector?.trim()?.ifEmpty { null }, deConfianza, page, size)
     }
 
     @GetMapping("/{anio}/lotes")

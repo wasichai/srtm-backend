@@ -726,16 +726,18 @@ Base: `/api/srtm/brecha`. Controlador `BrechaController`. Toda consulta pide ant
 
 |`GET /corridas?anio`, `GET /corridas/{id}`
 |Corridas (la más reciente primero) y una con su avance. Una activa sin latido por más de 10 minutos se informa
-FALLIDA.
+FALLIDA. Terminada, trae los predios y el Δ impuesto por confianza (`prediosConfiables`, `prediosDudosos`,
+`prediosSinLevantar`, `deltaImpuestoConfiable`, `deltaImpuestoDudoso`, `deltaImpuestoSinLevantar`).
 |200; 404.
 
 |`GET /{anio}/panel?corrida`
-|KPIs, por categoría y por sector, de la última corrida TERMINADA del año (o de `corrida`).
+|KPIs, por categoría, por confianza (`porConfianza`: CONFIABLE, DUDOSO y SIN_LEVANTAR, cada una con `predios`,
+`deltaImpuesto` y `deltaAutoavaluo`) y por sector, de la última corrida TERMINADA del año (o de `corrida`).
 |200; 404 si no hay.
 
-|`GET /{anio}/predios?categoria&sector&page&size&corrida`
-|Página de filas (25 por omisión).
-|200; 404; 422 categoría inválida.
+|`GET /{anio}/predios?categoria&sector&confianza&page&size&corrida`
+|Página de filas (25 por omisión), con su `confianza` y `confianzaMotivo`.
+|200; 404; 422 categoría o confianza inválida.
 
 |`GET /{anio}/lotes?corrida`
 |`FeatureCollection` GeoJSON (EPSG:4326) con `{categoria, codigo, deltaImpuesto}`.

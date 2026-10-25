@@ -29,6 +29,8 @@ class CatastrosTest {
             porPagina: suspend () -> Unit
         ): Valuaciones = Valuaciones(anio, nombre, emptyList())
 
+        override suspend fun titulares(porPagina: suspend () -> Unit): List<TitularCatastral> = emptyList()
+
         override suspend fun valuar(insumos: InsumosValuacion): ValuacionDeInsumos = throw UnsupportedOperationException(nombre)
 
         override suspend fun guardarArancel(a: ArancelCatastral): CopiaDeArancel = throw UnsupportedOperationException(nombre)

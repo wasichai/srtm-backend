@@ -185,12 +185,13 @@ class BrechaService(
     // every row of a corrida
     suspend fun filas(corrida: String): List<FilaBrecha> = registros.all(BRECHA_PREDIO, FilaBrecha::class.java, filters = mapOf("corrida" to corrida))
 
-    // a page of a corrida's rows, by categoría and sector when given, in their orden (Brecha.ordenadas: the padrón's
-    // code, then the catastro's; unique, so pages never shuffle)
+    // a page of a corrida's rows, by categoría, sector and confianza when given, in their orden (Brecha.ordenadas: the
+    // padrón's code, then the catastro's; unique, so pages never shuffle)
     suspend fun pagina(
         corrida: String,
         categoria: Categoria?,
         sector: String?,
+        confianza: Confianza?,
         page: Int,
         size: Int
     ): PageResponse<PredioBrecha> {
@@ -199,16 +200,19 @@ class BrechaService(
                 put("corrida", corrida)
                 if (categoria != null) put("categoria", categoria.name)
                 if (sector != null) put("sector", sector)
+                if (confianza != null) put("confianza", confianza.name)
             }
         return registros
             .page(BRECHA_PREDIO, FilaBrecha::class.java, RecordQuery(page = PageRequest.of(page, size), sort = "orden", filters = filtros))
             .map(::predioBrechaDe)
     }
 
-    // in the background, as the caller: catastro's valuations, the padrón, the measure and its rows. its latido beats
-    // after every page of catastro and between the long steps; before writing its rows, after each batch and before
-    // ending it reads its estado again and stops if it is no longer EN_CURSO (another POST found it stale and failed
-    // it: an abandoned run never overwrites a newer one). what goes wrong leaves it FALLIDA with why
+    // in the background, as the caller: catastro's valuations and titulares, the padrón, the measure and its rows. its
+    // latido beats after every page of catastro and between the long steps; before writing its rows, after each batch
+    // and before ending it reads its estado again and stops if it is no longer EN_CURSO (another POST found it stale and
+    // failed it: an abandoned run never overwrites a newer one). what goes wrong leaves it FALLIDA with why, but a
+    // catastro without GET /titulares (404, an older one; 403, no read on titular_catastral): the confianza compares no
+    // titular, and mensaje says so
     private suspend fun correr(
         id: UUID,
         anio: Int,
@@ -219,6 +223,14 @@ class BrechaService(
             val parametros = parametrosTributarios.todos()
             val valuaciones = catastro.valuaciones(anio) { latir(id) }
             latir(id, mapOf("version_catastro" to valuaciones.version))
+            val (titulares, sinTitulares) =
+                try {
+                    catastro.titulares { latir(id) } to null
+                } catch (e: CatastroException) {
+                    if (e.estado != 403 && e.estado != 404) throw e
+                    emptyList<TitularCatastral>() to
+                        "El catastro no da titulares (GET /api/catastro/titulares respondió ${e.estado}): la confianza no compara titulares"
+                }
             val (contexto, sinArbitrios) =
                 try {
                     arbitrios.contexto(anio) to null
@@ -233,7 +245,8 @@ class BrechaService(
                 fallar(id, it)
                 return
             }
-            val medicion = Brecha.medir(anio, valuaciones.items, padron, parametros, contexto, LocalDate.now(), sinArbitrios)
+            val medicion =
+                Brecha.medir(anio, valuaciones.items, padron, parametros, contexto, LocalDate.now(), sinArbitrios, titulares, sinTitulares)
             if (medicion.faltan.isNotEmpty()) {
                 fallar(id, "Faltan parámetros del impuesto predial: ${medicion.faltan.joinToString("; ")}")
                 return
@@ -249,7 +262,9 @@ class BrechaService(
                 latir(id, mapOf("procesados" to procesados))
             }
             val corrida = exigirEnCurso(id)
-            val kpis = Brecha.panel(corrida, medicion.filas).kpis
+            val panel = Brecha.panel(corrida, medicion.filas)
+            val kpis = panel.kpis
+            val porConfianza = panel.porConfianza
             val fin = ahora().toString()
             actualizar(
                 id,
@@ -261,6 +276,12 @@ class BrechaService(
                     "catastro" to kpis.autoavaluoCatastro,
                     "delta_impuesto" to kpis.deltaImpuesto,
                     "delta_arbitrios" to kpis.deltaArbitrios,
+                    "predios_confiables" to porConfianza.getValue(Confianza.CONFIABLE.name).predios,
+                    "predios_dudosos" to porConfianza.getValue(Confianza.DUDOSO.name).predios,
+                    "predios_sin_levantar" to porConfianza.getValue(Confianza.SIN_LEVANTAR.name).predios,
+                    "delta_impuesto_confiable" to porConfianza.getValue(Confianza.CONFIABLE.name).deltaImpuesto,
+                    "delta_impuesto_dudoso" to porConfianza.getValue(Confianza.DUDOSO.name).deltaImpuesto,
+                    "delta_impuesto_sin_levantar" to porConfianza.getValue(Confianza.SIN_LEVANTAR.name).deltaImpuesto,
                     "mensaje" to medicion.avisos.joinToString("\n").ifEmpty { null }
                 )
             )
@@ -295,8 +316,9 @@ class BrechaService(
             .awaitSingle()
 
     // what Brecha.medir reads of srtm: every predio (the candidates of the cruce) and declaración of the year, with the
-    // otras instalaciones of an external padrón (#208, which the dto does not read: one read of the records); for the
-    // arbitrios, when their context was read, the contribuyentes' codes and the inafectaciones
+    // otras instalaciones of an external padrón (#208, which the dto does not read: one read of the records), and the
+    // declaraciones' contribuyentes (their documento and nombre for the confianza, #204); for the arbitrios, when their
+    // context was read, the contribuyentes' codes and the inafectaciones
     @Suppress("UNCHECKED_CAST")
     private suspend fun padron(
         anio: Int,
@@ -311,12 +333,16 @@ class BrechaService(
                     val monto = r["valor_otras_instalaciones"]?.toString()?.trim()?.toBigDecimalOrNull() ?: return@mapNotNull null
                     if (monto.signum() > 0) r["id"].toString() to monto else null
                 }.toMap()
-        if (contexto == null) return Padron(predios, declaraciones, obrasDelPadron = obrasDelPadron)
-        val codigos =
-            registros
-                .byIds(CONTRIBUYENTE, Contribuyente::class.java, declaraciones.mapNotNull { it.contribuyente })
-                .mapValues { it.value.codigo }
-        return Padron(predios, declaraciones, codigos, registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java), obrasDelPadron)
+        val contribuyentes = registros.byIds(CONTRIBUYENTE, Contribuyente::class.java, declaraciones.mapNotNull { it.contribuyente })
+        if (contexto == null) return Padron(predios, declaraciones, obrasDelPadron = obrasDelPadron, contribuyentes = contribuyentes)
+        return Padron(
+            predios,
+            declaraciones,
+            contribuyentes.mapValues { it.value.codigo },
+            registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java),
+            obrasDelPadron,
+            contribuyentes
+        )
     }
 
     private suspend fun activas(anio: Int) =

@@ -18,10 +18,17 @@ val ACTIVAS = setOf(PENDIENTE, EN_CURSO)
 // one, even with a ficha. used by the autoavalúo sugerido and the brecha (task 6)
 const val PREDIO_RUSTICO = "PREDIO_RUSTICO"
 
+// #204: an item's estadoLevantamiento when its ficha has no levantamiento yet (autoavaluo is null, motivo is this)
+const val SIN_LEVANTAR = "SIN_LEVANTAR"
+
+// #204: an item's vinculoMetodo when catastro matched it to the padrón by the predio's codigo_rentas, or by hand
+const val CODIGO_RENTAS = "CODIGO_RENTAS"
+const val MANUAL = "MANUAL"
+
 // what a catastro item is next to the padrón (D7, D10): never in the padrón (OMISO), a padrón predio the catastro
 // lacks (SIN_CATASTRO), crossed but not valued (SIN_VALOR), or crossed and valued above, below or within ±5 % of its
-// declared autoavalúo
-enum class Categoria { OMISO, SIN_CATASTRO, SIN_VALOR, SUBVALUADO, SOBREVALUADO, COINCIDE }
+// declared autoavalúo. #204: a ficha sin levantar is SIN_LEVANTAR, crossed or not, with no difference
+enum class Categoria { OMISO, SIN_CATASTRO, SIN_VALOR, SUBVALUADO, SOBREVALUADO, COINCIDE, SIN_LEVANTAR }
 
 // one item of catastro-backend's GET /api/catastro/valuaciones: a predio catastral valued for the year. autoavaluo is
 // null when it could not be valued (motivo says why); loteGeom is its lote, GeoJSON in EPSG:4326
@@ -41,7 +48,17 @@ data class ValuacionCatastral(
     val autoavaluo: BigDecimal? = null,
     val motivo: String? = null,
     val llave: String? = null,
-    val loteGeom: Map<String, Any?>? = null
+    val loteGeom: Map<String, Any?>? = null,
+    // #204: its ficha's levantamiento (SIN_LEVANTAR, PARCIAL, COMPLETO) and when, and the entrega that last touched it
+    val estadoLevantamiento: String? = null,
+    val fechaLevantamiento: String? = null,
+    val entrega: String? = null,
+    // #204: how it was crossed to the padrón (CODIGO_RENTAS, LLAVE_HU_MZ_LOTE, GEOMETRICO, MANUAL), whether a person
+    // checked it, and its cuc and codigoReferenciaCatastral (the catastro's own ids, not the padrón's)
+    val vinculoMetodo: String? = null,
+    val vinculoRevisado: Boolean? = null,
+    val cuc: String? = null,
+    val codigoReferenciaCatastral: String? = null
 )
 
 // every valued item of a year, and the version of the engine that valued them
@@ -49,6 +66,17 @@ data class Valuaciones(
     val anio: Int,
     val version: String?,
     val items: List<ValuacionCatastral>
+)
+
+// one titular of GET /api/catastro/titulares: a padrón predio may have several, each its share (porcentaje) and
+// condicion (e.g. PROPIETARIO)
+data class TitularCatastral(
+    val codigoMunicipal: String?,
+    val tipoDocumento: String?,
+    val numeroDocumento: String?,
+    val nombre: String?,
+    val porcentaje: BigDecimal?,
+    val condicion: String?
 )
 
 // the brecha_corrida record as core keeps it
@@ -67,7 +95,14 @@ data class RegistroCorrida(
     val catastro: BigDecimal? = null,
     val deltaImpuesto: BigDecimal? = null,
     val deltaArbitrios: BigDecimal? = null,
-    val latido: String? = null
+    val latido: String? = null,
+    // #204: the rows and Δ impuesto of each confianza (PanelBrecha.porConfianza), null before it was measured
+    val prediosConfiables: Int? = null,
+    val prediosDudosos: Int? = null,
+    val prediosSinLevantar: Int? = null,
+    val deltaImpuestoConfiable: BigDecimal? = null,
+    val deltaImpuestoDudoso: BigDecimal? = null,
+    val deltaImpuestoSinLevantar: BigDecimal? = null
 )
 
 // the brecha_predio record: one per catastro item, plus one per padrón predio the catastro lacks. corrida and predio are
@@ -97,7 +132,10 @@ data class FilaBrecha(
     // its position in /predios (Brecha.ordenadas)
     val orden: Int? = null,
     // #208: the DJ's obras the catastro side added, its ficha without obras (Brecha.conObrasDeLaDj)
-    val obrasDj: BigDecimal? = null
+    val obrasDj: BigDecimal? = null,
+    // #204: how sure its cruce is (Confianza) and why (Confiabilidad.de)
+    val confianza: String? = null,
+    val confianzaMotivo: String? = null
 )
 
 // the corrida as the portal shows it (camelCase, like /liquidacion)
@@ -114,7 +152,13 @@ data class Corrida(
     val declarado: BigDecimal?,
     val catastro: BigDecimal?,
     val deltaImpuesto: BigDecimal?,
-    val deltaArbitrios: BigDecimal?
+    val deltaArbitrios: BigDecimal?,
+    val prediosConfiables: Int?,
+    val prediosDudosos: Int?,
+    val prediosSinLevantar: Int?,
+    val deltaImpuestoConfiable: BigDecimal?,
+    val deltaImpuestoDudoso: BigDecimal?,
+    val deltaImpuestoSinLevantar: BigDecimal?
 )
 
 fun corridaDe(r: RegistroCorrida) =
@@ -131,7 +175,13 @@ fun corridaDe(r: RegistroCorrida) =
         declarado = r.declarado,
         catastro = r.catastro,
         deltaImpuesto = r.deltaImpuesto,
-        deltaArbitrios = r.deltaArbitrios
+        deltaArbitrios = r.deltaArbitrios,
+        prediosConfiables = r.prediosConfiables,
+        prediosDudosos = r.prediosDudosos,
+        prediosSinLevantar = r.prediosSinLevantar,
+        deltaImpuestoConfiable = r.deltaImpuestoConfiable,
+        deltaImpuestoDudoso = r.deltaImpuestoDudoso,
+        deltaImpuestoSinLevantar = r.deltaImpuestoSinLevantar
     )
 
 // a row of GET /brecha/{anio}/predios
@@ -154,7 +204,9 @@ data class PredioBrecha(
     val deltaArbitrios: BigDecimal?,
     val estimado: Boolean,
     val motivo: String?,
-    val obrasDj: BigDecimal?
+    val obrasDj: BigDecimal?,
+    val confianza: String?,
+    val confianzaMotivo: String?
 )
 
 fun predioBrechaDe(f: FilaBrecha) =
@@ -177,18 +229,21 @@ fun predioBrechaDe(f: FilaBrecha) =
         deltaArbitrios = f.deltaArbitrios,
         estimado = f.estimado == true,
         motivo = f.motivo,
-        obrasDj = f.obrasDj
+        obrasDj = f.obrasDj,
+        confianza = f.confianza,
+        confianzaMotivo = f.confianzaMotivo
     )
 
 data class PedidoCorrida(
     val anio: Int? = null
 )
 
-// GET /brecha/{anio}/panel
+// GET /brecha/{anio}/panel. porConfianza: every Confianza, in its order (#204)
 data class PanelBrecha(
     val corrida: CorridaDelPanel,
     val kpis: Kpis,
     val porCategoria: List<PorCategoria>,
+    val porConfianza: Map<String, PorConfianza>,
     val porSector: List<PorSector>
 )
 
@@ -207,6 +262,8 @@ data class Kpis(
     val coinciden: Int,
     val sinCatastro: Int,
     val sinValor: Int,
+    // #204: the fichas sin levantar, crossed or not
+    val sinLevantar: Int = 0,
     // over the rows compared (valued on both sides, and the omisos): declarado + Δ = catastro
     val autoavaluoDeclarado: BigDecimal,
     val autoavaluoCatastro: BigDecimal,
@@ -228,6 +285,13 @@ data class PorCategoria(
     val deltaAutoavaluo: BigDecimal,
     val deltaImpuesto: BigDecimal,
     val deltaArbitrios: BigDecimal?
+)
+
+// the rows of a confianza (#204)
+data class PorConfianza(
+    val predios: Int,
+    val deltaImpuesto: BigDecimal,
+    val deltaAutoavaluo: BigDecimal
 )
 
 data class PorSector(
