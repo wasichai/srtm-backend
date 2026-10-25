@@ -39,12 +39,13 @@ def _argumentos():
     grupo.add_argument("--corte", help="carpeta de un corte ya descargado (con --destino)")
     grupo.add_argument("--org", help="organización: baja su último corte de S3 y arma <destino-dir>/<org>.duckdb")
     parser.add_argument("--destino", help="archivo DuckDB que se crea o se reemplaza (con --corte)")
-    parser.add_argument("--cortes", default=CORTES_DIR, help=f"carpeta de cortes bajados (con --org; {CORTES_DIR})")
+    # no default here (None, not CORTES_DIR/DESTINO_DIR): main() tells "not given" from "given, same as the
+    # default" apart, so --cortes/--destino-dir can be rejected alongside --corte without a value comparison
+    parser.add_argument("--cortes", help=f"carpeta de cortes bajados (con --org; por omisión {CORTES_DIR})")
     parser.add_argument(
         "--destino-dir",
         dest="destino_dir",
-        default=DESTINO_DIR,
-        help=f"carpeta de los .duckdb (con --org; {DESTINO_DIR})",
+        help=f"carpeta de los .duckdb (con --org; por omisión {DESTINO_DIR})",
     )
     return parser
 
@@ -72,6 +73,14 @@ def _armar_local(carpeta, destino):
 
 
 def _armar_org(org, cortes, destino_dir):
+    # validated again inside s3.descargar (a public helper on its own), but checked here first too: an
+    # unvalidated org would otherwise reach a filesystem path (cortes/org/fecha, destino_dir/<org>.duckdb)
+    # and an S3 prefix before either function has a chance to reject it
+    try:
+        comun.validar_org(org)
+    except comun.ErrorCorte as e:
+        print(f"armar_duckdb: {e}", file=sys.stderr)
+        return 2
     s3_base = comun.parametros()["publicacion"]["s3"]
     try:
         carpeta = s3.descargar(s3_base, org, cortes)
@@ -105,10 +114,15 @@ def main(argv=None):
         if args.destino:
             print("armar_duckdb: --destino no se usa con --org (usa --destino-dir)", file=sys.stderr)
             return 2
-        return _armar_org(args.org, Path(args.cortes).expanduser(), Path(args.destino_dir).expanduser())
+        cortes = Path(args.cortes or CORTES_DIR).expanduser()
+        destino_dir = Path(args.destino_dir or DESTINO_DIR).expanduser()
+        return _armar_org(args.org, cortes, destino_dir)
 
     if not args.destino:
         print("armar_duckdb: falta --destino (o usa --org)", file=sys.stderr)
+        return 2
+    if args.cortes or args.destino_dir:
+        print("armar_duckdb: --cortes/--destino-dir no se usan con --corte (son de --org)", file=sys.stderr)
         return 2
     return _armar_local(Path(args.corte).expanduser(), Path(args.destino).expanduser())
 

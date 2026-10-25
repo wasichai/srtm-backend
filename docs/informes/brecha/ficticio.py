@@ -26,6 +26,7 @@ if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import corte  # noqa: E402
+from herramientas import comun  # noqa: E402
 from herramientas.falsos import CatastroFalso, SrtmFalso  # noqa: E402
 from herramientas.sinteticos import datos  # noqa: E402
 
@@ -62,6 +63,14 @@ def main(argv=None):
         args = _argumentos().parse_args(argv)
     except SystemExit as e:  # argparse already printed the usage error (2) or the help (0)
         return e.code if isinstance(e.code, int) else 2
+
+    # corte.main validates --org too, but only after this script already built a path from it
+    # (<tmp>/<org>.env); checked here first, like corte.py's own usage errors (exit 2)
+    try:
+        comun.validar_org(args.org)
+    except comun.ErrorCorte as e:
+        print(f"ficticio: {e}", file=sys.stderr)
+        return 2
 
     s = datos(args.semilla)
     srtm = SrtmFalso(s.srtm)

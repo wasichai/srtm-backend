@@ -27,7 +27,12 @@ def ultimo_corte(listado: str) -> str | None:
 def descargar(s3_base: str, org: str, cortes: Path, ejecutar=subprocess.run) -> Path:
     """Lists `<s3_base>/<org>/`, syncs its latest fecha into `cortes/<org>/<fecha>/` and checks the result
     against its manifiesto.json (an ErrorCorte before `armar_duckdb.py` trusts it); returns that folder. An
-    ErrorCorte also names the organization when nothing is published there yet."""
+    ErrorCorte also names the organization when nothing is published there yet.
+
+    `org` is validated first (armar_duckdb.py already does, but this is a public helper on its own): an
+    unvalidated org becomes both a filesystem path segment (`cortes/org/fecha`) and an S3 key segment, so
+    something like "../x" must never reach `ejecutar` or the filesystem."""
+    comun.validar_org(org)
     listado = ejecutar(["aws", "s3", "ls", f"{s3_base}/{org}/"], capture_output=True, text=True, check=True)
     fecha = ultimo_corte(listado.stdout)
     if fecha is None:

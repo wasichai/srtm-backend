@@ -4,6 +4,8 @@ corte - `herramientas.s3` (download), `herramientas.base.construir_atomico` and 
 test's fictitious organizations). `armar_duckdb.py --org` wires s3 + construir_atomico together but is not
 re-tested here beyond that wiring: its --corte/--destino path is task 6's own (pruebas/test_vistas.py)."""
 
+import contextlib
+import io
 import json
 import shutil
 import stat
@@ -15,10 +17,19 @@ from pathlib import Path
 
 import duckdb
 
+import armar_duckdb
 import ficticio
 from herramientas import base, comun, manifiesto, s3
 from herramientas.sinteticos import minimos
 from pruebas.test_corte import ConCorte
+
+
+def _cli(funcion, argv):
+    """Runs a script's `main` capturing stdout/stderr, like pruebas/test_vistas.py's `_armar`."""
+    salida, error = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(salida), contextlib.redirect_stderr(error):
+        codigo = funcion(argv)
+    return codigo, salida.getvalue(), error.getvalue()
 
 TIENDAS = "TIENDAS DEPOSITOS CENTROS DE RECREACION CLUBES E INSTITUCIONES"
 
@@ -76,6 +87,42 @@ class DescargarTests(ConCorte, unittest.TestCase):
         with self.assertRaises(comun.ErrorCorte) as error:
             s3.descargar("s3://sgtm-dev/analitica", "perene", self.tmp / "cortes", ejecutar=ejecutar)
         self.assertIn("perene", str(error.exception))
+
+    def test_descargar_rechaza_una_organizacion_invalida(self):
+        # an unvalidated org becomes a filesystem path segment (cortes/org/fecha) and an S3 key segment: "../x"
+        # must be rejected before aws is ever invoked and before anything is written under `cortes`
+        llamadas = []
+
+        def ejecutar(cmd, **kwargs):
+            llamadas.append(cmd)
+            raise AssertionError("ejecutar no debía llamarse con una organización inválida")
+
+        cortes = self.tmp / "cortes"
+        with self.assertRaises(comun.ErrorCorte):
+            s3.descargar("s3://sgtm-dev/analitica", "../x", cortes, ejecutar=ejecutar)
+        self.assertEqual(llamadas, [])
+        self.assertFalse(cortes.exists())
+
+
+class ArmarDuckdbCliTests(ConCorte, unittest.TestCase):
+    def test_armar_org_rechaza_una_organizacion_invalida(self):
+        # _armar_org validates before calling comun.parametros() or s3.descargar - no S3/AWS involved at all
+        codigo, _, error = _cli(armar_duckdb.main, ["--org", "../x", "--destino-dir", str(self.tmp / "duckdb")])
+        self.assertEqual(codigo, 2)
+        self.assertIn("organización inválida", error)
+        self.assertFalse((self.tmp / "duckdb").exists())
+
+    def test_armar_duckdb_rechaza_cortes_y_destino_dir_con_corte(self):
+        carpeta = self._corte(minimos())
+        for opcion in ("--cortes", "--destino-dir"):
+            with self.subTest(opcion=opcion):
+                codigo, _, error = _cli(
+                    armar_duckdb.main,
+                    ["--corte", str(carpeta), "--destino", str(self.tmp / "x.duckdb"), opcion, str(self.tmp)],
+                )
+                self.assertEqual(codigo, 2)
+                self.assertIn("--corte", error)
+                self.assertFalse((self.tmp / "x.duckdb").exists())
 
 
 class ConstruirAtomicoTests(ConCorte, unittest.TestCase):
@@ -212,6 +259,17 @@ class FicticioTests(unittest.TestCase):
             {a["sha256"] for a in m1["archivos"]},
             {a["sha256"] for a in m_b["archivos"]},
         )
+
+    def test_ficticio_rechaza_una_organizacion_invalida(self):
+        # validated before building the temp secrets file path (<tmp>/<org>.env) or starting the fakes
+        salida = self.tmp / "salida"
+        codigo, _, error = _cli(
+            ficticio.main,
+            ["--org", "../x", "--semilla", "1", "--fecha", "2026-10-25", "--salida", str(salida)],
+        )
+        self.assertEqual(codigo, 2)
+        self.assertIn("organización inválida", error)
+        self.assertFalse(salida.exists())
 
 
 if __name__ == "__main__":
