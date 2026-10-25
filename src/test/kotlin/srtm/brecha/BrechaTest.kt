@@ -37,8 +37,9 @@ class BrechaTest {
         cpu: String? = null,
         sector: String? = null,
         manzana: String? = null,
-        lote: String? = null
-    ) = Predio(id = id, codigo = codigo, codigoCpu = cpu, sectorCatastral = sector, manzanaCatastral = manzana, lote = lote)
+        lote: String? = null,
+        origen: String? = null
+    ) = Predio(id = id, codigo = codigo, codigoCpu = cpu, sectorCatastral = sector, manzanaCatastral = manzana, lote = lote, codigoOrigen = origen)
 
     private fun item(
         municipal: String? = null,
@@ -195,6 +196,30 @@ class BrechaTest {
         // a predio its código took first leaves the key unique for the rest
         val porCodigo = Brecha.cruzar(listOf(item(municipal = "P-p1"), item(sector = "01", manzana = "A", lote = "1")), listOf(p1, p2))
         assertEquals(listOf("p1", "p2"), porCodigo.map { it.second?.id })
+    }
+
+    @Test
+    fun `an item whose code is no predio's crosses by the codigo_origen, the first derived predio`() {
+        val x1 = predio("x1", codigo = "X-1", origen = "X")
+        val x2 = predio("x2", codigo = "X-2", origen = "X")
+        val pares = Brecha.cruzar(listOf(item(municipal = "X")), listOf(x1, x2))
+        assertEquals(listOf("x1"), pares.map { it.second?.id })
+    }
+
+    @Test
+    fun `a predio's own code wins over another's codigo_origen`() {
+        val x = predio("x", codigo = "X")
+        val y1 = predio("y1", codigo = "Y-1", origen = "X")
+        val pares = Brecha.cruzar(listOf(item(municipal = "X")), listOf(x, y1))
+        assertEquals(listOf("x"), pares.map { it.second?.id })
+    }
+
+    @Test
+    fun `the codigo_origen pass comes before the CPU`() {
+        val x1 = predio("x1", codigo = "X-1", origen = "X")
+        val c = predio("c", codigo = "C", cpu = "C")
+        val pares = Brecha.cruzar(listOf(item(municipal = "X", cpu = "C")), listOf(x1, c))
+        assertEquals(listOf("x1"), pares.map { it.second?.id })
     }
 
     // the categories (D10)

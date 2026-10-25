@@ -49,6 +49,8 @@ data class Contribuyente(
 data class Predio(
     val id: String? = null,
     val codigo: String? = null,
+    // the padrón de origen's code (Ica: el del SAT), #207. read-only: PADRON_EXTERNO_PREDIO, registrarPredio, actualizarPredio
+    val codigoOrigen: String? = null,
     val sectorCatastral: String? = null,
     val manzanaCatastral: String? = null,
     // PREDIO URBANO / PREDIO RUSTICO. the srtm's condición del predio is another datum: the declaration's condicion_especial

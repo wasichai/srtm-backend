@@ -37,8 +37,12 @@ class ValuacionOrigenTest {
         assertEquals(emptyMap<String, Any>(), conValor(mapOf("id" to "n1", "area_construida" to 120), PADRON_EXTERNO_NIVEL))
     }
 
+    // #207: codigo_origen joined the four codes, at the end
     @Test
-    fun `the predio's list holds the four codes of the external padron`() {
-        assertEquals(listOf("codigo_via", "codigo_unidad_urbana", "codigo_hu_armonizacion", "codigo_via_armonizacion"), PADRON_EXTERNO_PREDIO)
+    fun `the predio's list holds the codes of the external padron and its codigo_origen`() {
+        assertEquals(
+            listOf("codigo_via", "codigo_unidad_urbana", "codigo_hu_armonizacion", "codigo_via_armonizacion", "codigo_origen"),
+            PADRON_EXTERNO_PREDIO
+        )
     }
 }

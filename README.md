@@ -821,16 +821,17 @@ salta (con un aviso en el log al arrancar). Una organización sin catastro respo
 veces (por su slug y por su id, o por dos entradas del mapa) **409** «Catastro configurado dos veces para esta
 organización», con las claves que la nombran: nunca se cruza el padrón de una organización con el catastro de otra.
 
-**Cruce** (D7). Cada ítem del catastro busca su predio: por código municipal (`predio.codigo`), si no por código CPU
+**Cruce** (D7). Cada ítem del catastro busca su predio: por código municipal (`predio.codigo`), si no por el
+`codigo_origen` de un predio (#207: el código del SAT que Ica partió en `X-1`, `X-2`, ...), si no por código CPU
 (`codigo_cpu`), si no por sector, manzana y lote (`sector_catastral`, `manzana_catastral`, `lote`), sin distinguir
 mayúsculas, espacios en los extremos ni ceros a la izquierda de cada tramo de números: `01-01-0006` y `1-1-6` son la
 misma llave, como un lote `08` y `8` (el padrón de Perené escribe los dos). El cruce va **por pasadas sobre todos los ítems**, así el orden de los ítems no
-cambia nada: primero todos por código municipal, luego los que quedan por CPU, luego los que quedan por sector, manzana
-y lote. Una llave de respaldo nunca le quita a otro ítem el predio que este nombra por una llave más fuerte. Un predio
-cruza una sola vez. En las dos primeras pasadas, entre varios predios de la misma llave gana el que tiene DJ del año y
-luego el de código menor. Sector, manzana y lote no identifican: cruzan solo cuando a la llave le quedan **un** ítem y
-**un** predio; si la comparten varios ítems o varios predios, ninguno cruza (los ítems quedan OMISO y los predios
-SIN_CATASTRO) antes que emparejarlos al azar.
+cambia nada: primero todos por código municipal, luego los que quedan por `codigo_origen`, luego por CPU, luego por
+sector, manzana y lote. Una llave de respaldo nunca le quita a otro ítem el predio que este nombra por una llave más
+fuerte. Un predio cruza una sola vez. En las tres primeras pasadas, entre varios predios de la misma llave gana el que
+tiene DJ del año y luego el de código menor. Sector, manzana y lote no identifican: cruzan solo cuando a la llave le
+quedan **un** ítem y **un** predio; si la comparten varios ítems o varios predios, ninguno cruza (los ítems quedan
+OMISO y los predios SIN_CATASTRO) antes que emparejarlos al azar.
 
 **Categorías** (una fila de `brecha_predio` por ítem del catastro y por predio del padrón sin catastro). El padrón son
 los predios con alguna DJ **vigente** del año; su autoavalúo declarado es el de `totalesDePredio` (el mayor de cada
@@ -1372,14 +1373,15 @@ dev está el entorno de [develop/pruebas](develop/pruebas/README.md).
    - No se crea domicilio.
    - Un número de documento que ya tiene otro código se carga sin número, porque `numero_documento` es único. Lo
      conserva el código menor.
-3. **`predio`:** la llave es `codigo`.
+3. **`predio`:** la llave es `codigo`, el del SAT o uno derivado de él si el código es compartido (ver abajo).
+   - `codigo_origen` guarda siempre el código del SAT.
    - Valores fijos: ubigeo 110101, región COSTA y departamento, provincia y distrito ICA.
    - La dirección es la del xlsx. Si viene vacía, se arma con sus partes.
    - Se cargan también `codigo_via`, `codigo_unidad_urbana` y las dos llaves de armonización GIS.
 4. **`declaracion_predial`:** la llave es predio + contribuyente + año + secuencia `001`.
    - `valor_autoavaluo` es `valor_predio`.
-   - **Condominio:** como en `Condominio.kt`. Con varios titulares, cada uno es CONDOMINO con 100/n %: los céntimos que
-     faltan van de a uno a los primeros, así que la suma da 100. Un titular solo conserva su condición si es PROPIETARIO
+   - **Condominio:** como en `Condominio.kt`. Con varios titulares del mismo predio, cada uno es CONDOMINO con 100/n %:
+     los céntimos que faltan van de a uno a los primeros, así que la suma da 100. Un titular solo conserva su condición si es PROPIETARIO
      UNICO, SOCIEDAD CONYUGAL o POSEEDOR; si no, queda PROPIETARIO UNICO con 100 %.
    - `valor_condominio` es el % del autoavalúo, `deduccion` es 0 y `valor_afecto` es igual a `valor_condominio`.
    - La fecha de adquisición 1900-01-01 es un relleno y se carga vacía.
@@ -1391,6 +1393,25 @@ dev está el entorno de [develop/pruebas](develop/pruebas/README.md).
      total.
      `valor_unitario_depreciado` no se carga, porque no cuadra con nada.
    - No tiene llave natural: se comparan DJ, nivel, año y área, contando las secciones repetidas.
+
+**Códigos compartidos** (#207). El SAT da a veces un mismo `codigo_predio` a predios distintos de contribuyentes
+distintos: cambian la dirección, el área y el autoavalúo, y la mayoría de esas DJ dice «propietario único». Repartirlos
+en 100/n haría pagar a cada contribuyente una fracción de su propio predio.
+
+- **Mismo predio:** dos filas de un código lo son si tienen la misma dirección (`direccion_del_predio_completa`, o si
+  falta la vía, el número, la manzana y el lote, en mayúsculas), la misma `area_terreno` y el mismo `valor_predio`, al
+  céntimo. La comparación es exacta, porque un condominio del SAT repite sus cifras tal cual. Es un condominio y queda
+  en 100/n, con el código del SAT.
+- **Predios distintos:** cada uno es un predio de srtm al 100 %, con el código `<codigo>-<n>`. `n` va de 1 en
+  adelante, en el orden del código de contribuyente menor de cada predio (los numéricos por su valor), y ninguno
+  conserva el código pelado. Los niveles siguen a su DJ.
+- **Cruce:** `codigo_origen` guarda el código del SAT. Con él la brecha encuentra el predio en catastro.
+- **Resumen:** el `--dry-run` muestra la línea `códigos compartidos: N (P predios, D DJ)` antes de cargar, y el reporte
+  tiene una fila `codigo_compartido` por código.
+- **Ya cargado sin partir:** si Core tiene el código pelado de un código compartido (una carga anterior a #207, como
+  la de dev), la carga omite ese código con sus predios, sus DJ y sus niveles, y lo reporta como
+  `codigo_compartido_en_core`. Moverlo a los predios nuevos es una migración aparte.
+- **Por confirmar** con la municipalidad que esos códigos agrupan predios distintos.
 
 **Tablas de códigos.** Están en `model/data/ica/codigos.json`: vía, documento, condición, uso, tipo de predio,
 material, estado, clasificación y nivel. Ninguna está confirmada (`"confirmado": false`). Cada una dice de dónde sale
@@ -1410,8 +1431,10 @@ códigos, sin nombres ni documentos, pero no se versiona.
 | Categoría | Qué es |
 | --- | --- |
 | `rechazada` | La fila no se carga: no encaja en el modelo (por ejemplo, la letra J), es un nivel sin DJ, o cuelga de algo rechazado |
-| `condominio_100_n` | Varios titulares con el mismo valor y sin %: se carga 100/n |
-| `condominio_valores_distintos` | Varios titulares con valores distintos: también 100/n, pero hay que revisarlo |
+| `condominio_100_n` | Varios titulares del mismo predio (dirección, área y valor) y sin %: se carga 100/n |
+| `codigo_compartido` | Un código del SAT con predios distintos: cuántas DJ y en qué predios `<codigo>-<n>` se reparten |
+| `codigo_derivado_repetido` | Un código `<codigo>-<n>` que el padrón ya usa para otro predio: ese predio, sus DJ y sus niveles no se cargan |
+| `codigo_compartido_en_core` | En la carga: Core ya tiene el código compartido sin partir, y se omite con todo lo que cuelga de él |
 | `titulares_en_conflicto` | Un PROPIETARIO ÚNICO comparte el predio con otros titulares (posible transferencia no cerrada) |
 | `condomino_solo` | Un condómino (5 o 9) sin otros titulares en el padrón: se carga PROPIETARIO UNICO con 100 % |
 | `codigo_sin_mapeo` | Un código que `codigos.json` no tiene, una fila por columna y valor |

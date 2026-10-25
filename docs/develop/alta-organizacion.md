@@ -241,5 +241,6 @@ también por el día y por las órdenes (solo lectura: `pago_caja` y `orden_caja
 - el levantamiento real (catastro-backend#10);
 - el padrón completo;
 - las tablas de códigos por confirmar con la municipalidad;
+- confirmar con la municipalidad que un código del SAT agrupa predios distintos (#207);
 - el porcentaje de condominio;
 - el RUC.
