@@ -109,7 +109,12 @@ object Seguimiento {
                     cambios = suyos.size,
                     objetos = suyos.mapNotNull { it.objeto },
                     entregas = suyos.mapNotNull { it.entrega },
-                    ultimoCambio = suyos.mapNotNull { it.en }.maxOrNull(),
+                    // by instant: as text "…T05:00Z" would pass "…T05:00:30Z"
+                    ultimoCambio =
+                        suyos
+                            .mapNotNull { c -> c.en?.let { en -> instante(en)?.let { it to en } } }
+                            .maxByOrNull { it.first }
+                            ?.second,
                     autoavaluoDeclarado = fila?.autoavaluoDeclarado,
                     autoavaluoCatastro = fila?.autoavaluoCatastro,
                     deltaAutoavaluo = delta,

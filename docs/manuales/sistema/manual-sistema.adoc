@@ -1186,7 +1186,8 @@ día: `CAMBIOS` si hay cambios pendientes desde la última (o la última automá
 hubo ninguna en los últimos 7 días, aunque no haya cambios (recupera lo que el feed de catastro pudiera perder). Una
 diferencia catastral mayor a 5 UIT (del 1 de enero del año) obliga a presentar DJ (LTM art. 14 b); la fiscalización
 alcanza 4 años, o 6 si no hubo DJ (CT art. 43): por eso `GET /{anio}/cambios` marca `SUPERA_5_UIT`, como lista de
-trabajo. Una lectura fallida deja `error` en `sincronizacion_catastro` y no decide nada esa vuelta.
+trabajo. Una lectura fallida, o una página que no se pudo guardar, deja `error` en `sincronizacion_catastro` y no
+decide nada esa vuelta.
 |===
 
 NOTE: Las decisiones del cruce y del cálculo las confirmó la municipalidad el 19 de octubre de 2026, salvo D8: D5
@@ -1420,10 +1421,11 @@ que dispara, en `GET /api/srtm/brecha/corridas?anio` (`origen` CAMBIOS o SEMANAL
 * Un trabajo cuyo creador fue borrado o deshabilitado falla sin reintentos: los lotes corren con sus permisos.
 * La corrida de la brecha no se retoma: si su instancia muere, a los 10 minutos sin latido se informa FALLIDA y se
   puede lanzar otra.
-* El seguimiento del catastro no reintenta solo: una lectura que falla deja `error` en `sincronizacion_catastro` y
-  no decide nada esa vuelta; la siguiente, a los `SRTM_CATASTRO_SEGUIMIENTO_MINUTOS`, lo intenta de nuevo desde el
-  mismo `cursor`. Si la última corrida automática quedó FALLIDA, la siguiente vuelta la reintenta como `CAMBIOS`
-  aunque no haya cambios nuevos.
+* El seguimiento del catastro no reintenta solo: una lectura que falla, una página que no se puede guardar (se
+  deshace entera) o una que no avanza el `cursor` deja `error` en `sincronizacion_catastro` y no decide nada esa
+  vuelta; la siguiente, a los `SRTM_CATASTRO_SEGUIMIENTO_MINUTOS`, lo intenta de nuevo desde el mismo `cursor`. Si
+  la última corrida automática quedó FALLIDA, se reintenta como `CAMBIOS` al día siguiente, a partir de
+  `SRTM_CATASTRO_SEGUIMIENTO_HORA`, aunque no haya cambios nuevos (nunca más de una corrida automática al día).
 
 [[async-instancias]]
 === Varias instancias

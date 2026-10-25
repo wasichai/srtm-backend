@@ -35,8 +35,8 @@ import kotlin.coroutines.cancellation.CancellationException
 // catastro and the model's sincronizacion_catastro reads its GET /api/catastro/cambios from its cursor, keeps them in
 // cambio_catastro and, by Seguimiento.disparo, starts its automatic corrida of the day. one instance per organization
 // (the ClusterLock of its key: another holding it skips it), as the platform (asPlatform: no user). each page of
-// cambios is written with its cursor in one transaction, so a crash never repeats nor skips a page; a failed read
-// writes error and that pass decides nothing
+// cambios is written with its cursor in one transaction, so a crash never repeats nor skips a page; a failed read or
+// write of a page (or one that does not move the cursor) writes error and that pass decides nothing
 @Component
 class SeguimientoCatastro(
     private val registros: Registros,
@@ -54,7 +54,11 @@ class SeguimientoCatastro(
     @EventListener(ApplicationReadyEvent::class)
     fun arrancar() {
         val minutos = config.seguimiento.minutos
-        if (minutos <= 0 || !catastros.configurado) return
+        if (minutos <= 0) return
+        if (!catastros.configurado) {
+            log.warn("catastro: srtm.catastro.seguimiento.minutos es {}, pero no hay un catastro configurado; sus cambios no se leen", minutos)
+            return
+        }
         log.info("catastro: sus cambios se leen cada {} minutos; la corrida automática, desde las {} h", minutos, config.seguimiento.hora)
         scope.launch {
             while (isActive) {
@@ -122,20 +126,32 @@ class SeguimientoCatastro(
                 val pagina = catastro.cambios(s.cursor)
                 s = guardar(s, pagina)
             } while (pagina.hayMas)
-        } catch (e: CatastroException) {
-            log.warn("el seguimiento del catastro de {} no leyó sus cambios: {}", organizacion, e.message)
-            registros.replace(SINCRONIZACION_CATASTRO, RegistroSincronizacion::class.java, UUID.fromString(s.id), mapOf("error" to e.message))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            // the page rolled back, the cursor stays: the next pass reads it again. its class and message only, never
+            // a token nor a secret (catastro's own errors already say what failed)
+            val error = if (e is CatastroException) e.message else "${e.javaClass.simpleName}: ${e.message}".take(ERROR_MAXIMO)
+            log.warn("el seguimiento del catastro de {} no leyó o no guardó sus cambios: {}", organizacion, error)
+            registros.replace(SINCRONIZACION_CATASTRO, RegistroSincronizacion::class.java, UUID.fromString(s.id), mapOf("error" to error))
             return
         }
         disparar(organizacion, catastro, s, ahora, hora)
     }
 
     // a page's cambio_catastro rows and the sincronizacion that follows them (cursor, ultimo_cambio_en, pendientes, no
-    // error), in one transaction. a page with nothing new, and nothing to clear, writes nothing
+    // error), in one transaction. a page with nothing new, and nothing to clear, writes nothing. one with cambios, or
+    // with more to come, must move the cursor: else its rows would be written again, or the pass would never end
     private suspend fun guardar(
         s: RegistroSincronizacion,
         pagina: PaginaDeCambios
     ): RegistroSincronizacion {
+        if ((pagina.items.isNotEmpty() || pagina.hayMas) && (pagina.cursor == null || pagina.cursor == s.cursor)) {
+            throw CatastroException(
+                "catastro devolvió una página de cambios que no avanza el cursor (${pagina.items.size} cambios, " +
+                    "cursor ${pagina.cursor ?: "vacío"}, hayMas ${pagina.hayMas})"
+            )
+        }
         val cursor = pagina.cursor ?: s.cursor
         if (pagina.items.isEmpty() && cursor == s.cursor && s.error == null) return s
         val ultimo =
@@ -213,5 +229,8 @@ class SeguimientoCatastro(
         val DETENER: Duration = Duration.ofSeconds(30)
 
         fun clave(organizacion: UUID) = "srtm:seguimiento-catastro:$organizacion"
+
+        // how much of an unexpected failure's message error keeps
+        const val ERROR_MAXIMO = 500
     }
 }

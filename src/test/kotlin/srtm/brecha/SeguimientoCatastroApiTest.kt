@@ -3,6 +3,7 @@ package srtm.brecha
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -283,6 +284,78 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
         assertNull(sincronizacion(org)["error"]?.takeUnless { it.isNull })
     }
 
+    @Test
+    fun `a change without a codigo is kept and the cursor moves on`() {
+        val falso = FALSOS.getValue("sincodigo")
+        val (org, _) = organizacion(falso)
+        val sinCodigo = """{"codigoMunicipal":null,"objeto":"titular_catastral","operacion":"DELETE","campos":[],
+            "en":"2026-10-20T15:00:00Z","entrega":null}"""
+        falso.paginas.set(mapOf("" to pagina("c1", false, sinCodigo, cambio("S-1", "2026-10-20T16:00:00Z"))))
+
+        vuelta(ahora(), hora = 24)
+
+        val cambios = registros(CAMBIO_CATASTRO, org)
+        assertEquals(2, cambios.size)
+        assertTrue(cambios.any { it["codigo_municipal"]?.isNull ?: true }, cambios.toString())
+        val s = sincronizacion(org)
+        assertEquals("c1", s["cursor"].asString())
+        assertEquals(2, s["pendientes"].asInt())
+        assertTrue(s["error"]?.isNull ?: true, s.toString())
+    }
+
+    @Test
+    fun `a page core refuses to write leaves its error, its cursor and no corrida`() {
+        val falso = FALSOS.getValue("escritura")
+        val (org, _) = organizacion(falso)
+        // core refuses an operacion off its enum: the whole page rolls back, its good cambio too
+        val ajena = """{"codigoMunicipal":"W-2","objeto":"predio_catastral","operacion":"OTRA","campos":[],
+            "en":"2026-10-20T16:00:00Z","entrega":null}"""
+        falso.paginas.set(mapOf("" to pagina("c1", false, cambio("W-1", "2026-10-20T15:00:00Z"), ajena)))
+
+        // hora 0 and no corrida yet: a pass that got to decide would launch the weekly one
+        vuelta(ahora(), hora = 0)
+
+        var s = sincronizacion(org)
+        assertTrue(!s["error"].isNull && s["error"].asString().isNotBlank(), s.toString())
+        assertTrue(s["cursor"]?.isNull ?: true, s.toString())
+        assertTrue(registros(CAMBIO_CATASTRO, org).isEmpty())
+        assertTrue(corridas(org, ahora().year).isEmpty())
+
+        // once catastro sends what core takes, the feed goes on
+        falso.paginas.set(mapOf("" to pagina("c1", false, cambio("W-1", "2026-10-20T15:00:00Z"))))
+        vuelta(ahora(), hora = 24)
+        s = sincronizacion(org)
+        assertTrue(s["error"]?.isNull ?: true, s.toString())
+        assertEquals("c1", s["cursor"].asString())
+        assertEquals(1, registros(CAMBIO_CATASTRO, org).size)
+    }
+
+    @Test
+    fun `a page that does not move the cursor is an error, never a loop`() {
+        val falso = FALSOS.getValue("cursor")
+        val (org, _) = organizacion(falso)
+        // cambios with no cursor to follow them
+        falso.paginas.set(mapOf("" to """{"items":[${cambio("K-1", "2026-10-20T15:00:00Z")}],"cursor":null,"hayMas":false}"""))
+        vuelta(ahora(), hora = 24)
+        var s = sincronizacion(org)
+        assertTrue(s["error"].asString().contains("cursor"), s.toString())
+        assertTrue(registros(CAMBIO_CATASTRO, org).isEmpty())
+
+        falso.paginas.set(mapOf("" to pagina("c1", false, cambio("K-1", "2026-10-20T15:00:00Z"))))
+        vuelta(ahora(), hora = 24)
+        assertEquals("c1", sincronizacion(org)["cursor"].asString())
+
+        // the cursor it was asked with, and more to come: the pass ends with its error, the rows are not written again
+        for (atascada in listOf(pagina("c1", true, cambio("K-2", "2026-10-21T15:00:00Z")), pagina("c1", true))) {
+            falso.paginas.set(mapOf("c1" to atascada))
+            runBlocking { withTimeout(60_000) { seguimiento.vuelta(ahora(), 24) } }
+            s = sincronizacion(org)
+            assertTrue(s["error"].asString().contains("cursor"), s.toString())
+            assertEquals("c1", s["cursor"].asString())
+            assertEquals(1, registros(CAMBIO_CATASTRO, org).size)
+        }
+    }
+
     // #203: GET /{anio}/cambios, task 19
     @Test
     fun `the aviso lists the changed predios with their difference and marks those above 5 UIT`() {
@@ -324,6 +397,8 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
         assertEquals(a, content[0]["codigoMunicipal"].asString())
         assertEquals("SUPERA_5_UIT", content[0]["marca"].asString())
         assertEquals(2, content[0]["cambios"].asInt())
+        // core's instant, utc and with its seconds, whatever the session's offset
+        assertEquals("2026-10-21T15:00:00Z", content[0]["ultimoCambio"].asString())
         assertEquals(b, content[1]["codigoMunicipal"].asString())
         assertTrue(content[1]["marca"]?.isNull ?: true, content[1].toString())
 
@@ -331,6 +406,8 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
         assertEquals(1, marcados["totalElements"].asInt())
         assertEquals(a, marcados["content"][0]["codigoMunicipal"].asString())
 
+        // a blank marca is no marca, as a blank desde or objeto
+        assertEquals(2, tree(send("GET", "/api/srtm/brecha/$anio/cambios?marca=", null, HttpStatus.OK, org))["totalElements"].asInt())
         send("GET", "/api/srtm/brecha/$anio/cambios?marca=OTRA", null, HttpStatus.UNPROCESSABLE_CONTENT, org)
     }
 
@@ -387,7 +464,18 @@ class SeguimientoCatastroApiTest : SrtmApiTest() {
     }
 
     companion object {
-        private val FALSOS = listOf("lee", "cambia", "semanal", "falla", "candado", "aviso").associateWith { CatastroFalso(it) }
+        private val FALSOS =
+            listOf(
+                "lee",
+                "cambia",
+                "semanal",
+                "falla",
+                "candado",
+                "aviso",
+                "sincodigo",
+                "escritura",
+                "cursor"
+            ).associateWith { CatastroFalso(it) }
 
         private fun cambio(
             codigo: String,

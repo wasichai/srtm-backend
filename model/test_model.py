@@ -452,6 +452,9 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(list(c), ["codigo_municipal", "objeto", "operacion", "campos", "en", "entrega"])
         self.assertEqual((c["objeto"]["type"], c["operacion"]["enum"], c["en"]["type"], c["campos"]["type"]),
                          ("TEXT", "operacion_catastro", "DATETIME", "LONG_TEXT"))
+        # a cambio of catastro without a predio's code (catastro may send one) is still kept: a required code
+        # would refuse its whole page and stop the feed for good
+        self.assertFalse(c["codigo_municipal"].get("required"))
         self.assertEqual(self.model["enums"]["operacion_catastro"], ["CREATE", "UPDATE", "DELETE"])
         self.assertEqual(self.model["enums"]["origen_corrida"], ["MANUAL", "CAMBIOS", "SEMANAL"])
         self.assertEqual(self.campos("brecha_corrida")["origen"]["enum"], "origen_corrida")

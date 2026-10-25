@@ -117,11 +117,14 @@ class BrechaController(
             objeto?.trim()?.ifEmpty { null }?.also {
                 if (it !in OBJETOS_CAMBIO_CATASTRO) throw ParametroInvalido("objeto", "debe ser uno de ${OBJETOS_CAMBIO_CATASTRO.joinToString()}")
             }
-        if (marca != null && marca != Seguimiento.SUPERA_5_UIT) throw ParametroInvalido("marca", "debe ser ${Seguimiento.SUPERA_5_UIT}")
+        val deMarca =
+            marca?.trim()?.ifEmpty { null }?.also {
+                if (it != Seguimiento.SUPERA_5_UIT) throw ParametroInvalido("marca", "debe ser ${Seguimiento.SUPERA_5_UIT}")
+            }
         if (page < 0) throw ParametroInvalido("page", "debe ser 0 o más")
         if (size !in 1..PageRequest.MAX_SIZE) throw ParametroInvalido("size", "debe ser de 1 a ${PageRequest.MAX_SIZE}")
         val cambios = brechas.cambios(anio, corrida, fecha, deObjeto)
-        return (if (marca == null) cambios else cambios.filter { it.marca == marca }).pagina(page, size)
+        return (if (deMarca == null) cambios else cambios.filter { it.marca == deMarca }).pagina(page, size)
     }
 
     private suspend fun leer() = permisos.exigirLeer(BRECHA_CORRIDA, "consultar la brecha de recaudación")

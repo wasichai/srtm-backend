@@ -263,7 +263,8 @@ class BrechaService(
                     objeto = row.get("objeto", String::class.java),
                     operacion = row.get("operacion", String::class.java),
                     campos = row.get("campos", String::class.java),
-                    en = row.get("en", OffsetDateTime::class.java)?.toString(),
+                    // as core's record path writes it: utc, with its seconds
+                    en = row.get("en", OffsetDateTime::class.java)?.toInstant()?.toString(),
                     entrega = row.get("entrega", String::class.java)
                 )
             }.all()

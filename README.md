@@ -950,9 +950,11 @@ y como la plataforma (`RecordService.asPlatform`): esta corrida no la lanza ning
 `created_by` y `updated_by` vacíos. A la hora de Lima `SRTM_CATASTRO_SEGUIMIENTO_HORA` (por omisión 2), como máximo
 una corrida automática al día del año corriente: `origen = CAMBIOS` si hay cambios pendientes desde la última
 automática (o esa última quedó FALLIDA), o `origen = SEMANAL` si no hubo ninguna en los últimos 7 días, aunque no
-haya cambios (recupera lo que el feed de catastro-backend pudiera perder: ver wasichai/catastro-backend#26). Una
-lectura fallida deja `error` en `sincronizacion_catastro` y esa vuelta no decide nada; la siguiente lo intenta de
-nuevo desde el mismo `cursor`.
+haya cambios (recupera lo que el feed de catastro-backend pudiera perder: ver wasichai/catastro-backend#26); una
+FALLIDA se reintenta así al día siguiente, a partir de esa hora. Una lectura fallida, una página que no se pudo
+guardar (se deshace entera) o una que no avanza el `cursor` deja `error` en `sincronizacion_catastro` y esa vuelta
+no decide nada; la siguiente lo intenta de nuevo desde el mismo `cursor`. Un cambio sin código municipal se guarda
+igual y el aviso lo omite.
 
 Una diferencia entre el autoavalúo de catastro y el declarado mayor a 5 UIT (del 1 de enero del año) obliga al
 contribuyente a presentar DJ (TUO de la Ley de Tributación Municipal, art. 14 b); la fiscalización alcanza 4 años, o

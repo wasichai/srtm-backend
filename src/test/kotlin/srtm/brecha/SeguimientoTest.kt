@@ -2,6 +2,8 @@ package srtm.brecha
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.time.Instant
@@ -110,5 +112,23 @@ class SeguimientoTest {
         val aviso = Seguimiento.aviso(listOf(cambio("01-01-0006")), filas, BigDecimal("5500.00"))
 
         assertEquals(BigDecimal("100.00"), aviso.single().deltaAutoavaluo)
+    }
+
+    @Test
+    fun `the aviso's last cambio is the latest instant, not the greatest text`() {
+        // as text "…T05:00Z" sorts after "…T05:00:30Z" (':' < 'Z'); as instants it is 30 seconds earlier
+        val cambios = listOf(cambio("A", en = "2026-10-20T05:00:30Z"), cambio("A", en = "2026-10-20T05:00Z"))
+
+        assertEquals("2026-10-20T05:00:30Z", Seguimiento.aviso(cambios, emptyList(), BigDecimal("5500.00")).single().ultimoCambio)
+    }
+
+    @Test
+    fun `the hour of the automatic corrida is one of the day`() {
+        assertEquals(0, SeguimientoProperties(hora = 0).hora)
+        assertEquals(23, SeguimientoProperties(hora = 23).hora)
+        for (hora in listOf(-1, 24)) {
+            val e = assertThrows(IllegalArgumentException::class.java) { SeguimientoProperties(hora = hora) }
+            assertTrue(e.message!!.contains("srtm.catastro.seguimiento.hora"), e.message)
+        }
     }
 }

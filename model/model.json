@@ -1543,7 +1543,8 @@
       "indexes": [["en"], ["codigo_municipal"]],
       "appendOnly": true,
       "fields": [
-        {"name": "codigo_municipal", "label": "Código municipal", "type": "TEXT", "required": true},
+        {"name": "codigo_municipal", "label": "Código municipal", "type": "TEXT",
+          "description": "Vacío cuando catastro-backend no lo trae: el cambio se guarda igual y el aviso lo omite."},
         {"name": "objeto", "label": "Objeto", "type": "TEXT", "required": true,
           "description": "predio_catastral, construccion, obra_complementaria o titular_catastral, tal como lo nombra catastro-backend; un objeto nuevo nunca detiene la lectura."},
         {"name": "operacion", "label": "Operación", "type": "ENUM", "enum": "operacion_catastro", "required": true},

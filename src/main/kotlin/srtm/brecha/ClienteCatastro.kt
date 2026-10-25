@@ -79,11 +79,15 @@ data class CatastroProperties(
 }
 
 // minutos: how often the cambios are read (0, the default: never); hora: from which hour of the day (Lima) the
-// automatic corrida of the day may start
+// automatic corrida of the day may start. an hour off the day fails the startup: 24 or more would never run it
 data class SeguimientoProperties(
     val minutos: Long = 0,
     val hora: Int = 2
-)
+) {
+    init {
+        require(hora in 0..23) { "srtm.catastro.seguimiento.hora debe ser una hora del día, de 0 a 23: $hora" }
+    }
+}
 
 // one organization's catastro-backend and its service account
 data class CuentaCatastro(
