@@ -188,7 +188,28 @@ class AutoavaluoSugeridoTest {
         assertEquals("020101", insumos(declaracion = declaracion.copy(claseUso = null, subClaseUso = null, uso = "BODEGA")).uso)
         assertNull(insumos(declaracion = declaracion.copy(claseUso = null, subClaseUso = null)).uso)
         assertNull(insumos(declaracion = declaracion.copy(uso = "OTRO")).uso)
-        assertNull(insumos(declaracion = declaracion.copy(uso = null)).uso)
+    }
+
+    // #235: an Ica padrón leaves the uso empty when its código is a sub clase's; catastro takes the longest prefix of
+    // the code, so the sub clase's XXYY00 (or the clase's XX0000) depreciates a construcción without clasificación
+    @Test
+    fun `without uso the code is its sub clase's, else its clase's`() {
+        assertEquals("010100", insumos(declaracion = declaracion.copy(uso = null)).uso)
+        assertEquals("010000", insumos(declaracion = declaracion.copy(subClaseUso = null, uso = null)).uso)
+        assertEquals("020100", insumos(declaracion = declaracion.copy(claseUso = null, subClaseUso = "TIENDAS", uso = "  ")).uso)
+        // a uso that names no row is no code, as always
+        assertNull(insumos(declaracion = declaracion.copy(uso = "OTRO")).uso)
+    }
+
+    @Test
+    fun `without uso an unknown or ambiguous sub clase or clase is no code`() {
+        assertNull(insumos(declaracion = declaracion.copy(subClaseUso = "OTRA", uso = null)).uso)
+        assertNull(insumos(declaracion = declaracion.copy(claseUso = null, subClaseUso = null, uso = null)).uso)
+        // the same sub clase under two prefixes, the same clase under two
+        val dobles = usos + UsoPredio("020301", "COMERCIAL", "TIENDAS", "TIENDA") + UsoPredio("110101", "RESIDENCIAL", "OTRA", "CASA")
+        val tiendas = declaracion.copy(claseUso = "COMERCIAL", subClaseUso = "TIENDAS", uso = null)
+        assertNull(AutoavaluoSugerido.codigoDeUso(tiendas, dobles))
+        assertNull(AutoavaluoSugerido.codigoDeUso(declaracion.copy(subClaseUso = null, uso = null), dobles))
     }
 
     @Test

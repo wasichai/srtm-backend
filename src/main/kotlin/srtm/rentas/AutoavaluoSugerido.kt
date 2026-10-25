@@ -114,19 +114,29 @@ object AutoavaluoSugerido {
     }
 
     // the declaración stores the names of its clase, sub clase and uso; catastro wants the uso_predio's code. the names
-    // it has narrow the catalog's rows of its uso; none or more than one left is no code (catastro's motivo)
+    // it has narrow the catalog's rows of its uso; none or more than one left is no code (catastro's motivo). #235:
+    // without uso (an Ica padrón's sub clase código) the code is the prefix its sub clase's rows share (XXYY00), else
+    // its clase's (XX0000): catastro takes a code's longest prefix. none, or more than one prefix, is no code
     fun codigoDeUso(
         d: Declaracion,
         usos: List<UsoPredio>
     ): String? {
-        val uso = d.uso.valor() ?: return null
-        val suyos =
-            usos.filter {
-                it.uso == uso &&
-                    (d.claseUso.valor() == null || it.clase == d.claseUso) &&
-                    (d.subClaseUso.valor() == null || it.subClase == d.subClaseUso)
-            }
-        return suyos.singleOrNull()?.codigo
+        val clase = d.claseUso.valor()
+        val subClase = d.subClaseUso.valor()
+        val suyos = usos.filter { (clase == null || it.clase == clase) && (subClase == null || it.subClase == subClase) }
+        val uso = d.uso.valor()
+        if (uso != null) return suyos.filter { it.uso == uso }.singleOrNull()?.codigo
+        if (clase == null && subClase == null) return null
+        val (digitos, relleno) = if (subClase != null) 4 to "00" else 2 to "0000"
+        return suyos
+            .mapNotNull {
+                it.codigo
+                    .valor()
+                    ?.takeIf { c -> c.length == 6 }
+                    ?.take(digitos)
+            }.distinct()
+            .singleOrNull()
+            ?.plus(relleno)
     }
 
     private fun String?.valor(): String? = this?.trim()?.ifEmpty { null }

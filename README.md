@@ -2107,7 +2107,10 @@ su `valor_autoavaluo` ([Valores derivados de la DJ](#valores-derivados-de-la-dj)
 - **Arancel:** el `arancel` del padrón externo guardado en la DJ (`origen_arancel` = `CUERPO`). Sin él, el catastro
   toma el de su ficha por `codigo_municipal`, que es el `codigo` del predio, la misma llave de la brecha (`FICHA`).
 - **Uso:** la DJ guarda los nombres de clase, sub clase y uso; se manda el `codigo` de `uso_predio` que les corresponde.
-  Si no hay uno solo, va `null` y el catastro responde su motivo.
+  Si no hay uno solo, va `null` y el catastro responde su motivo. Sin uso (#235: el padrón de Ica lo deja vacío
+  cuando su código es de sub clase), va el prefijo que comparten los usos de su sub clase (`XXYY00`, p. ej. `020300`)
+  o, sin sub clase, los de su clase (`XX0000`); el catastro toma el prefijo más largo para la tabla de depreciación.
+  Si no hay un solo prefijo, va `null`.
 - **Tipo de predio (#209):** el `tipo_predio` del predio (nunca el de la DJ, que no lo tiene) va como `tipoPredio`
   (`PREDIO RUSTICO` → `RUSTICO`, `PREDIO URBANO` → `URBANO`; otro valor, o ninguno, `null`, como siempre urbano).
   Un predio rústico responde `motivo = "PREDIO_RUSTICO"` y sin `autoavaluo`: el catastro todavía no tiene los
