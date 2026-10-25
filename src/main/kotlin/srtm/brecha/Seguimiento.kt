@@ -107,8 +107,8 @@ object Seguimiento {
                     codigoPredio = fila?.codigoPredio,
                     categoria = fila?.categoria,
                     cambios = suyos.size,
-                    objetos = suyos.mapNotNull { it.objeto },
-                    entregas = suyos.mapNotNull { it.entrega },
+                    objetos = suyos.mapNotNull { it.objeto }.distinct(),
+                    entregas = suyos.mapNotNull { it.entrega }.distinct(),
                     // by instant: as text "…T05:00Z" would pass "…T05:00:30Z"
                     ultimoCambio =
                         suyos
