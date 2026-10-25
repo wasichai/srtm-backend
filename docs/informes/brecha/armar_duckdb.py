@@ -8,7 +8,8 @@
 one Metabase's `make duckdb` runs: it downloads the organization's latest published corte with
 herramientas.s3.descargar into --cortes/<org>/<fecha> (by omission /srv/srtm-metabase/cortes) and rebuilds
 --destino-dir/<org>.duckdb atomically with herramientas.base.construir_atomico (by omission
-/srv/srtm-metabase/duckdb) - the file Metabase has open is only ever replaced whole, never half-built.
+/srv/srtm-metabase/<org>/duckdb, the only folder the organization's own Metabase instance mounts - plan,
+Decisión 2026-10-25) - the file Metabase has open is only ever replaced whole, never half-built.
 
 Either way the corte is checked against its manifest before anything is touched. Exit codes: 0 ok, 2 bad
 usage, a corte that does not match its manifest, or (--org) nothing published yet; 1 a DuckDB, download or
@@ -30,7 +31,8 @@ import duckdb  # noqa: E402
 from herramientas import base, comun, s3  # noqa: E402
 
 CORTES_DIR = "/srv/srtm-metabase/cortes"
-DESTINO_DIR = "/srv/srtm-metabase/duckdb"
+# one folder per organization: its Metabase instance mounts that folder alone (metabase/compose.yml)
+DESTINO_DIR = "/srv/srtm-metabase/{org}/duckdb"
 
 
 def _argumentos():
@@ -45,7 +47,7 @@ def _argumentos():
     parser.add_argument(
         "--destino-dir",
         dest="destino_dir",
-        help=f"carpeta de los .duckdb (con --org; por omisión {DESTINO_DIR})",
+        help=f"carpeta de los .duckdb (con --org; por omisión {DESTINO_DIR.format(org='<org>')})",
     )
     return parser
 
@@ -115,7 +117,13 @@ def main(argv=None):
             print("armar_duckdb: --destino no se usa con --org (usa --destino-dir)", file=sys.stderr)
             return 2
         cortes = Path(args.cortes or CORTES_DIR).expanduser()
-        destino_dir = Path(args.destino_dir or DESTINO_DIR).expanduser()
+        # the org reaches a path here only after validar_org: _armar_org would reject it, but too late
+        try:
+            comun.validar_org(args.org)
+        except comun.ErrorCorte as e:
+            print(f"armar_duckdb: {e}", file=sys.stderr)
+            return 2
+        destino_dir = Path(args.destino_dir or DESTINO_DIR.format(org=args.org)).expanduser()
         return _armar_org(args.org, cortes, destino_dir)
 
     if not args.destino:

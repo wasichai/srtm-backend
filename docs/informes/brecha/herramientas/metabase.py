@@ -1,53 +1,57 @@
-"""Metabase's REST API for the corte's dashboards (srtm-backend#206): one DuckDB database, one group and one
-collection per organization, the permission graphs that keep them apart, and the starting tableros of
-metabase/tableros.json.
+"""Metabase's REST API for the corte's dashboards (srtm-backend#206): one Metabase instance per organization
+(plan, Decisión 2026-10-25), and in it that organization's DuckDB database, group and collection, the permission
+graphs that keep "All Users" out of them, and the starting tableros of metabase/tableros.json.
 
 Stdlib only (urllib), like cliente.py: the client never retries, and an ErrorMetabase carries only the method,
 the route and the status - never a password or a session token (the session travels in the
 `X-Metabase-Session` header, never in a URL). The shapes are Metabase 0.63.19's (task 10's report names the
 source file behind each one); pruebas/metabase_falso.py copies them.
 
-Isolation is what Metabase OSS has (plan § Rulings, aislamiento: no "Blocked", no sandboxing): each
-organization's group gets `create-queries: query-builder` on its own database and `no` on the others, "All
-Users" `no` everywhere; each organization's collection is `read` for its group and `none` for the rest. The
-DuckDB connection is `read_only` with `init_sql` = base.INIT_SQL, so not even a native query could open another
-organization's file. Beyond the plan's letter, "All Users" also loses the root collection (Metabase's default
-is `write`): a question saved there would be visible to every organization's users, and with `view-data`
-unrestricted it would run for them.
+Isolation between organizations is the instance itself: Metabase OSS shows every user of an instance the names
+and emails of all the others (GET /api/user/recipients, `user-visibility` is a paid setting), so the
+organizations no longer share one. Each instance's compose mounts only its organization's DuckDB, and
+`provisionar` refuses an instance that already holds another organization's database or `Brecha …` group (an
+<org>.env copied with someone else's METABASE_PUERTO). Inside the instance, the organization's group gets
+`create-queries: query-builder` on its database and `read` on its collection; "All Users" gets `no` and `none`
+on them and loses the root collection (Metabase's default is `write`), so an account outside the group - one
+created by hand, say - sees nothing. The DuckDB connection is `read_only` with `init_sql` = base.INIT_SQL.
 
 The tableros are native cards `SELECT * FROM <vista>` (plan § Rulings: "los tableros son tarjetas nativas ...
 idempotentes por nombre dentro de la colección"): a second run finds every database, group, collection, card
 and dashboard by name and only PUTs what differs from the definition.
 
-`humo` (task 11, `humo.py`) checks a provisioned Metabase stays that way: every `Brecha …` database syncs and
-shows its views, every tablero's card still runs, and, logged in as each organization's user, isolation holds
-(plan § Rulings: "si Metabase OSS muestra a un usuario el nombre de otra base, la prueba de humo lo marca").
+`humo` (task 11, `humo.py`) checks a provisioned instance stays that way: it holds exactly its organization's
+database, whose DuckDB connection has only `/datos/<org>.duckdb` open and whose corte is that organization's;
+the database syncs and shows its views, every tablero's card still runs, and the organization's user sees it
+without native SQL.
 """
 
 import http.client
 import json
+import os
 import re
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 from . import base, comun
 
 TIMEOUT = 60
 GRILLA = 24  # Metabase dashboards are 24 columns wide
 PREFIJO = "Brecha "
+CREDENCIALES = ("METABASE_ADMIN_EMAIL", "METABASE_ADMIN_PASSWORD")
 TODOS = "all-internal-users"  # magic_group_type of "All Users" (permissions_group.clj)
 
 PROPIA = {"view-data": "unrestricted", "create-queries": "query-builder"}
 AJENA = {"create-queries": "no"}
 
 _VISTA = re.compile(r"^v_[a-z0-9_]+$")
-# The statuses of a query that ran and failed in Metabase 0.63.19 (query_processor/streaming.clj `status-code`,
-# written by server/streaming_response.clj `write-error!`): 400 for a client error such as an invalid query, 500
-# for the rest; the body is the failed result. 403 is a permission error, not a failure of the query itself.
-_CONSULTA_FALLIDA = (400, 500)
 _ACCESO_EXTERNO = "SELECT current_setting('enable_external_access') AS v"
+# the files the DuckDB connection has open (the instance must see only its organization's), and whose corte it is
+_ARCHIVOS_ABIERTOS = "SELECT path FROM duckdb_databases() WHERE NOT internal ORDER BY path"
+_ORGANIZACION_DEL_CORTE = "SELECT DISTINCT organizacion FROM corte_manifiesto"
 _CAMPOS_TARJETA = ("nombre", "vista", "display", "visualizacion", "fila", "col", "ancho", "alto")
 
 
@@ -138,6 +142,26 @@ def _campos_con_error(crudo):
     return tuple(sorted(str(k) for k in errores)) if isinstance(errores, dict) else ()
 
 
+def conexion(org, ruta=None):
+    """(url, admin email, admin password) of the organization's own instance (provisionar.py and humo.py). The
+    URL comes only from its <org>.env (`ruta`, by omission comun.ruta_entorno(org)): METABASE_URL there, else
+    http://127.0.0.1:<METABASE_PUERTO> (the SSH tunnel forwards the same port) - never from the shell's
+    environment, where a METABASE_URL left over from another organization's session would point this one at
+    the wrong instance. The administrator's email and password come from the environment or, without them,
+    from that file. Raises comun.ErrorCorte (a configuration error) naming keys and the file, never a value."""
+    ruta = Path(ruta).expanduser() if ruta else comun.ruta_entorno(org)
+    try:
+        valores = comun.leer_entorno(ruta, ("METABASE_PUERTO",))
+    except OSError as e:
+        raise comun.ErrorCorte(f"no se puede leer {ruta}: {e.strerror}") from None
+    url = valores.get("METABASE_URL") or f"http://127.0.0.1:{valores['METABASE_PUERTO']}"
+    credenciales = [os.environ.get(c) or valores.get(c) for c in CREDENCIALES]
+    faltan = [c for c, v in zip(CREDENCIALES, credenciales) if not v]
+    if faltan:
+        raise comun.ErrorCorte(f"falta {', '.join(faltan)} en el entorno o en {ruta}")
+    return url, *credenciales
+
+
 def asegurar_setup(mb, email, clave):
     """A Metabase that was never set up has no user: GET /api/session/properties answers `has-user-setup`
     false and a `setup-token`, and POST /api/setup (setup_rest/api.clj) creates the first administrator with
@@ -193,35 +217,51 @@ def validar_tableros(tableros):
                 raise ErrorTableros(f"tableros.json: «{tarjeta['nombre']}» tiene dos definiciones distintas")
 
 
-def provisionar(mb, orgs, tableros, ruta_datos="/datos"):
-    """Creates or updates, per organization (`orgs`: clave -> nombre), the database `Brecha <nombre>` over
+def provisionar(mb, org, nombre, tableros, ruta_datos="/datos"):
+    """Creates or updates, in this organization's own instance, the database `Brecha <nombre>` over
     `<ruta_datos>/<org>.duckdb`, the group `Brecha <org>`, the collection `Brecha <nombre>`, the two permission
-    graphs and the tableros' cards and dashboards. Returns {org: {"base", "grupo", "coleccion", "tarjetas",
-    "tableros"}} with Metabase's ids. The session must be an administrator's."""
+    graphs and the tableros' cards and dashboards. Returns {"base", "grupo", "coleccion", "tarjetas", "tableros"}
+    with Metabase's ids. The session must be an administrator's.
+
+    Refuses (an ErrorMetabase, before writing anything) an instance that already has another `Brecha …`
+    database or group, or a `Brecha <nombre>` database over another file: one instance, one organization."""
     validar_tableros(tableros)
-    for org in orgs:
-        comun.validar_org(org)
+    comun.validar_org(org)
+    archivo = f"{ruta_datos.rstrip('/')}/{org}.duckdb"
+    _comprobar_instancia(mb, org, f"{PREFIJO}{nombre}", archivo)
     todos = _grupo_todos(mb)
-    resultado = {}
-    for org, nombre in orgs.items():
-        detalles = {
-            "database_file": f"{ruta_datos.rstrip('/')}/{org}.duckdb",
-            "read_only": True,
-            "old_implicit_casting": True,
-            "init_sql": base.INIT_SQL,
-        }
-        grupos = mb.get("/api/permissions/group")
-        resultado[org] = {
-            "base": _asegurar_base(mb, f"{PREFIJO}{nombre}", detalles, todos),
-            "grupo": _asegurar_por_nombre(mb, "/api/permissions/group", grupos, f"{PREFIJO}{org}"),
-            "coleccion": _asegurar_coleccion(mb, f"{PREFIJO}{nombre}"),
-        }
-    _grafo_de_datos(mb, resultado, todos)
-    _grafo_de_colecciones(mb, resultado, todos)
-    for org in orgs:
-        r = resultado[org]
-        r["tarjetas"], r["tableros"] = _asegurar_tableros(mb, tableros, r["base"], r["coleccion"])
-    return resultado
+    detalles = {"database_file": archivo, "read_only": True, "old_implicit_casting": True, "init_sql": base.INIT_SQL}
+    grupos = mb.get("/api/permissions/group")
+    r = {
+        "base": _asegurar_base(mb, f"{PREFIJO}{nombre}", detalles, todos),
+        "grupo": _asegurar_por_nombre(mb, "/api/permissions/group", grupos, f"{PREFIJO}{org}"),
+        "coleccion": _asegurar_coleccion(mb, f"{PREFIJO}{nombre}"),
+    }
+    _grafo_de_datos(mb, r, todos)
+    _grafo_de_colecciones(mb, r, todos)
+    r["tarjetas"], r["tableros"] = _asegurar_tableros(mb, tableros, r["base"], r["coleccion"])
+    return r
+
+
+def _comprobar_instancia(mb, org, nombre_base, archivo):
+    """The instance is this organization's, or still empty: no `Brecha …` database other than `nombre_base`, that
+    one over `archivo`, and no `Brecha …` group other than `Brecha <org>`."""
+    pista = "(¿METABASE_PUERTO de otra organización?)"
+    for b in (mb.get("/api/database") or {}).get("data") or []:
+        nombre = str(b.get("name", ""))
+        if not nombre.startswith(PREFIJO):
+            continue
+        if nombre != nombre_base:
+            ajena = f"la instancia ya tiene la base {nombre}: no es de {org} {pista}"
+            raise ErrorMetabase("GET", "/api/database", ajena)
+        otro = (b.get("details") or {}).get("database_file")
+        if otro != archivo:
+            raise ErrorMetabase("GET", "/api/database", f"{nombre} abre {otro}, no {archivo}: no es de {org}")
+    for g in mb.get("/api/permissions/group") or []:
+        nombre = str(g.get("name", ""))
+        if nombre.startswith(PREFIJO) and nombre != f"{PREFIJO}{org}":
+            ajeno = f"la instancia ya tiene el grupo {nombre}: no es de {org} {pista}"
+            raise ErrorMetabase("GET", "/api/permissions/group", ajeno)
 
 
 def agregar_usuario(mb, org, email, nombre, apellido, clave):
@@ -229,10 +269,10 @@ def agregar_usuario(mb, org, email, nombre, apellido, clave):
     `Brecha <org>` if it is not there yet (POST /api/permissions/membership). An existing user keeps its password.
     Returns the user's id.
 
-    One user, one organization: an email already in another `Brecha …` group is refused (a member of two groups
-    sees both organizations' tableros), and so is a deactivated user's email (POST /api/user would answer a bare
-    400; reactivating someone is an administrator's decision, made in Metabase's own admin). Both are an
-    ErrorMetabase whose one line names the email and the reason, before anything is written."""
+    A deactivated user's email is refused (POST /api/user would answer a bare 400; reactivating someone is an
+    administrator's decision, made in Metabase's own admin): an ErrorMetabase whose one line names the email and
+    the reason, before anything is written. The instance is this organization's alone, so there is no other
+    organization's group to check the user against."""
     comun.validar_org(org)
     grupos = mb.get("/api/permissions/group") or []
     grupo = _buscar(grupos, f"{PREFIJO}{org}")
@@ -251,13 +291,6 @@ def agregar_usuario(mb, org, email, nombre, apellido, clave):
         )
     uid = usuario["id"]
     membresias = (mb.get("/api/permissions/membership") or {}).get(str(uid)) or []
-    otros = sorted(
-        g["name"] for g in grupos
-        if g["id"] != grupo["id"] and str(g.get("name", "")).startswith(PREFIJO)
-        and any(m.get("group_id") == g["id"] for m in membresias)
-    )
-    if otros:
-        raise ErrorMetabase("GET", "/api/permissions/membership", f"{email} ya está en {', '.join(otros)}")
     if not any(m.get("group_id") == grupo["id"] for m in membresias):
         mb.post("/api/permissions/membership", {"group_id": grupo["id"], "user_id": uid})
     return uid
@@ -318,45 +351,22 @@ def _asegurar_coleccion(mb, nombre):
 # --- permission graphs ----------------------------------------------------------------------------------------
 
 
-def _brecha(elementos):
-    return {e["id"] for e in elementos if isinstance(e.get("id"), int) and str(e.get("name", "")).startswith(PREFIJO)}
-
-
 def _cerrar_base(mb, base_id, todos):
-    """Right after POST /api/database: All Users and every `Brecha …` group get AJENA on the new database.
-    Metabase gives a non-admin group its most restrictive level elsewhere on a new database, and native SQL when
-    it has none (permissions/models/data_permissions.clj set-default-database-permissions!), so the first
-    database is open to All Users with native SQL until a graph says otherwise. _grafo_de_datos only runs after
-    every organization's database exists: without this, a later failure (another organization's .duckdb
-    missing, a 409 on the graph) would leave this one open to everyone. Its own group gets PROPIA there later."""
-    grupos = {todos} | _brecha(mb.get("/api/permissions/group") or [])
+    """Right after POST /api/database: All Users gets AJENA on the new database. Metabase gives a non-admin group
+    native SQL on a database when it has no other level to copy (permissions/models/data_permissions.clj
+    set-default-database-permissions!), so a new database is open to All Users with native SQL until a graph
+    says otherwise; without this, a later failure in the run (a 500 on the collection, a 409 on the graph) would
+    leave it that way. Its own group gets PROPIA later, in _grafo_de_datos."""
     grafo = mb.get("/api/permissions/graph")
-    mb.put(
-        "/api/permissions/graph",
-        {"revision": grafo.get("revision"), "groups": {str(g): {str(base_id): AJENA} for g in sorted(grupos)}},
-    )
+    mb.put("/api/permissions/graph", {"revision": grafo.get("revision"), "groups": {str(todos): {str(base_id): AJENA}}})
 
 
-def _grafo_de_datos(mb, resultado, todos):
+def _grafo_de_datos(mb, r, todos):
     """The data permissions graph (GET/PUT /api/permissions/graph, permissions_rest/api.clj; group id -> database
-    id -> {"view-data", "create-queries"}; keys are strings in JSON). This run's groups get PROPIA on their own
-    database and AJENA on every other `Brecha …` database; every other `Brecha …` group gets AJENA on this run's
-    databases (so a new organization never opens up the earlier ones, nor they it); All Users gets AJENA on this
-    run's databases. Only the entries that differ are PUT, with the graph's `revision` (a stale one is a 409)."""
-    grupos = _brecha(mb.get("/api/permissions/group") or [])
-    bases = _brecha((mb.get("/api/database") or {}).get("data") or [])
-    propias = {(r["grupo"], r["base"]) for r in resultado.values()}
-    nuevos_grupos = {r["grupo"] for r in resultado.values()}
-    nuevas_bases = {r["base"] for r in resultado.values()}
-    deseado = {}
-    for grupo in grupos:
-        for b in bases:
-            if (grupo, b) in propias:
-                deseado[(grupo, b)] = PROPIA
-            elif grupo in nuevos_grupos or b in nuevas_bases:
-                deseado[(grupo, b)] = AJENA
-    for b in nuevas_bases:
-        deseado[(todos, b)] = AJENA
+    id -> {"view-data", "create-queries"}; keys are strings in JSON): the organization's group gets PROPIA on its
+    database and All Users AJENA. Only the entries that differ are PUT, with the graph's `revision` (a stale one
+    is a 409)."""
+    deseado = {(r["grupo"], r["base"]): PROPIA, (todos, r["base"]): AJENA}
     grafo = mb.get("/api/permissions/graph")
     actual = grafo.get("groups") or {}
     parche = {}
@@ -368,26 +378,11 @@ def _grafo_de_datos(mb, resultado, todos):
         mb.put("/api/permissions/graph", {"revision": grafo.get("revision"), "groups": parche})
 
 
-def _grafo_de_colecciones(mb, resultado, todos):
+def _grafo_de_colecciones(mb, r, todos):
     """The collection graph (GET/PUT /api/collection/graph, collections_rest/api.clj; group id -> collection id or
-    "root" -> "read"/"write"/"none"), on the same rule as the data graph: `read` on its own collection, `none`
-    on the others, All Users `none` on this run's collections and on the root. PUT only what differs."""
-    grupos = _brecha(mb.get("/api/permissions/group") or [])
-    colecciones = _brecha(
-        c for c in mb.get("/api/collection") or [] if c.get("personal_owner_id") is None and c.get("location") == "/"
-    )
-    propias = {(r["grupo"], r["coleccion"]) for r in resultado.values()}
-    nuevos_grupos = {r["grupo"] for r in resultado.values()}
-    nuevas = {r["coleccion"] for r in resultado.values()}
-    deseado = {(todos, "root"): "none"}
-    for grupo in grupos:
-        for c in colecciones:
-            if (grupo, c) in propias:
-                deseado[(grupo, c)] = "read"
-            elif grupo in nuevos_grupos or c in nuevas:
-                deseado[(grupo, c)] = "none"
-    for c in nuevas:
-        deseado[(todos, c)] = "none"
+    "root" -> "read"/"write"/"none"): `read` for the organization's group on its collection, `none` for All Users
+    on it and on the root. PUT only what differs."""
+    deseado = {(r["grupo"], r["coleccion"]): "read", (todos, r["coleccion"]): "none", (todos, "root"): "none"}
     grafo = mb.get("/api/collection/graph")
     actual = grafo.get("groups") or {}
     parche = {}
@@ -483,32 +478,6 @@ class Fallas(list):
         self.comprobaciones = 0
 
 
-def _base_propia(mb, org):
-    """The id of the one database the group `Brecha <org>` can query (`create-queries` != "no" on the admin's
-    data permissions graph) - safer than asking the organization's own user, whose GET /api/database is
-    exactly what a broken isolation would lie about. None when the group is missing, or when it can query zero
-    or more than one database (provisionar.py never ran, or ran against a different tableros.json)."""
-    grupo = _buscar(mb.get("/api/permissions/group") or [], f"{PREFIJO}{org}")
-    if grupo is None:
-        return None
-    permisos = (mb.get("/api/permissions/graph") or {}).get("groups") or {}
-    propias = [
-        int(b) for b, p in (permisos.get(str(grupo["id"])) or {}).items() if p.get("create-queries") not in (None, "no")
-    ]
-    return propias[0] if len(propias) == 1 else None
-
-
-def _nombre_de_base(bases, base_id):
-    """The name of `base_id` in `bases` (name -> id), or a fallback that still shows the id. The admin's
-    permissions graph (where humo finds an organization's "own" base) and GET /api/database (where it lists
-    `bases`) are two separate calls: a base renamed or deleted between them must become a falla's text, never
-    an uncaught StopIteration that stops humo.py with a traceback instead of a clean exit 1."""
-    for nombre, i in bases.items():
-        if i == base_id:
-            return nombre
-    return f"base #{base_id} (no aparece en /api/database)"
-
-
 def _esperar_vista(mb, base_id, vista, espera):
     """Polls GET /api/database/:id/metadata until `vista` is one of its tables, or `espera` seconds pass (a
     real sync_schema runs in the background; MetabaseFalso's is immediate, so the tests never wait)."""
@@ -525,20 +494,34 @@ def _esperar_vista(mb, base_id, vista, espera):
         retraso = min(retraso * 2, 5)
 
 
-def humo(url, admin, usuarios, espera=120):
-    """Smoke test of an already provisioned Metabase (plan § Rulings, aislamiento: "si Metabase OSS muestra a
-    un usuario el nombre de otra base, la prueba de humo lo marca"). As the administrator: every `Brecha …`
-    database still syncs and shows `v_segmentos`, every tablero's card still runs (a card that fails is one
-    falla, and the run goes on), `current_setting('enable_external_access')` is false on every one of them, and
-    an ATTACH from one organization's database to another's file fails (a 400/500, see _CONSULTA_FALLIDA).
-    Logged in as each organization's user (`usuarios`: org ->
-    (email, clave)): GET /api/database lists its own database, and no other, a foreign tablero's card is 403, and
-    native SQL is 403 everywhere - on a foreign database and on its own (provisioning never grants
-    `create-queries: "query-builder-and-native"` to anyone, plan § Rulings: PROPIA).
+def _nativa(mb, base_id, sql):
+    """The rows of a native query the administrator runs on `base_id`, or a short reason it did not complete
+    (as a str): a query that fails is a falla to report, never an exception out of humo."""
+    try:
+        resultado = mb.post("/api/dataset", {"database": base_id, "type": "native", "native": {"query": sql}}) or {}
+    except ErrorMetabase as e:
+        return f"falló ({e.estado})"
+    if resultado.get("status") != "completed":
+        return f"no terminó ({resultado.get('status')!r})"
+    return (resultado.get("data") or {}).get("rows") or []
+
+
+def humo(url, admin, org, usuario, espera=120):
+    """Smoke test of an organization's own, already provisioned Metabase instance (plan, Decisión 2026-10-25).
+    As the administrator: the instance holds exactly one database, over `/datos/<org>.duckdb` - any other
+    database, `Brecha …` or not, is a falla; that database still syncs and shows `v_segmentos`; every tablero's
+    card still runs (a card that fails is one falla, and the run goes on); and, inside its DuckDB connection,
+    `enable_external_access` is false, `duckdb_databases()` shows only `<org>.duckdb` open, and
+    `corte_manifiesto` says the corte is `org`'s - so the instance sees only its own DuckDB, by name and by
+    content. Logged in as the organization's user (`usuario`: (email, clave)): GET /api/database lists its
+    database and no other, and native SQL on it is 403 (provisioning never grants
+    `create-queries: "query-builder-and-native"`, plan § Rulings: PROPIA).
 
     Returns a Fallas (empty = every comprobación passed); an ErrorMetabase propagates only from a request that is
     not itself what a comprobación checks (the administrator's login, a listing), never from one that merely
     found something wrong."""
+    comun.validar_org(org)
+    archivo = f"/datos/{org}.duckdb"
     mb = Metabase(url)
     mb.sesion(*admin)
     fallas = Fallas()
@@ -548,18 +531,31 @@ def humo(url, admin, usuarios, espera=120):
     if not isinstance(salud, dict) or salud.get("status") != "ok":
         fallas.append(f"/api/health no respondió ok: {salud!r}")
 
-    bases = {
-        b["name"]: b["id"]
-        for b in (mb.get("/api/database") or {}).get("data") or []
-        if str(b.get("name", "")).startswith(PREFIJO)
-    }
-    for nombre, base_id in bases.items():
-        fallas.comprobaciones += 1
-        try:
-            mb.post(f"/api/database/{base_id}/sync_schema")
-        except ErrorMetabase as e:
-            fallas.append(f"{nombre}: sync_schema -> {e}")
-            continue
+    fallas.comprobaciones += 1
+    bases = (mb.get("/api/database") or {}).get("data") or []
+    propia = next((b for b in bases if (b.get("details") or {}).get("database_file") == archivo), None)
+    if propia is None and len(bases) == 1:
+        propia = bases[0]
+    if not bases:
+        fallas.append(f"{org}: la instancia no tiene ninguna base (¿corrió provisionar.py?)")
+    otras = [b for b in bases if b is not propia]
+    if otras:
+        nombres = ", ".join(f"{b.get('name')} ({(b.get('details') or {}).get('database_file')})" for b in otras)
+        fallas.append(f"{org}: la instancia tiene otra base además de la suya: {nombres}")
+    if propia is None:
+        return fallas
+    nombre = propia.get("name")
+    base_id = propia["id"]
+    otro_archivo = (propia.get("details") or {}).get("database_file")
+    if otro_archivo != archivo:
+        fallas.append(f"{nombre} abre {otro_archivo}, no {archivo}")
+
+    fallas.comprobaciones += 1
+    try:
+        mb.post(f"/api/database/{base_id}/sync_schema")
+    except ErrorMetabase as e:
+        fallas.append(f"{nombre}: sync_schema -> {e}")
+    else:
         if not _esperar_vista(mb, base_id, "v_segmentos", espera):
             fallas.append(f"{nombre}: v_segmentos no aparece en sus metadatos tras sincronizar")
 
@@ -567,14 +563,13 @@ def humo(url, admin, usuarios, espera=120):
         c for c in mb.get("/api/collection") or []
         if isinstance(c.get("id"), int) and str(c.get("name", "")).startswith(PREFIJO)
     ]
-    tarjetas_por_base = {}
     for c in colecciones:
         items = (mb.get(f"/api/collection/{c['id']}/items?models=card") or {}).get("data") or []
-        tarjetas_por_base[c["name"]] = [i["id"] for i in items]
         for item in items:
             fallas.comprobaciones += 1
-            # a card whose query fails answers an HTTP error (400/500, see _CONSULTA_FALLIDA), not 202 "failed":
-            # one falla naming the card, and the run goes on with the next one
+            # a query that ran and failed answers an HTTP error in Metabase 0.63.19, not 202 "failed"
+            # (query_processor/streaming.clj `status-code`: 400 for a client error, 500 for the rest; 403 is a
+            # permission error): one falla naming the card, and the run goes on with the next one
             try:
                 resultado = mb.post(f"/api/card/{item['id']}/query") or {}
             except ErrorMetabase as e:
@@ -583,103 +578,45 @@ def humo(url, admin, usuarios, espera=120):
             if resultado.get("status") != "completed":
                 fallas.append(f"{c['name']}: la tarjeta «{item['name']}» no corrió ({resultado.get('status')!r})")
 
-    # the positive half of INIT_SQL's check, which cannot pass vacuously: on every `Brecha …` base the setting
-    # really is off (the ATTACH below only shows that one statement failed, for whatever reason)
-    for nombre, base_id in bases.items():
-        fallas.comprobaciones += 1
-        consulta = {"database": base_id, "type": "native", "native": {"query": _ACCESO_EXTERNO}}
-        try:
-            resultado = mb.post("/api/dataset", consulta) or {}
-        except ErrorMetabase as e:
-            fallas.append(f"{nombre}: no se pudo leer enable_external_access ({e.estado})")
-            continue
-        filas = (resultado.get("data") or {}).get("rows") or []
-        if resultado.get("status") != "completed" or filas[:1] not in ([[False]], [["false"]]):
-            fallas.append(f"{nombre}: enable_external_access no es false ({filas[:1]!r}): ¿falta su init_sql?")
+    fallas.comprobaciones += 1
+    filas = _nativa(mb, base_id, _ACCESO_EXTERNO)
+    if isinstance(filas, str) or filas[:1] not in ([[False]], [["false"]]):
+        fallas.append(f"{nombre}: enable_external_access no es false ({filas!r}): ¿falta su init_sql?")
 
-    bases_por_org = {}
-    for org in usuarios:
-        fallas.comprobaciones += 1
-        base_id = _base_propia(mb, org)
-        if base_id is None:
-            fallas.append(f"{org}: no se encuentra su base (¿corrió provisionar.py con este tableros.json?)")
-        bases_por_org[org] = base_id
+    fallas.comprobaciones += 1
+    filas = _nativa(mb, base_id, _ARCHIVOS_ABIERTOS)
+    rutas = filas if isinstance(filas, str) else [str(f[0]) for f in filas]
+    if isinstance(rutas, str) or len(rutas) != 1 or rutas[0].rsplit("/", 1)[-1] != f"{org}.duckdb":
+        fallas.append(f"{nombre}: duckdb_databases() muestra {rutas!r}, no solo {org}.duckdb")
 
-    for org, (email, clave) in usuarios.items():
-        propia = bases_por_org.get(org)
-        if propia is None:
-            continue
-        nombre_propia = _nombre_de_base(bases, propia)
-        otro_org = next((o for o, b in bases_por_org.items() if o != org and b is not None), None)
+    fallas.comprobaciones += 1
+    filas = _nativa(mb, base_id, _ORGANIZACION_DEL_CORTE)
+    if filas != [[org]]:
+        fallas.append(f"{nombre}: corte_manifiesto es de {filas!r}, no de {org}")
 
-        mu = Metabase(url)
-        fallas.comprobaciones += 1
-        try:
-            mu.sesion(email, clave)
-        except ErrorMetabase as e:
-            fallas.append(f"{org}: no pudo iniciar sesión ({e})")
-            continue
+    mu = Metabase(url)
+    fallas.comprobaciones += 1
+    try:
+        mu.sesion(*usuario)
+    except ErrorMetabase as e:
+        fallas.append(f"{org}: no pudo iniciar sesión ({e})")
+        return fallas
 
-        fallas.comprobaciones += 1
-        vistas = {b["name"]: b["id"] for b in (mu.get("/api/database") or {}).get("data") or []}
-        if propia not in vistas.values():
-            fallas.append(f"{org} no ve su propia base ({nombre_propia})")
-        ajenas = sorted(n for n, i in vistas.items() if i != propia)
-        if ajenas:
-            fallas.append(f"{org} ve, además de la suya, otra base: {', '.join(ajenas)}")
+    fallas.comprobaciones += 1
+    vistas = {b["name"]: b["id"] for b in (mu.get("/api/database") or {}).get("data") or []}
+    if base_id not in vistas.values():
+        fallas.append(f"{org} no ve su propia base ({nombre})")
+    ajenas = sorted(n for n, i in vistas.items() if i != base_id)
+    if ajenas:
+        fallas.append(f"{org} ve, además de la suya, otra base: {', '.join(ajenas)}")
 
-        if otro_org is not None:
-            base_ajena = bases_por_org[otro_org]
-            nombre_ajena = _nombre_de_base(bases, base_ajena)
-            tarjeta_ajena = next(iter(tarjetas_por_base.get(nombre_ajena, [])), None)
-            if tarjeta_ajena is not None:
-                fallas.comprobaciones += 1
-                try:
-                    mu.get(f"/api/card/{tarjeta_ajena}")
-                except ErrorMetabase as e:
-                    if e.estado != 403:
-                        fallas.append(f"{org}: leer una tarjeta de {nombre_ajena} dio {e.estado}, no 403")
-                else:
-                    fallas.append(f"{org} pudo leer una tarjeta de {nombre_ajena}")
-
-            fallas.comprobaciones += 1
-            nativa_ajena = {"database": base_ajena, "type": "native", "native": {"query": "SELECT 1"}}
-            try:
-                mu.post("/api/dataset", nativa_ajena)
-            except ErrorMetabase as e:
-                if e.estado != 403:
-                    fallas.append(f"{org}: SQL nativo sobre {nombre_ajena} dio {e.estado}, no 403")
-            else:
-                fallas.append(f"{org} pudo correr SQL nativo sobre {nombre_ajena}")
-
-        fallas.comprobaciones += 1
-        nativa_propia = {"database": propia, "type": "native", "native": {"query": "SELECT 1"}}
-        try:
-            mu.post("/api/dataset", nativa_propia)
-        except ErrorMetabase as e:
-            if e.estado != 403:
-                fallas.append(
-                    f"{org}: SQL nativo sobre {nombre_propia} dio {e.estado}, no 403 (no debería tener SQL nativo)"
-                )
-        else:
-            fallas.append(f"{org} pudo correr SQL nativo sobre su propia base ({nombre_propia}): nadie debería tenerlo")
-
-    for org, propia in bases_por_org.items():
-        if propia is None:
-            continue
-        otro_org = next((o for o, b in bases_por_org.items() if o != org and b is not None), None)
-        if otro_org is None:
-            continue
-        fallas.comprobaciones += 1
-        consulta = {"database": propia, "type": "native", "native": {"query": f"ATTACH '/datos/{otro_org}.duckdb'"}}
-        try:
-            resultado = mb.post("/api/dataset", consulta) or {}
-        except ErrorMetabase as e:
-            # DuckDB's refusal is a failed query: 400 (a client error) or 500, never anything else
-            if e.estado not in _CONSULTA_FALLIDA:
-                fallas.append(f"{org}: ATTACH '/datos/{otro_org}.duckdb' dio {e.estado}, no 400/500")
-            continue
-        if resultado.get("status") == "completed":
-            fallas.append(f"{org}: ATTACH '/datos/{otro_org}.duckdb' no dio error (aislamiento roto)")
+    fallas.comprobaciones += 1
+    try:
+        mu.post("/api/dataset", {"database": base_id, "type": "native", "native": {"query": "SELECT 1"}})
+    except ErrorMetabase as e:
+        if e.estado != 403:
+            fallas.append(f"{org}: SQL nativo sobre {nombre} dio {e.estado}, no 403 (no debería tener SQL nativo)")
+    else:
+        fallas.append(f"{org} pudo correr SQL nativo sobre su propia base ({nombre}): nadie debería tenerlo")
 
     return fallas

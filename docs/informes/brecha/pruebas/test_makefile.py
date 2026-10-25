@@ -11,9 +11,10 @@ from herramientas import comun
 
 # variables a caller's shell or an outer `make pruebas` could leak into the dry run
 _FUERA = (
-    "SALIDA", "FECHA", "ORG", "CORTE", "REEMPLAZAR", "METABASE_ENV", "MAKEFLAGS", "MFLAGS", "MAKELEVEL",
-    "MAKEOVERRIDES",
+    "SALIDA", "FECHA", "ORG", "CORTE", "REEMPLAZAR", "METABASE_ENV", "ENTORNO_ORG", "USUARIO", "NOMBRE",
+    "MAKEFLAGS", "MFLAGS", "MAKELEVEL", "MAKEOVERRIDES",
 )
+ENTORNO_X = f"{Path.home()}/.config/srtm-analitica/x.env"
 
 
 @unittest.skipIf(shutil.which("make") is None, "make no está instalado")
@@ -57,15 +58,44 @@ class MakefileTests(unittest.TestCase):
         self.assertIn('aws s3api head-object --bucket "sgtm-dev" --key "analitica/x/2026-01-01/manifiesto.json"', texto)
         self.assertNotIn("aws s3 ls", texto)
 
-    def test_respaldo_toma_metabase_env(self):
-        # METABASE_ENV, not ENV: ENV is the shell's own startup-file variable (POSIX sh sources $ENV)
-        texto = self._seco("respaldo", "METABASE_ENV=/srv/srtm-metabase/metabase.env")
-        self.assertIn('metabase/respaldo.sh "/srv/srtm-metabase/metabase.env"', texto)
+    # one Metabase per organization (plan, Decisión 2026-10-25): every Metabase target takes ORG, runs the
+    # compose project metabase-<ORG> and reads that organization's own env file
+
+    def test_metabase_up_por_organizacion(self):
+        texto = self._seco("metabase-up", "ORG=x")
+        linea = next(x for x in texto.splitlines() if "docker compose" in x)
+        self.assertIn('METABASE_ORG="x" docker compose -p "metabase-x" -f metabase/compose.yml', linea)
+        self.assertIn(f'--env-file "{ENTORNO_X}"', linea)
+        self.assertTrue(linea.endswith("up -d --build"), linea)
+
+    def test_metabase_reiniciar_y_detener(self):
+        self.assertIn("restart metabase", self._seco("metabase-reiniciar", "ORG=x"))
+        self.assertIn('-p "metabase-x"', self._seco("metabase-detener", "ORG=x"))
+        self.assertIn("stop metabase", self._seco("metabase-detener", "ORG=x"))
+
+    def test_entorno_org_con_tilde(self):
+        texto = self._seco("metabase-up", "ORG=x", "ENTORNO_ORG=~/otro.env")
+        self.assertIn(f'--env-file "{Path.home()}/otro.env"', texto)
+
+    def test_respaldo_por_organizacion(self):
+        texto = self._seco("respaldo", "ORG=x")
+        self.assertIn(f'metabase/respaldo.sh "x" "{ENTORNO_X}"', texto)
 
     def test_respaldo_no_lee_env(self):
-        texto = self._seco("respaldo", "ENV=/srv/srtm-metabase/metabase.env")
-        self.assertNotIn("/srv/srtm-metabase/metabase.env", texto)
-        self.assertIn("METABASE_ENV", texto)
+        # ENV is the shell's own startup-file variable (POSIX sh sources $ENV): never the Metabase env file
+        texto = self._seco("respaldo", "ORG=x", "ENV=/otro/metabase.env")
+        self.assertNotIn("/otro/metabase.env", texto)
+
+    def test_humo_por_organizacion(self):
+        texto = self._seco("humo", "ORG=x", "USUARIO=humo-x@ejemplo.pe")
+        self.assertIn(f'humo.py --org "x" --usuario "humo-x@ejemplo.pe" --entorno "{ENTORNO_X}"', texto)
+
+    def test_provisionar_con_nombre(self):
+        texto = self._seco("provisionar", "ORG=x", "NOMBRE=Equis")
+        self.assertIn(f'provisionar.py --org "x:Equis" --entorno "{ENTORNO_X}"', texto)
+
+    def test_duckdb_por_organizacion(self):
+        self.assertIn('armar_duckdb.py --org "x"', self._seco("duckdb", "ORG=x"))
 
     def test_local_sin_barra_final(self):
         texto = self._seco("local", "CORTE=/tmp/cortes/x/2026-01-01/")

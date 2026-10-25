@@ -4,7 +4,7 @@
 # mismatched download fails the build instead of silently loading. Mirrors the driver's own release Dockerfile
 # (motherduckdb/metabase_duckdb_driver, tag 1.5.5.0) for the base image, plugins dir and CMD.
 #
-#   docker compose -f metabase/compose.yml --env-file metabase/metabase.env build
+#   METABASE_ORG=<org> docker compose -f metabase/compose.yml --env-file ~/.config/srtm-analitica/<org>.env build
 #
 FROM eclipse-temurin:21-jre-jammy
 

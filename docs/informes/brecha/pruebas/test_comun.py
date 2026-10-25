@@ -116,6 +116,41 @@ class LeerSecretosTests(unittest.TestCase):
                 self.assertEqual(secretos[clave], f"valor-de-{clave}")
 
 
+class LeerEntornoTests(unittest.TestCase):
+    """The same <org>.env file, read for Metabase (#206, one instance per organization): the 0600 check and the
+    CLAVE=valor parsing of leer_secretos, but none of the corte's REQUERIDOS - only the keys the caller names."""
+
+    def _escribir(self, tmp, contenido, modo=0o600):
+        ruta = Path(tmp) / "org.env"
+        ruta.write_text(contenido, encoding="utf-8")
+        ruta.chmod(modo)
+        return ruta
+
+    def test_lee_sin_las_claves_del_corte(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = self._escribir(tmp, "# Metabase\nMETABASE_PUERTO=3311\n")
+            self.assertEqual(comun.leer_entorno(ruta, ("METABASE_PUERTO",)), {"METABASE_PUERTO": "3311"})
+
+    def test_permisos_abiertos_se_rechazan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = self._escribir(tmp, "METABASE_PUERTO=3311\n", modo=0o640)
+            with self.assertRaises(ErrorCorte) as ctx:
+                comun.leer_entorno(ruta)
+            self.assertIn("0600", str(ctx.exception))
+
+    def test_falta_una_clave_pedida(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ruta = self._escribir(tmp, "OTRA=1\n")
+            with self.assertRaises(ErrorCorte) as ctx:
+                comun.leer_entorno(ruta, ("METABASE_PUERTO",))
+            self.assertIn("METABASE_PUERTO", str(ctx.exception))
+
+    def test_ruta_por_organizacion(self):
+        self.assertEqual(comun.ruta_entorno("ica"), Path.home() / ".config" / "srtm-analitica" / "ica.env")
+        with self.assertRaises(ErrorCorte):
+            comun.ruta_entorno("../ica")
+
+
 class Sha256Tests(unittest.TestCase):
     def test_calcula_el_sha256_del_archivo(self):
         with tempfile.TemporaryDirectory() as tmp:

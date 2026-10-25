@@ -69,22 +69,34 @@ def carpeta_corte(base, org, fecha, reemplazar=False):
     return carpeta
 
 
-def leer_secretos(ruta):
+def ruta_entorno(org):
+    """~/.config/srtm-analitica/<org>.env: the corte's secrets and, on the VPS, the block of the organization's own
+    Metabase instance (METABASE_PUERTO and the rest of metabase/metabase.env.example)."""
+    return pathlib.Path.home() / ".config" / "srtm-analitica" / f"{validar_org(org)}.env"
+
+
+def leer_entorno(ruta, requeridos=()):
+    """The CLAVE=valor lines of an <org>.env file, refused unread when its mode lets group or others in, and
+    with every key of `requeridos` present (the error names the keys, never a value)."""
     # the file carries credentials in the clear: a mode with group or other permissions is rejected unread
     modo = ruta.stat().st_mode
     if modo & 0o077:
         raise ErrorCorte(f"permisos demasiado abiertos en {ruta}: debe ser 0600 (chmod 600 {ruta})")
-    secretos = {}
+    valores = {}
     for linea in ruta.read_text(encoding="utf-8").splitlines():
         linea = linea.strip()
         if not linea or linea.startswith("#"):
             continue
         clave, _, valor = linea.partition("=")
-        secretos[clave.strip()] = valor.strip()
-    faltantes = [clave for clave in REQUERIDOS if clave not in secretos]
+        valores[clave.strip()] = valor.strip()
+    faltantes = [clave for clave in requeridos if clave not in valores]
     if faltantes:
         raise ErrorCorte(f"faltan claves en {ruta}: {', '.join(faltantes)}")
-    return secretos
+    return valores
+
+
+def leer_secretos(ruta):
+    return leer_entorno(ruta, REQUERIDOS)
 
 
 def sha256(ruta):
