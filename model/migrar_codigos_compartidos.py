@@ -18,7 +18,9 @@ A code with a DJ whose contribuyente is no titular of the code in the padrón, w
 another predio (codigo_derivado_repetido), or a derived predio in Core of another codigo_origen is left as it is and
 reported. A real condominio (one predio, several titulares) is no shared code and is never read. The cuotas
 (cuota_predial) and the emisión masiva of --anio already made are listed, never changed: the administración decides
-on a rectificación de oficio.
+on a rectificación de oficio. So are the arbitrio cuotas (cuota_arbitrio) of --anio of the bare predios: they hang
+from the predio and the year, so the move leaves them there and the derived predios have none until someone
+redetermines them (POST /api/srtm/predios/{id}/arbitrios/redeterminacion).
 
 stdout carries counts only: no names, documents nor contribuyente codes. The report (--report, a CSV) has the codes.
 Idempotent: a second run finds every code de baja and changes nothing.
@@ -178,7 +180,7 @@ def delta_base(plan):
     return {anio: tuple(v) for anio, v in por_anio.items()}
 
 
-def filas_reporte(plan, contribuyentes, cuotas, emisiones):
+def filas_reporte(plan, contribuyentes, cuotas, emisiones, arbitrios=()):
     filas = []
 
     def fila(categoria, predio=None, contribuyente=None, anio=None, detalle=""):
@@ -206,6 +208,12 @@ def filas_reporte(plan, contribuyentes, cuotas, emisiones):
         fila("cuota_predial", None, contribuyentes.get(a.get("contribuyente")), a.get("anio"),
              f"cuota {a.get('numero')}, revisión {a.get('revision')}, monto {a.get('monto')}, afecto {a.get('valor_afecto')}: "
              "no se toca")
+    codigo_de = {i.bare["id"]: i.codigo for i in plan}
+    for c in arbitrios:
+        a = c["attributes"]
+        fila("cuota_arbitrio", codigo_de.get(a.get("predio")), contribuyentes.get(a.get("contribuyente")), a.get("anio"),
+             f"periodo {a.get('periodo')}, servicio {a.get('servicio')}, monto {a.get('monto')}: queda en el predio dado de "
+             "baja; los derivados no tienen arbitrios hasta redeterminarlos")
     for e in emisiones:
         a = e["attributes"]
         fila("emision_masiva", anio=a.get("anio"), detalle=f"{e['id']} {a.get('estado')}: no se toca")
@@ -316,7 +324,7 @@ def _parse_args(argv):
     return p.parse_args(argv)
 
 
-def _resumen(plan, data, cuotas, emisiones, anio):
+def _resumen(plan, data, cuotas, emisiones, anio, arbitrios=()):
     estados = Counter(i.estado for i in plan)
     motivos = Counter(m for i in plan for m in i.motivos)
     migrables = [i for i in plan if i.estado == "migrable"]
@@ -336,6 +344,8 @@ def _resumen(plan, data, cuotas, emisiones, anio):
         print(f"Δ base imponible {a}: S/ {antes} -> S/ {despues} (Δ S/ {despues - antes})")
     print(f"cuotas {anio}: {len({c['attributes'].get('contribuyente') for c in cuotas})} contribuyentes afectados con "
           f"{len(cuotas)} cuotas (no se tocan)")
+    print(f"cuotas de arbitrio {anio}: {len(arbitrios)} en {len({c['attributes'].get('predio') for c in arbitrios})} predios "
+          "dados de baja (no se tocan: redeterminar los derivados)")
     estados_emision = Counter(e["attributes"].get("estado") for e in emisiones)
     print(f"emisión masiva {anio}: {len(emisiones)}" + (" (" + ", ".join(f"{e}: {n}" for e, n in sorted(estados_emision.items())) + ")"
                                                          if emisiones else ""))
@@ -360,13 +370,16 @@ def main(argv=None):
         afectados = {m.record["attributes"].get("contribuyente") for m in movidas}
         cuotas = [c for c in client.list_all("cuota_predial", anio=args.anio) if c["attributes"].get("contribuyente") in afectados]
         emisiones = client.list_all("emision_masiva", anio=args.anio)
+        # the arbitrios hang from the predio and the year: the move leaves them on the bare predio
+        pelados = {i.bare["id"] for i in plan if i.estado == "migrable"}
+        arbitrios = [c for c in client.list_all("cuota_arbitrio", anio=args.anio) if c["attributes"].get("predio") in pelados]
     except CoreError as e:
         print(f"error -> {e.status}\n{e.body}", file=sys.stderr)
         return 1
 
-    filas = filas_reporte(plan, contribuyentes, cuotas, emisiones)
+    filas = filas_reporte(plan, contribuyentes, cuotas, emisiones, arbitrios)
     write_report(args.report, filas)
-    _resumen(plan, data, cuotas, emisiones, args.anio)
+    _resumen(plan, data, cuotas, emisiones, args.anio, arbitrios)
     print(f"reporte: {len(filas)} filas -> {args.report}")
     if errores:
         for error in errores:

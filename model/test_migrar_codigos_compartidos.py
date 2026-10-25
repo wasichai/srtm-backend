@@ -281,6 +281,77 @@ class CuotasTests(MigrarTestCase):
         self.assertEqual((row["codigo_contribuyente"], row["anio"]), ("900001", "2026"))
 
 
+class ArbitriosTests(MigrarTestCase):
+    def test_the_arbitrio_cuotas_of_the_bare_predio_are_listed_and_not_touched(self):
+        # cuota_arbitrio hangs from the predio and the year: the move leaves them on the bare predio, and the derived
+        # ones get none until someone redetermines them
+        cuota = self.core.add_record("cuota_arbitrio", {"predio": self.bare["id"], "contribuyente": self.ana["id"],
+                                                        "anio": 2026, "periodo": 1, "monto": "12.50"})
+        self.core.add_record("cuota_arbitrio", {"predio": self.bare["id"], "contribuyente": self.ana["id"], "anio": 2025,
+                                                "periodo": 1, "monto": "11.00"})
+        self.core.add_record("cuota_arbitrio", {"predio": self.condominio["id"], "contribuyente": self.ana["id"],
+                                                "anio": 2026, "periodo": 1, "monto": "9.00"})
+        code, out, err = self.run_cli()
+        self.assertEqual(code, 0, msg=err)
+        self.assertIn("cuotas de arbitrio 2026: 1 en 1 predios dados de baja (no se tocan: redeterminar los derivados)", out)
+        self.assertFalse([p for m, p, _, _ in self.core.requests if m != "GET" and ("arbitrio" in p)])
+        self.assertEqual((cuota["attributes"]["predio"], cuota["attributes"]["monto"]), (self.bare["id"], "12.50"))
+        [row] = [r for r in self.report_rows() if r["categoria"] == "cuota_arbitrio"]
+        self.assertEqual((row["codigo_predio"], row["codigo_contribuyente"], row["anio"]), (P, "900001", "2026"))
+
+
+class RecuperacionTests(MigrarTestCase):
+    def test_a_run_that_fails_midway_is_finished_by_the_next_one(self):
+        self.core.fail_on_recalcular = True
+        code, out, err = self.run_cli()
+        self.assertEqual(code, 1)
+        self.assertIn("recalcular", err)
+        self.assertNotIn("fecha_baja", self.predio(P)["attributes"])
+        # the DJ already moved: the next run finds them on the derived predios and recalculates them
+        self.core.fail_on_recalcular = False
+        since = len(self.core.requests)
+        code, out, err = self.run_cli()
+        self.assertEqual(code, 0, msg=err)
+        for line in ("migrables: 1", "predios a crear: 0 (2 ya existen)", "DJ a mover: 0", "DJ a recalcular: 4",
+                     "predios a dar de baja: 1"):
+            self.assertIn(line, out)
+        recalculadas = [p for m, p, _, _ in self.core.requests[since:] if m == "POST" and p.endswith("/recalcular")]
+        self.assertEqual(sorted(recalculadas), sorted(f"/api/srtm/declaraciones/{dj['id']}/recalcular" for dj in self.djs.values()))
+        self.assertEqual(self.predio(P)["attributes"]["fecha_baja"], date.today().isoformat())
+        self.assertEqual(len([r for r in self.core.records["predio"] if r["attributes"]["codigo"].startswith(P + "-")]), 2)
+
+
+class CondominioDerivadoTests(MigrarTestCase):
+    Q = "000000010-0001-0001"
+
+    def test_a_derived_predio_of_two_titulares_is_a_condominio_at_50(self):
+        Q = self.Q
+        write_xlsx(self.excel, PADRON + [
+            padron(codigo_predio=Q, codigo_contribuyente="900001", direccion_del_predio_completa="JR ICA 10"),
+            padron(codigo_predio=Q, codigo_contribuyente="900002", nro_documento="40000002", direccion_del_predio_completa="JR ICA 10"),
+            padron(codigo_predio=Q, codigo_contribuyente="900003", nro_documento="40000003", direccion_del_predio_completa="JR ICA 30"),
+        ], [])
+        tercero = self.core.add_record("contribuyente", {"codigo": "900003"})
+        bare = self.core.add_record("predio", {"codigo": Q, "codigo_origen": Q})
+        djs = {}
+        for persona, pct in ((self.ana, "33.34"), (self.luis, "33.33"), (tercero, "33.33")):
+            djs[persona["attributes"]["codigo"]] = self.core.add_record("declaracion_predial", {
+                "predio": bare["id"], "contribuyente": persona["id"], "anio": 2026, "secuencia_uso": "001",
+                "condicion_propiedad": "CONDOMINO", "porcentaje_condominio": pct, "valor_autoavaluo": "108427.00",
+                "deduccion": "0.00", "valor_afecto": "36139.72"})
+        code, out, err = self.run_cli()
+        self.assertEqual(code, 0, msg=err)
+        por_id = {r["id"]: r["attributes"] for r in self.core.records["declaracion_predial"]}
+        uno, dos = self.predio(f"{Q}-1")["id"], self.predio(f"{Q}-2")["id"]
+        for contribuyente in ("900001", "900002"):
+            a = por_id[djs[contribuyente]["id"]]
+            self.assertEqual((a["predio"], a["condicion_propiedad"], a["porcentaje_condominio"], a["valor_condominio"]),
+                             (uno, "CONDOMINO", "50.00", "54213.50"))
+        a = por_id[djs["900003"]["id"]]
+        self.assertEqual((a["predio"], a["condicion_propiedad"], a["porcentaje_condominio"], a["valor_condominio"]),
+                         (dos, "PROPIETARIO UNICO", "100.00", "108427.00"))
+
+
 class PureTests(unittest.TestCase):
     def test_valor_afecto_keeps_the_deduccion(self):
         self.assertEqual(mcc.valores(Decimal("100.00"), "50000.00", "0.00"), ("50000.00", "50000.00"))

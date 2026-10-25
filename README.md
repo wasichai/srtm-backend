@@ -1543,12 +1543,18 @@ python3 -I migrar_codigos_compartidos.py --excel PADRON_CONSTRUCCION.xlsx --core
   existen) y mueve a cada uno las DJ vigentes de sus titulares, de cualquier año. Es el mismo registro: sus niveles,
   obras y frentes lo siguen. Toma la condición y el % de su grupo (PROPIETARIO UNICO al 100 % si es el único titular)
   y los valores de `Condominio.kt`. Después recalcula cada DJ movida (`POST /declaraciones/{id}/recalcular`).
-- Da de baja el predio pelado: `fecha_baja` (hoy) y `motivo_baja`, campos de `predio` desde #219. No lo borra.
+- Da de baja el predio pelado: `fecha_baja` (hoy) y `motivo_baja`, campos de `predio` desde #219. No lo borra. Sus
+  DJ no vigentes (ANULADA o SUSTITUIDA) se quedan en él.
 - No toca un código con una DJ cuyo contribuyente no es titular suyo en el padrón (`contribuyente_sin_titular`), con
   un `codigo_derivado_repetido` o con un `<codigo>-<n>` de Core de otro `codigo_origen`: lo reporta. Un condominio real
   no es un código compartido y no se lee.
 - Lista sin tocarlas las cuotas de predial de `--anio` de los contribuyentes afectados y la emisión masiva del año:
   decide la administración si hace falta una rectificación de oficio.
+- Lista también, sin tocarlas, las cuotas de arbitrio (`cuota_arbitrio`) de `--anio` de los predios pelados. Cuelgan del
+  predio y del año: la migración las deja en el predio dado de baja, y los `<codigo>-<n>` no tienen arbitrios. Hay que
+  redeterminarlos a mano, predio por predio: `POST /api/srtm/predios/{id}/arbitrios/redeterminacion` con
+  `{"anio": 2026}` en cada derivado, y en el pelado, que ya no tiene DJ vigentes, para que anule las que ya no le tocan
+  (las pagadas en caja no se tocan).
 - La salida lleva solo conteos: códigos migrables, ya migrados y no migrables por motivo, predios a crear, DJ a mover,
   predios a dar de baja, el Δ de la base imponible por año (la suma de `valor_afecto` antes y después) y las cuotas y
   la emisión del año. La corrida real añade el Δ del impuesto por año: lee

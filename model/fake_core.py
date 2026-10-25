@@ -97,6 +97,7 @@ class FakeCore:
         self.sugeridos = dict(sugeridos or {})  # declaración id -> its autoavaluo-sugerido dict, or 404 if missing
         # POST /recalcular: a function of the declaración id -> the declaración answered ({"id"} by default)
         self.recalcular = recalcular
+        self.fail_on_recalcular = False  # POST /recalcular answers 500
         # GET /contribuyentes/{id}/liquidacion?anio=: a function of (contribuyente id, anio) -> the Liquidacion; 404 if None
         self.liquidacion = None
         # GET /api/organizations/current: the login's organization
@@ -323,6 +324,8 @@ class FakeCore:
         recalcular = RECALCULAR.match(path)
         if recalcular and method == "POST":
             id = recalcular.group(1)
+            if self.fail_on_recalcular:
+                return 500, {"detail": "boom-recalcular"}
             return 200, self.recalcular(id) if self.recalcular else {"id": id}
         liquidacion = LIQUIDACION.match(path)
         if liquidacion and method == "GET":
