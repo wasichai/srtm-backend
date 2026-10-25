@@ -1471,6 +1471,11 @@ vencimiento por ordenanza.
 El impuesto calculado (S/ 3,523.40) es mayor que el mínimo (S/ 33.00), así que el impuesto anual es S/ 3,523.40: cuatro
 cuotas de S/ 880.85.
 
+IMPORTANT: Si una declaración del contribuyente está con el *Autoavalúo por revisar* (el catastro no la pudo valuar),
+el impuesto se calcula igual, con el último valor de autoavalúo guardado, que puede ser uno anterior. La liquidación
+lo avisa, con el predio y el motivo, pero la HR no: antes de entregarla, revise esas declaraciones y use
+btn:[Recalcular] cuando el catastro ya responda.
+
 TIP: Si una cifra de la HR no le parece correcta, revise primero el *Valor afecto* de cada declaración (pestaña
 *Predios* de la ficha): es lo único que usted registra de lo que entra en el cálculo.
 
