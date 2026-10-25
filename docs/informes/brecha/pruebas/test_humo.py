@@ -83,6 +83,48 @@ class HumoTests(ConHumo):
         fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
         self.assertTrue(any("ATTACH" in f for f in fallas), fallas)
 
+    def test_humo_attach_rechazado_con_400_no_es_falla(self):
+        # Metabase 0.63.19 answers a refused query with an HTTP error status (400 for DuckDB's "file system
+        # operations are disabled"), not 202 + status "failed": that is the expected outcome of the ATTACH check
+        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
+        self.assertEqual(fallas, [])
+        attach = [
+            (m, ruta) for m, ruta, cuerpo in self.falso.peticiones
+            if ruta == "/api/dataset" and "ATTACH" in str((cuerpo or {}).get("native"))
+        ]
+        self.assertEqual(len(attach), 2)
+
+    def test_humo_tarjeta_que_falla_con_400_es_una_falla_y_sigue(self):
+        normal = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
+        alguna = self.resultado["ficticia-a"]["tarjetas"][0]
+        nombre = self.falso.tarjetas[alguna]["name"]
+        self.falso.tarjetas_fallidas = {alguna}
+        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
+        self.assertEqual(len(fallas), 1, fallas)
+        self.assertIn(nombre, fallas[0])
+        self.assertIn("400", fallas[0])
+        # every other comprobación still ran (isolation, ATTACH...): a broken card does not stop the run
+        self.assertEqual(fallas.comprobaciones, normal.comprobaciones)
+
+    def test_humo_detecta_acceso_externo_activo(self):
+        # the positive check: current_setting('enable_external_access') must be false on every base, so the
+        # ATTACH check can never pass just because the query failed for some other reason
+        base_a = self.resultado["ficticia-a"]["base"]
+        self.falso.bases[base_a]["details"]["init_sql"] = ""
+        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
+        self.assertTrue(
+            any("Brecha Ficticia A" in f and "enable_external_access" in f for f in fallas), fallas
+        )
+        self.assertFalse(any("Brecha Ficticia B" in f for f in fallas), fallas)
+
+    def test_humo_comprueba_enable_external_access_en_cada_base(self):
+        metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
+        consultadas = {
+            cuerpo["database"] for m, ruta, cuerpo in self.falso.peticiones
+            if ruta == "/api/dataset" and "current_setting" in str((cuerpo or {}).get("native"))
+        }
+        self.assertEqual(consultadas, {r["base"] for r in self.resultado.values()})
+
     def test_humo_no_truena_si_una_base_se_renombro_fuera_del_prefijo(self):
         # the admin's permissions graph (where humo finds an organization's "own" base, by group) and
         # GET /api/database (where it resolves a base id back to a name) can disagree - a renamed base must

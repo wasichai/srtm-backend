@@ -13,11 +13,19 @@ provisioning that forgot to take something away shows in a test. A non-admin ses
 graphs grant: the databases it can query, the cards and dashboards of the collections it can read, native SQL
 only with `create-queries` "query-builder-and-native". Test helper only; never imported by the scripts.
 
+A query that fails answers like Metabase 0.63.19's streaming response: an HTTP error status with the failed
+result as its JSON body (`{"status": "failed", "error": ...}`), never a 202. query_processor/streaming.clj
+`status-code` gives 403 to a permission error, 400 to a client error (an invalid query, which is what DuckDB's
+refusals become) and 500 to the rest, and server/streaming_response.clj `write-error!` sets it while the response
+is not committed yet; upstream's query_processor/api_test.clj `failure-test` expects `:post 400 "dataset"`.
+POST /api/card/:id/query goes through the same streaming response (query_processor/card.clj).
+
 Task 11's smoke test turns knobs to simulate a broken isolation or a broken card: `listar_todas_las_bases`
 (every session lists every database), `permitir_nativo` (native SQL for anyone), `tarjetas_fallidas` (card ids
-whose query answers `status: "failed"`), `permitir_lectura_ajena` (any session can read any card or dashboard,
-ignoring the collection graph) and `permitir_acceso_externo` (a native ATTACH/read_parquet/etc. "succeeds"
-instead of failing, as if INIT_SQL's `enable_external_access = false` had never run).
+whose query fails with a 400), `permitir_lectura_ajena` (any session can read any card or dashboard, ignoring the
+collection graph) and `permitir_acceso_externo` (a native ATTACH/read_parquet/etc. "succeeds" instead of failing).
+`SELECT current_setting('enable_external_access')` answers from the database's own `details.init_sql`: false only
+when it sets `enable_external_access = false`, as base.INIT_SQL does.
 """
 
 import itertools
@@ -40,6 +48,9 @@ _VER_DATOS = ("unrestricted", "legacy-no-self-service", "blocked")
 _LLAVES_PERMISOS = {"view-data", "create-queries", "download", "data-model", "details", "transforms"}
 # what INIT_SQL (enable_external_access = false) makes DuckDB refuse in a native query
 _SIN_ACCESO_EXTERNO = re.compile(r"\b(ATTACH|read_parquet|read_csv\w*|read_json\w*|COPY|INSTALL|LOAD)\b", re.I)
+# the smoke test's positive check of INIT_SQL, and what makes it answer false
+_CONSULTA_ACCESO_EXTERNO = re.compile(r"current_setting\(\s*'enable_external_access'\s*\)", re.I)
+_INIT_SQL_SIN_ACCESO = re.compile(r"\bSET\s+enable_external_access\s*=\s*false\b", re.I)
 
 _NO_PERMITIDO = "You don't have permissions to do that."
 # what PUT /api/card/:id may change (a subset of card.clj CardUpdateSchema)
@@ -49,6 +60,11 @@ _CAMPOS_TARJETA = ("name", "type", "display", "visualization_settings", "dataset
 def _vistas():
     texto = (comun.INFORME / "vistas.sql").read_text(encoding="utf-8")
     return re.findall(r"CREATE OR REPLACE VIEW (\w+)", texto)
+
+
+def _fallida(error):
+    """The body of a failed query (query_processor/api_test.clj failure-test): no rows, `status` "failed"."""
+    return {"status": "failed", "error": error, "row_count": 0, "data": {"rows": [], "cols": []}}
 
 
 class _Respuesta(Exception):
@@ -544,7 +560,7 @@ class MetabaseFalso:
         if partes[1:] == ["query"] and metodo == "POST":
             self._leer_coleccion(uid, tarjeta["collection_id"])
             if tid in self.tarjetas_fallidas:
-                return 202, {"status": "failed", "error": "falla simulada", "row_count": 0}
+                return 400, _fallida("falla simulada")
             return 202, {"status": "completed", "row_count": 0, "data": {"rows": [], "cols": []}}
         return 404, "API endpoint does not exist."
 
@@ -576,12 +592,13 @@ class MetabaseFalso:
             if nivel != "query-builder-and-native":
                 return 403, "You do not have permissions to run this query."
             sql = (cuerpo.get("native") or {}).get("query") or ""
+            if _CONSULTA_ACCESO_EXTERNO.search(sql):
+                init_sql = self.bases[base_id]["details"].get("init_sql") or ""
+                valor = not _INIT_SQL_SIN_ACCESO.search(init_sql)
+                datos = {"rows": [[valor]], "cols": [{"name": "v"}]}
+                return 202, {"status": "completed", "row_count": 1, "data": datos}
             if not self.permitir_acceso_externo and _SIN_ACCESO_EXTERNO.search(sql):
-                return 202, {
-                    "status": "failed",
-                    "error": "Permission Error: file system operations are disabled by configuration",
-                    "row_count": 0,
-                }
+                return 400, _fallida("Permission Error: file system operations are disabled by configuration")
             return 202, {"status": "completed", "row_count": 1, "data": {"rows": [[1]], "cols": [{"name": "1"}]}}
         if nivel == "no":
             return 403, "You do not have permissions to run this query."

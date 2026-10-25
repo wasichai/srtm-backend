@@ -236,6 +236,23 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(error.exception.estado, 401)
         self.assertNotIn("clave-equivocada", str(error.exception))
 
+    def test_error_400_nombra_los_campos_sin_sus_valores(self):
+        # a 400 from /api/setup is diagnosable only with the keys of its `errors` object; never their values
+        # (they can echo what was sent) nor the request body (the password)
+        falso = MetabaseFalso({})
+        self.addCleanup(falso.cerrar)
+        mb = metabase.Metabase(falso.url)
+        cuerpo = {"token": MetabaseFalso.SETUP_TOKEN, "user": {"email": ADMIN[0], "password": "clave-secreta-9"}}
+        with self.assertRaises(metabase.ErrorMetabase) as error:
+            mb.post("/api/setup", {**cuerpo, "prefs": {}})
+        mensaje = str(error.exception)
+        self.assertEqual(error.exception.estado, 400)
+        self.assertIn("POST /api/setup -> 400", mensaje)
+        self.assertIn("user", mensaje)
+        self.assertNotIn("clave-secreta-9", mensaje)
+        self.assertNotIn("falta", mensaje)
+        self.assertEqual(len(mensaje.splitlines()), 1)
+
     def test_sin_servidor(self):
         falso = MetabaseFalso({})
         url = falso.url

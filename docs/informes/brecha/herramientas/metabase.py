@@ -43,18 +43,29 @@ PROPIA = {"view-data": "unrestricted", "create-queries": "query-builder"}
 AJENA = {"create-queries": "no"}
 
 _VISTA = re.compile(r"^v_[a-z0-9_]+$")
+# The statuses of a query that ran and failed in Metabase 0.63.19 (query_processor/streaming.clj `status-code`,
+# written by server/streaming_response.clj `write-error!`): 400 for a client error such as an invalid query, 500
+# for the rest; the body is the failed result. 403 is a permission error, not a failure of the query itself.
+_CONSULTA_FALLIDA = (400, 500)
+_ACCESO_EXTERNO = "SELECT current_setting('enable_external_access') AS v"
 _CAMPOS_TARJETA = ("nombre", "vista", "display", "visualizacion", "fila", "col", "ancho", "alto")
 
 
 class ErrorMetabase(Exception):
     """A Metabase call that failed. Like cliente.ErrorApi, the message is `<method> <route> -> <status>`, safe to
-    print: it never carries a request body (passwords) nor the session."""
+    print: it never carries a request body (passwords) nor the session. `campos` are the keys of the response's
+    `errors` object (a 400 from /api/setup or /api/user names the fields it refused), appended as
+    `(errors: a, b)` - only the keys, never their values, which can echo what was sent."""
 
-    def __init__(self, metodo, ruta, estado):
-        super().__init__(f"{metodo} {ruta} -> {estado}")
+    def __init__(self, metodo, ruta, estado, campos=()):
+        mensaje = f"{metodo} {ruta} -> {estado}"
+        if campos:
+            mensaje += f" (errors: {', '.join(campos)})"
+        super().__init__(mensaje)
         self.metodo = metodo
         self.ruta = ruta
         self.estado = estado
+        self.campos = tuple(campos)
 
 
 class ErrorTableros(Exception):
@@ -101,9 +112,9 @@ class Metabase:
             with urllib.request.urlopen(peticion, timeout=self.timeout) as respuesta:
                 crudo = respuesta.read()
         except urllib.error.HTTPError as e:
-            e.read()
+            crudo = e.read()
             e.close()  # avoid a ResourceWarning: HTTPError is also an unread response
-            raise ErrorMetabase(metodo, ruta, e.code) from None
+            raise ErrorMetabase(metodo, ruta, e.code, _campos_con_error(crudo)) from None
         except urllib.error.URLError as e:
             raise ErrorMetabase(metodo, ruta, str(e.reason)) from None
         except (http.client.HTTPException, OSError) as e:
@@ -114,6 +125,17 @@ class Metabase:
             return json.loads(crudo.decode("utf-8"))
         except ValueError:  # a proxy's HTML page, say
             raise ErrorMetabase(metodo, ruta, "la respuesta no es JSON") from None
+
+
+def _campos_con_error(crudo):
+    """The keys of an error body's `errors` object, sorted (Metabase's validation errors: field -> message), or
+    () when the body is not JSON or has none. Keys only: printing a field's name is safe, its message is not."""
+    try:
+        cuerpo = json.loads(crudo.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        return ()
+    errores = cuerpo.get("errors") if isinstance(cuerpo, dict) else None
+    return tuple(sorted(str(k) for k in errores)) if isinstance(errores, dict) else ()
 
 
 def asegurar_setup(mb, email, clave):
@@ -472,14 +494,17 @@ def _esperar_vista(mb, base_id, vista, espera):
 def humo(url, admin, usuarios, espera=120):
     """Smoke test of an already provisioned Metabase (plan § Rulings, aislamiento: "si Metabase OSS muestra a
     un usuario el nombre de otra base, la prueba de humo lo marca"). As the administrator: every `Brecha …`
-    database still syncs and shows `v_segmentos`, every tablero's card still runs, and an ATTACH from one
-    organization's database to another's file fails. Logged in as each organization's user (`usuarios`: org ->
+    database still syncs and shows `v_segmentos`, every tablero's card still runs (a card that fails is one
+    falla, and the run goes on), `current_setting('enable_external_access')` is false on every one of them, and
+    an ATTACH from one organization's database to another's file fails (a 400/500, see _CONSULTA_FALLIDA).
+    Logged in as each organization's user (`usuarios`: org ->
     (email, clave)): GET /api/database lists its own database, and no other, a foreign tablero's card is 403, and
     native SQL is 403 everywhere - on a foreign database and on its own (provisioning never grants
     `create-queries: "query-builder-and-native"` to anyone, plan § Rulings: PROPIA).
 
-    Returns a Fallas (empty = every comprobación passed); only a failed login or request to Metabase itself
-    (ErrorMetabase) propagates, never a comprobación that merely found something wrong."""
+    Returns a Fallas (empty = every comprobación passed); an ErrorMetabase propagates only from a request that is
+    not itself what a comprobación checks (the administrator's login, a listing), never from one that merely
+    found something wrong."""
     mb = Metabase(url)
     mb.sesion(*admin)
     fallas = Fallas()
@@ -514,9 +539,29 @@ def humo(url, admin, usuarios, espera=120):
         tarjetas_por_base[c["name"]] = [i["id"] for i in items]
         for item in items:
             fallas.comprobaciones += 1
-            resultado = mb.post(f"/api/card/{item['id']}/query") or {}
+            # a card whose query fails answers an HTTP error (400/500, see _CONSULTA_FALLIDA), not 202 "failed":
+            # one falla naming the card, and the run goes on with the next one
+            try:
+                resultado = mb.post(f"/api/card/{item['id']}/query") or {}
+            except ErrorMetabase as e:
+                fallas.append(f"{c['name']}: la tarjeta «{item['name']}» no corrió ({e.estado})")
+                continue
             if resultado.get("status") != "completed":
                 fallas.append(f"{c['name']}: la tarjeta «{item['name']}» no corrió ({resultado.get('status')!r})")
+
+    # the positive half of INIT_SQL's check, which cannot pass vacuously: on every `Brecha …` base the setting
+    # really is off (the ATTACH below only shows that one statement failed, for whatever reason)
+    for nombre, base_id in bases.items():
+        fallas.comprobaciones += 1
+        consulta = {"database": base_id, "type": "native", "native": {"query": _ACCESO_EXTERNO}}
+        try:
+            resultado = mb.post("/api/dataset", consulta) or {}
+        except ErrorMetabase as e:
+            fallas.append(f"{nombre}: no se pudo leer enable_external_access ({e.estado})")
+            continue
+        filas = (resultado.get("data") or {}).get("rows") or []
+        if resultado.get("status") != "completed" or filas[:1] not in ([[False]], [["false"]]):
+            fallas.append(f"{nombre}: enable_external_access no es false ({filas[:1]!r}): ¿falta su init_sql?")
 
     bases_por_org = {}
     for org in usuarios:
@@ -593,7 +638,13 @@ def humo(url, admin, usuarios, espera=120):
             continue
         fallas.comprobaciones += 1
         consulta = {"database": propia, "type": "native", "native": {"query": f"ATTACH '/datos/{otro_org}.duckdb'"}}
-        resultado = mb.post("/api/dataset", consulta) or {}
+        try:
+            resultado = mb.post("/api/dataset", consulta) or {}
+        except ErrorMetabase as e:
+            # DuckDB's refusal is a failed query: 400 (a client error) or 500, never anything else
+            if e.estado not in _CONSULTA_FALLIDA:
+                fallas.append(f"{org}: ATTACH '/datos/{otro_org}.duckdb' dio {e.estado}, no 400/500")
+            continue
         if resultado.get("status") == "completed":
             fallas.append(f"{org}: ATTACH '/datos/{otro_org}.duckdb' no dio error (aislamiento roto)")
 
