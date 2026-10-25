@@ -62,6 +62,36 @@ class HumoTests(ConHumo):
         fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
         self.assertTrue(any(nombre in f for f in fallas), fallas)
 
+    def test_humo_detecta_que_el_usuario_no_ve_su_propia_base(self):
+        # a membership mistake (the user was never put in its own group), not a graph mistake: _base_propia
+        # (admin side, by group) still finds the base; the user's own session does not
+        uid = next(u["id"] for u in self.falso.usuarios.values() if u["email"] == self.usuarios["ficticia-a"][0])
+        grupo_a = self.resultado["ficticia-a"]["grupo"]
+        self.falso.membresias = [
+            m for m in self.falso.membresias if not (m["user_id"] == uid and m["group_id"] == grupo_a)
+        ]
+        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
+        self.assertTrue(any("ficticia-a no ve su propia base" in f for f in fallas), fallas)
+
+    def test_humo_detecta_tarjeta_ajena_legible(self):
+        self.falso.permitir_lectura_ajena = True
+        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
+        self.assertTrue(any("pudo leer una tarjeta" in f for f in fallas), fallas)
+
+    def test_humo_detecta_attach_que_no_falla(self):
+        self.falso.permitir_acceso_externo = True
+        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
+        self.assertTrue(any("ATTACH" in f for f in fallas), fallas)
+
+    def test_humo_no_truena_si_una_base_se_renombro_fuera_del_prefijo(self):
+        # the admin's permissions graph (where humo finds an organization's "own" base, by group) and
+        # GET /api/database (where it resolves a base id back to a name) can disagree - a renamed base must
+        # not raise an uncaught StopIteration out of humo()
+        base_a = self.resultado["ficticia-a"]["base"]
+        self.falso.bases[base_a]["name"] = "renombrada a mano, sin el prefijo Brecha"
+        fallas = metabase.humo(self.falso.url, ADMIN, self.usuarios, espera=1)
+        self.assertIsInstance(fallas, list)
+
     def test_humo_detecta_una_base_que_no_sincroniza(self):
         base_id = self.resultado["ficticia-a"]["base"]
         with mock.patch.object(metabase, "_esperar_vista", side_effect=lambda mb, bid, vista, espera: bid != base_id):

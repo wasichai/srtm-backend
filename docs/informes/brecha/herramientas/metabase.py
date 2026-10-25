@@ -442,6 +442,17 @@ def _base_propia(mb, org):
     return propias[0] if len(propias) == 1 else None
 
 
+def _nombre_de_base(bases, base_id):
+    """The name of `base_id` in `bases` (name -> id), or a fallback that still shows the id. The admin's
+    permissions graph (where humo finds an organization's "own" base) and GET /api/database (where it lists
+    `bases`) are two separate calls: a base renamed or deleted between them must become a falla's text, never
+    an uncaught StopIteration that stops humo.py with a traceback instead of a clean exit 1."""
+    for nombre, i in bases.items():
+        if i == base_id:
+            return nombre
+    return f"base #{base_id} (no aparece en /api/database)"
+
+
 def _esperar_vista(mb, base_id, vista, espera):
     """Polls GET /api/database/:id/metadata until `vista` is one of its tables, or `espera` seconds pass (a
     real sync_schema runs in the background; MetabaseFalso's is immediate, so the tests never wait)."""
@@ -463,7 +474,7 @@ def humo(url, admin, usuarios, espera=120):
     un usuario el nombre de otra base, la prueba de humo lo marca"). As the administrator: every `Brecha …`
     database still syncs and shows `v_segmentos`, every tablero's card still runs, and an ATTACH from one
     organization's database to another's file fails. Logged in as each organization's user (`usuarios`: org ->
-    (email, clave)): GET /api/database lists only its own database, a foreign tablero's card is 403, and
+    (email, clave)): GET /api/database lists its own database, and no other, a foreign tablero's card is 403, and
     native SQL is 403 everywhere - on a foreign database and on its own (provisioning never grants
     `create-queries: "query-builder-and-native"` to anyone, plan § Rulings: PROPIA).
 
@@ -519,7 +530,7 @@ def humo(url, admin, usuarios, espera=120):
         propia = bases_por_org.get(org)
         if propia is None:
             continue
-        nombre_propia = next(n for n, i in bases.items() if i == propia)
+        nombre_propia = _nombre_de_base(bases, propia)
         otro_org = next((o for o, b in bases_por_org.items() if o != org and b is not None), None)
 
         mu = Metabase(url)
@@ -532,13 +543,15 @@ def humo(url, admin, usuarios, espera=120):
 
         fallas.comprobaciones += 1
         vistas = {b["name"]: b["id"] for b in (mu.get("/api/database") or {}).get("data") or []}
+        if propia not in vistas.values():
+            fallas.append(f"{org} no ve su propia base ({nombre_propia})")
         ajenas = sorted(n for n, i in vistas.items() if i != propia)
         if ajenas:
             fallas.append(f"{org} ve, además de la suya, otra base: {', '.join(ajenas)}")
 
         if otro_org is not None:
             base_ajena = bases_por_org[otro_org]
-            nombre_ajena = next(n for n, i in bases.items() if i == base_ajena)
+            nombre_ajena = _nombre_de_base(bases, base_ajena)
             tarjeta_ajena = next(iter(tarjetas_por_base.get(nombre_ajena, [])), None)
             if tarjeta_ajena is not None:
                 fallas.comprobaciones += 1

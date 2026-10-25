@@ -13,9 +13,11 @@ provisioning that forgot to take something away shows in a test. A non-admin ses
 graphs grant: the databases it can query, the cards and dashboards of the collections it can read, native SQL
 only with `create-queries` "query-builder-and-native". Test helper only; never imported by the scripts.
 
-Task 11's smoke test turns three knobs to simulate a broken isolation or a broken card: `listar_todas_las_bases`
-(every session lists every database), `permitir_nativo` (native SQL for anyone) and `tarjetas_fallidas` (card ids
-whose query answers `status: "failed"`).
+Task 11's smoke test turns knobs to simulate a broken isolation or a broken card: `listar_todas_las_bases`
+(every session lists every database), `permitir_nativo` (native SQL for anyone), `tarjetas_fallidas` (card ids
+whose query answers `status: "failed"`), `permitir_lectura_ajena` (any session can read any card or dashboard,
+ignoring the collection graph) and `permitir_acceso_externo` (a native ATTACH/read_parquet/etc. "succeeds"
+instead of failing, as if INIT_SQL's `enable_external_access = false` had never run).
 """
 
 import itertools
@@ -109,6 +111,8 @@ class MetabaseFalso:
         self.listar_todas_las_bases = False
         self.permitir_nativo = False
         self.tarjetas_fallidas = set()
+        self.permitir_lectura_ajena = False
+        self.permitir_acceso_externo = False
 
         self.usuarios = {}
         self.sesiones = {}
@@ -202,6 +206,8 @@ class MetabaseFalso:
         return max(niveles, key=_COLECCION.index, default="none")
 
     def _leer_coleccion(self, uid, coleccion_id):
+        if self.permitir_lectura_ajena:
+            return
         if self._permiso_coleccion(uid, coleccion_id) == "none":
             raise _Respuesta(403, _NO_PERMITIDO)
 
@@ -570,7 +576,7 @@ class MetabaseFalso:
             if nivel != "query-builder-and-native":
                 return 403, "You do not have permissions to run this query."
             sql = (cuerpo.get("native") or {}).get("query") or ""
-            if _SIN_ACCESO_EXTERNO.search(sql):
+            if not self.permitir_acceso_externo and _SIN_ACCESO_EXTERNO.search(sql):
                 return 202, {
                     "status": "failed",
                     "error": "Permission Error: file system operations are disabled by configuration",
