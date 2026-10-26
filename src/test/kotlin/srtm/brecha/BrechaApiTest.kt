@@ -263,6 +263,35 @@ class BrechaApiTest : SrtmApiTest() {
         assertEquals(BigDecimal("10000.00"), dec(fila["obrasDj"]))
     }
 
+    // #246: a code shared by distinct predios, migrated (#219): the original is de baja and its DJ went to <codigo>-1 and
+    // <codigo>-2, which keep the SAT code as codigo_origen. the ficha of that code crosses a derived predio, not the
+    // original: a predio de baja is no candidate of the cruce, nor a row of the brecha
+    @Test
+    fun `a ficha of a migrated code crosses its derived predios by codigo_origen, never the predio de baja`() {
+        val org = organizacion()
+        val sufijo = uniqueDocumento()
+        val codigo = "M-$sufijo"
+
+        fun registro(atributos: Map<String, Any?>) =
+            post(
+                "/api/objects/predio/records",
+                mapOf("attributes" to mapOf("direccion" to "JR. LIMA 123", "tipo_predio" to "PREDIO URBANO", "sector_catastral" to "01") + atributos),
+                org
+            )["id"].asString()
+        registro(mapOf("codigo" to codigo, "fecha_baja" to "2026-10-25", "motivo_baja" to "#207: sus DJ pasan a $codigo-1 y $codigo-2"))
+        val c = contribuyente(org)
+        declarar(org, c, registro(mapOf("codigo" to "$codigo-1", "codigo_origen" to codigo)), "100000.00", anio = 2022)
+        declarar(org, c, registro(mapOf("codigo" to "$codigo-2", "codigo_origen" to codigo)), "50000.00", anio = 2022)
+        ITEMS.set(listOf(item(codigo, "100000.00")))
+
+        val corrida = corrida(org, 2022)
+        assertEquals(TERMINADA, corrida["estado"].asString(), corrida.toString())
+        val filas = tree(send("GET", "/api/srtm/brecha/2022/predios", null, HttpStatus.OK, org))["content"]
+        val porPredio = filas.associate { it["codigoPredio"]?.asString() to it["categoria"].asString() }
+        assertEquals(mapOf("$codigo-1" to "COINCIDE", "$codigo-2" to "SIN_CATASTRO"), porPredio, filas.toString())
+        assertEquals(codigo, filas.single { it["codigoPredio"]?.asString() == "$codigo-1" }["codigoCatastro"].asString())
+    }
+
     @Test
     fun `a year without its parameters fails the corrida and names them, and there is no panel`() {
         val org = organizacion()

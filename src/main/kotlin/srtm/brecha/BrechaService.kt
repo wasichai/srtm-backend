@@ -408,16 +408,23 @@ class BrechaService(
             .one()
             .awaitSingle()
 
-    // what Brecha.medir reads of srtm: every predio (the candidates of the cruce) and declaración of the year, with the
-    // otras instalaciones of an external padrón (#208, which the dto does not read: one read of the records), and the
-    // declaraciones' contribuyentes (their documento and nombre for the confianza, #204); for the arbitrios, when their
-    // context was read, the contribuyentes' codes and the inafectaciones
+    // what Brecha.medir reads of srtm: every predio not de baja (the candidates of the cruce) and declaración of the
+    // year, with the otras instalaciones of an external padrón (#208, which the dto does not read: one read of the
+    // records), and the declaraciones' contribuyentes (their documento and nombre for the confianza, #204); for the
+    // arbitrios, when their context was read, the contribuyentes' codes and the inafectaciones
     @Suppress("UNCHECKED_CAST")
     private suspend fun padron(
         anio: Int,
         contexto: ContextoArbitrios?
     ): Padron {
-        val predios = registros.all(PREDIO, Predio::class.java)
+        // #246: a predio de baja (fecha_baja, #219) is no candidate: a migrated code's ficha crosses its derived predios
+        // by codigo_origen, not the original, and the original is no row either. the dto does not read fecha_baja
+        val predios =
+            registros
+                .all(PREDIO, Map::class.java)
+                .map { it as Map<String, Any?> }
+                .filter { it["fecha_baja"]?.toString().isNullOrBlank() }
+                .map { Records.read(Predio::class.java, it["id"].toString(), it) }
         val registrosDj = registros.all(DECLARACION, Map::class.java, filters = mapOf("anio" to "$anio")).map { it as Map<String, Any?> }
         val declaraciones = registrosDj.map { Records.read(Declaracion::class.java, it["id"].toString(), it) }
         val obrasDelPadron =
