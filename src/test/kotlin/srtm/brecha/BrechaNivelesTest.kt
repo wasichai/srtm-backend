@@ -72,6 +72,12 @@ class BrechaNivelesTest {
     }
 
     @Test
+    fun `a nivel without tipo is a piso, a piso without number is AMBIGUO`() {
+        val niveles = Brecha.niveles(listOf(nivel(1, "100", tipo = null), nivel(null, "20")), listOf(construccion(1, "100")))
+        assertEquals(listOf(par(1, "100", "100", EstadoNivel.PAR), par(null, "20", null, EstadoNivel.AMBIGUO)), niveles)
+    }
+
+    @Test
     fun `an inactive nivel is not declared, and an area that is missing is null`() {
         val niveles = Brecha.niveles(listOf(nivel(1, "100", estado = "INACTIVO"), nivel(2, null)), listOf(construccion(1, "90")))
         assertEquals(listOf(par(1, null, "90", EstadoNivel.SOLO_CATASTRO), par(2, null, null, EstadoNivel.SOLO_RENTAS)), niveles)
@@ -87,10 +93,12 @@ class BrechaNivelesTest {
                     // rentas 0 is no larger catastro, but its difference counts
                     par(3, "0", "20", EstadoNivel.PAR),
                     par(4, null, "500", EstadoNivel.SOLO_CATASTRO),
+                    // a PAR without one side's area is compared, but adds no difference
+                    par(5, null, "300", EstadoNivel.PAR),
                     par(null, "1", "900", EstadoNivel.AMBIGUO)
                 )
             )
-        assertEquals(ResumenDeNiveles(3, 1, BigDecimal("30")), r)
+        assertEquals(ResumenDeNiveles(4, 1, BigDecimal("30")), r)
         assertEquals(ResumenDeNiveles(0, 0, BigDecimal.ZERO), Brecha.resumenDeNiveles(emptyList()))
     }
 

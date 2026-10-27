@@ -499,11 +499,14 @@ object Brecha {
     private fun sumaDeAreas(areas: List<BigDecimal?>): BigDecimal? = areas.filterNotNull().takeIf { it.isNotEmpty() }?.fold(BigDecimal.ZERO, BigDecimal::add)
 
     // #247: a row's niveles counted: the PAR, those whose catastro area is larger than a rentas one above 0, and the PAR's
-    // positive differences (an area missing counts 0)
+    // positive differences (a PAR missing either area adds none)
     fun resumenDeNiveles(niveles: List<NivelBrecha>): ResumenDeNiveles {
         val pares = niveles.filter { it.estado == EstadoNivel.PAR.name }
         val mayor = pares.count { (it.areaRentas ?: BigDecimal.ZERO).signum() > 0 && (it.areaCatastro ?: BigDecimal.ZERO) > it.areaRentas }
-        val delta = pares.fold(BigDecimal.ZERO) { s, n -> s + ((n.areaCatastro ?: BigDecimal.ZERO) - (n.areaRentas ?: BigDecimal.ZERO)).max(BigDecimal.ZERO) }
+        val delta =
+            pares.fold(BigDecimal.ZERO) { s, n ->
+                if (n.areaCatastro == null || n.areaRentas == null) s else s + (n.areaCatastro - n.areaRentas).max(BigDecimal.ZERO)
+            }
         return ResumenDeNiveles(pares.size, mayor, delta)
     }
 

@@ -297,12 +297,13 @@ class BrechaApiTest : SrtmApiTest() {
     // (an older catastro) compares no nivel
     @Test
     fun `a corrida keeps the areas of both sides and pairs the niveles by piso`() {
-        val org = organizacion()
+        // the year of no other test: Ica's 2026 (each year with predial parameters has its test in the other organization)
+        val org = organizacionIca()
         val sufijo = uniqueDocumento()
         val conNiveles = predio(org, "N-$sufijo")
         val sinNiveles = predio(org, "S-$sufijo")
-        val dj = declarar(org, contribuyente(org), conNiveles, "100000.00", anio = 2021, delPadron = mapOf("area_terreno" to 200, "area_construida" to 150))
-        declarar(org, contribuyente(org), sinNiveles, "100000.00", anio = 2021, delPadron = mapOf("area_terreno" to 90))
+        val dj = declarar(org, contribuyente(org), conNiveles, "100000.00", anio = 2026, delPadron = mapOf("area_terreno" to 200, "area_construida" to 150))
+        declarar(org, contribuyente(org), sinNiveles, "100000.00", anio = 2026, delPadron = mapOf("area_terreno" to 90))
         val id = dj["id"].asString()
         val nivel =
             mapOf(
@@ -318,11 +319,11 @@ class BrechaApiTest : SrtmApiTest() {
         val construcciones =
             """[{"piso":null,"seccion":1,"areaConstruida":15},{"piso":1,"seccion":1,"areaConstruida":70},""" +
                 """{"piso":1,"seccion":2,"areaConstruida":50},{"piso":2,"seccion":1,"areaConstruida":40}]"""
-        ITEMS.set(listOf(item("N-$sufijo", "100000.00", llavesCrudas = mapOf("construcciones" to construcciones)), item("S-$sufijo", "100000.00")))
+        ITEMS_ICA.set(listOf(item("N-$sufijo", "100000.00", llavesCrudas = mapOf("construcciones" to construcciones)), item("S-$sufijo", "100000.00")))
 
-        val corrida = corrida(org, 2021)
+        val corrida = corrida(org, 2026)
         assertEquals(TERMINADA, corrida["estado"].asString(), corrida.toString())
-        val filas = tree(send("GET", "/api/srtm/brecha/2021/predios", null, HttpStatus.OK, org))["content"].associateBy { it["codigoPredio"].asString() }
+        val filas = tree(send("GET", "/api/srtm/brecha/2026/predios", null, HttpStatus.OK, org))["content"].associateBy { it["codigoPredio"].asString() }
         val fila = filas.getValue("N-$sufijo")
         assertEquals(BigDecimal("200.00"), dec(fila["areaTerrenoDeclarada"]))
         assertEquals(BigDecimal("150.00"), dec(fila["areaConstruidaDeclarada"]))
@@ -332,15 +333,14 @@ class BrechaApiTest : SrtmApiTest() {
         assertEquals(1, fila["nivelesCatastroMayor"].asInt())
         assertEquals(BigDecimal("20.00"), dec(fila["deltaAreaNiveles"]))
 
-        val niveles =
-            tree(send("GET", "/api/objects/brecha_nivel/records?size=50&brecha_predio=${fila["id"].asString()}", null, HttpStatus.OK, org))["content"]
-                .map { it["attributes"] }
-        assertTrue(niveles.all { it["corrida"].asString() == corrida["id"].asString() }, niveles.toString())
+        val respuesta = tree(send("GET", "/api/objects/brecha_nivel/records?size=50&brecha_predio=${fila["id"].asString()}", null, HttpStatus.OK, org))
+        val niveles = respuesta.path("content").values().map { it.path("attributes") }
+        assertEquals(setOf(corrida.path("id").asString()), niveles.map { it.path("corrida").asString() }.toSet(), respuesta.toString())
 
         fun area(
             n: JsonNode,
             campo: String
-        ) = n[campo]?.takeUnless { it.isNull }?.let(::dec)
+        ) = n.path(campo).takeUnless { it.isNull || it.isMissingNode }?.let(::dec)
         assertEquals(
             setOf(
                 listOf("1", "100.00", "120.00", "PAR"),
@@ -351,19 +351,19 @@ class BrechaApiTest : SrtmApiTest() {
             niveles
                 .map {
                     listOf(
-                        it["piso"]?.takeUnless { p -> p.isNull }?.asString(),
+                        it.path("piso").takeUnless { p -> p.isNull || p.isMissingNode }?.asString(),
                         area(it, "area_rentas")?.toPlainString(),
                         area(it, "area_catastro")?.toPlainString(),
-                        it["estado"].asString()
+                        it.path("estado").asString()
                     )
                 }.toSet()
         )
 
         val sinConstrucciones = filas.getValue("S-$sufijo")
         assertEquals(BigDecimal("90.00"), dec(sinConstrucciones["areaTerrenoDeclarada"]))
-        assertTrue(sinConstrucciones["nivelesComparados"].isNull, sinConstrucciones.toString())
+        assertTrue(sinConstrucciones.path("nivelesComparados").let { it.isNull || it.isMissingNode }, sinConstrucciones.toString())
         val deLaOtra = tree(send("GET", "/api/objects/brecha_nivel/records?brecha_predio=${sinConstrucciones["id"].asString()}", null, HttpStatus.OK, org))
-        assertEquals(0, deLaOtra["content"].size(), deLaOtra.toString())
+        assertEquals(0, deLaOtra.path("content").size(), deLaOtra.toString())
     }
 
     @Test

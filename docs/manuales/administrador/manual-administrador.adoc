@@ -277,7 +277,8 @@ trabajo de una oficina de rentas; sirven de punto de partida y son los que usan 
 
 Todos llevan, además, lectura sobre las corridas, los predios y los niveles de la brecha de recaudación
 (`brecha_corrida`, `brecha_predio` y `brecha_nivel`): la municipalidad decidió que cualquier usuario la consulte. Al
-crear un rol nuevo, agréguele esas tres lecturas, o verá el panel de la brecha con un error de permiso.
+crear un rol nuevo, agréguele esas tres lecturas: sin las dos primeras verá el panel de la brecha con un error de
+permiso, y sin la de `brecha_nivel` no podrá leer los pisos de cada predio.
 
 La lista exacta de permisos de cada uno está en `docs/manuales/demo/perfiles.json`, que es la fuente que usa la carga de
 la demostración. Para crear estos perfiles en la base real, créelos desde la consola con <<proc-crear-rol>> y

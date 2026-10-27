@@ -905,7 +905,7 @@ La regla:
 
 La fila de `brecha_predio` resume sus niveles: `niveles_comparados` (los PAR), `niveles_catastro_mayor` (los PAR con
 área catastral mayor que la de rentas, y la de rentas mayor que 0) y `delta_area_niveles` (la suma de las diferencias
-positivas, catastro − rentas, de los PAR). Un catastro anterior, sin `construcciones`, deja esos tres campos vacíos y
+positivas, catastro − rentas, de los PAR que tienen las dos áreas). Un catastro anterior, sin `construcciones`, deja esos tres campos vacíos y
 no escribe `brecha_nivel`; una lista vacía sí compara (todo lo declarado sale SOLO_RENTAS). `/predios` devuelve los
 siete campos en camelCase; los niveles se leen por la API genérica
 (`/api/objects/brecha_nivel/records?brecha_predio=<id>`).
