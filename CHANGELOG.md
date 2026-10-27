@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.0](https://github.com/wasichai/srtm-backend/compare/v2.2.0...v2.3.0) (2026-10-27)
+
+
+### Features
+
+* **corte:** exportar brecha_nivel en el corte analítico ([#257](https://github.com/wasichai/srtm-backend/issues/257)) ([345ae75](https://github.com/wasichai/srtm-backend/commit/345ae7513c3dfe141273f25013b750132b353936)), closes [#256](https://github.com/wasichai/srtm-backend/issues/256)
+* **reportes:** la caché de los reportes se precalienta al terminar la corrida ([#259](https://github.com/wasichai/srtm-backend/issues/259)) ([6daacd3](https://github.com/wasichai/srtm-backend/commit/6daacd307726ec003ac48c2c902cb6524593bef9))
+
 ## [2.2.0](https://github.com/wasichai/srtm-backend/compare/v2.1.0...v2.2.0) (2026-10-27)
 
 

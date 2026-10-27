@@ -7,7 +7,7 @@
 :producto-largo: Sistema de Gestión Tributaria Municipal
 :municipalidad: Municipalidad Distrital de Perené
 // x-release-please-start-version
-:version-producto: 2.2.0
+:version-producto: 2.3.0
 // x-release-please-end
 :version-ui: 0.5.0
 :version-wasichai: 1.6.0
