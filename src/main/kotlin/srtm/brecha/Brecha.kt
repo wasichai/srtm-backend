@@ -8,6 +8,7 @@ import srtm.impuesto.ImpuestoPredial
 import srtm.impuesto.ParametroTributario
 import srtm.rentas.Contribuyente
 import srtm.rentas.Declaracion
+import srtm.rentas.NivelConstruccion
 import srtm.rentas.Predio
 import srtm.rentas.UsoPredio
 import srtm.rentas.condominio
@@ -26,7 +27,8 @@ import srtm.rentas.vigente as declaracionVigente
 // obrasDelPadron: declaración id -> the otras instalaciones an external padrón brought (> 0), which no dto reads.
 // contribuyentes: id -> the DJs' titulares, whose documento and nombre the confianza compares with the ficha's (#204).
 // prediosDeBaja: those with a fecha_baja (#219), out of predios: no candidate of the cruce (#246), only the labels of
-// the SIN_CATASTRO row of one that still has a vigente DJ of the year
+// the SIN_CATASTRO row of one that still has a vigente DJ of the year. niveles: declaración id -> its niveles de
+// construcción (#247), read for the vigente DJs of the year only
 data class Padron(
     val predios: List<Predio>,
     val declaraciones: List<Declaracion>,
@@ -34,7 +36,8 @@ data class Padron(
     val inafectaciones: List<InafectacionArbitrio> = emptyList(),
     val obrasDelPadron: Map<String, BigDecimal> = emptyMap(),
     val contribuyentes: Map<String, Contribuyente> = emptyMap(),
-    val prediosDeBaja: List<Predio> = emptyList()
+    val prediosDeBaja: List<Predio> = emptyList(),
+    val niveles: Map<String, List<NivelConstruccion>> = emptyMap()
 )
 
 // the rows of a corrida, or what the year lacks to liquidate (then no row). avisos are what could not be computed
@@ -460,6 +463,102 @@ object Brecha {
         parametros: List<ParametroTributario>
     ): BigDecimal = ImpuestoPredial.liquidar(anio, autoavaluo, parametros).impuestoAnual!!
 
+    // #247: a predio's niveles, rentas against catastro, paired by piso. catastro's secciones of one piso are summed
+    // into one; then each piso number (null included) is one row: AMBIGUO when it is null (a sótano, mezanine or
+    // azotea of rentas, a piso of catastro that is no number) or when rentas has it on more than one nivel (two usos of
+    // one floor: which part is which cannot be told); else PAR when both sides have it, SOLO_RENTAS or SOLO_CATASTRO
+    // when one only. a rentas nivel INACTIVO is not declared. each side's area is the sum of its niveles (null when
+    // none has one, or the side lacks the piso). by piso, the null one last
+    fun niveles(
+        rentas: List<NivelConstruccion>,
+        catastro: List<ConstruccionCatastral>
+    ): List<NivelBrecha> {
+        val declarados = rentas.filter { it.estado != INACTIVO }.groupBy(::pisoDeRentas)
+        val construidos = catastro.groupBy { it.piso }
+        return (declarados.keys + construidos.keys).sortedWith(nullsLast()).map { piso ->
+            val r = declarados[piso]
+            val c = construidos[piso]
+            val estado =
+                when {
+                    piso == null || (r?.size ?: 0) > 1 -> EstadoNivel.AMBIGUO
+                    r != null && c != null -> EstadoNivel.PAR
+                    r != null -> EstadoNivel.SOLO_RENTAS
+                    else -> EstadoNivel.SOLO_CATASTRO
+                }
+            val areaRentas = r?.let { sumaDeAreas(it.map(NivelConstruccion::areaConstruida)) }
+            val areaCatastro = c?.let { sumaDeAreas(it.map(ConstruccionCatastral::areaConstruida)) }
+            NivelBrecha(piso, areaRentas, areaCatastro, estado.name)
+        }
+    }
+
+    // a rentas nivel's piso as a number: a PISO's (or one without tipo) numero_piso; a sótano, mezanine or azotea has
+    // none (catastro writes them S1, M1, AZ: no number either)
+    private fun pisoDeRentas(n: NivelConstruccion): Int? = n.numeroPiso.takeIf { (n.tipoNivel ?: PISO) == PISO }
+
+    // the areas that are there, added; null when none is
+    private fun sumaDeAreas(areas: List<BigDecimal?>): BigDecimal? = areas.filterNotNull().takeIf { it.isNotEmpty() }?.fold(BigDecimal.ZERO, BigDecimal::add)
+
+    // #247: a row's niveles counted: the PAR, those whose catastro area is larger than a rentas one above 0, and the PAR's
+    // positive differences (a PAR missing either area adds none)
+    fun resumenDeNiveles(niveles: List<NivelBrecha>): ResumenDeNiveles {
+        val pares = niveles.filter { it.estado == EstadoNivel.PAR.name }
+        val mayor = pares.count { (it.areaRentas ?: BigDecimal.ZERO).signum() > 0 && (it.areaCatastro ?: BigDecimal.ZERO) > it.areaRentas }
+        val delta =
+            pares.fold(BigDecimal.ZERO) { s, n ->
+                if (n.areaCatastro == null || n.areaRentas == null) s else s + (n.areaCatastro - n.areaRentas).max(BigDecimal.ZERO)
+            }
+        return ResumenDeNiveles(pares.size, mayor, delta)
+    }
+
+    // #247: an area of a predio's DJs (area_terreno, area_construida): once per secuencia, the highest of its titulares
+    // (as pesos and totalesDePredio count them), added. null: none has it
+    fun areaDeclarada(
+        declaraciones: List<Declaracion>,
+        area: (Declaracion) -> BigDecimal?
+    ): BigDecimal? =
+        declaraciones
+            .groupBy(::grupoDe)
+            .values
+            .mapNotNull { s -> s.mapNotNull(area).maxOrNull() }
+            .takeIf { it.isNotEmpty() }
+            ?.fold(BigDecimal.ZERO, BigDecimal::add)
+
+    // #247: the niveles a predio declares: each secuencia's once, those of the titular whose active niveles add up the
+    // most area (every condómino carries a copy; the first on a tie), the secuencias' together
+    fun nivelesDeRentas(
+        declaraciones: List<Declaracion>,
+        niveles: Map<String, List<NivelConstruccion>>
+    ): List<NivelConstruccion> =
+        declaraciones.groupBy(::grupoDe).values.flatMap { secuencia ->
+            secuencia
+                .map { d -> d.id?.let(niveles::get).orEmpty() }
+                .maxByOrNull { ns -> ns.filter { it.estado != INACTIVO }.fold(BigDecimal.ZERO) { s, n -> s + (n.areaConstruida ?: BigDecimal.ZERO) } }
+                .orEmpty()
+        }
+
+    // #247: the row with what catastro and the DJs say of its areas, and its niveles when both sides can be compared
+    // (a DJ, and an item that sends construcciones)
+    private fun conAreas(
+        fila: FilaBrecha,
+        item: ValuacionCatastral?,
+        declaraciones: List<Declaracion>?,
+        delPadron: Map<String, List<NivelConstruccion>>
+    ): FilaBrecha {
+        val construcciones = item?.construcciones
+        val comparados = if (construcciones == null || declaraciones == null) null else niveles(nivelesDeRentas(declaraciones, delPadron), construcciones)
+        val resumen = comparados?.let(::resumenDeNiveles)
+        return fila.copy(
+            areaTerrenoDeclarada = declaraciones?.let { areaDeclarada(it, Declaracion::areaTerreno) },
+            areaConstruidaDeclarada = declaraciones?.let { areaDeclarada(it, Declaracion::areaConstruida) },
+            areaTerrenoCatastro = item?.areaTerreno,
+            areaConstruidaCatastro = item?.areaConstruida,
+            niveles = comparados,
+            nivelesComparados = resumen?.comparados,
+            nivelesCatastroMayor = resumen?.catastroMayor,
+            deltaAreaNiveles = resumen?.delta
+        )
+    }
+
     // a corrida's rows: one per catastro item (crossed or OMISO) and one per padrón predio the catastro lacks
     // (SIN_CATASTRO). the padrón is the predios with a vigente declaración of the year: a catastro item crossed with a
     // predio without one is an OMISO too (it keeps the predio). #204: an item whose ficha is sin levantar is
@@ -599,7 +698,7 @@ object Brecha {
                 val delPadron = predio?.id?.takeIf { suyas != null }
                 if (delPadron != null) cruzados += delPadron
                 filas +=
-                    base.copy(
+                    conAreas(base, null, suyas, padron.niveles).copy(
                         categoria = Categoria.SIN_LEVANTAR.name,
                         autoavaluoCatastro = null,
                         autoavaluoDeclarado = suyas?.let { totalesDePredio(it).autoavaluo.setScale(2, RoundingMode.HALF_UP) },
@@ -612,7 +711,7 @@ object Brecha {
             if (predio == null || suyas == null) {
                 val impuesto = item.autoavaluo?.let { estimado(anio, it, parametros) }
                 filas +=
-                    base.copy(
+                    conAreas(base, item, null, padron.niveles).copy(
                         categoria = Categoria.OMISO.name,
                         deltaAutoavaluo = item.autoavaluo,
                         impuestoCatastro = impuesto,
@@ -628,7 +727,7 @@ object Brecha {
             val impuesto = impuestos.porPredio[predio.id] ?: ImpuestoDelPredio(cero, cero)
             val valor = item.autoavaluo
             filas +=
-                base.copy(
+                conAreas(base, item, suyas, padron.niveles).copy(
                     categoria = categoria(declarado, valor).name,
                     autoavaluoDeclarado = declarado,
                     deltaAutoavaluo = valor?.subtract(declarado),
@@ -647,7 +746,7 @@ object Brecha {
             val predio = porId[id]
             val conf = confianza(null, predio)
             filas +=
-                FilaBrecha(
+                conAreas(FilaBrecha(), null, suyas, padron.niveles).copy(
                     predio = id,
                     codigoPredio = predio?.codigo,
                     categoria = Categoria.SIN_CATASTRO.name,
@@ -670,6 +769,10 @@ object Brecha {
     }
 
     private fun sinLevantar(item: ValuacionCatastral) = item.estadoLevantamiento == SIN_LEVANTAR
+
+    // a nivel_construccion's estado that is not declared any more, and the tipo_nivel of a floor with a number
+    private const val INACTIVO = "INACTIVO"
+    private const val PISO = "PISO"
 
     // catastro answered no item at all while the padrón has predios of the year: an empty or misconfigured catastro,
     // not a district of omisos. measuring it would call every predio SIN_CATASTRO: the corrida fails with why instead

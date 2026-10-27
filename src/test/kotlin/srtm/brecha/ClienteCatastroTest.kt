@@ -156,6 +156,33 @@ class ClienteCatastroTest {
         assertEquals("1101010001010001", conTodos.codigoReferenciaCatastral)
     }
 
+    // #247 (catastro-backend#71): each piso and sección of the ficha, piso null when it is no number (S1); an older
+    // catastro sends no construcciones at all, and that is null, not empty
+    @Test
+    fun `an item carries its construcciones, null when catastro sends none`() {
+        assertNull(runBlocking { cliente().valuaciones(2026) }.items[0].construcciones)
+
+        server.removeContext("/api/catastro/valuaciones")
+        val conConstrucciones =
+            ITEM_VALORADO.dropLast(1) +
+                ""","construcciones":[{"piso":null,"seccion":1,"areaConstruida":12.5},{"piso":1,"seccion":1,"areaConstruida":100.10},
+                {"piso":1,"seccion":2,"areaConstruida":null}]}"""
+        val sinConstrucciones = ITEM_SIN_VALOR.dropLast(1) + ""","construcciones":[]}"""
+        server.createContext("/api/catastro/valuaciones") { ex ->
+            responder(ex, 200, """{"anio":2026,"version":"valuacion-v2","page":0,"size":500,"total":2,"items":[$conConstrucciones,$sinConstrucciones]}""")
+        }
+        val items = runBlocking { cliente().valuaciones(2026) }.items
+        assertEquals(
+            listOf(
+                ConstruccionCatastral(null, 1, BigDecimal("12.5")),
+                ConstruccionCatastral(1, 1, BigDecimal("100.10")),
+                ConstruccionCatastral(1, 2, null)
+            ),
+            items[0].construcciones
+        )
+        assertEquals(emptyList<ConstruccionCatastral>(), items[1].construcciones)
+    }
+
     @Test
     fun `the titulares, every page`() {
         val titulares = runBlocking { cliente().titulares() }

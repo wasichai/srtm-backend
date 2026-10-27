@@ -30,6 +30,8 @@ import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
 import srtm.rentas.DECLARACION
 import srtm.rentas.Declaracion
+import srtm.rentas.NIVEL_CONSTRUCCION
+import srtm.rentas.NivelConstruccion
 import srtm.rentas.PREDIO
 import srtm.rentas.Predio
 import srtm.rentas.Records
@@ -43,6 +45,7 @@ import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
 import wasichai.core.common.UnauthorizedException
 import wasichai.core.common.ValidationException
+import wasichai.core.data.RecordCriterion
 import wasichai.core.data.RecordQuery
 import wasichai.core.data.RecordService
 import wasichai.core.identity.AuthenticatedUser
@@ -55,6 +58,7 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.util.UUID
 import kotlin.coroutines.cancellation.CancellationException
+import srtm.rentas.vigente as declaracionVigente
 
 // the corridas de brecha (DeterminacionMasivaService's shape, without its lotes): a POST checks what it can, leaves a
 // PENDIENTE corrida and returns; in the background, as the caller, one worker reads catastro-backend's valuations of
@@ -349,7 +353,14 @@ class BrechaService(
             for (lote in Brecha.ordenadas(medicion.filas).chunked(LOTE)) {
                 exigirEnCurso(id)
                 transaccion.executeAndAwait {
-                    registros.createAll(BRECHA_PREDIO, FilaBrecha::class.java, lote.map { Records.attributes(it.copy(corrida = id.toString())) })
+                    val creadas =
+                        registros.createAll(BRECHA_PREDIO, FilaBrecha::class.java, lote.map { Records.attributes(it.copy(corrida = id.toString())) })
+                    // #247: each row's niveles, in the same transaction as their rows
+                    val niveles =
+                        lote.zip(creadas).flatMap { (fila, creada) ->
+                            fila.niveles.orEmpty().map { Records.attributes(it) + mapOf("corrida" to id.toString(), "brecha_predio" to creada.id) }
+                        }
+                    registros.createAll(BRECHA_NIVEL, NivelBrecha::class.java, niveles)
                 }
                 procesados += lote.size
                 latir(id, mapOf("procesados" to procesados))
@@ -410,8 +421,9 @@ class BrechaService(
 
     // what Brecha.medir reads of srtm: every predio not de baja (the candidates of the cruce) and declaración of the
     // year, with the otras instalaciones of an external padrón (#208, which the dto does not read: one read of the
-    // records), and the declaraciones' contribuyentes (their documento and nombre for the confianza, #204); for the
-    // arbitrios, when their context was read, the contribuyentes' codes and the inafectaciones
+    // records), the declaraciones' contribuyentes (their documento and nombre for the confianza, #204) and the niveles
+    // of the vigente ones (#247); for the arbitrios, when their context was read, the contribuyentes' codes and the
+    // inafectaciones
     @Suppress("UNCHECKED_CAST")
     private suspend fun padron(
         anio: Int,
@@ -435,8 +447,16 @@ class BrechaService(
                     if (monto.signum() > 0) r["id"].toString() to monto else null
                 }.toMap()
         val contribuyentes = registros.byIds(CONTRIBUYENTE, Contribuyente::class.java, declaraciones.mapNotNull { it.contribuyente })
+        val niveles = nivelesDe(declaraciones.filter { it.anio == anio && declaracionVigente(it) }.mapNotNull { it.id })
         if (contexto == null) {
-            return Padron(predios, declaraciones, obrasDelPadron = obrasDelPadron, contribuyentes = contribuyentes, prediosDeBaja = prediosDeBaja)
+            return Padron(
+                predios,
+                declaraciones,
+                obrasDelPadron = obrasDelPadron,
+                contribuyentes = contribuyentes,
+                prediosDeBaja = prediosDeBaja,
+                niveles = niveles
+            )
         }
         return Padron(
             predios,
@@ -445,9 +465,25 @@ class BrechaService(
             registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java),
             obrasDelPadron,
             contribuyentes,
-            prediosDeBaja
+            prediosDeBaja,
+            niveles
         )
     }
+
+    // #247: the niveles of these declaraciones, by declaración: a query per page of ids (their declaracion among them)
+    private suspend fun nivelesDe(declaraciones: List<String>): Map<String, List<NivelConstruccion>> =
+        declaraciones
+            .chunked(PageRequest.MAX_SIZE)
+            .flatMap { ids -> registros.donde(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, listOf(declaracionEntre(ids))) }
+            .filter { it.declaracion != null }
+            .groupBy { it.declaracion!! }
+
+    // a nivel's declaracion (a relation, uuid) among `ids`: bound as text and cast, so the column keeps its index
+    private fun declaracionEntre(ids: List<String>) =
+        RecordCriterion { definition, bind ->
+            val columna = "\"${definition.fields.first { it.name == "declaracion" }.columnName}\""
+            "$columna = ANY(CAST(CAST(${bind(ids.toTypedArray())} AS text[]) AS uuid[]))"
+        }
 
     private suspend fun activas(anio: Int) =
         registros
@@ -489,10 +525,11 @@ class BrechaService(
             currentUser.requirePermission(usuario, Actions.CREATE, metadata.definitionOf(BRECHA_CORRIDA).obj.id)
             currentUser.requirePermission(usuario, Actions.UPDATE, metadata.definitionOf(BRECHA_CORRIDA).obj.id)
             currentUser.requirePermission(usuario, Actions.CREATE, metadata.definitionOf(BRECHA_PREDIO).obj.id)
+            currentUser.requirePermission(usuario, Actions.CREATE, metadata.definitionOf(BRECHA_NIVEL).obj.id)
         } catch (_: ForbiddenException) {
             throw ForbiddenException(
                 "Lanzar una corrida de la brecha exige permiso de creación y de edición sobre $BRECHA_CORRIDA, y de creación sobre " +
-                    "$BRECHA_PREDIO: la corrida guarda su avance y escribe sus predios"
+                    "$BRECHA_PREDIO y $BRECHA_NIVEL: la corrida guarda su avance y escribe sus predios y sus niveles"
             )
         }
         return usuario

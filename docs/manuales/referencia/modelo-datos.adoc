@@ -382,11 +382,19 @@ Corrida de brecha de recaudación. Una medición de la brecha de recaudación de
 |13 (2)
 a|Sin campos únicos ni relaciones.
 a|`brecha_predio` +
-Predio de la brecha. Fila de una corrida: categoría y diferencias de autoavalúo, impuesto y arbitrios.
-|18 (1)
+Predio de la brecha. Fila de una corrida: categoría y diferencias de autoavalúo, impuesto y arbitrios; las áreas de
+terreno y construida de los dos lados y el resumen de sus niveles (#247).
+|28 (1)
 a|Geometría: `lote_geom` (POLYGON 32718) +
 `corrida` → `brecha_corrida` +
 `predio` → `predio` (opcional)
+a|`brecha_nivel` +
+Nivel de la brecha. Un piso de un predio de una corrida: el área que le dan la DJ vigente y la ficha, y cómo se
+emparejaron (`estado`: PAR, SOLO_RENTAS, SOLO_CATASTRO o AMBIGUO; ver la regla en el README, «Áreas y niveles», #247).
+|4 (1)
+a|Sin campos únicos. +
+`corrida` → `brecha_corrida` +
+`brecha_predio` → `brecha_predio`
 a|`sincronizacion_catastro` +
 Sincronización con catastro. Una fila por organización: el cursor de lectura de cambios, la última corrida automática que disparó y el error de la última pasada (#203).
 |4 (0)
@@ -584,6 +592,14 @@ a|`brecha_predio.predio` +
 → `predio`
 |no
 |`brecha_predio_predio`
+a|`brecha_nivel.corrida` +
+→ `brecha_corrida`
+|sí
+|`brecha_nivel_corrida`
+a|`brecha_nivel.brecha_predio` +
+→ `brecha_predio`
+|sí
+|`brecha_nivel_brecha_predio`
 |===
 
 [[ref-modelo-unicidad]]
@@ -705,6 +721,9 @@ por ENSAMBLANDO).
 
 |`categoria_brecha`
 |OMISO, SIN_CATASTRO, SIN_VALOR, SUBVALUADO, SOBREVALUADO, COINCIDE.
+
+|`estado_nivel_brecha`
+|PAR, SOLO_RENTAS, SOLO_CATASTRO, AMBIGUO.
 
 |`base_arbitrio`
 |PREDIO, FRONTIS_ML, AREA_CONSTRUIDA_M2.

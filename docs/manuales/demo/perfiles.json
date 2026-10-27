@@ -160,6 +160,9 @@
         "brecha_predio": [
           "READ"
         ],
+        "brecha_nivel": [
+          "READ"
+        ],
         "cuota_predial": [
           "CREATE",
           "READ"
@@ -283,6 +286,9 @@
         "brecha_predio": [
           "READ"
         ],
+        "brecha_nivel": [
+          "READ"
+        ],
         "cuota_predial": [
           "CREATE",
           "READ"
@@ -377,6 +383,9 @@
         "brecha_predio": [
           "READ"
         ],
+        "brecha_nivel": [
+          "READ"
+        ],
         "arancel": [
           "READ"
         ]
@@ -428,6 +437,9 @@
           "READ"
         ],
         "brecha_predio": [
+          "READ"
+        ],
+        "brecha_nivel": [
           "READ"
         ],
         "arancel": [
@@ -566,6 +578,9 @@
           "READ"
         ],
         "brecha_predio": [
+          "READ"
+        ],
+        "brecha_nivel": [
           "READ"
         ],
         "cuota_predial": [

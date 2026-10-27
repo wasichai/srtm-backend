@@ -771,7 +771,11 @@ FALLIDA. Terminada, trae los predios y el Δ impuesto por confianza (`prediosCon
 |200; 404 si no hay.
 
 |`GET /{anio}/predios?categoria&sector&confianza&page&size&corrida`
-|Página de filas (25 por omisión), con su `confianza` y `confianzaMotivo`.
+|Página de filas (25 por omisión), con su `confianza` y `confianzaMotivo`, y sus áreas (#247):
+`areaTerrenoDeclarada`, `areaTerrenoCatastro`, `areaConstruidaDeclarada`, `areaConstruidaCatastro`, y el resumen de
+sus niveles, `nivelesComparados`, `nivelesCatastroMayor` y `deltaAreaNiveles` (`null` si no se compararon: un catastro
+sin `construcciones` o una corrida anterior). Los niveles mismos se leen con
+`GET /api/objects/brecha_nivel/records?brecha_predio=<id>`.
 |200; 404; 422 categoría o confianza inválida.
 
 |`GET /{anio}/lotes?corrida`

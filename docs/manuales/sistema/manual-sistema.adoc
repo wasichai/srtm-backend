@@ -1198,7 +1198,7 @@ Amazonía no se aplica) sigue abierta para una municipalidad de la Amazonía. La
 catastro-backend.
 
 La brecha la consulta cualquier usuario de la municipalidad: por decisión del 19 de octubre de 2026, *todo rol* lleva
-lectura sobre `brecha_corrida` y `brecha_predio` (wasichai no tiene un permiso para «cualquier usuario autenticado»,
+lectura sobre `brecha_corrida`, `brecha_predio` y `brecha_nivel` (wasichai no tiene un permiso para «cualquier usuario autenticado»,
 así que un rol nuevo sin esa lectura ve el panel con 403). Lanzar una corrida pide creación y edición.
 
 include::../referencia/api.adoc[]

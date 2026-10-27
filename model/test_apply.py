@@ -14,8 +14,8 @@ from fake_core import OBJECT, FakeCore
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.json")
 
-OBJECTS = 49
-RELATIONSHIPS = 53
+OBJECTS = 50
+RELATIONSHIPS = 55
 OBJECT_ORDER = ["contribuyente", "predio", "declaracion_predial", "domicilio", "relacionado", "medio_contacto", "sustento",
                 "ubigeo", "via", "unidad_urbana", "transferente", "nivel_construccion", "obra_complementaria", "otro_frente",
                 "categoria_valor", "catastro_fiscal", "obra_categoria", "uso_predio", "parametro_tributario",
@@ -24,7 +24,7 @@ OBJECT_ORDER = ["contribuyente", "predio", "declaracion_predial", "domicilio", "
                 "determinacion_arbitrio_lote", "codigo_infraccion", "notificacion_administrativa", "subsanacion_notificacion",
                 "papeleta", "anulacion_papeleta", "descargo_papeleta", "resolucion_gerencia", "notificacion_resolucion",
                 "anuncio", "movimiento_anuncio", "zona_arbitrio_ubicacion", "brecha_corrida", "brecha_predio", "cuota_predial", "orden_caja", "pago_caja",
-                "pago_caja_detalle", "arancel", "sincronizacion_catastro", "cambio_catastro"]
+                "pago_caja_detalle", "arancel", "sincronizacion_catastro", "cambio_catastro", "brecha_nivel"]
 RELATIONSHIP_ORDER = ["declaracion_predial_contribuyente", "declaracion_predial_predio", "domicilio_contribuyente",
                       "relacionado_contribuyente", "medio_contacto_contribuyente", "sustento_contribuyente",
                       "transferente_declaracion", "nivel_construccion_declaracion", "obra_complementaria_declaracion",
@@ -40,7 +40,8 @@ RELATIONSHIP_ORDER = ["declaracion_predial_contribuyente", "declaracion_predial_
                       "movimiento_parametro", "brecha_predio_corrida", "brecha_predio_predio",
                       "cuota_predial_contribuyente", "orden_caja_contribuyente", "orden_caja_cuota_arbitrio",
                       "orden_caja_cuota_predial", "pago_caja_contribuyente", "pago_caja_detalle_pago",
-                      "pago_caja_detalle_orden", "pago_caja_detalle_contribuyente", "sincronizacion_catastro_corrida"]
+                      "pago_caja_detalle_orden", "pago_caja_detalle_contribuyente", "sincronizacion_catastro_corrida",
+                      "brecha_nivel_corrida", "brecha_nivel_brecha_predio"]
 
 
 def load_model():
@@ -181,6 +182,8 @@ class HappyPathTests(ApplyCliTestCase):
             ("/api/metadata/objects/cuota_predial/fields/contribuyente", {"required": True}),
             ("/api/metadata/objects/orden_caja/fields/contribuyente", {"required": True}),
             ("/api/metadata/objects/pago_caja_detalle/fields/pago", {"required": True}),
+            ("/api/metadata/objects/brecha_nivel/fields/corrida", {"required": True}),
+            ("/api/metadata/objects/brecha_nivel/fields/brecha_predio", {"required": True}),
         ] + APPEND_ONLY_PUTS)
         # the rules go after the last relationship: an index can name a relation field
         last_relationship = max(i for i, r in enumerate(self.core.requests) if r[1] == "/api/relationships")
@@ -194,7 +197,7 @@ class HappyPathTests(ApplyCliTestCase):
                 self.assertEqual(auth, "Bearer t")
 
         self.assertIn("update object cuota_arbitrio (appendOnly, indexes)", out)
-        self.assertIn("done: 102 created, 8 updated, 0 skipped", out)
+        self.assertIn("done: 105 created, 8 updated, 0 skipped", out)
 
 
 class IdempotencyTests(ApplyCliTestCase):
@@ -216,7 +219,7 @@ class IdempotencyTests(ApplyCliTestCase):
         self.assertEqual(object_posts, [])
         self.assertEqual([r for r in self.core.requests if r[0] == "POST" and "/fields" in r[1]], [])
         self.assertEqual(object_puts(self.core), [])
-        self.assertIn("done: 0 created, 0 updated, 102 skipped", out)
+        self.assertIn("done: 0 created, 0 updated, 105 skipped", out)
 
 
 class ObjectRulesTests(ApplyCliTestCase):
@@ -245,7 +248,7 @@ class ObjectRulesTests(ApplyCliTestCase):
         self.assertEqual(object_puts(self.core), APPEND_ONLY_PUTS)
         self.assertIn("update object cuota_arbitrio (appendOnly, indexes)", out)
         self.assertIn("update object anulacion_cuota_arbitrio (appendOnly)", out)
-        self.assertIn("done: 0 created, 8 updated, 102 skipped", out)
+        self.assertIn("done: 0 created, 8 updated, 105 skipped", out)
         self.assertEqual({n: r for n, r in self.core.object_rules.items() if r.get("appendOnly")},
                          {n: rules for n, rules in OBJECT_RULES.items() if rules.get("appendOnly")})
 
@@ -253,7 +256,7 @@ class ObjectRulesTests(ApplyCliTestCase):
         code, out, err = self.run_cli([])
         self.assertEqual(code, 0, msg=err)
         self.assertEqual(object_puts(self.core), [])
-        self.assertIn("done: 0 created, 0 updated, 102 skipped", out)
+        self.assertIn("done: 0 created, 0 updated, 105 skipped", out)
 
     def test_indexes_core_has_and_the_model_lacks_are_dropped(self):
         # model.json is the source of the indexes: one only Core has goes
@@ -472,7 +475,7 @@ class SyncTests(ApplyCliTestCase):
             "/api/metadata/objects/contribuyente/fields/tipo_documento",
             {"enumOptions": ["SIN DOCUMENTO", "DNI", "CARNET DE EXTRANJERIA", "RUC", "PASAPORTE", "PTP-CPP", "CI", "OTROS"]},
         )])
-        self.assertIn("done: 16 created, 1 updated, 101 skipped", out)
+        self.assertIn("done: 16 created, 1 updated, 104 skipped", out)
 
 
 class DropOptionsTests(ApplyCliTestCase):
@@ -512,7 +515,7 @@ class DropOptionsTests(ApplyCliTestCase):
         self.assertIn("; -CISTERNAS, PISCINAS, LOSAS DEPORTIVAS, PISOS DE CONCRETO, OTROS)", out)
         self.assertIn("; -CISTERNAS, PISCINAS, LOSAS DEPORTIVAS, PISOS DE CONCRETO)", out)
         self.assertIn("keep   option obra_complementaria.tipo_obra OTROS: 1 record uses it", out)
-        self.assertIn("done: 0 created, 2 updated, 100 skipped", out)
+        self.assertIn("done: 0 created, 2 updated, 103 skipped", out)
 
     def count_answers(self, status, payload):
         """The records GET, the count asked before dropping an option, answers this."""
@@ -562,7 +565,7 @@ class RelaxRequiredTests(ApplyCliTestCase):
         puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "/api/metadata/objects/contribuyente/" in r[1]]
         self.assertEqual(puts, [("/api/metadata/objects/contribuyente/fields/numero_documento", {"required": False})])
         self.assertIn("update field contribuyente.numero_documento (optional)", out)
-        self.assertIn("done: 0 created, 1 updated, 101 skipped", out)
+        self.assertIn("done: 0 created, 1 updated, 104 skipped", out)
 
 
 class RelacionadoTransferenteSyncTests(ApplyCliTestCase):
@@ -602,7 +605,7 @@ class RelacionadoTransferenteSyncTests(ApplyCliTestCase):
             ("/api/metadata/objects/transferente/fields/nombres", {"required": False}),
         ])
         self.assertIn("update field relacionado.nombres (optional)", out)
-        self.assertIn("done: 4 created, 2 updated, 100 skipped", out)
+        self.assertIn("done: 4 created, 2 updated, 103 skipped", out)
 
 
 class RelabelTests(ApplyCliTestCase):
@@ -627,7 +630,7 @@ class RelabelTests(ApplyCliTestCase):
         puts = [(r[1], r[3]) for r in self.core.requests if r[0] == "PUT" and "label" in (r[3] or {})]
         self.assertEqual(puts, [("/api/metadata/objects/predio/fields/tipo_predio", {"label": "Tipo de predio"})])
         self.assertIn("update field predio.tipo_predio (label)", out)
-        self.assertIn("done: 0 created, 1 updated, 101 skipped", out)
+        self.assertIn("done: 0 created, 1 updated, 104 skipped", out)
 
 
 class FailureStopsTests(ApplyCliTestCase):
@@ -694,7 +697,7 @@ class DropTests(ApplyCliTestCase):
         deletes = [r[1] for r in self.core.requests if r[0] == "DELETE"]
         self.assertEqual(deletes, [f"/api/relationships/{n}" for n in reversed(RELATIONSHIP_ORDER)]
                          + [f"/api/objects/{n}" for n in reversed(OBJECT_ORDER)])
-        self.assertIn("done: 102 deleted, 0 skipped", out)
+        self.assertIn("done: 105 deleted, 0 skipped", out)
 
     def test_drop_switches_append_only_off_before_deleting(self):
         # Core refuses to drop an append-only object, or a relationship that holds one's values, until the rule is off
@@ -709,7 +712,7 @@ class DropTests(ApplyCliTestCase):
         last_put = max(i for i, r in enumerate(self.core.requests) if r[0] == "PUT")
         self.assertLess(last_put, first_delete)
         self.assertIn("update object cuota_arbitrio (appendOnly, indexes)", out)
-        self.assertIn("done: 102 deleted, 0 skipped", out)
+        self.assertIn("done: 105 deleted, 0 skipped", out)
 
     def test_drop_dry_run_makes_no_requests(self):
         code, out, err = self.run_cli(["--drop", "--dry-run"])

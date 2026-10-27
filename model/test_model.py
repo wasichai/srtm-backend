@@ -112,8 +112,8 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 49)
-        self.assertEqual(len(self.model["relationships"]), 53)
+        self.assertEqual(len(names), 50)
+        self.assertEqual(len(self.model["relationships"]), 55)
 
     def test_the_municipalidad_holds_the_documents_header(self):
         # the PU and HR's header, one record per organization edited in the admin, its escudo an image of wasichai-files
@@ -277,8 +277,8 @@ class ShippedModelTests(unittest.TestCase):
         # srtm.normativa (#188): the valor arancelario of a tramo de vía in a year. srtm owns it and catastro-backend
         # copies it (sincronizado_en, error_sincronizacion). clave is id_aranc|anio, not unique: an ANULADO keeps it
         names = [o["name"] for o in self.model["objects"]]
-        # the last object of #188; #203 appends sincronizacion_catastro and cambio_catastro after it
-        self.assertEqual(names[-3], "arancel")
+        # the last object of #188; #203 appends sincronizacion_catastro and cambio_catastro after it, #247 brecha_nivel
+        self.assertEqual(names[-4], "arancel")
         arancel = next(o for o in self.model["objects"] if o["name"] == "arancel")
         self.assertEqual((arancel["label"], arancel["pluralLabel"]), ("Arancel", "Aranceles"))
         for palabra in ("catastro", "POR_VERIFICAR", "doble firma"):
@@ -448,11 +448,28 @@ class ShippedModelTests(unittest.TestCase):
         self.assertEqual(list(predio), ["codigo_catastro", "codigo_predio", "categoria", "sector", "manzana", "lote", "uso",
                                         "autoavaluo_declarado", "autoavaluo_catastro", "delta_autoavaluo", "impuesto_declarado",
                                         "impuesto_catastro", "delta_impuesto", "delta_arbitrios", "estimado", "motivo", "lote_geom",
-                                        "orden", "obras_dj", "confianza", "confianza_motivo"])
+                                        "orden", "obras_dj", "confianza", "confianza_motivo",
+                                        # #247
+                                        "area_terreno_declarada", "area_terreno_catastro", "area_construida_declarada",
+                                        "area_construida_catastro", "niveles_comparados", "niveles_catastro_mayor",
+                                        "delta_area_niveles"])
         self.assertEqual(self.model["enums"]["categoria_brecha"],
                          ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE", "SIN_LEVANTAR"])
         self.assertEqual(self.model["enums"]["confianza_brecha"], ["CONFIABLE", "DUDOSO", "SIN_LEVANTAR"])
         self.assertEqual(self.relaciones("brecha_predio"), {"corrida": ("brecha_corrida", True), "predio": ("predio", False)})
+
+    def test_the_brecha_keeps_each_piso_of_a_predio(self):
+        # #247: a piso of a brecha_predio, the area each side gives it and how they paired
+        nivel = self.campos("brecha_nivel")
+        self.assertEqual({n: f["type"] for n, f in nivel.items()},
+                         {"piso": "INTEGER", "area_rentas": "DECIMAL", "area_catastro": "DECIMAL", "estado": "ENUM"})
+        self.assertEqual({n for n, f in nivel.items() if f.get("required")}, {"estado"})
+        self.assertEqual(self.model["enums"]["estado_nivel_brecha"], ["PAR", "SOLO_RENTAS", "SOLO_CATASTRO", "AMBIGUO"])
+        self.assertEqual(self.relaciones("brecha_nivel"),
+                         {"corrida": ("brecha_corrida", True), "brecha_predio": ("brecha_predio", True)})
+        predio = self.campos("brecha_predio")
+        self.assertEqual({predio[n]["type"] for n in ("niveles_comparados", "niveles_catastro_mayor")}, {"INTEGER"})
+        self.assertFalse(any(f.get("required") for n, f in predio.items() if n.startswith(("area_", "niveles_", "delta_area"))))
 
     def test_the_dj_keeps_its_obras_and_the_brecha_what_it_added(self):
         # #208: valor_obras is derived (recalcular writes it); obras_dj records what the brecha added to catastro's side

@@ -139,6 +139,14 @@ COLUMNAS = {
         "confianza",
         "confianza_motivo",
         "orden",
+        # srtm-backend#247: null in a corrida from before it
+        "area_terreno_declarada",
+        "area_terreno_catastro",
+        "area_construida_declarada",
+        "area_construida_catastro",
+        "niveles_comparados",
+        "niveles_catastro_mayor",
+        "delta_area_niveles",
     ),
     "srtm_parametro": (
         "id",

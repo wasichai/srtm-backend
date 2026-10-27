@@ -91,11 +91,13 @@ redeterminó. Por eso el perfil `{p-registrador}` sugerido los tiene (<<ref-perm
 
 |Lanzar una corrida de la brecha +
 `POST /api/srtm/brecha/corridas`
-|`CREATE` y `UPDATE` sobre `brecha_corrida`; `CREATE` sobre `brecha_predio`.
+|`CREATE` y `UPDATE` sobre `brecha_corrida`; `CREATE` sobre `brecha_predio` y `brecha_nivel` (#247: los pisos de cada
+fila).
 
 |Consultar la brecha +
 `GET /api/srtm/brecha/**`
-|`READ` sobre `brecha_corrida` (y `RecordService` exige `READ` sobre `brecha_predio` al servir las filas). El aviso
+|`READ` sobre `brecha_corrida` (y `RecordService` exige `READ` sobre `brecha_predio` al servir las filas, y sobre
+`brecha_nivel` al servir sus niveles por la API genérica). El aviso
 de cambios (`GET /{anio}/cambios`, #203) pide esta misma lectura; `cambio_catastro` se lee directo de su tabla, sin
 pasar por `RecordService`, así que ningún rol necesita un permiso nuevo sobre ese objeto.
 
@@ -350,7 +352,7 @@ notificación, panel.
 
 |`{p-consulta}`
 |Solo lectura del modelo entero, la brecha incluida.
-|Nada: `READ` sobre los 47 objetos.
+|Nada: `READ` sobre los 48 objetos.
 
 |`{p-normativa}`
 |Normativa: registrar, corregir, verificar, anular e importar los parámetros tributarios y los aranceles
@@ -359,7 +361,7 @@ notificación, panel.
 dos cuentas.
 |===
 
-Los otros cinco perfiles leen `brecha_corrida` y `brecha_predio`: la municipalidad decidió el 19 de octubre de 2026 que
+Los otros cinco perfiles leen `brecha_corrida`, `brecha_predio` y `brecha_nivel`: la municipalidad decidió el 19 de octubre de 2026 que
 cualquier usuario consulte la brecha, y wasichai no tiene un permiso para «cualquier usuario autenticado», así que va en
 cada rol. Solo un rol con los permisos de la tabla de arriba puede lanzar una corrida. La
 configuración de la ordenanza de arbitrios (ordenanza, servicios, inafectaciones, zonas) se carga con los
