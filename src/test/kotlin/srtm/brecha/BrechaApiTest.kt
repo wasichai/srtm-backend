@@ -512,13 +512,14 @@ class BrechaApiTest : SrtmApiTest() {
     }
 
     // #255: a corrida that ends TERMINADA fills the reportes' cache in the background, as the platform (this manual
-    // corrida runs as its caller), with no read of the reportes; the next corrida of the year takes its place
+    // corrida runs as its caller), with no read of the reportes; the next corrida of the year takes its place. the other
+    // organization's 2026, which no other test runs
     @Test
     fun `a TERMINADA corrida warms the reportes' cache, and the next one of its year replaces it`() {
-        val org = organizacion()
+        val org = organizacionIca()
         val sufijo = uniqueDocumento()
         declarar(org, contribuyente(org), predio(org, "W-$sufijo"), "100000.00")
-        ITEMS.set(listOf(item("W-$sufijo", "150000.00")))
+        ITEMS_ICA.set(listOf(item("W-$sufijo", "150000.00")))
         val primera = corrida(org, 2026)
         assertEquals(TERMINADA, primera["estado"].asString(), primera.toString())
         esperarPrecalentada(primera["id"].asString())
