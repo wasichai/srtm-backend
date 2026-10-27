@@ -374,6 +374,9 @@ Solo desde la API de srtm (marca `EscrituraDeSrtm`).
 [[ref-modelo-brecha]]
 ==== Brecha de recaudación
 
+Los reportes de brechas (#248, <<ref-api-reportes>>) no tienen objeto propio: leen `brecha_corrida` y `brecha_predio`,
+y en catastro `decision_brecha`.
+
 [cols="6,2,6",options="header"]
 |===
 |Objeto y propósito |Campos |Claves, relaciones y reglas

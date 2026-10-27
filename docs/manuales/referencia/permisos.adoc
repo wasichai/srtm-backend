@@ -101,6 +101,14 @@ fila).
 de cambios (`GET /{anio}/cambios`, #203) pide esta misma lectura; `cambio_catastro` se lee directo de su tabla, sin
 pasar por `RecordService`, así que ningún rol necesita un permiso nuevo sobre ese objeto.
 
+|Consultar los reportes de brechas +
+`GET /api/srtm/reportes/**`
+|`READ` sobre `brecha_corrida` y sobre `brecha_predio`, pedidos antes de leer nada (#248: las filas de la corrida se
+guardan en memoria, así que no basta con que `RecordService` las filtre). El reporte `contribuyentes` pide además
+`READ` sobre `contribuyente` y `declaracion_predial`; en los demás, quien no los lee recibe las filas sin su
+contribuyente, con un aviso. La descripción del uso se lee de `uso_predio` si el usuario lo lee. Las decisiones de
+catastro las lee la cuenta de servicio de la brecha (`SRTM_LECTOR`), no el usuario.
+
 |Enviar a caja las deudas de un contribuyente +
 `POST /api/srtm/contribuyentes/{id}/caja`
 |`CREATE` sobre `orden_caja`.

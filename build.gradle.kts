@@ -48,6 +48,9 @@ dependencies {
     implementation(libs.openhtmltopdf.slf4j)
     implementation(libs.pdfbox)
 
+    // srtm.reportes: the reports' xlsx, streamed by fastexcel (no poi); its reader parses them in the tests
+    implementation(libs.fastexcel)
+
     // srtm.emision.almacen=s3 (AlmacenS3): the sync client over its default http client (apache5). the async netty
     // client the sdk brings is never used, and would mix its netty with webflux's
     implementation(platform(libs.awssdk.bom))
@@ -62,6 +65,7 @@ dependencies {
     // WasichaiIntegrationTest; brings spring-boot-starter-test, webflux-test and testcontainers
     testImplementation("wasichai:wasichai-test")
     testImplementation(libs.testcontainers.minio)
+    testImplementation(libs.fastexcel.reader)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
