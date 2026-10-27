@@ -408,16 +408,24 @@ class BrechaService(
             .one()
             .awaitSingle()
 
-    // what Brecha.medir reads of srtm: every predio (the candidates of the cruce) and declaración of the year, with the
-    // otras instalaciones of an external padrón (#208, which the dto does not read: one read of the records), and the
-    // declaraciones' contribuyentes (their documento and nombre for the confianza, #204); for the arbitrios, when their
-    // context was read, the contribuyentes' codes and the inafectaciones
+    // what Brecha.medir reads of srtm: every predio not de baja (the candidates of the cruce) and declaración of the
+    // year, with the otras instalaciones of an external padrón (#208, which the dto does not read: one read of the
+    // records), and the declaraciones' contribuyentes (their documento and nombre for the confianza, #204); for the
+    // arbitrios, when their context was read, the contribuyentes' codes and the inafectaciones
     @Suppress("UNCHECKED_CAST")
     private suspend fun padron(
         anio: Int,
         contexto: ContextoArbitrios?
     ): Padron {
-        val predios = registros.all(PREDIO, Predio::class.java)
+        // #246: a predio de baja (fecha_baja, #219) is no candidate: a migrated code's ficha crosses its derived predios
+        // by codigo_origen, not the original. read as records: the dto does not read fecha_baja
+        val (vigentes, deBaja) =
+            registros
+                .all(PREDIO, Map::class.java)
+                .map { it as Map<String, Any?> }
+                .partition { it["fecha_baja"]?.toString().isNullOrBlank() }
+        val predios = vigentes.map { Records.read(Predio::class.java, it["id"].toString(), it) }
+        val prediosDeBaja = deBaja.map { Records.read(Predio::class.java, it["id"].toString(), it) }
         val registrosDj = registros.all(DECLARACION, Map::class.java, filters = mapOf("anio" to "$anio")).map { it as Map<String, Any?> }
         val declaraciones = registrosDj.map { Records.read(Declaracion::class.java, it["id"].toString(), it) }
         val obrasDelPadron =
@@ -427,14 +435,17 @@ class BrechaService(
                     if (monto.signum() > 0) r["id"].toString() to monto else null
                 }.toMap()
         val contribuyentes = registros.byIds(CONTRIBUYENTE, Contribuyente::class.java, declaraciones.mapNotNull { it.contribuyente })
-        if (contexto == null) return Padron(predios, declaraciones, obrasDelPadron = obrasDelPadron, contribuyentes = contribuyentes)
+        if (contexto == null) {
+            return Padron(predios, declaraciones, obrasDelPadron = obrasDelPadron, contribuyentes = contribuyentes, prediosDeBaja = prediosDeBaja)
+        }
         return Padron(
             predios,
             declaraciones,
             contribuyentes.mapValues { it.value.codigo },
             registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java),
             obrasDelPadron,
-            contribuyentes
+            contribuyentes,
+            prediosDeBaja
         )
     }
 

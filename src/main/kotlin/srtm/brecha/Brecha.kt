@@ -24,14 +24,17 @@ import srtm.rentas.vigente as declaracionVigente
 // the year (an annulled one too: arbitrios may charge the months before a sale; the impuesto counts only the vigentes),
 // and for the arbitrios the contribuyentes' codes (the titular principal's tie-break) and the inafectaciones.
 // obrasDelPadron: declaración id -> the otras instalaciones an external padrón brought (> 0), which no dto reads.
-// contribuyentes: id -> the DJs' titulares, whose documento and nombre the confianza compares with the ficha's (#204)
+// contribuyentes: id -> the DJs' titulares, whose documento and nombre the confianza compares with the ficha's (#204).
+// prediosDeBaja: those with a fecha_baja (#219), out of predios: no candidate of the cruce (#246), only the labels of
+// the SIN_CATASTRO row of one that still has a vigente DJ of the year
 data class Padron(
     val predios: List<Predio>,
     val declaraciones: List<Declaracion>,
     val codigos: Map<String, String?> = emptyMap(),
     val inafectaciones: List<InafectacionArbitrio> = emptyList(),
     val obrasDelPadron: Map<String, BigDecimal> = emptyMap(),
-    val contribuyentes: Map<String, Contribuyente> = emptyMap()
+    val contribuyentes: Map<String, Contribuyente> = emptyMap(),
+    val prediosDeBaja: List<Predio> = emptyList()
 )
 
 // the rows of a corrida, or what the year lacks to liquidate (then no row). avisos are what could not be computed
@@ -638,7 +641,7 @@ object Brecha {
                     loteGeom = poligono(predio.loteGeom) ?: poligono(item.loteGeom)
                 )
         }
-        val porId = padron.predios.filter { it.id != null }.associateBy { it.id!! }
+        val porId = (padron.predios + padron.prediosDeBaja).filter { it.id != null }.associateBy { it.id!! }
         for ((id, suyas) in vigentesPorPredio.toSortedMap()) {
             if (id in cruzados) continue
             val predio = porId[id]

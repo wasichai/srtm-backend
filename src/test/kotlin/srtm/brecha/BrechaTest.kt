@@ -436,6 +436,30 @@ class BrechaTest {
 
     private fun padron(vararg ds: Declaracion) = Padron(listOf(propio, sinCatastro, sinDj), ds.toList())
 
+    // #246: a predio de baja is no candidate of the cruce (a ficha of its code crosses the derived predio by its
+    // codigo_origen), but one that still has a vigente DJ of the year is a SIN_CATASTRO row that keeps its labels
+    @Test
+    fun `a predio de baja is no candidate, but its vigente DJ's row keeps its code and sector`() {
+        val baja = predio("pb", codigo = "M", sector = "01")
+        val derivado = predio("pd", codigo = "M-1", origen = "M")
+        val m =
+            Brecha.medir(
+                anio,
+                listOf(item(municipal = "M", autoavaluo = "100000.00")),
+                Padron(listOf(derivado), listOf(dj("1", "a", "pd", "100000.00"), dj("2", "b", "pb", "20000.00")), prediosDeBaja = listOf(baja)),
+                parametros,
+                null,
+                hoy
+            )
+        val porPredio = m.filas.associateBy { it.predio }
+        assertEquals(Categoria.COINCIDE.name, porPredio.getValue("pd").categoria)
+        val deBaja = porPredio.getValue("pb")
+        assertEquals(Categoria.SIN_CATASTRO.name, deBaja.categoria)
+        assertEquals("M", deBaja.codigoPredio)
+        assertEquals("01", deBaja.sector)
+        assertEquals(2, m.filas.size)
+    }
+
     // #147: a rectificatoria replaces the declaración it rectifies: the padrón declares what the rectificatoria says
     @Test
     fun `a sustituida declaration is measured by its rectificatoria alone`() {
