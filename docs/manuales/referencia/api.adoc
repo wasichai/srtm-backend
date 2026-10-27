@@ -17,13 +17,13 @@ posible, contra un Core en marcha.
   Ambas las protege el mismo filtro JWT: toda petición lleva `Authorization: Bearer <token>`, salvo
   `POST /api/auth/login`, `POST /api/auth/token`, `GET /api/health` y `GET /actuator/health/**`.
 * *Cuerpos.* JSON. Los registros usan los nombres de campo del modelo, en `snake_case`, y las relaciones van como id.
-  La liquidación, la brecha y el estado de los trabajos masivos van en `camelCase`. Fechas ISO (`AAAA-MM-DD`); dinero
+  La liquidación, la brecha, los reportes y el estado de los trabajos masivos van en `camelCase`. Fechas ISO (`AAAA-MM-DD`); dinero
   como número.
 * *Errores.* Siempre `application/problem+json` (RFC 7807), con `type` `+https://wasichai.dev/problems/<estado>+`,
   `title`, `status`, `detail`, `instance` y, cuando aplica, `errors: [{field, message}]` o `faltan: [...]`. Cada
   respuesta lleva la cabecera `X-Correlation-Id`, que también queda en la auditoría.
 * *Año por omisión.* Donde una ruta acepta `anio` y no se envía, se usa el año en curso.
-* *Filtros.* En las consultas de arbitrios, infracciones, anuncios y brecha, un parámetro desconocido o mal formado es
+* *Filtros.* En las consultas de arbitrios, infracciones, anuncios, brecha y reportes, un parámetro desconocido o mal formado es
   *422* y se nombra en `errors`; nunca se ignora en silencio.
 * *Permisos.* `RecordService` aplica los permisos del rol por objeto y por campo en cada lectura y escritura (403).
   Los actos de {sigla} piden además, antes de leer nada, el permiso de creación sobre el objeto que escriben
@@ -791,3 +791,82 @@ año (#203). Lee `cambio_catastro` directo de su tabla, de la organización del 
 |200; 404 sin corrida TERMINADA del año; 422 `desde`, `marca` (solo `SUPERA_5_UIT`), `objeto` (uno de los cuatro de
 catastro), `page` o `size` inválidos, o falta la UIT del año (`faltan`).
 |===
+
+[[ref-api-reportes]]
+=== Reportes de brechas
+
+Base: `/api/srtm/reportes`. Controlador `ReportesController` (#248). Es la lectura de rentas de una corrida TERMINADA
+de la brecha: un tablero, un catálogo y una lista exportable por reporte. No duplica la fiscalización, que vive en
+catastro (`decision_brecha`): solo muestra su estado.
+
+*Parámetros comunes.* `anio` (obligatorio) y `corrida` (opcional; si falta, la última TERMINADA del año). Toda ruta
+pide antes lectura sobre `brecha_corrida` y sobre `brecha_predio`. Una corrida de otro año o inexistente es 404; una que
+no está TERMINADA, 409.
+
+*Cálculo y caché.* Los agregados y las listas se calculan en memoria desde las filas de la corrida, como el panel de la
+brecha. Las filas de una corrida (y los titulares del padrón de sus predios) se guardan en memoria
+`srtm.reportes.cache` (10 minutos), para las `srtm.reportes.corridas` (8) más recientes; las decisiones de catastro,
+`srtm.reportes.cache-decisiones` (1 minuto). Con 30 000 filas, el cálculo en memoria de `/resumen` toma unos 0,3 s y
+el de una página, menos de 0,1 s.
+
+*Decisiones de catastro.* Se leen de `GET /api/objects/decision_brecha/records?anio=` del Core de catastro de la
+organización, con la cuenta de servicio de la brecha (rol `SRTM_LECTOR`, que tiene `READ` sobre `decision_brecha`). Una
+fila toma la decisión cuyo `codigo_municipal` coincide con su código de catastro o, si no tiene, con su código de
+predio (comparados como en el cruce). Si catastro no está configurado o falla, `decisiones` es `null`, la `decision` de
+cada fila es `null` y `avisos` dice por qué; nunca es un error.
+
+[cols="5,6,4",options="header"]
+|===
+|Método y ruta |Qué hace |Respuestas
+
+|`GET /resumen?anio&corrida`
+|El tablero: `corrida` `{id, anio, estado, terminado, versionCatastro}`; `kpis` (los del panel de la brecha);
+`porCategoria` (todas, en su orden), `porConfianza` (las tres), `porSector` y `porUso` (por código, `null` al final;
+`porUso` con su `descripcion` del catálogo de usos), cada uno con `predios`, `deltaAutoavaluo` y `deltaImpuesto`;
+`porManzana` (`sector`, `manzana`; las 20 de mayor Δ impuesto); `histogramaDeltaAutoavaluo`
+(`[{desde, hasta, predios}]`, ocho tramos con bordes en ±10 000, ±50 000 y ±100 000 S/ y 0; `desde` incluido, `hasta`
+no, `null` abierto); `areas` (`terrenoConDiferencia`, `terrenoCatastralMayor`, `nivelesComparados`,
+`prediosConNivelMayor`, `deltaM2Terreno`: los m² de terreno que el catastro tiene de más, `deltaM2Niveles`: la suma de
+`deltaAreaNiveles`; ambos `null` si ninguna fila se pudo comparar); `decisiones` (las filas de cada estado de
+`decision_brecha`: `PENDIENTE`, `A_INSPECCIONAR`, `INSPECCIONADO`, `A_FISCALIZAR` y `DESCARTADO`; solo cuentan las que
+tienen un registro en catastro) o `null`, y `avisos` (los de la corrida y los de la lectura).
+|200; 404; 409.
+
+|`GET /?anio&corrida`
+|El catálogo: `[{clave, titulo, descripcion, predios, deltaImpuesto, deltaAutoavaluo}]`, en este orden:
+`subvaluados`, `sobrevaluados`, `omisos`, `sin-catastro`, `sin-levantar`, `sin-valor` (por categoría), `terreno` (el
+área de terreno del catastro difiere de la declarada), `construccion` (difiere el área construida, o un piso del
+catastro es mayor), `contribuyentes` (`predios` cuenta contribuyentes) y `mayores-5-uit` (\|Δ autoavalúo\| mayor que
+5 UIT del 1 de enero del año; vacío sin la UIT, con un aviso). Los Δ son `null` si ninguna fila tiene uno.
+|200; 404; 409.
+
+|`GET /{clave}?anio&corrida&sector&manzana&uso&confianza&q&orden&dir&page&size`
+|Una página `{page, size, total, items}` (25 por omisión, hasta 200). Filtros: `sector` y `manzana` como compara el
+cruce (`01` es `1`, sin mayúsculas), `uso` un prefijo del código, `confianza` exacta, `q` parte de un código (del
+predio o de catastro) o del código o nombre de cualquiera de sus contribuyentes, sin mayúsculas ni tildes. `orden`:
+`deltaImpuesto`, `deltaAutoavaluo`, `areaTerreno` y `areaConstruida` (por la diferencia catastro menos declarada) o
+`codigo`; `dir` `asc` o `desc`. Los `null` van al final en ambos sentidos; los empates, en el orden de la corrida. Sin
+`orden`, el del reporte (Δ impuesto de mayor a menor; `sobrevaluados` de menor a mayor; los `sin-*` por código;
+`terreno` y `construccion` por su diferencia de área; `mayores-5-uit` por Δ autoavalúo). Cada fila: `id` (el de
+`brecha_predio`, el mismo de `/brecha/{anio}/lotes`), `predio`, `codigoPredio`, `codigoCatastro`, `contribuyente`,
+`codigoContribuyente`, `nombreContribuyente` y `declaracion` (el titular de mayor % de condominio en las DJ vigentes
+del año; `null` en un omiso o sin lectura del padrón), `sector`, `manzana`, `lote`, `uso`, `usoDescripcion`,
+`categoria`, `confianza`, `autoavaluoDeclarado`, `autoavaluoCatastro`, `deltaAutoavaluo`, `impuestoDeclarado`,
+`impuestoCatastro`, `deltaImpuesto`, `deltaArbitrios`, `estimado`, `areaTerrenoDeclarada`, `areaTerrenoCatastro`,
+`areaConstruidaDeclarada`, `areaConstruidaCatastro`, `nivelesComparados`, `nivelesCatastroMayor`, `deltaAreaNiveles`
+y `decision`. En `contribuyentes` cada fila es `{contribuyente, codigoContribuyente, nombreContribuyente, predios,
+deltaAutoavaluo, deltaImpuesto}`: sus predios comparados (con un Δ) y su parte del Δ de cada uno, por su % de
+condominio (al céntimo, sin perder nada); los filtros de predio se aplican antes de agrupar, `q` después.
+|200; 403 (`contribuyentes` pide además `READ` sobre `contribuyente` y `declaracion_predial`); 404 reporte o corrida;
+409; 422 `confianza`, `orden`, `dir`, `page` o `size` inválidos, un orden de área en `contribuyentes`, o falta la UIT en
+`mayores-5-uit` (`faltan`).
+
+|`GET /{clave}.xlsx` y `GET /{clave}.csv`, con los mismos parámetros salvo `page` y `size`
+|Todas las filas de esos filtros y ese orden, para descargar (`Content-Disposition: attachment`,
+`brecha-<clave>-<anio>.xlsx` o `.csv`). El xlsx trae las hojas *Resumen* (reporte, corrida, filtros, orden, filas y
+totales de Δ), *Detalle* (una fila por predio o contribuyente, con números como números) y *Notas* (fuente y la
+definición de cada columna). El csv es UTF-8 con BOM, separado por `;` (Excel en es-PE), con los números con punto y
+una cabecera estable: los nombres de campo de la fila (`codigoPredio;codigoCatastro;...`).
+|200; las mismas de la página.
+|===
+

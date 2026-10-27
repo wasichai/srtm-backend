@@ -133,6 +133,10 @@ interface Catastro {
 
     // catastro's arancel of the clave is deleted; none is no error
     suspend fun borrarArancel(clave: String): CopiaDeArancel
+
+    // the reportes (#248): every decision_brecha of the year, what catastro decided to do with each predio. a catastro
+    // that cannot give them fails with a CatastroException: the reports go on without them
+    suspend fun decisiones(anio: Int): List<DecisionCatastral> = throw CatastroException("Este catastro no da sus decisiones de brecha", 404)
 }
 
 // an arancel as catastro-backend keeps it (its object arancel, catastro-backend's model.json): srtm's VIGENTE one,
@@ -304,9 +308,9 @@ class ClienteCatastro(
         page: Int,
         pagina: JsonNode,
         anterior: JsonNode?,
-        size: Int
+        size: Int,
+        items: JsonNode = pagina.path("items")
     ) {
-        val items = pagina.path("items")
         val motivo =
             when {
                 size <= 0 -> "catastro sirvió páginas de tamaño $size"
@@ -315,6 +319,55 @@ class ClienteCatastro(
                 else -> return
             }
         throw CatastroException("catastro no avanza al leer $que: página $page, $motivo")
+    }
+
+    // core's records of catastro's decision_brecha (SRTM_LECTOR reads it): GET /api/objects/decision_brecha/records
+    // ?anio&sort=clave&page&size=200, core's page ({content: [{id, attributes}], totalElements, size}), every page
+    override suspend fun decisiones(anio: Int): List<DecisionCatastral> {
+        val decisiones = mutableListOf<DecisionCatastral>()
+        var page = 0
+        var anterior: JsonNode? = null
+        while (true) {
+            val pagina = paginaDeDecisiones(anio, page)
+            val contenido = pagina.path("content")
+            val suyas = contenido.values().map { decision(it.path("attributes")) }
+            decisiones += suyas
+            val total = pagina.path("totalElements").takeIf { it.isNumber }?.asLong() ?: decisiones.size.toLong()
+            val size = pagina.path("size").takeIf { it.isNumber }?.asInt() ?: TAMANIO_REGISTROS
+            if (decisiones.size >= total) break
+            avanza("las decisiones de $anio", page, pagina, anterior, size, contenido)
+            if (suyas.size < size) break
+            anterior = contenido
+            page++
+        }
+        return decisiones
+    }
+
+    private suspend fun paginaDeDecisiones(
+        anio: Int,
+        page: Int
+    ): JsonNode {
+        val uri =
+            UriComponentsBuilder
+                .fromUriString(cuenta.url.trimEnd('/'))
+                .path(REGISTROS_DECISION)
+                .queryParam("anio", anio)
+                .queryParam("sort", "clave")
+                .queryParam("page", page)
+                .queryParam("size", TAMANIO_REGISTROS)
+                .build()
+                .toUri()
+        val body =
+            autorizado("las decisiones de brecha de $anio (página $page)") { token ->
+                client
+                    .get()
+                    .uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer $token")
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(String::class.java)
+            }
+        return DECIMALES.readTree(body.orEmpty())
     }
 
     override suspend fun cambios(
@@ -551,6 +604,10 @@ class ClienteCatastro(
     companion object {
         const val TAMANIO_PAGINA = 500
         private const val REGISTROS_ARANCEL = "/api/objects/arancel/records"
+        private const val REGISTROS_DECISION = "/api/objects/decision_brecha/records"
+
+        // core's records list serves pages of 200 at most (PageRequest.MAX_SIZE)
+        const val TAMANIO_REGISTROS = 200
         val TIMEOUT: Duration = Duration.ofSeconds(60)
         private const val TAMANIO_MAXIMO = 32 * 1024 * 1024
         private val JSON = JsonMapper.builder().build()
@@ -601,6 +658,14 @@ class ClienteCatastro(
                 piso = n.path("piso").entero(),
                 seccion = n.path("seccion").entero(),
                 areaConstruida = n.path("areaConstruida").decimal()
+            )
+
+        // the attributes of a decision_brecha record (#248): its anio an INTEGER, or its text
+        fun decision(n: JsonNode) =
+            DecisionCatastral(
+                codigoMunicipal = n.path("codigo_municipal").texto(),
+                anio = n.path("anio").entero() ?: n.path("anio").texto()?.toIntOrNull(),
+                estado = n.path("estado").texto()
             )
 
         // one item of GET /api/catastro/titulares (#204)

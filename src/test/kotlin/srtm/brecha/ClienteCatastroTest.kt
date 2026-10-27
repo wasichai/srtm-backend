@@ -81,6 +81,14 @@ class ClienteCatastroTest {
             }
             responder(ex, 200, VALUADA)
         }
+        server.createContext("/api/objects/decision_brecha/records") { ex ->
+            val auth = ex.requestHeaders.getFirst("Authorization")
+            pedidos += "GET ${ex.requestURI.query} $auth"
+            val page = Regex("page=(\\d+)").find(ex.requestURI.query)!!.groupValues[1].toInt()
+            // 3 decisions in pages of 2, as core's records list answers (the stub ignores size=200 to make paging visible)
+            val items = listOf(DECISION_1, DECISION_2, DECISION_3).drop(page * 2).take(2)
+            responder(ex, 200, """{"content":[${items.joinToString(",")}],"page":$page,"size":2,"totalElements":3,"totalPages":2}""")
+        }
         server.start()
     }
 
@@ -181,6 +189,37 @@ class ClienteCatastroTest {
             items[0].construcciones
         )
         assertEquals(emptyList<ConstruccionCatastral>(), items[1].construcciones)
+    }
+
+    @Test
+    fun `the decisions of a year, every page of core's records`() {
+        val decisiones = runBlocking { cliente().decisiones(2026) }
+        assertEquals(listOf("PM-1", "PM-2", "PM-3"), decisiones.map { it.codigoMunicipal })
+        assertEquals(listOf("A_INSPECCIONAR", "DESCARTADO", "A_FISCALIZAR"), decisiones.map { it.estado })
+        assertEquals(2026, decisiones[0].anio)
+        assertEquals(
+            listOf("anio=2026&sort=clave&page=0&size=200 Bearer t1", "anio=2026&sort=clave&page=1&size=200 Bearer t1"),
+            pedidos.drop(1).map { it.removePrefix("GET ") }
+        )
+    }
+
+    @Test
+    fun `a catastro that may not be read for its decisions fails with its status`() {
+        server.removeContext("/api/objects/decision_brecha/records")
+        server.createContext("/api/objects/decision_brecha/records") { ex -> responder(ex, 403, "{}") }
+        val e = assertThrows(CatastroException::class.java) { runBlocking { cliente().decisiones(2026) } }
+        assertEquals(403, e.estado)
+        assertTrue(!e.message!!.contains("secreto"))
+    }
+
+    @Test
+    @Timeout(10)
+    fun `decisions that repeat a page fail, never loop`() {
+        server.removeContext("/api/objects/decision_brecha/records")
+        server.createContext("/api/objects/decision_brecha/records") { ex ->
+            responder(ex, 200, """{"content":[$DECISION_1,$DECISION_2],"page":0,"size":2,"totalElements":9,"totalPages":5}""")
+        }
+        assertThrows(CatastroException::class.java) { runBlocking { cliente().decisiones(2026) } }
     }
 
     @Test
@@ -479,6 +518,11 @@ class ClienteCatastroTest {
         val CAMBIO_2 =
             """{"codigoMunicipal":"PM-2","objeto":"titular_catastral","operacion":"CREATE","campos":[],
             "en":"2026-10-21T08:30:00Z","entrega":null}"""
+
+        // core's records of catastro's decision_brecha (#248)
+        val DECISION_1 = """{"id":"r1","attributes":{"clave":"PM-1|2026","codigo_municipal":"PM-1","anio":2026,"estado":"A_INSPECCIONAR"}}"""
+        val DECISION_2 = """{"id":"r2","attributes":{"clave":"PM-2|2026","codigo_municipal":"PM-2","anio":2026,"estado":"DESCARTADO"}}"""
+        val DECISION_3 = """{"id":"r3","attributes":{"clave":"PM-3|2026","codigo_municipal":"PM-3","anio":"2026","estado":"A_FISCALIZAR"}}"""
 
         val TITULAR_1 =
             """{"codigoMunicipal":"PM-1","tipoDocumento":"DNI","numeroDocumento":"12345678","nombre":"PEREZ JUAN",

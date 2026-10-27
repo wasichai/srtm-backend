@@ -11,6 +11,8 @@ awssdk = "2.57.1"
 openhtmltopdf = "1.1.97"
 pdfbox = "3.0.8"
 thymeleaf = "3.1.5.RELEASE"
+# srtm.reportes: the xlsx export (Apache 2.0; its only dependency, opczip, Apache 2.0 too); its reader parses it in the tests
+fastexcel = "0.20.2"
 
 [libraries]
 awssdk-bom = { module = "software.amazon.awssdk:bom", version.ref = "awssdk" }
@@ -22,5 +24,7 @@ openhtmltopdf-pdfbox = { module = "io.github.openhtmltopdf:openhtmltopdf-pdfbox"
 openhtmltopdf-slf4j = { module = "io.github.openhtmltopdf:openhtmltopdf-slf4j", version.ref = "openhtmltopdf" }
 pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
 thymeleaf = { module = "org.thymeleaf:thymeleaf", version.ref = "thymeleaf" }
+fastexcel = { module = "org.dhatim:fastexcel", version.ref = "fastexcel" }
+fastexcel-reader = { module = "org.dhatim:fastexcel-reader", version.ref = "fastexcel" }
 # a minio for AlmacenS3's tests: versioned by testcontainers' bom (through spring boot's)
 testcontainers-minio = { module = "org.testcontainers:testcontainers-minio" }

@@ -42,7 +42,7 @@ cuenta (<<permisos-usuario>>). Con el perfil {p-consulta}, usted puede:
 * consultar los expedientes de infracción, las notificaciones previas, el CUIS y las escalas y plazos;
 * consultar el padrón de anuncios y sus tasas;
 * ver, imprimir y descargar el PU, la HR, la HLA y las resoluciones, y descargar las emisiones masivas;
-* consultar la brecha de recaudación.
+* consultar la brecha de recaudación y sus reportes, y exportarlos a Excel o CSV.
 
 Con el perfil {p-consulta} usted no registra, corrige, anula ni elimina nada (<<sin-escritura>>).
 
@@ -55,6 +55,7 @@ Con el perfil {p-consulta} usted no registra, corrige, anula ni elimina nada (<<
 |Tema |Dónde se explica
 |Cómo encontrar y leer cada ficha, qué muestra cada pantalla |Este manual.
 |La brecha de recaudación: qué mide, cómo se lee y su situación en esta instalación |Este manual (<<brecha>>).
+|Los reportes de brechas: el tablero, las listas y su exportación |Este manual (<<reportes>>).
 |Cómo se inscriben contribuyentes y predios y se reciben declaraciones; qué significa cada dato del padrón
 |{m-registrador}.
 |Cómo se calculan y determinan los arbitrios; la HLA y la emisión masiva |{m-arbitrios}.
@@ -569,6 +570,75 @@ el mapa le dan los predios a visitar, y su código lleva a la ficha con sus titu
 
 NOTE: Las cifras de la brecha son las de la corrida, al día en que terminó. Si después se registran declaraciones o el
 catastro se actualiza, la brecha no cambia hasta que se calcule otra corrida.
+
+[[reportes]]
+== Reportes de brechas
+
+[[reportes-que-es]]
+=== Para qué sirven
+
+Los reportes leen la brecha de recaudación con la mirada de rentas: un *tablero* con los totales de la corrida y una
+*lista* por cada tipo de diferencia, con filtros y exportación a Excel (xlsx) o CSV. Leen siempre una corrida
+*terminada*: la última del año, salvo que usted elija otra. No cambian nada: la decisión de inspeccionar o fiscalizar un
+predio la toma catastro, y el reporte solo muestra en qué estado está.
+
+Como la brecha (<<brecha-situacion>>), los reportes necesitan una corrida terminada: en una instalación sin catastro
+conectado, la página dice que la brecha no se ha calculado.
+
+[[reportes-tablero]]
+=== El tablero
+
+Arriba se elige el *Año* y, si hace falta, la *Corrida*; vacía es la última terminada. El tablero muestra:
+
+Indicadores:: Los mismos de la brecha (<<brecha-pagina>>).
+Avisos:: Lo que la corrida no pudo calcular (por ejemplo, el Δ arbitrios sin ordenanza) y lo que no se pudo leer al
+abrir el reporte: las decisiones de catastro, si catastro no responde, o la UIT del año.
+Reportes:: Una tarjeta por reporte, con cuántos predios (o contribuyentes) tiene, su Δ impuesto y su Δ autoavalúo. La
+tarjeta abre su lista.
+Gráficos:: Los predios y el Δ por categoría, por confianza, por sector, por uso y las 20 manzanas de mayor Δ impuesto;
+cuántos predios caen en cada tramo de Δ autoavalúo; las diferencias de área (predios cuyo terreno difiere, en cuántos
+el catastro tiene más terreno, pisos comparados, predios con un piso mayor en catastro y los m² que el catastro tiene
+de más) y las *Decisiones de catastro*: cuántos predios están pendientes, por inspeccionar, inspeccionados, por
+fiscalizar o descartados. Si catastro no se pudo leer, dice *Sin datos de catastro*.
+
+.Los reportes
+[cols="1,3",options="header"]
+|===
+|Reporte |Qué predios trae
+|Predios subvaluados |El valor del catastro supera en más de 5 % al declarado.
+|Predios sobrevaluados |El valor del catastro es menor en más de 5 % que el declarado.
+|Omisos |Predios del catastro sin declaración vigente del año.
+|Sin catastro |Predios del padrón que el catastro no tiene.
+|Sin levantar |Fichas del catastro aún sin levantamiento: no se comparan.
+|Sin valor |Predios cruzados que el catastro no pudo valorizar.
+|Diferencias de área de terreno |El área de terreno del catastro difiere de la declarada.
+|Diferencias de área construida |El área construida del catastro difiere de la declarada, o un piso del catastro es
+mayor que el declarado.
+|Contribuyentes con mayor brecha |Una fila por contribuyente: sus predios comparados y la suma de su parte del Δ de cada
+uno (en un predio en condominio, por su %).
+|Δ autoavalúo mayor a 5 UIT |La diferencia de autoavalúo, en valor absoluto, pasa de 5 UIT del 1 de enero del año.
+|===
+
+[[reportes-lista]]
+=== La lista de un reporte
+
+Cada fila es un predio: sus códigos (del padrón y de catastro), su contribuyente principal (el de mayor % de
+condominio en las declaraciones vigentes del año), sector, manzana, lote, uso, categoría, confianza, los dos
+autoavalúos y su Δ, los dos impuestos y su Δ, las áreas de terreno y construida de las DJ y del catastro, y la
+*decisión de catastro*. El código abre el predio; el contribuyente, su ficha.
+
+Filtros:: *Sector*, *Manzana*, *Uso* (el comienzo del código: `02` trae todos los comerciales), *Confianza* y *Código o
+nombre* (de un predio o de cualquiera de sus contribuyentes; no distingue mayúsculas ni tildes). `01` y `1` son el
+mismo sector o manzana.
+Orden:: Pulse el encabezado de *Δ impuesto*, *Δ autoavalúo*, *Terreno*, *Construida* (por la diferencia entre catastro
+y DJ) o *Código*; otra vez, invierte el orden. Las filas sin valor van siempre al final.
+Exportar:: btn:[XLSX] o btn:[CSV] descargan *todas* las filas del filtro y el orden que tiene en pantalla, no solo la
+página. El Excel trae tres hojas: *Resumen* (el reporte, la corrida, los filtros, el orden, cuántas filas y los totales
+de Δ), *Detalle* (las filas) y *Notas* (de dónde salen los datos y qué es cada columna). El CSV se abre con Excel: va
+separado por punto y coma y con tildes correctas.
+
+Para ver un reporte hace falta permiso de lectura sobre las corridas de brecha y sus predios; el de contribuyentes pide
+además lectura sobre los contribuyentes y las declaraciones. Su perfil {p-consulta} los tiene.
 
 [[errores]]
 == Errores frecuentes

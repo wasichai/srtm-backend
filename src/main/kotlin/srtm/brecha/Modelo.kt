@@ -127,6 +127,14 @@ data class TitularCatastral(
     val condicion: String?
 )
 
+// one decision_brecha of catastro (#248): what catastro decided on a predio (its codigo_municipal) in a year. estado is
+// PENDIENTE, A_INSPECCIONAR, INSPECCIONADO, A_FISCALIZAR or DESCARTADO (catastro-backend's estado_decision)
+data class DecisionCatastral(
+    val codigoMunicipal: String?,
+    val anio: Int?,
+    val estado: String?
+)
+
 // one item of GET /api/catastro/cambios (#203): what catastro's objeto (predio_catastral, construccion,
 // obra_complementaria or titular_catastral) did since desde (CREATE, UPDATE or DELETE), which campos changed, en
 // (when, ISO-8601) and the entrega that carried it (or null)
