@@ -806,10 +806,13 @@ no está TERMINADA, 409.
 *Cálculo y caché.* Los agregados y las listas se calculan en memoria desde las filas de la corrida, como el panel de la
 brecha. Las filas de una corrida (y los titulares del padrón de sus predios) se guardan en memoria
 `srtm.reportes.cache` (10 minutos), para las `srtm.reportes.corridas` (8) más recientes; las decisiones de catastro,
-`srtm.reportes.cache-decisiones` (1 minuto). Con 30 000 filas, el cálculo en memoria de `/resumen` toma unos 0,3 s y
+`srtm.reportes.cache-decisiones` (1 minuto), y su falla, `srtm.reportes.cache-fallo-decisiones` (30 segundos): con
+catastro caído no se espera su respuesta en cada página. Un cambio del padrón (una DJ nueva o rectificada) aparece en
+el contribuyente de las filas al vencer la caché. Con 30 000 filas, el cálculo en memoria de `/resumen` toma unos 0,3 s y
 el de una página, menos de 0,1 s.
 
-*Decisiones de catastro.* Se leen de `GET /api/objects/decision_brecha/records?anio=` del Core de catastro de la
+*Decisiones de catastro.* Las leen `/resumen`, las listas de predios y sus exportaciones (no el catálogo ni
+`contribuyentes`). Se leen de `GET /api/objects/decision_brecha/records?anio=` del Core de catastro de la
 organización, con la cuenta de servicio de la brecha (rol `SRTM_LECTOR`, que tiene `READ` sobre `decision_brecha`). Una
 fila toma la decisión cuyo `codigo_municipal` coincide con su código de catastro o, si no tiene, con su código de
 predio (comparados como en el cruce). Si catastro no está configurado o falla, `decisiones` es `null`, la `decision` de

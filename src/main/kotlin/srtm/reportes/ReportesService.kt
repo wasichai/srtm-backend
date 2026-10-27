@@ -1,5 +1,7 @@
 package srtm.reportes
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
@@ -61,8 +63,10 @@ class FaltaUit(
 // recent srtm.reportes.corridas of them): its rows never change once TERMINADA. the padrón's titulares of its predios
 // (read only for a caller who may read declaracion_predial and contribuyente) are kept the same way, the uso
 // catalog per organization. catastro's decisions are read of the organization's catastro, kept for
-// srtm.reportes.cache-decisiones (a minute: they change as catastro works); when catastro cannot answer they are left
-// out with an aviso, never an error
+// srtm.reportes.cache-decisiones (a minute: they change as catastro works), and only by what shows them (the resumen,
+// the lists of predios and their exports; not the catalog nor contribuyentes). when catastro cannot answer they are
+// left out with an aviso, never an error, and the failure is kept srtm.reportes.cache-fallo-decisiones (30 s): a
+// catastro down is not waited for on every page. the counting and sorting run off the event loop (Dispatchers.Default)
 @Service
 class ReportesService(
     private val brechas: BrechaService,
@@ -74,27 +78,29 @@ class ReportesService(
     private val parametros: ParametrosTributarios,
     @param:Value("\${srtm.reportes.cache:10m}") vigencia: Duration,
     @param:Value("\${srtm.reportes.corridas:8}") corridas: Int,
-    @param:Value("\${srtm.reportes.cache-decisiones:1m}") vigenciaDecisiones: Duration
+    @param:Value("\${srtm.reportes.cache-decisiones:1m}") vigenciaDecisiones: Duration,
+    @param:Value("\${srtm.reportes.cache-fallo-decisiones:30s}") vigenciaFallo: Duration
 ) {
     private val filasPorCorrida = Cache<String, List<FilaBrecha>>(vigencia, corridas)
     private val titularesPorCorrida = Cache<String, Map<String, List<Titular>>>(vigencia, corridas)
     private val usosPorOrganizacion = Cache<UUID, Map<String, String>>(vigencia, corridas)
     private val decisionesPorAnio = Cache<Pair<UUID, Int>, Map<String, String>>(vigenciaDecisiones, corridas)
+    private val falloDeDecisiones = Cache<Pair<UUID, Int>, String>(vigenciaFallo, corridas)
 
     suspend fun resumen(
         anio: Int,
         corrida: UUID?
     ): ResumenReportes {
         val l = leer(anio, corrida)
-        return Reportes.resumen(l.corrida, l.brecha, l.filas, l.conDecisiones, l.avisos)
+        return calcular { Reportes.resumen(l.corrida, l.brecha, l.filas, l.conDecisiones, l.avisos) }
     }
 
     suspend fun catalogo(
         anio: Int,
         corrida: UUID?
     ): List<EntradaCatalogo> {
-        val l = leer(anio, corrida)
-        return Reportes.catalogo(l.filas, l.umbral)
+        val l = leer(anio, corrida, conDecisiones = false)
+        return calcular { Reportes.catalogo(l.filas, l.umbral) }
     }
 
     // a report of predios: its rows filtered and sorted. mayores-5-uit without the UIT of the year: 422
@@ -108,7 +114,7 @@ class ReportesService(
     ): Listado<FilaReportePredio> {
         val l = leer(anio, corrida)
         if (reporte == Reporte.MAYORES_5_UIT && l.umbral == null) throw FaltaUit(listOf("UIT $anio"))
-        return Listado(l.corrida, Reportes.ordenar(Reportes.filtrar(Reportes.del(reporte, l.filas, l.umbral), filtros), orden, dir))
+        return Listado(l.corrida, calcular { Reportes.ordenar(Reportes.filtrar(Reportes.del(reporte, l.filas, l.umbral), filtros), orden, dir) })
     }
 
     // the contribuyentes: the padrón's, so its readers only. the predios filtered (all but q), then grouped, then q
@@ -122,15 +128,21 @@ class ReportesService(
     ): Listado<FilaReporteContribuyente> {
         permisos.exigirLeer(CONTRIBUYENTE, "consultar el reporte de contribuyentes")
         permisos.exigirLeer(DECLARACION, "consultar el reporte de contribuyentes")
-        val l = leer(anio, corrida)
-        val predios = Reportes.filtrar(Reportes.del(Reporte.CONTRIBUYENTES, l.filas, l.umbral), filtros.copy(q = null))
-        val suyos = Reportes.buscarContribuyentes(Reportes.contribuyentes(predios), filtros.q)
-        return Listado(l.corrida, Reportes.ordenarContribuyentes(suyos, orden, dir))
+        val l = leer(anio, corrida, conDecisiones = false)
+        return Listado(
+            l.corrida,
+            calcular {
+                val predios = Reportes.filtrar(Reportes.del(Reporte.CONTRIBUYENTES, l.filas, l.umbral), filtros.copy(q = null))
+                Reportes.ordenarContribuyentes(Reportes.buscarContribuyentes(Reportes.contribuyentes(predios), filtros.q), orden, dir)
+            }
+        )
     }
 
+    // conDecisiones false: the caller does not show them (catastro is not asked)
     suspend fun leer(
         anio: Int,
-        corrida: UUID?
+        corrida: UUID?,
+        conDecisiones: Boolean = true
     ): Lectura {
         permisos.exigirLeer(BRECHA_CORRIDA, "consultar los reportes de brechas")
         permisos.exigirLeer(BRECHA_PREDIO, "consultar los reportes de brechas")
@@ -153,10 +165,12 @@ class ReportesService(
                 avisos += "Sin lectura del padrón (declaracion_predial y contribuyente): las filas no traen su contribuyente"
                 null
             }
-        val usos = usosPorOrganizacion.get(organizacion) ?: usos().also { usosPorOrganizacion.put(organizacion, it) }
-        val decisiones = decisiones(organizacion, anio, avisos)
+        // a caller who may not read the catalog gets none, and none is kept for the others
+        val usos = usosPorOrganizacion.get(organizacion) ?: usos()?.also { usosPorOrganizacion.put(organizacion, it) }.orEmpty()
+        val decisiones = if (conDecisiones) decisiones(organizacion, anio, avisos) else null
         val umbral = umbral(anio, avisos)
-        return Lectura(r, brecha, Reportes.filas(brecha, titulares, usos, decisiones), decisiones != null, umbral, avisos)
+        val filas = calcular { Reportes.filas(brecha, titulares, usos, decisiones) }
+        return Lectura(r, brecha, filas, decisiones != null, umbral, avisos)
     }
 
     // the vigente DJs of the year and their contribuyentes: each predio's titulares
@@ -166,15 +180,15 @@ class ReportesService(
         return Reportes.titulares(declaraciones, contribuyentes)
     }
 
-    // uso_predio's código (Brecha.llave) -> its uso; none for a caller who may not read the catalog
-    private suspend fun usos(): Map<String, String> =
+    // uso_predio's código (Brecha.llave) -> its uso; null for a caller who may not read the catalog
+    private suspend fun usos(): Map<String, String>? =
         try {
             registros
                 .all(USO_PREDIO, UsoPredio::class.java)
                 .mapNotNull { u -> Brecha.llave(u.codigo)?.let { c -> u.uso?.let { c to it } } }
                 .toMap()
         } catch (_: ForbiddenException) {
-            emptyMap()
+            null
         }
 
     // catastro's decision_brecha of the year by its codigo_municipal (Brecha.llave); null with an aviso when there is
@@ -184,7 +198,12 @@ class ReportesService(
         anio: Int,
         avisos: MutableList<String>
     ): Map<String, String>? {
-        decisionesPorAnio.get(organizacion to anio)?.let { return it }
+        val clave = organizacion to anio
+        decisionesPorAnio.get(clave)?.let { return it }
+        falloDeDecisiones.get(clave)?.let {
+            avisos += it
+            return null
+        }
         try {
             val catastro = catastros.delUsuario(currentUser.require(), organizaciones)
             if (catastro == null) {
@@ -203,7 +222,9 @@ class ReportesService(
             throw e
         } catch (e: Exception) {
             log.warn("los reportes de {} siguen sin las decisiones de catastro: {}", anio, e.message)
-            avisos += "$SIN_DECISIONES: ${e.message ?: e.javaClass.simpleName}"
+            val aviso = "$SIN_DECISIONES: ${e.message ?: e.javaClass.simpleName}"
+            falloDeDecisiones.put(clave, aviso)
+            avisos += aviso
             return null
         }
     }
@@ -224,6 +245,9 @@ class ReportesService(
         if (uit == null) avisos += "Falta la UIT de $anio: el reporte de Δ mayores a 5 UIT queda vacío"
         return uit?.multiply(CINCO)
     }
+
+    // counting and sorting tens of thousands of rows: off the event loop
+    private suspend fun <T> calcular(bloque: () -> T): T = withContext(Dispatchers.Default) { bloque() }
 
     private companion object {
         val log = LoggerFactory.getLogger(ReportesService::class.java)

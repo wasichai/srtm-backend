@@ -160,7 +160,7 @@ class ReportesApiTest : SrtmApiTest() {
                     "lote" to "2",
                     "uso" to "020101",
                     "confianza" to "DUDOSO",
-                    "delta_autoavaluo" to 30000,
+                    "delta_autoavaluo" to 20000,
                     "delta_impuesto" to 100,
                     "area_terreno_declarada" to 150,
                     "area_terreno_catastro" to 150
@@ -207,7 +207,7 @@ class ReportesApiTest : SrtmApiTest() {
         token: String = datos().org
     ): JsonNode = tree(send("GET", "/api/srtm/reportes$ruta", null, HttpStatus.OK, token))
 
-    private fun lotes(n: JsonNode) = n["items"].map { it["lote"]?.takeUnless { l -> l.isNull }?.asString() }
+    private fun lotes(n: JsonNode) = n["items"].values().map { it["lote"]?.takeUnless { l -> l.isNull }?.asString() }
 
     private fun dec(n: JsonNode) = n.decimalValue()
 
@@ -222,8 +222,8 @@ class ReportesApiTest : SrtmApiTest() {
         val sub = r["porCategoria"].single { it["categoria"].asString() == "SUBVALUADO" }
         assertEquals(3, sub["predios"].asInt())
         assertEquals(0, BigDecimal(1300).compareTo(dec(sub["deltaImpuesto"])))
-        assertEquals(listOf("CONFIABLE", "DUDOSO", "SIN_LEVANTAR"), r["porConfianza"].map { it["confianza"].asString() })
-        assertEquals(listOf("01", "02", "03"), r["porSector"].map { it["sector"].asString() })
+        assertEquals(listOf("CONFIABLE", "DUDOSO", "SIN_LEVANTAR"), r["porConfianza"].values().map { it["confianza"].asString() })
+        assertEquals(listOf("01", "02", "03"), r["porSector"].values().map { it["sector"].asString() })
         val casa = r["porUso"].single { it["uso"].takeUnless { u -> u.isNull }?.asString() == "010101" }
         assertEquals("CASA HABITACIÓN", casa["descripcion"].asString())
         assertEquals("03", r["porManzana"][0]["sector"].asString())
@@ -258,7 +258,7 @@ class ReportesApiTest : SrtmApiTest() {
                 "contribuyentes",
                 "mayores-5-uit"
             ),
-            c.map { it["clave"].asString() }
+            c.values().map { it["clave"].asString() }
         )
         val n = c.associate { it["clave"].asString() to it["predios"].asInt() }
         assertEquals(3, n["subvaluados"])
@@ -309,7 +309,8 @@ class ReportesApiTest : SrtmApiTest() {
         assertEquals(listOf("1"), lotes(leer("/terreno?anio=2026")))
         assertEquals(listOf("1"), lotes(leer("/construccion?anio=2026")))
         // above 5 UIT of 2026: A, E and the omiso
-        assertTrue(Parametros.uit(2026).multiply(BigDecimal(5)) < BigDecimal(40000))
+        val umbral = Parametros.uit(2026).multiply(BigDecimal(5))
+        assertTrue(umbral > BigDecimal(20000) && umbral < BigDecimal(40000), "$umbral")
         assertEquals(listOf("5", "1", "4"), lotes(leer("/mayores-5-uit?anio=2026")))
     }
 
@@ -322,15 +323,15 @@ class ReportesApiTest : SrtmApiTest() {
         assertEquals(d.c1, uno["contribuyente"].asString())
         assertEquals(3, uno["predios"].asInt())
         assertEquals(0, BigDecimal(1300).compareTo(dec(uno["deltaImpuesto"])))
-        assertEquals(0, BigDecimal(180000).compareTo(dec(uno["deltaAutoavaluo"])))
+        assertEquals(0, BigDecimal(170000).compareTo(dec(uno["deltaAutoavaluo"])))
         val dos = c["items"][1]
         assertEquals(d.c2, dos["contribuyente"].asString())
         assertEquals(1, dos["predios"].asInt())
-        assertEquals(listOf(d.c2, d.c1), leer("/contribuyentes?anio=2026&dir=asc")["items"].map { it["contribuyente"].asString() })
-        assertEquals(listOf(d.c1), leer("/contribuyentes?anio=2026&q=${d.codigoC1}")["items"].map { it["contribuyente"].asString() })
+        assertEquals(listOf(d.c2, d.c1), leer("/contribuyentes?anio=2026&dir=asc")["items"].values().map { it["contribuyente"].asString() })
+        assertEquals(listOf(d.c1), leer("/contribuyentes?anio=2026&q=${d.codigoC1}")["items"].values().map { it["contribuyente"].asString() })
         assertEquals(
             listOf(d.c2),
-            leer("/contribuyentes?anio=2026&sector=01&manzana=A&confianza=CONFIABLE&dir=asc&size=1")["items"].map {
+            leer("/contribuyentes?anio=2026&sector=01&manzana=A&confianza=CONFIABLE&dir=asc&size=1")["items"].values().map {
                 it["contribuyente"].asString()
             }
         )
@@ -479,6 +480,7 @@ class ReportesApiTest : SrtmApiTest() {
             registro.add("srtm.catastro.organizacion") { SLUG }
             // the decisions are read on every request: FALLA shows at once
             registro.add("srtm.reportes.cache-decisiones") { "0s" }
+            registro.add("srtm.reportes.cache-fallo-decisiones") { "0s" }
         }
 
         @JvmStatic

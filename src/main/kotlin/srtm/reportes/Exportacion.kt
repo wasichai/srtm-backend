@@ -172,12 +172,17 @@ object Exportacion {
         return texto.toString().toByteArray(Charsets.UTF_8)
     }
 
+    // a text Excel would run as a formula (=, +, -, @, a tab or a carriage return first: a name or a code of the
+    // imported padrón) goes with a ' before it, as Excel's own text marker; numbers are written as they are
     private fun textoDe(valor: Any?): String =
         when (valor) {
             null -> ""
             is BigDecimal -> valor.toPlainString()
-            else -> valor.toString()
+            is Number, is Boolean -> valor.toString()
+            else -> valor.toString().let { if (it.isNotEmpty() && it[0] in FORMULA) "'$it" else it }
         }
+
+    private val FORMULA = setOf('=', '+', '-', '@', '\t', '\r')
 
     // quoted when it carries the separator, a quote or a line break, its quotes doubled
     private fun campo(texto: String): String =

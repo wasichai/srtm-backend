@@ -81,6 +81,21 @@ class ExportacionTest {
     }
 
     @Test
+    fun `a text that Excel would read as a formula is written as text, numbers are left alone`() {
+        val bytes =
+            Exportacion.csv(
+                Exportacion.CONTRIBUYENTES,
+                listOf(
+                    FilaReporteContribuyente("k1", "=1+1", "@SUMA(A1)", 1, BigDecimal("-5.00"), BigDecimal("-1")),
+                    FilaReporteContribuyente("k2", "+51", "-X", 1, null, null)
+                )
+            )
+        val lineas = String(bytes, 3, bytes.size - 3, Charsets.UTF_8).split("\r\n")
+        assertEquals("'=1+1;'@SUMA(A1);1;-5.00;-1", lineas[1])
+        assertEquals("'+51;'-X;1;;", lineas[2])
+    }
+
+    @Test
     fun `the contribuyentes' csv has their columns`() {
         val bytes =
             Exportacion.csv(

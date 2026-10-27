@@ -105,12 +105,14 @@ class ReportesController(
         val c = consulta(clave, sector, manzana, uso, confianza, q, orden, dir)
         val listado = filas(c, anio, corrida)
 
-        @Suppress("UNCHECKED_CAST")
         val bytes =
-            if (c.reporte == Reporte.CONTRIBUYENTES) {
-                Exportacion.csv(Exportacion.CONTRIBUYENTES, listado.filas as List<FilaReporteContribuyente>)
-            } else {
-                Exportacion.csv(Exportacion.PREDIOS, listado.filas as List<FilaReportePredio>)
+            withContext(Dispatchers.Default) {
+                @Suppress("UNCHECKED_CAST")
+                if (c.reporte == Reporte.CONTRIBUYENTES) {
+                    Exportacion.csv(Exportacion.CONTRIBUYENTES, listado.filas as List<FilaReporteContribuyente>)
+                } else {
+                    Exportacion.csv(Exportacion.PREDIOS, listado.filas as List<FilaReportePredio>)
+                }
             }
         return descarga(bytes, CSV, Exportacion.nombre(c.reporte, anio, "csv"))
     }
