@@ -19,6 +19,7 @@ OBJETO_SRTM = {
     "srtm_impuesto_contribuyente": "cuota_predial",
     "srtm_brecha_corrida": "brecha_corrida",
     "srtm_brecha_predio": "brecha_predio",
+    "srtm_brecha_nivel": "brecha_nivel",
     "srtm_parametro": "parametro_tributario",
     "srtm_arancel": "arancel",
 }
@@ -43,8 +44,8 @@ class EsquemasTests(unittest.TestCase):
                     self.assertEqual(campo.type, POR_TIPO_DEL_MODELO.get(campos[campo.name], TEXTO))
         self.assertGreater(revisadas, 100)
 
-    def test_diecisiete_tablas_con_sus_columnas_y_orden(self):
-        self.assertEqual(len(ESQUEMAS), 17)
+    def test_dieciocho_tablas_con_sus_columnas_y_orden(self):
+        self.assertEqual(len(ESQUEMAS), 18)
         for tabla, esquema in ESQUEMAS.items():
             with self.subTest(tabla=tabla):
                 self.assertEqual(tuple(esquema.names), COLUMNAS[tabla])

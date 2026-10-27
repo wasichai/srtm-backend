@@ -142,13 +142,13 @@ class CorteTests(ConCorte, unittest.TestCase):
         self.assertEqual(codigo, 0, error)
 
         uno, dos = self.tmp / "uno" / ORG / FECHA, self.tmp / "dos" / ORG / FECHA
-        self.assertEqual(len(self._sumas(uno)), 17)
+        self.assertEqual(len(self._sumas(uno)), 18)
         self.assertEqual(self._sumas(uno), self._sumas(dos))
         m_uno, m_dos = self._manifiesto(uno), self._manifiesto(dos)
         self.assertNotEqual(m_uno.pop("leido_en"), m_dos.pop("leido_en"))
         self.assertEqual(m_uno, m_dos)
         filas = sum(a["filas"] for a in m_uno["archivos"])
-        self.assertEqual(salida_std.strip(), f"corte {ORG} {FECHA}: 17 tablas, {filas} filas -> {uno}")
+        self.assertEqual(salida_std.strip(), f"corte {ORG} {FECHA}: 18 tablas, {filas} filas -> {uno}")
 
     def test_ningun_parquet_trae_documentos_ni_nombres(self):
         s = datos(7)
@@ -157,7 +157,7 @@ class CorteTests(ConCorte, unittest.TestCase):
         for documento in s.documentos:
             prohibidos |= {documento, documento.lstrip("0")}
         archivos = sorted(carpeta.glob("*.parquet"))
-        self.assertEqual(len(archivos), 17)
+        self.assertEqual(len(archivos), 18)
         for archivo in archivos:
             for fila in pq.read_table(archivo).to_pylist():
                 for columna, valor in fila.items():
@@ -228,7 +228,7 @@ class CorteTests(ConCorte, unittest.TestCase):
         )
 
         archivos = m["archivos"]
-        self.assertEqual(len(archivos), 17)
+        self.assertEqual(len(archivos), 18)
         self.assertEqual([a["archivo"] for a in archivos], sorted(a["archivo"] for a in archivos))
         self.assertEqual({a["tabla"] for a in archivos}, set(COLUMNAS))
         for entrada in archivos:
@@ -251,7 +251,13 @@ class CorteTests(ConCorte, unittest.TestCase):
         s = minimos()
         s.srtm["brecha_corrida"] = [c for c in s.srtm["brecha_corrida"] if c["attributes"]["estado"] != "TERMINADA"]
         carpeta = self._corte(s, sin_titulares=True, sin_cambios=True)
-        for tabla in ("srtm_brecha_corrida", "srtm_brecha_predio", "catastro_titular", "catastro_cambio"):
+        for tabla in (
+            "srtm_brecha_corrida",
+            "srtm_brecha_predio",
+            "srtm_brecha_nivel",
+            "catastro_titular",
+            "catastro_cambio",
+        ):
             with self.subTest(tabla=tabla):
                 leida = pq.read_table(carpeta / f"{tabla}.parquet")
                 self.assertEqual(leida.num_rows, 0)
@@ -261,6 +267,16 @@ class CorteTests(ConCorte, unittest.TestCase):
         self.assertIn("sin brecha TERMINADA de 2026", m["avisos"])
         self.assertTrue(any("titulares" in aviso for aviso in m["avisos"]))
         self.assertTrue(any("cambios" in aviso for aviso in m["avisos"]))
+
+    def test_srtm_sin_brecha_nivel_escribe_la_tabla_vacia(self):
+        # srtm-backend#256: un srtm anterior a #247 no tiene el objeto; el corte sigue, con aviso
+        s = minimos()
+        del s.srtm["brecha_nivel"]
+        carpeta = self._corte(s)
+        leida = pq.read_table(carpeta / "srtm_brecha_nivel.parquet")
+        self.assertEqual(leida.num_rows, 0)
+        self.assertTrue(leida.schema.equals(ESQUEMAS["srtm_brecha_nivel"]))
+        self.assertTrue(any("brecha_nivel" in aviso for aviso in self._manifiesto(carpeta)["avisos"]))
 
     def test_decimales_se_cuantizan(self):
         filas = [

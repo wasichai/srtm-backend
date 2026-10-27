@@ -104,6 +104,19 @@ class VistasTests(ConCorte, unittest.TestCase):
             ],
         )
 
+    def test_niveles_catastro_mayor_por_manzana_y_uso(self):
+        # srtm-backend#256: solo los PAR con más área en catastro y área de rentas mayor que 0 (BN1: 60 -> 100.50);
+        # BN4 (100 = 100), BN2 (SOLO_CATASTRO) y BN3 (AMBIGUO) no cuentan, ni el BN0 de otra corrida
+        con = self._base()
+        filas = con.execute(
+            "SELECT sector, manzana, uso, predios, niveles, area_rentas, area_catastro, delta_area "
+            "FROM v_niveles_catastro_mayor"
+        ).fetchall()
+        self.assertEqual(
+            filas,
+            [("01", "01", "CASA HABITACIÓN", 1, 1, Decimal("60"), Decimal("100.5"), Decimal("40.5"))],
+        )
+
     def test_brecha_por_clase(self):
         con = self._base()
         filas = con.execute("SELECT confianza, clase, predios, delta_impuesto FROM v_brecha_por_clase").fetchall()
@@ -188,8 +201,8 @@ class VistasTests(ConCorte, unittest.TestCase):
                 "SELECT view_name FROM duckdb_views() WHERE NOT internal ORDER BY view_name"
             ).fetchall()
         ]
-        # the 8 views of task 6 plus the 5 tablero-only views of #206 task 8
-        self.assertEqual(len(vistas), 13)
+        # the 8 views of task 6, the 5 tablero-only views of #206 task 8 and v_niveles_catastro_mayor (#256)
+        self.assertEqual(len(vistas), 14)
         for vista in vistas:
             with self.subTest(vista=vista):
                 # v_corte carries leido_en as TIMESTAMPTZ; fetching it as is would need duckdb's Python

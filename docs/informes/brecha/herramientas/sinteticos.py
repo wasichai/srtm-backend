@@ -57,6 +57,7 @@ N1, N2 = "N1", "N2"
 O1 = "O1"
 R1, R2, R3 = "R1", "R2", "R3"
 BP0, BP1, BP2, BP3 = "BP0", "BP1", "BP2", "BP3"
+BN0, BN1, BN2, BN3, BN4 = "BN0", "BN1", "BN2", "BN3", "BN4"
 F1, F2, F3 = "F1", "F2", "F3"
 
 DOCUMENTO_C1 = "04587963"
@@ -69,7 +70,8 @@ DOCUMENTO_TITULAR_F1 = "4587963"
 def minimos():
     """Task 3's exact fixture: two predios, three contribuyentes (one cited by nothing), four declaraciones
     across two años, one brecha corrida TERMINADA (plus a decoy of an older one) and a third brecha_predio with
-    neither a predio nor a confianza - the two absence-tolerance cases srtm.py must handle."""
+    neither a predio nor a confianza - the two absence-tolerance cases srtm.py must handle. Its brecha_nivel
+    (#247) cover the four estados, a piso without a number and a decoy under the older corrida."""
     predios = [
         _registro(P1, codigo="0101001", codigo_origen="0101001-1"),
         _registro(P2, codigo="0101002"),
@@ -255,6 +257,9 @@ def minimos():
             delta_autoavaluo=5000,
             confianza="CONFIABLE",
             orden=1,
+            sector="01",
+            manzana="01",
+            uso="CASA HABITACIÓN",
         ),
         _registro(
             BP2,
@@ -267,6 +272,9 @@ def minimos():
             delta_impuesto=-50.00,
             confianza="DUDOSO",
             orden=2,
+            sector="01",
+            manzana="02",
+            uso="CASA HABITACIÓN",
         ),
         _registro(
             BP3,
@@ -278,6 +286,28 @@ def minimos():
             # sin "confianza" ni "confianza_motivo": srtm viejo, sin #204 (se exportan null + aviso)
             orden=3,
         ),
+    ]
+
+    def _nivel_brecha(id_, corrida, brecha_predio, piso, area_rentas, area_catastro, estado):
+        return _registro(
+            id_,
+            corrida=corrida,
+            brecha_predio=brecha_predio,
+            piso=piso,
+            area_rentas=area_rentas,
+            area_catastro=area_catastro,
+            estado=estado,
+        )
+
+    niveles_brecha = [
+        # a decoy under R1 (not the chosen corrida), like BP0
+        _nivel_brecha(BN0, R1, BP0, 1, 60, 90, "PAR"),
+        # BP1: piso 1 with 40 m2 more in catastro; piso 2 only in catastro
+        _nivel_brecha(BN1, R2, BP1, 1, 60, 100.50, "PAR"),
+        _nivel_brecha(BN2, R2, BP1, 2, None, 30, "SOLO_CATASTRO"),
+        # BP2: a rentas nivel without a number (a sótano, say) and a piso 1 equal on both sides
+        _nivel_brecha(BN3, R2, BP2, None, 20, None, "AMBIGUO"),
+        _nivel_brecha(BN4, R2, BP2, 1, 100, 100, "PAR"),
     ]
 
     parametros = [
@@ -366,6 +396,7 @@ def minimos():
         "cuota_predial": cuotas,
         "brecha_corrida": corridas,
         "brecha_predio": brechas,
+        "brecha_nivel": niveles_brecha,
         "parametro_tributario": parametros,
         "arancel": arancel,
     }
@@ -568,7 +599,7 @@ def _ruc(rng, usados):
 
 def datos(semilla, contribuyentes=40):
     """A seeded-random dataset of `contribuyentes` contributors (predio + declaración + nivel + 4 cuotas each,
-    one brecha_predio under a single corrida TERMINADA) plus a matching catastro: a ficha, titular and
+    one brecha_predio and one brecha_nivel under a single corrida TERMINADA) plus a matching catastro: a ficha, titular and
     valuación per predio, consistent by código. Documents follow plan, Rulings de la ejecución, R2: 8-digit DNIs and
     11-digit RUCs (first digit non-zero), never repeated and never equal to any predio/ficha código (those
     use a distinct, shorter "0101NNN" shape, so a collision is not just unlikely - it cannot happen)."""
@@ -576,7 +607,7 @@ def datos(semilla, contribuyentes=40):
     documentos_usados = set()
 
     predios, contribuyentes_filas, declaraciones, niveles, cuotas = [], [], [], [], []
-    fichas, construcciones, titulares, valuaciones, brechas = [], [], [], [], []
+    fichas, construcciones, titulares, valuaciones, brechas, niveles_brecha = [], [], [], [], [], []
     documentos, nombres = [], []
 
     for i in range(contribuyentes):
@@ -710,6 +741,18 @@ def datos(semilla, contribuyentes=40):
                 orden=i + 1,
             )
         )
+        # no rng here: the draws above keep the figures every earlier corte of datos() had
+        niveles_brecha.append(
+            _registro(
+                f"brecha-nivel-{i}",
+                corrida="corrida-1",
+                brecha_predio=f"brecha-predio-{i}",
+                piso=1,
+                area_rentas=area,
+                area_catastro=area + (i % 3) * 5,
+                estado="PAR",
+            )
+        )
 
     corridas = [
         _registro(
@@ -733,6 +776,7 @@ def datos(semilla, contribuyentes=40):
         "cuota_predial": cuotas,
         "brecha_corrida": corridas,
         "brecha_predio": brechas,
+        "brecha_nivel": niveles_brecha,
         "parametro_tributario": minimos().srtm["parametro_tributario"],
         "arancel": minimos().srtm["arancel"],
     }

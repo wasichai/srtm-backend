@@ -1,4 +1,4 @@
--- The views of a corte's DuckDB (base.construir_duckdb runs this file after loading the 17 tables and
+-- The views of a corte's DuckDB (base.construir_duckdb runs this file after loading the 18 tables and
 -- corte_manifiesto): the brecha by confianza, categoría and clase de construcción, and the predial in three
 -- columns, the figures of the brecha report v3 (docs/superpowers/plans/2026-10-25-corte-analitico.md;
 -- srtm-backend#205). Every statement is CREATE OR REPLACE so the file can be run again over the same base.
@@ -216,6 +216,19 @@ SELECT l.codigo_municipal, l.lat, l.lon, b.categoria, b.confianza, b.delta_impue
 FROM catastro_lote l
 LEFT JOIN v_brecha_predio b ON b.codigo_catastro = l.codigo_municipal
 ORDER BY l.codigo_municipal;
+
+-- srtm-backend#256: the niveles (pisos) whose área catastral exceeds rentas', by sector, manzana and uso of their
+-- brecha_predio - the same rule as brecha_predio.niveles_catastro_mayor and delta_area_niveles (#247): only PAR
+-- niveles, with an área de rentas greater than 0. Empty when the srtm had no brecha_nivel yet.
+CREATE OR REPLACE VIEW v_niveles_catastro_mayor AS
+SELECT b.sector, b.manzana, b.uso, count(DISTINCT n.brecha_predio) AS predios, count(*) AS niveles,
+       sum(n.area_rentas) AS area_rentas, sum(n.area_catastro) AS area_catastro,
+       sum(n.area_catastro - n.area_rentas) AS delta_area
+FROM srtm_brecha_nivel n
+JOIN srtm_brecha_predio b ON b.id = n.brecha_predio
+WHERE n.estado = 'PAR' AND n.area_rentas > 0 AND n.area_catastro > n.area_rentas
+GROUP BY b.sector, b.manzana, b.uso
+ORDER BY b.sector, b.manzana, b.uso;
 
 -- The corte's manifest at a glance, for the scalar card above each tablero.
 CREATE OR REPLACE VIEW v_corte AS SELECT * FROM corte_manifiesto;
