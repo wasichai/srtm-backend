@@ -3,14 +3,17 @@ package srtm.brecha
 import com.sun.net.httpserver.HttpServer
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.http.HttpStatus
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import srtm.impuesto.ImpuestoPredial
 import srtm.impuesto.Parametros
 import srtm.rentas.SrtmApiTest
+import srtm.reportes.ReportesService
 import tools.jackson.databind.JsonNode
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -26,6 +29,9 @@ import java.util.concurrent.atomic.AtomicReference
 // (srtm.catastro.organizacion), SLUG_ICA's by an entry of srtm.catastro.organizaciones; the tests share them, each
 // created once with its slug, and keep apart by year. an organization without a catastro is refused
 class BrechaApiTest : SrtmApiTest() {
+    @Autowired
+    private lateinit var reportes: ReportesService
+
     // the organization of the catastro, with the model and the verified predial parameters: its admin's token
     private fun organizacion(): String = organizacionDelCatastro ?: crearOrganizacion(SLUG).also { organizacionDelCatastro = it }
 
@@ -503,6 +509,33 @@ class BrechaApiTest : SrtmApiTest() {
         assertEquals(FALLIDA, corrida["estado"].asString(), corrida.toString())
         assertTrue(corrida["mensaje"].asString().startsWith("El catastro no devolvió valuaciones de 2029"), corrida.toString())
         assertEquals(0, corrida["totalPredios"].asInt())
+    }
+
+    // #255: a corrida that ends TERMINADA fills the reportes' cache in the background, as the platform (this manual
+    // corrida runs as its caller), with no read of the reportes; the next corrida of the year takes its place. the other
+    // organization's 2026, which no other test runs
+    @Test
+    fun `a TERMINADA corrida warms the reportes' cache, and the next one of its year replaces it`() {
+        val org = organizacionIca()
+        val sufijo = uniqueDocumento()
+        declarar(org, contribuyente(org), predio(org, "W-$sufijo"), "100000.00")
+        ITEMS_ICA.set(listOf(item("W-$sufijo", "150000.00")))
+        val primera = corrida(org, 2026)
+        assertEquals(TERMINADA, primera["estado"].asString(), primera.toString())
+        esperarPrecalentada(primera["id"].asString())
+
+        val segunda = corrida(org, 2026)
+        assertEquals(TERMINADA, segunda["estado"].asString(), segunda.toString())
+        esperarPrecalentada(segunda["id"].asString())
+        assertFalse(reportes.precalentada(primera["id"].asString()))
+    }
+
+    private fun esperarPrecalentada(corrida: String) {
+        repeat(100) {
+            if (reportes.precalentada(corrida)) return
+            Thread.sleep(100)
+        }
+        error("los reportes de la corrida $corrida no se precalentaron")
     }
 
     @Test
