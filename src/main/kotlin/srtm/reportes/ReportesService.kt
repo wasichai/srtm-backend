@@ -34,6 +34,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.cancellation.CancellationException
 
 // what a report reads: the corrida, its rows (as brecha_predio keeps them and as the reports show them), whether
@@ -59,10 +60,12 @@ class FaltaUit(
 ) : Faltan("Faltan parámetros para el reporte de Δ mayores a 5 UIT: ${faltan.joinToString("; ")}", faltan)
 
 // the reportes de brechas (#248): a corrida read as the caller (Permisos: read on brecha_corrida and brecha_predio,
-// asked on every request, before any cache is touched) and kept in memory per corrida (srtm.reportes.cache, the most
-// recent srtm.reportes.corridas of them): its rows never change once TERMINADA. the padrón's titulares of its predios
-// (read only for a caller who may read declaracion_predial and contribuyente) are kept the same way, the uso
-// catalog per organization. catastro's decisions are read of the organization's catastro, kept for
+// asked on every request, before any cache is touched) and kept in memory per corrida: its rows never change once
+// TERMINADA, so they are kept with no vigencia, the srtm.reportes.corridas most recently used (#255). the padrón's
+// titulares of its predios (read only for a caller who may read declaracion_predial and contribuyente) do change: per
+// corrida for srtm.reportes.cache, the uso catalog per organization the same. a corrida that ends TERMINADA fills
+// them in the background (Precalentador), and a read of what is being read waits for it (Cache.obtener) instead of
+// reading it twice. catastro's decisions are read of the organization's catastro, kept for
 // srtm.reportes.cache-decisiones (a minute: they change as catastro works), and only by what shows them (the resumen,
 // the lists of predios and their exports; not the catalog nor contribuyentes). when catastro cannot answer they are
 // left out with an aviso, never an error, and the failure is kept srtm.reportes.cache-fallo-decisiones (30 s): a
@@ -81,11 +84,14 @@ class ReportesService(
     @param:Value("\${srtm.reportes.cache-decisiones:1m}") vigenciaDecisiones: Duration,
     @param:Value("\${srtm.reportes.cache-fallo-decisiones:30s}") vigenciaFallo: Duration
 ) {
-    private val filasPorCorrida = Cache<String, List<FilaBrecha>>(vigencia, corridas)
+    private val filasPorCorrida = Cache<String, List<FilaBrecha>>(null, corridas)
     private val titularesPorCorrida = Cache<String, Map<String, List<Titular>>>(vigencia, corridas)
     private val usosPorOrganizacion = Cache<UUID, Map<String, String>>(vigencia, corridas)
     private val decisionesPorAnio = Cache<Pair<UUID, Int>, Map<String, String>>(vigenciaDecisiones, corridas)
     private val falloDeDecisiones = Cache<Pair<UUID, Int>, String>(vigenciaFallo, corridas)
+
+    // the corrida last warmed per organization and year
+    private val precalentadas = ConcurrentHashMap<Pair<UUID, Int>, String>()
 
     suspend fun resumen(
         anio: Int,
@@ -157,10 +163,10 @@ class ReportesService(
                 ?.filter { it.isNotEmpty() }
                 .orEmpty()
                 .toMutableList()
-        val brecha = filasPorCorrida.get(id) ?: brechas.filas(id).map { it.copy(loteGeom = null) }.also { filasPorCorrida.put(id, it) }
+        val brecha = filas(id)
         val titulares =
             if (permisos.puedeLeer(DECLARACION) && permisos.puedeLeer(CONTRIBUYENTE)) {
-                titularesPorCorrida.get(id) ?: titulares(anio).also { titularesPorCorrida.put(id, it) }
+                titularesPorCorrida.obtener(id) { titulares(anio) }
             } else {
                 avisos += "Sin lectura del padrón (declaracion_predial y contribuyente): las filas no traen su contribuyente"
                 null
@@ -172,6 +178,30 @@ class ReportesService(
         val filas = calcular { Reportes.filas(brecha, titulares, usos, decisiones) }
         return Lectura(r, brecha, filas, decisiones != null, umbral, avisos)
     }
+
+    // #255: what leer keeps of a TERMINADA corrida (its rows, its titulares and its organization's usos), read before
+    // anyone asks for it. no permission is asked here: Precalentador runs it as the platform, and leer asks for them on
+    // every request before it reads the cache. the corrida warmed before it for the same organization and year is no
+    // longer the latest: it is dropped, so the daily automatic corridas do not fill the cache with what nobody reads
+    suspend fun precalentar(
+        organizacion: UUID,
+        anio: Int,
+        corrida: String
+    ) {
+        precalentadas.put(organizacion to anio, corrida)?.takeIf { it != corrida }?.let {
+            filasPorCorrida.quitar(it)
+            titularesPorCorrida.quitar(it)
+        }
+        filas(corrida)
+        titularesPorCorrida.obtener(corrida) { titulares(anio) }
+        if (usosPorOrganizacion.get(organizacion) == null) usos()?.let { usosPorOrganizacion.put(organizacion, it) }
+    }
+
+    // whether the corrida's rows and titulares are kept: for the tests
+    internal fun precalentada(corrida: String): Boolean = filasPorCorrida.get(corrida) != null && titularesPorCorrida.get(corrida) != null
+
+    // the corrida's rows, without the lote's geometry (the reports never show it)
+    private suspend fun filas(corrida: String): List<FilaBrecha> = filasPorCorrida.obtener(corrida) { brechas.filas(corrida).map { it.copy(loteGeom = null) } }
 
     // the vigente DJs of the year and their contribuyentes: each predio's titulares
     private suspend fun titulares(anio: Int): Map<String, List<Titular>> {

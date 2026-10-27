@@ -12,6 +12,7 @@ import kotlinx.coroutines.reactive.awaitFirstOrNull
 import kotlinx.coroutines.reactor.asCoroutineContext
 import kotlinx.coroutines.reactor.awaitSingle
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.security.core.context.ReactiveSecurityContextHolder
 import org.springframework.stereotype.Service
@@ -81,6 +82,7 @@ class BrechaService(
     private val organizaciones: OrganizationRepository,
     private val records: RecordService,
     private val tablas: TablasCore,
+    private val eventos: ApplicationEventPublisher,
     transacciones: ReactiveTransactionManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -102,7 +104,7 @@ class BrechaService(
         val catastro = catastroDe(usuario)
         val creada = crearCorrida(usuario.organizationId, anio, OrigenCorrida.MANUAL)
         val id = UUID.fromString(creada.id)
-        scope.launch(ReactiveSecurityContextHolder.withAuthentication(llamante).asCoroutineContext()) { correr(id, anio, catastro) }
+        scope.launch(ReactiveSecurityContextHolder.withAuthentication(llamante).asCoroutineContext()) { correr(usuario.organizationId, id, anio, catastro) }
         return corridaDe(creada)
     }
 
@@ -120,7 +122,7 @@ class BrechaService(
     ): Corrida {
         val creada = crearCorrida(organizacion, anio, origen, alCrear)
         val id = UUID.fromString(creada.id)
-        scope.launch { records.asPlatform(organizacion, "srtm:brecha-automatica") { correr(id, anio, catastro) } }
+        scope.launch { records.asPlatform(organizacion, "srtm:brecha-automatica") { correr(organizacion, id, anio, catastro) } }
         return corridaDe(creada)
     }
 
@@ -309,8 +311,9 @@ class BrechaService(
     // and before ending it reads its estado again and stops if it is no longer EN_CURSO (another POST found it stale and
     // failed it: an abandoned run never overwrites a newer one). what goes wrong leaves it FALLIDA with why, but a
     // catastro without GET /titulares (404, an older one; 403, no read on titular_catastral): the confianza compares no
-    // titular, and mensaje says so
+    // titular, and mensaje says so. once TERMINADA it publishes CorridaTerminada (#255: the reportes warm their cache)
     private suspend fun correr(
+        organizacion: UUID,
         id: UUID,
         anio: Int,
         catastro: Catastro
@@ -389,6 +392,7 @@ class BrechaService(
                     "mensaje" to medicion.avisos.joinToString("\n").ifEmpty { null }
                 )
             )
+            avisarTerminada({ eventos.publishEvent(it) }, CorridaTerminada(organizacion, anio, id.toString()))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Abandonada) {
