@@ -1,17 +1,19 @@
 """srtm extraction for the corte (docs/superpowers/plans/2026-10-25-corte-analitico.md § Tablas del corte;
 plan, Rulings de la ejecución, R6, for the columns it adds).
 
-`extraer_srtm` reads the ten `srtm_*` objects of one año and turns each into the exact row shape its table
+`extraer_srtm` reads the eleven `srtm_*` objects of one año and turns each into the exact row shape its table
 needs: a column whitelist (the plan's minimization ruling - no names, no addresses, no free text), the
 contributor's document seudonimizado instead of its number, and the brecha corrida chosen by its own ruling
 (TERMINADA, most recent `terminado`, ties broken by the highest `id`). Every column defaults to `None` when
 its attribute is missing - this is what makes confianza/confianza_motivo (srtm-backend#204, not in every
 srtm) and codigo_origen/the brecha_corrida R6 columns (not in every srtm either) safe to read before they
-exist everywhere.
+exist everywhere. brecha_nivel (srtm-backend#247) is tolerated missing as a whole object: an srtm before it
+answers 404, and the table goes empty with an aviso, like catastro.py's titulares and cambios.
 """
 
 from dataclasses import dataclass
 
+from .cliente import ErrorApi
 from .seudonimo import seudonimo
 
 # plan § Tablas del corte, in the order given there; srtm_brecha_corrida's last 7 and srtm_predio's last 1 are
@@ -148,6 +150,8 @@ COLUMNAS = {
         "niveles_catastro_mayor",
         "delta_area_niveles",
     ),
+    # srtm-backend#256: the per-piso área comparison of each brecha_predio (#247), of the same corrida
+    "srtm_brecha_nivel": ("id", "corrida", "brecha_predio", "piso", "area_rentas", "area_catastro", "estado"),
     "srtm_parametro": (
         "id",
         "tipo",
@@ -163,6 +167,7 @@ COLUMNAS = {
 }
 
 _AVISO_SIN_CORRIDA = "sin brecha TERMINADA de {anio}"
+_AVISO_SIN_BRECHA_NIVEL = "brecha_nivel no disponible en srtm (404, anterior a srtm-backend#247): tabla vacía"
 _AVISO_SIN_CONFIANZA = (
     "brecha_predio sin el atributo confianza/confianza_motivo en algunas filas (srtm-backend#204): se exporta null"
 )
@@ -290,6 +295,7 @@ def extraer_srtm(cliente, anio, clave):
         avisos.append(_AVISO_SIN_CORRIDA.format(anio=anio))
         tablas["srtm_brecha_corrida"] = []
         tablas["srtm_brecha_predio"] = []
+        tablas["srtm_brecha_nivel"] = []
         corrida = None
     else:
         fila_corrida = _fila(COLUMNAS["srtm_brecha_corrida"], corrida_elegida)
@@ -299,6 +305,14 @@ def extraer_srtm(cliente, anio, clave):
         if any("confianza" not in b["attributes"] for b in brechas):
             avisos.append(_AVISO_SIN_CONFIANZA)
         tablas["srtm_brecha_predio"] = [_fila(COLUMNAS["srtm_brecha_predio"], b) for b in brechas]
+        try:
+            niveles_brecha = list(cliente.registros("brecha_nivel", corrida=corrida_elegida["id"]))
+        except ErrorApi as e:
+            if e.estado != 404:
+                raise
+            avisos.append(_AVISO_SIN_BRECHA_NIVEL)
+            niveles_brecha = []
+        tablas["srtm_brecha_nivel"] = [_fila(COLUMNAS["srtm_brecha_nivel"], n) for n in niveles_brecha]
 
     parametros_vigentes = _parametros_vigentes(parametros_todos, anio)
     tablas["srtm_parametro"] = [_fila(COLUMNAS["srtm_parametro"], p) for p in parametros_vigentes]

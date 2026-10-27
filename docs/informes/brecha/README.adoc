@@ -22,9 +22,9 @@ El corte lee las dos APIs con cuentas de servicio de solo lectura, cada una acot
 
 * *srtm*, con una cuenta de servicio `analitica` y el rol `ANALITICA` (`READ` sobre `predio`,
   `contribuyente`, `declaracion_predial`, `nivel_construccion`, `obra_complementaria`, `cuota_predial`,
-  `brecha_corrida`, `brecha_predio`, `parametro_tributario` y `arancel`). El rol está versionado en
-  `model/roles.json` y lo crea `model/apply_roles.py`; la cuenta, `model/crear_cuenta_analitica.py`, en cada
-  organización (cómo, en
+  `brecha_corrida`, `brecha_predio`, `brecha_nivel`, `parametro_tributario` y `arancel`). El rol está
+  versionado en `model/roles.json` y lo crea `model/apply_roles.py`; la cuenta,
+  `model/crear_cuenta_analitica.py`, en cada organización (cómo, en
   link:../../develop/alta-organizacion.md#9-corte-analítico-205[«Alta de una organización», sección 9]). Una
   prueba de `model/` falla si los objetos del rol dejan de ser los que lee `herramientas/srtm.py`.
 * *catastro*, con la cuenta de servicio `srtm` que ya existe (`SRTM_LECTOR`), la misma que usa srtm para leer
@@ -75,6 +75,12 @@ todavía no tiene esas columnas).
 |registros `brecha_predio?corrida=`
 |Una fila por predio de esa corrida: autoavalúo e impuesto declarado y de catastro, sus deltas, confianza y
 motivo.
+
+|`srtm_brecha_nivel`
+|registros `brecha_nivel?corrida=`
+|Una fila por piso de cada predio de esa corrida (#256): `piso`, `area_rentas`, `area_catastro` y `estado`
+(`PAR`, `SOLO_RENTAS`, `SOLO_CATASTRO`, `AMBIGUO`), con su `brecha_predio`. Tolerada ausente (404) en un srtm
+anterior a #247: tabla vacía con su esquema, con aviso.
 
 |`srtm_parametro` / `srtm_arancel`
 |`parametro_tributario` / `arancel?anio=`
@@ -267,7 +273,7 @@ make local CORTE=~/cortes/analitica/perene/2026-10-25
 duckdb ~/cortes/analitica/perene/2026-10-25.duckdb -c "SELECT * FROM v_segmentos"
 ----
 
-El archivo tiene las 17 tablas del corte materializadas (no vistas sobre los Parquet), `corte_manifiesto` con
+El archivo tiene las 18 tablas del corte materializadas (no vistas sobre los Parquet), `corte_manifiesto` con
 las cifras del manifiesto, y las vistas de `vistas.sql`. `armar_duckdb.py` verifica el corte contra su
 manifiesto antes de tocar el archivo de destino, así que una carpeta que no coincide con su `manifiesto.json`
 nunca llega a reemplazarlo; también rechaza un destino dentro de la carpeta del corte (sería un archivo que el
@@ -293,6 +299,10 @@ manifiesto no lista).
 
 |Parámetros usados
 |`v_parametros_predial`
+
+|Pisos con más área en catastro, por sector, manzana y uso
+|`v_niveles_catastro_mayor` (los `PAR` con área de rentas mayor que 0, la regla de
+`brecha_predio.niveles_catastro_mayor`)
 |===
 
 `v_predial_contribuyente` calcula, por contribuyente:

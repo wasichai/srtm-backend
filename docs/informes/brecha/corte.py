@@ -107,7 +107,7 @@ def _publicar(parcial, carpeta):
 
 
 def cortar(carpeta, org, fecha, secretos, clave, reloj):
-    """Reads both APIs, writes the 17 tables and the manifest in <carpeta>.parcial, checks them against the
+    """Reads both APIs, writes the 18 tables and the manifest in <carpeta>.parcial, checks them against the
     manifest and renames the folder into place; returns the manifest. Nothing is left on disk on error."""
     parcial = carpeta.with_name(carpeta.name + ".parcial")
     shutil.rmtree(parcial, ignore_errors=True)  # left behind by a run that was killed

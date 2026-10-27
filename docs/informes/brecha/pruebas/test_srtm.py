@@ -10,7 +10,11 @@ from herramientas.cliente import Cliente
 from herramientas.falsos import CatastroFalso, SrtmFalso
 from herramientas.seudonimo import seudonimo
 from herramientas.sinteticos import (
+    BN1,
+    BN2,
+    BN3,
     BP1,
+    BP2,
     BP3,
     C1,
     C2,
@@ -91,6 +95,31 @@ class ExtraccionMinimosTests(unittest.TestCase):
         self.assertEqual(len(filas), 3)  # BP1, BP2, BP3 de R2; el BP0 de R1 queda fuera
         self.assertEqual({f["corrida"] for f in filas}, {R2})
 
+    def test_niveles_de_brecha_de_la_corrida_elegida(self):
+        # srtm-backend#256: los brecha_nivel de R2, por corrida (el BN0 de R1 queda fuera), con su lista blanca
+        filas = self.ext.tablas["srtm_brecha_nivel"]
+        self.assertEqual({f["id"] for f in filas}, {"BN1", "BN2", "BN3", "BN4"})
+        self.assertEqual({f["corrida"] for f in filas}, {R2})
+        for fila in filas:
+            self.assertEqual(set(fila), set(COLUMNAS["srtm_brecha_nivel"]))
+        por_id = _por_id(filas)
+        self.assertEqual(
+            por_id[BN1],
+            {
+                "id": BN1,
+                "corrida": R2,
+                "brecha_predio": BP1,
+                "piso": 1,
+                "area_rentas": 60,
+                "area_catastro": Decimal("100.50"),
+                "estado": "PAR",
+            },
+        )
+        self.assertIsNone(por_id[BN2]["area_rentas"])  # SOLO_CATASTRO
+        self.assertIsNone(por_id[BN3]["piso"])  # AMBIGUO, sin número
+        self.assertEqual(por_id[BN3]["brecha_predio"], BP2)
+        self.assertFalse(any("brecha_nivel" in aviso for aviso in self.ext.avisos))
+
     def test_sin_confianza_es_null_y_avisa(self):
         por_id = _por_id(self.ext.tablas["srtm_brecha_predio"])
         self.assertIsNone(por_id[BP3]["confianza"])  # BP3 no trae el atributo
@@ -142,7 +171,19 @@ class SinCorridaTerminadaTests(unittest.TestCase):
         self.assertIsNone(ext.corrida)
         self.assertEqual(ext.tablas["srtm_brecha_corrida"], [])
         self.assertEqual(ext.tablas["srtm_brecha_predio"], [])
+        self.assertEqual(ext.tablas["srtm_brecha_nivel"], [])
         self.assertIn(f"sin brecha TERMINADA de {ANIO}", ext.avisos)
+
+
+class SinBrechaNivelTests(unittest.TestCase):
+    def test_srtm_sin_brecha_nivel_da_tabla_vacia_y_aviso(self):
+        # un srtm anterior a #247: el objeto no existe y la API responde 404
+        registros = dict(minimos().srtm)
+        del registros["brecha_nivel"]
+        ext = _extraer(registros)
+        self.assertEqual(ext.tablas["srtm_brecha_nivel"], [])
+        self.assertEqual(len(ext.tablas["srtm_brecha_predio"]), 3)  # lo demás sale igual
+        self.assertTrue(any("brecha_nivel" in aviso and "#247" in aviso for aviso in ext.avisos), ext.avisos)
 
 
 class ColumnasR6AusentesTests(unittest.TestCase):
@@ -215,6 +256,7 @@ class DatosTests(unittest.TestCase):
         self.assertEqual(len(ext.tablas["srtm_contribuyente"]), 40)  # los 40 están citados por su propia DJ
         self.assertIsNotNone(ext.corrida)
         self.assertEqual(len(ext.tablas["srtm_brecha_predio"]), 40)
+        self.assertEqual(len(ext.tablas["srtm_brecha_nivel"]), 40)
 
 
 if __name__ == "__main__":

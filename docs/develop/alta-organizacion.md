@@ -202,7 +202,7 @@ El corte analítico (`docs/informes/brecha`) lee srtm y catastro con cuentas de 
 una foto de la organización en Parquet, seudonimizada. Los pasos van como administrador de la organización, en
 el Core de srtm.
 
-**El rol `ANALITICA`:** solo lee los diez objetos que el corte necesita, nada de escritura. Está en
+**El rol `ANALITICA`:** solo lee los once objetos que el corte necesita, nada de escritura. Está en
 `model/roles.json`; `apply_roles.py` lo crea o lo deja al día en la organización del login y no toca los demás
 roles (`CAJA`, los de la demo).
 

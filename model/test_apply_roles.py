@@ -58,11 +58,12 @@ class RolesJsonTests(unittest.TestCase):
     def test_valida_contra_el_modelo(self):
         self.assertEqual(apply_roles.validate(load(ROLES_PATH), load(MODEL_PATH)), [])
 
-    def test_el_corte_lee_los_diez_objetos_de_srtm(self):
-        # si esto cambia, la lista blanca del corte cambió: revisa roles.json con ella
+    def test_el_corte_lee_los_once_objetos_de_srtm(self):
+        # si esto cambia, la lista blanca del corte cambió: revisa roles.json con ella (#256: brecha_nivel)
         self.assertEqual(objetos_del_corte(), {
             "predio", "contribuyente", "declaracion_predial", "cuota_predial", "nivel_construccion",
-            "obra_complementaria", "brecha_corrida", "brecha_predio", "parametro_tributario", "arancel"})
+            "obra_complementaria", "brecha_corrida", "brecha_predio", "brecha_nivel", "parametro_tributario",
+            "arancel"})
 
     def test_analitica_solo_lee_y_exactamente_lo_que_lee_el_corte(self):
         self.assertEqual(permisos(self.roles["ANALITICA"]), {(o, "READ") for o in objetos_del_corte()})

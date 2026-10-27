@@ -1,4 +1,4 @@
-"""The corte's 17 tables: columns, Arrow schemas and sort keys (plan:
+"""The corte's 18 tables: columns, Arrow schemas and sort keys (plan:
 docs/superpowers/plans/2026-10-25-corte-analitico.md, § Tablas del corte; plan, Rulings de la ejecución, R13).
 
 The column whitelists live once, in srtm.py and catastro.py; this module only adds types and order. The types
@@ -96,6 +96,8 @@ _TIPOS = {
         "niveles_catastro_mayor": ENTERO,
         "delta_area_niveles": DECIMAL,
     },
+    # srtm-backend#256 (estado stays a string)
+    "srtm_brecha_nivel": {"piso": ENTERO, "area_rentas": DECIMAL, "area_catastro": DECIMAL},
     "srtm_parametro": {"vigencia_desde": FECHA, "vigencia_hasta": FECHA, "valor_numerico": DECIMAL},
     "srtm_arancel": {"anio": ENTERO, "valor_m2": DECIMAL},
     # catastro: areas, amounts, porcentaje and longitud_frente are DECIMAL; piso and seccion stay strings
@@ -135,6 +137,7 @@ ORDEN = {
     "srtm_impuesto_contribuyente": ("contribuyente",),
     "srtm_brecha_corrida": ("id",),
     "srtm_brecha_predio": ("orden", "id"),
+    "srtm_brecha_nivel": ("brecha_predio", "piso", "id"),
     "srtm_parametro": ("tipo", "clave", "vigencia_desde", "id"),
     "srtm_arancel": ("id_aranc", "id"),
     "catastro_ficha": ("codigo_municipal", "id"),
