@@ -808,8 +808,8 @@ brecha. Las filas de una corrida (y los titulares del padrón de sus predios) se
 `srtm.reportes.cache` (10 minutos), para las `srtm.reportes.corridas` (8) más recientes; las decisiones de catastro,
 `srtm.reportes.cache-decisiones` (1 minuto), y su falla, `srtm.reportes.cache-fallo-decisiones` (30 segundos): con
 catastro caído no se espera su respuesta en cada página. Un cambio del padrón (una DJ nueva o rectificada) aparece en
-el contribuyente de las filas al vencer la caché. Con 30 000 filas, el cálculo en memoria de `/resumen` toma unos 0,3 s y
-el de una página, menos de 0,1 s.
+el contribuyente de las filas al vencer la caché. Medido con 30 000 filas en la base de pruebas: la primera lectura de
+una corrida (sin caché) tarda unos 25 s; después, `/resumen` responde en 1,3 a 1,7 s y una página en 0,2 a 0,5 s.
 
 *Decisiones de catastro.* Las leen `/resumen`, las listas de predios y sus exportaciones (no el catálogo ni
 `contribuyentes`). Se leen de `GET /api/objects/decision_brecha/records?anio=` del Core de catastro de la
