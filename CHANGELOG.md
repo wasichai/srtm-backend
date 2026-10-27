@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.2.0](https://github.com/wasichai/srtm-backend/compare/v2.1.0...v2.2.0) (2026-10-27)
+
+
+### Features
+
+* **brecha:** la corrida guarda las áreas de terreno y construcción por predio y por nivel ([#252](https://github.com/wasichai/srtm-backend/issues/252)) ([ca493a9](https://github.com/wasichai/srtm-backend/commit/ca493a972675f29dd56f0225b0261e0884343b4a))
+* **reportes:** la API de reportes de brechas, con tablero y exportación xlsx y csv ([#253](https://github.com/wasichai/srtm-backend/issues/253)) ([7f2da18](https://github.com/wasichai/srtm-backend/commit/7f2da181b8ebfddcd682b84f6c9b0f8ae1434409))
+
+
+### Bug Fixes
+
+* **brecha:** el cruce ignora los predios de baja y encuentra los derivados por codigo_origen ([#250](https://github.com/wasichai/srtm-backend/issues/250)) ([45de11b](https://github.com/wasichai/srtm-backend/commit/45de11b9bfc29700b40c2d9bdb3d08309e47c232))
+
 ## [2.1.0](https://github.com/wasichai/srtm-backend/compare/v2.0.0...v2.1.0) (2026-10-25)
 
 
