@@ -1,5 +1,6 @@
 package srtm.brecha
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import srtm.Faltan
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
@@ -8,6 +9,7 @@ import java.math.BigDecimal
 // model/model.json
 const val BRECHA_CORRIDA = "brecha_corrida"
 const val BRECHA_PREDIO = "brecha_predio"
+const val BRECHA_NIVEL = "brecha_nivel"
 
 // cambio_catastro's objeto (#203), as catastro-backend names it
 val OBJETOS_CAMBIO_CATASTRO = setOf("predio_catastral", "construccion", "obra_complementaria", "titular_catastral")
@@ -71,7 +73,40 @@ data class ValuacionCatastral(
     val vinculoMetodo: String? = null,
     val vinculoRevisado: Boolean? = null,
     val cuc: String? = null,
-    val codigoReferenciaCatastral: String? = null
+    val codigoReferenciaCatastral: String? = null,
+    // #247 (catastro-backend#71): each piso and sección of its ficha, [] when it has none; null from an older catastro
+    // that does not send them (then the row compares no nivel)
+    val construcciones: List<ConstruccionCatastral>? = null
+)
+
+// one construcción of a ValuacionCatastral: piso null when the ficha's is no number (S1, a sótano), and a piso may
+// repeat across secciones
+data class ConstruccionCatastral(
+    val piso: Int? = null,
+    val seccion: Int? = null,
+    val areaConstruida: BigDecimal? = null
+)
+
+// #247: how a piso of a predio paired (Brecha.niveles): once on each side (PAR), on one side only (SOLO_RENTAS,
+// SOLO_CATASTRO), or not pairable (AMBIGUO: rentas repeats it on separate niveles, or it has no number)
+enum class EstadoNivel { PAR, SOLO_RENTAS, SOLO_CATASTRO, AMBIGUO }
+
+// #247: the brecha_nivel record (its corrida and brecha_predio are added when it is written): a piso, the area each
+// side gives it (null when that side has none) and its EstadoNivel
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class NivelBrecha(
+    val piso: Int? = null,
+    val areaRentas: BigDecimal? = null,
+    val areaCatastro: BigDecimal? = null,
+    val estado: String? = null
+)
+
+// #247: what a row sums of its niveles: how many are PAR, how many PAR have a catastro area larger than a positive
+// rentas one, and the PAR's positive differences (catastro - rentas, m2)
+data class ResumenDeNiveles(
+    val comparados: Int,
+    val catastroMayor: Int,
+    val delta: BigDecimal
 )
 
 // every valued item of a year, and the version of the engine that valued them
@@ -170,7 +205,19 @@ data class FilaBrecha(
     val obrasDj: BigDecimal? = null,
     // #204: how sure its cruce is (Confianza) and why (Confiabilidad.de)
     val confianza: String? = null,
-    val confianzaMotivo: String? = null
+    val confianzaMotivo: String? = null,
+    // #247: the terreno and construida (m2) of the vigente DJ (each secuencia once, Brecha.areaDeclarada) and of the
+    // catastro's item; the niveles' summary (Brecha.resumenDeNiveles), null when they were not compared
+    val areaTerrenoDeclarada: BigDecimal? = null,
+    val areaTerrenoCatastro: BigDecimal? = null,
+    val areaConstruidaDeclarada: BigDecimal? = null,
+    val areaConstruidaCatastro: BigDecimal? = null,
+    val nivelesComparados: Int? = null,
+    val nivelesCatastroMayor: Int? = null,
+    val deltaAreaNiveles: BigDecimal? = null,
+    // #247: its brecha_nivel rows, written apart (never a field of brecha_predio): null when they were not compared
+    @get:JsonIgnore
+    val niveles: List<NivelBrecha>? = null
 )
 
 // the corrida as the portal shows it (camelCase, like /liquidacion)
@@ -243,7 +290,14 @@ data class PredioBrecha(
     val motivo: String?,
     val obrasDj: BigDecimal?,
     val confianza: String?,
-    val confianzaMotivo: String?
+    val confianzaMotivo: String?,
+    val areaTerrenoDeclarada: BigDecimal?,
+    val areaTerrenoCatastro: BigDecimal?,
+    val areaConstruidaDeclarada: BigDecimal?,
+    val areaConstruidaCatastro: BigDecimal?,
+    val nivelesComparados: Int?,
+    val nivelesCatastroMayor: Int?,
+    val deltaAreaNiveles: BigDecimal?
 )
 
 fun predioBrechaDe(f: FilaBrecha) =
@@ -268,7 +322,14 @@ fun predioBrechaDe(f: FilaBrecha) =
         motivo = f.motivo,
         obrasDj = f.obrasDj,
         confianza = f.confianza,
-        confianzaMotivo = f.confianzaMotivo
+        confianzaMotivo = f.confianzaMotivo,
+        areaTerrenoDeclarada = f.areaTerrenoDeclarada,
+        areaTerrenoCatastro = f.areaTerrenoCatastro,
+        areaConstruidaDeclarada = f.areaConstruidaDeclarada,
+        areaConstruidaCatastro = f.areaConstruidaCatastro,
+        nivelesComparados = f.nivelesComparados,
+        nivelesCatastroMayor = f.nivelesCatastroMayor,
+        deltaAreaNiveles = f.deltaAreaNiveles
     )
 
 data class PedidoCorrida(

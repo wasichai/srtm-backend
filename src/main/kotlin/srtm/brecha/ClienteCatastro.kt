@@ -585,9 +585,23 @@ class ClienteCatastro(
                 vinculoMetodo = n.path("vinculoMetodo").texto(),
                 vinculoRevisado = n.path("vinculoRevisado").booleano(),
                 cuc = n.path("cuc").texto(),
-                codigoReferenciaCatastral = n.path("codigoReferenciaCatastral").texto()
+                codigoReferenciaCatastral = n.path("codigoReferenciaCatastral").texto(),
+                construcciones =
+                    n
+                        .path("construcciones")
+                        .takeIf { it.isArray }
+                        ?.values()
+                        ?.map(::construccion)
             )
         }
+
+        // #247: one construcción of an item (catastro-backend#71)
+        private fun construccion(n: JsonNode) =
+            ConstruccionCatastral(
+                piso = n.path("piso").entero(),
+                seccion = n.path("seccion").entero(),
+                areaConstruida = n.path("areaConstruida").decimal()
+            )
 
         // one item of GET /api/catastro/titulares (#204)
         fun titular(n: JsonNode) =

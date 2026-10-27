@@ -292,6 +292,80 @@ class BrechaApiTest : SrtmApiTest() {
         assertEquals(codigo, filas.single { it["codigoPredio"]?.asString() == "$codigo-1" }["codigoCatastro"].asString())
     }
 
+    // #247: the DJ's niveles against the ficha's construcciones (catastro-backend#71). the row keeps both sides' areas
+    // and what its niveles sum; each piso is a brecha_nivel of the corrida and the row. an item without construcciones
+    // (an older catastro) compares no nivel
+    @Test
+    fun `a corrida keeps the areas of both sides and pairs the niveles by piso`() {
+        val org = organizacion()
+        val sufijo = uniqueDocumento()
+        val conNiveles = predio(org, "N-$sufijo")
+        val sinNiveles = predio(org, "S-$sufijo")
+        val dj = declarar(org, contribuyente(org), conNiveles, "100000.00", anio = 2021, delPadron = mapOf("area_terreno" to 200, "area_construida" to 150))
+        declarar(org, contribuyente(org), sinNiveles, "100000.00", anio = 2021, delPadron = mapOf("area_terreno" to 90))
+        val id = dj["id"].asString()
+        val nivel =
+            mapOf(
+                "declaracion" to id,
+                "tipo_nivel" to "PISO",
+                "anio_construccion" to 2010,
+                "material" to "CONCRETO",
+                "estado_conservacion" to "BUENO"
+            )
+        post("/api/objects/nivel_construccion/records", mapOf("attributes" to nivel + mapOf("numero_piso" to 1, "area_construida" to 100)), org)
+        post("/api/objects/nivel_construccion/records", mapOf("attributes" to nivel + mapOf("numero_piso" to 2, "area_construida" to 50)), org)
+        post("/api/objects/nivel_construccion/records", mapOf("attributes" to nivel + mapOf("numero_piso" to 3, "area_construida" to 20)), org)
+        val construcciones =
+            """[{"piso":null,"seccion":1,"areaConstruida":15},{"piso":1,"seccion":1,"areaConstruida":70},""" +
+                """{"piso":1,"seccion":2,"areaConstruida":50},{"piso":2,"seccion":1,"areaConstruida":40}]"""
+        ITEMS.set(listOf(item("N-$sufijo", "100000.00", llavesCrudas = mapOf("construcciones" to construcciones)), item("S-$sufijo", "100000.00")))
+
+        val corrida = corrida(org, 2021)
+        assertEquals(TERMINADA, corrida["estado"].asString(), corrida.toString())
+        val filas = tree(send("GET", "/api/srtm/brecha/2021/predios", null, HttpStatus.OK, org))["content"].associateBy { it["codigoPredio"].asString() }
+        val fila = filas.getValue("N-$sufijo")
+        assertEquals(BigDecimal("200.00"), dec(fila["areaTerrenoDeclarada"]))
+        assertEquals(BigDecimal("150.00"), dec(fila["areaConstruidaDeclarada"]))
+        assertEquals(BigDecimal("200.00"), dec(fila["areaTerrenoCatastro"]))
+        assertEquals(BigDecimal("100.00"), dec(fila["areaConstruidaCatastro"]))
+        assertEquals(2, fila["nivelesComparados"].asInt())
+        assertEquals(1, fila["nivelesCatastroMayor"].asInt())
+        assertEquals(BigDecimal("20.00"), dec(fila["deltaAreaNiveles"]))
+
+        val niveles =
+            tree(send("GET", "/api/objects/brecha_nivel/records?size=50&brecha_predio=${fila["id"].asString()}", null, HttpStatus.OK, org))["content"]
+                .map { it["attributes"] }
+        assertTrue(niveles.all { it["corrida"].asString() == corrida["id"].asString() }, niveles.toString())
+
+        fun area(
+            n: JsonNode,
+            campo: String
+        ) = n[campo]?.takeUnless { it.isNull }?.let(::dec)
+        assertEquals(
+            setOf(
+                listOf("1", "100.00", "120.00", "PAR"),
+                listOf("2", "50.00", "40.00", "PAR"),
+                listOf("3", "20.00", null, "SOLO_RENTAS"),
+                listOf(null, null, "15.00", "AMBIGUO")
+            ),
+            niveles
+                .map {
+                    listOf(
+                        it["piso"]?.takeUnless { p -> p.isNull }?.asString(),
+                        area(it, "area_rentas")?.toPlainString(),
+                        area(it, "area_catastro")?.toPlainString(),
+                        it["estado"].asString()
+                    )
+                }.toSet()
+        )
+
+        val sinConstrucciones = filas.getValue("S-$sufijo")
+        assertEquals(BigDecimal("90.00"), dec(sinConstrucciones["areaTerrenoDeclarada"]))
+        assertTrue(sinConstrucciones["nivelesComparados"].isNull, sinConstrucciones.toString())
+        val deLaOtra = tree(send("GET", "/api/objects/brecha_nivel/records?brecha_predio=${sinConstrucciones["id"].asString()}", null, HttpStatus.OK, org))
+        assertEquals(0, deLaOtra["content"].size(), deLaOtra.toString())
+    }
+
     @Test
     fun `a year without its parameters fails the corrida and names them, and there is no panel`() {
         val org = organizacion()
@@ -441,14 +515,18 @@ class BrechaApiTest : SrtmApiTest() {
         send("GET", "/api/srtm/brecha/2026/cambios", null, HttpStatus.FORBIDDEN, lector)
     }
 
-    // an item as catastro-backend answered before #204; llavesNuevas adds its keys (string values, or null)
+    // an item as catastro-backend answered before #204; llavesNuevas adds its keys (string values, or null),
+    // llavesCrudas its keys with their json as given
     private fun item(
         codigo: String,
         autoavaluo: String,
         geometria: String = "null",
-        llavesNuevas: Map<String, String?> = emptyMap()
+        llavesNuevas: Map<String, String?> = emptyMap(),
+        llavesCrudas: Map<String, String> = emptyMap()
     ): String {
-        val nuevas = llavesNuevas.entries.joinToString("") { (k, v) -> ",\"$k\":" + (v?.let { "\"$it\"" } ?: "null") }
+        val nuevas =
+            llavesNuevas.entries.joinToString("") { (k, v) -> ",\"$k\":" + (v?.let { "\"$it\"" } ?: "null") } +
+                llavesCrudas.entries.joinToString("") { (k, v) -> ",\"$k\":$v" }
         return """{"codigoMunicipal":"$codigo","codigoCpu":null,"sector":"01","manzana":"A","lote":"1","uso":"010101",
         "areaTerreno":200,"areaConstruida":100,"longitudFrente":10.5,"terreno":1.00,"construccion":1.00,"obras":0.00,
         "autoavaluo":$autoavaluo,"motivo":null,"llave":null,"loteGeom":$geometria$nuevas}"""

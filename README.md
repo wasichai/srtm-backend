@@ -881,6 +881,35 @@ declara el monto entero. Se suma antes de categorizar y de liquidar, así el imp
 queda en `obras_dj` de la fila (`obrasDj` en `/predios`) y la corrida lo cuenta en `mensaje` («1 predios sin obras en
 la ficha: se sumaron S/ 10000.00 de obras de sus DJ»). Una ficha con obras no suma nada.
 
+**Áreas y niveles** (#247). Cada fila guarda el área de terreno y la construida de los dos lados:
+`area_terreno_declarada` y `area_construida_declarada` salen de las DJ vigentes del año, una vez por secuencia de uso
+y el mayor de sus titulares (como el autoavalúo); `area_terreno_catastro` y `area_construida_catastro`, del ítem del
+catastro. Un OMISO solo tiene las del catastro, un SIN_CATASTRO solo las declaradas, y un SIN_LEVANTAR solo las
+declaradas (la ficha no se midió).
+
+Si el ítem trae `construcciones` (catastro-backend#71: `[{piso, seccion, areaConstruida}]`) y el predio tiene DJ
+vigente, la corrida compara sus pisos con los `nivel_construccion` de esas DJ. Del lado de rentas cuenta una vez cada
+secuencia de uso, con los niveles del titular que más área suma (cada condómino lleva una copia), sin los INACTIVO.
+La regla:
+
+1. En cada lado se suman las áreas de un mismo piso: las secciones de un piso del catastro son uno solo.
+2. Cada número de piso es una fila de `brecha_nivel` (corrida, `brecha_predio`, `piso`, `area_rentas`,
+   `area_catastro`, `estado`), con estos estados:
+
+| Estado | Cuándo |
+|---|---|
+| `AMBIGUO` | El piso no tiene número: un sótano, mezanine o azotea de rentas, o un piso del catastro como `S1` (llega con `piso` null). También cuando rentas repite el número en varios niveles (dos usos de un mismo piso): no se sabe qué parte es cuál. |
+| `PAR` | El mismo número de piso, una sola vez en cada lado. |
+| `SOLO_RENTAS` | El piso solo está en rentas. |
+| `SOLO_CATASTRO` | El piso solo está en el catastro. |
+
+La fila de `brecha_predio` resume sus niveles: `niveles_comparados` (los PAR), `niveles_catastro_mayor` (los PAR con
+área catastral mayor que la de rentas, y la de rentas mayor que 0) y `delta_area_niveles` (la suma de las diferencias
+positivas, catastro − rentas, de los PAR). Un catastro anterior, sin `construcciones`, deja esos tres campos vacíos y
+no escribe `brecha_nivel`; una lista vacía sí compara (todo lo declarado sale SOLO_RENTAS). `/predios` devuelve los
+siete campos en camelCase; los niveles se leen por la API genérica
+(`/api/objects/brecha_nivel/records?brecha_predio=<id>`).
+
 **Impuesto.** Por cada contribuyente con DJ vigente del año:
 - el valor catastral de cada predio cruzado y valorizado se reparte entre sus secuencias de uso según el autoavalúo
   declarado de cada una; si todas declaran 0, según su área construida; si tampoco, en partes iguales (D12), al
@@ -929,8 +958,8 @@ sus servicios, o el contexto no se pudo leer, no hay Δ arbitrios y la corrida l
 puede determinar queda sin Δ y se cuenta en `mensaje`. Un omiso no tiene Δ arbitrios (no tiene zona ni DJ).
 
 **Corrida.** `POST /api/srtm/brecha/corridas {anio}` responde **202** con la corrida PENDIENTE; en segundo plano, como
-quien la lanzó, un solo trabajador lee el catastro y el padrón, calcula y escribe las filas en lotes de 200,
-actualizando `procesados`, hasta TERMINADA (o FALLIDA, con `mensaje`). Unos 4 000 predios son uno o dos minutos: la
+quien la lanzó, un solo trabajador lee el catastro y el padrón, calcula y escribe las filas en lotes de 200 (cada
+lote con sus `brecha_nivel`, en la misma transacción), actualizando `procesados`, hasta TERMINADA (o FALLIDA, con `mensaje`). Unos 4 000 predios son uno o dos minutos: la
 maquinaria de lotes de la determinación masiva no aporta aquí. Una sola activa por organización y año (candado
 `BRECHA`): otra responde **409**; una cuyo `latido` tiene más de 10 minutos (su instancia murió) se da por abandonada
 y pasa a FALLIDA. El `latido` late con el reloj de la base (`now()`, como la determinación masiva) tras cada página
@@ -939,8 +968,8 @@ estado y se detiene si ya no está EN_CURSO, así una abandonada nunca pisa a un
 **leer**: `GET /corridas` y `GET /corridas/{id}` devuelven FALLIDA («Abandonada: sin latido desde …», con el reloj de
 la base) la activa cuyo latido venció, y la guardan así si quien lee puede editar corridas; el portal deja de esperarla
 y puede lanzar otra.
-Pide creación y edición sobre `brecha_corrida` y creación sobre `brecha_predio` (**403**); consultar pide lectura
-sobre `brecha_corrida`.
+Pide creación y edición sobre `brecha_corrida` y creación sobre `brecha_predio` y `brecha_nivel` (**403**);
+consultar pide lectura sobre `brecha_corrida`.
 
 **Seguimiento del catastro** (#203). Con `SRTM_CATASTRO_SEGUIMIENTO_MINUTOS` > 0 (por omisión apagado),
 `SeguimientoCatastro` lee cada tantos minutos `GET {url}/api/catastro/cambios` de cada organización con catastro,
@@ -965,7 +994,7 @@ con cambios desde `desde` (por omisión el 1 de enero del año), su Δ autoaval�
 sin exigir un permiso nuevo sobre ese objeto: pide la misma lectura de `brecha_corrida` que el resto de la brecha.
 
 **Quién la ve.** La brecha la consulta cualquier usuario de la municipalidad (decisión del 2026-10-19), y eso se da por
-roles, no por código: **todo rol** de srtm lleva lectura sobre `brecha_corrida` y `brecha_predio`. Core revisa la
+roles, no por código: **todo rol** de srtm lleva lectura sobre `brecha_corrida`, `brecha_predio` y `brecha_nivel`. Core revisa la
 lectura de cada fila y wasichai no tiene un permiso para «cualquier usuario autenticado», así que un rol nuevo sin esa
 lectura ve el panel con 403. Lanzar una corrida queda para quien tenga creación y edición (arriba).
 
@@ -975,7 +1004,7 @@ lectura ve el panel con 403. Lanzar una corrida queda para quien tenga creación
 | GET | `/api/srtm/brecha/corridas?anio` | Las corridas, la más reciente primero. |
 | GET | `/api/srtm/brecha/corridas/{id}` | Una corrida, con su avance (`totalPredios`, `procesados`) y, terminada, sus conteos por confianza (`prediosConfiables`, `prediosDudosos`, `prediosSinLevantar`, `deltaImpuestoConfiable`, `deltaImpuestoDudoso`, `deltaImpuestoSinLevantar`; null en una corrida anterior a #204). |
 | GET | `/api/srtm/brecha/{anio}/panel?corrida` | KPIs, por categoría, por confianza (`porConfianza: {CONFIABLE, DUDOSO, SIN_LEVANTAR}`, cada una `{predios, deltaImpuesto, deltaAutoavaluo}`) y por sector de la última corrida TERMINADA del año (o de `corrida`); 404 si no hay. |
-| GET | `/api/srtm/brecha/{anio}/predios?categoria&sector&confianza&page&size&corrida` | Página de filas por su `orden` (código del predio, luego código catastral); 422 si `categoria` no es una de las siete o `confianza` no es una de las tres. |
+| GET | `/api/srtm/brecha/{anio}/predios?categoria&sector&confianza&page&size&corrida` | Página de filas por su `orden` (código del predio, luego código catastral), con sus áreas y el resumen de sus niveles (#247: `areaTerrenoDeclarada`, `areaTerrenoCatastro`, `areaConstruidaDeclarada`, `areaConstruidaCatastro`, `nivelesComparados`, `nivelesCatastroMayor`, `deltaAreaNiveles`); 422 si `categoria` no es una de las siete o `confianza` no es una de las tres. |
 | GET | `/api/srtm/brecha/{anio}/lotes?corrida` | GeoJSON `FeatureCollection` (EPSG:4326) con `{categoria, codigo, deltaImpuesto}`. |
 | GET | `/api/srtm/brecha/{anio}/cambios?corrida&desde&marca&objeto&page&size` | Predios con cambios en catastro desde `desde` (AAAA-MM-DD, por omisión el 1 de enero del año), con el Δ autoavalúo de la última corrida TERMINADA (o de `corrida`) y `marca = SUPERA_5_UIT` cuando \|Δ\| pasa de 5 UIT del 1 de enero del año; marcados primero, luego \|Δ\| de mayor a menor y por código municipal; 404 sin corrida TERMINADA del año; 422 si `marca`, `objeto`, `desde`, `page` o `size` son inválidos, o falta la UIT del año (`faltan`). |
 
@@ -1900,8 +1929,8 @@ Cuarenta y dos objetos (`model/model.json`):
   `notificacion_resolucion`.
 - **Anuncios y propaganda** (`srtm.anuncios`): `anuncio` y `movimiento_anuncio` (autorización, renovación, cese y
   retiro; la autorización y la renovación devengan la tasa).
-- **Brecha de recaudación** (`srtm.brecha`): `brecha_corrida` (una medición de un año) y `brecha_predio` (sus filas,
-  con el lote en `lote_geom`). Ver [Brecha de recaudación](#brecha-de-recaudación).
+- **Brecha de recaudación** (`srtm.brecha`): `brecha_corrida` (una medición de un año), `brecha_predio` (sus filas,
+  con el lote en `lote_geom`) y `brecha_nivel` (los pisos de cada fila, rentas contra catastro, #247). Ver [Brecha de recaudación](#brecha-de-recaudación).
 
 Las garantías de `rentas` sobre las infracciones y los anuncios, y dónde quedan:
 - **Unicidad:** Core no tiene unicidad compuesta, así que un campo único guarda las partes unidas: `codigo_infraccion.clave`

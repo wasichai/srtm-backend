@@ -354,6 +354,7 @@
     "estado_brecha": ["PENDIENTE", "EN_CURSO", "TERMINADA", "FALLIDA"],
     "categoria_brecha": ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE", "SIN_LEVANTAR"],
     "confianza_brecha": ["CONFIABLE", "DUDOSO", "SIN_LEVANTAR"],
+    "estado_nivel_brecha": ["PAR", "SOLO_RENTAS", "SOLO_CATASTRO", "AMBIGUO"],
     "origen_corrida": ["MANUAL", "CAMBIOS", "SEMANAL"],
     "operacion_catastro": ["CREATE", "UPDATE", "DELETE"],
     "estado_orden_caja": ["POR_ENVIAR", "ENVIADA", "POR_RETIRAR", "RETIRADA", "CANCELADA", "PAGADA_EN_CAJA", "CONFLICTO", "ERROR"],
@@ -1405,7 +1406,19 @@
         {"name": "confianza", "label": "Confianza", "type": "ENUM", "enum": "confianza_brecha",
           "description": "Qué tan confiable es el cruce de esta fila: por vínculo, por titular o ninguno (#204)."},
         {"name": "confianza_motivo", "label": "Motivo de la confianza", "type": "TEXT",
-          "description": "Por qué salió esa confianza, por ejemplo \"Sin ficha del catastro\" o \"Sin predio en el padrón\" (#204)."}
+          "description": "Por qué salió esa confianza, por ejemplo \"Sin ficha del catastro\" o \"Sin predio en el padrón\" (#204)."},
+        {"name": "area_terreno_declarada", "label": "Área de terreno declarada (m2)", "type": "DECIMAL",
+          "description": "La de las DJ vigentes del año: cada secuencia de uso una vez, la mayor de sus titulares (#247)."},
+        {"name": "area_terreno_catastro", "label": "Área de terreno catastral (m2)", "type": "DECIMAL", "description": "La de la ficha (#247)."},
+        {"name": "area_construida_declarada", "label": "Área construida declarada (m2)", "type": "DECIMAL",
+          "description": "La de las DJ vigentes del año: cada secuencia de uso una vez, la mayor de sus titulares (#247)."},
+        {"name": "area_construida_catastro", "label": "Área construida catastral (m2)", "type": "DECIMAL", "description": "La de la ficha (#247)."},
+        {"name": "niveles_comparados", "label": "Niveles comparados", "type": "INTEGER",
+          "description": "Sus brecha_nivel PAR: el mismo número de piso una sola vez en cada lado. Vacío si no se compararon niveles (#247)."},
+        {"name": "niveles_catastro_mayor", "label": "Niveles con más área en catastro", "type": "INTEGER",
+          "description": "Los PAR cuya área catastral supera la de rentas, con la de rentas mayor que 0 (#247)."},
+        {"name": "delta_area_niveles", "label": "Δ área de los niveles (m2)", "type": "DECIMAL",
+          "description": "La suma de las diferencias positivas (catastro − rentas) de los PAR (#247)."}
       ]
     },
     {
@@ -1559,6 +1572,22 @@
         {"name": "en", "label": "En", "type": "DATETIME", "required": true},
         {"name": "entrega", "label": "Entrega", "type": "TEXT",
           "description": "El código de la entrega que originó el cambio (wasichai/catastro-backend#23); vacío en otro caso."}
+      ]
+    },
+    {
+      "name": "brecha_nivel",
+      "label": "Nivel de la brecha",
+      "pluralLabel": "Niveles de la brecha",
+      "description": "Un piso de un predio de una corrida de brecha: el área que le dan la DJ vigente y la ficha catastral, y cómo se emparejaron (#247).",
+      "fields": [
+        {"name": "piso", "label": "Piso", "type": "INTEGER",
+          "description": "El número de piso; vacío para un sótano, mezanine o azotea de rentas y un piso catastral que no es número."},
+        {"name": "area_rentas", "label": "Área en rentas (m2)", "type": "DECIMAL",
+          "description": "La suma de los niveles de la DJ con ese piso; vacía si rentas no lo tiene."},
+        {"name": "area_catastro", "label": "Área en catastro (m2)", "type": "DECIMAL",
+          "description": "La suma de las secciones de la ficha con ese piso; vacía si catastro no lo tiene."},
+        {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_nivel_brecha", "required": true,
+          "description": "PAR: el piso una sola vez en cada lado. SOLO_RENTAS o SOLO_CATASTRO: en un lado. AMBIGUO: rentas lo repite en varios niveles, o no tiene número."}
       ]
     }
   ],
@@ -2039,6 +2068,24 @@
       "target": "brecha_corrida",
       "fieldName": "ultima_corrida",
       "required": false
+    },
+    {
+      "name": "brecha_nivel_corrida",
+      "label": "Corrida",
+      "inverseLabel": "Niveles",
+      "source": "brecha_nivel",
+      "target": "brecha_corrida",
+      "fieldName": "corrida",
+      "required": true
+    },
+    {
+      "name": "brecha_nivel_brecha_predio",
+      "label": "Predio de la brecha",
+      "inverseLabel": "Niveles",
+      "source": "brecha_nivel",
+      "target": "brecha_predio",
+      "fieldName": "brecha_predio",
+      "required": true
     }
   ]
 }
