@@ -267,11 +267,12 @@ object Visor {
         )
     }
 
-    // the rows that match and have a lote (lotes: brecha_predio id -> its geometry, GeoJSON in EPSG:4326), one
-    // Feature each with the properties the map colours by. its id is the brecha_predio's: /predios/{id}/niveles
+    // the rows that match and have a lote (lotes: brecha_predio id -> its geometry, GeoJSON in EPSG:4326, as a map or
+    // as its json: ReportesService's LoteJson), one Feature each with the properties the map colours by. its id is the
+    // brecha_predio's: /predios/{id}/niveles
     fun lotes(
         filas: List<FilaVisor>,
-        lotes: Map<String, Map<String, Any?>>,
+        lotes: Map<String, Any>,
         filtro: FiltroVisor
     ): Map<String, Any?> =
         mapOf(

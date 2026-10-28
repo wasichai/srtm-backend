@@ -808,8 +808,11 @@ brecha. Las filas de una corrida TERMINADA no cambian: se guardan en memoria sin
 `srtm.reportes.corridas` (8) corridas más usadas (la menos usada sale primero; `0` apaga la caché). Los titulares del
 padrón de sus predios y el catálogo de usos sí cambian: se guardan `srtm.reportes.cache` (10 minutos), y un cambio del
 padrón (una DJ nueva o rectificada) aparece en el contribuyente de las filas al vencer esa caché. Las decisiones de
-catastro se guardan `srtm.reportes.cache-decisiones` (1 minuto), y su falla, `srtm.reportes.cache-fallo-decisiones` (30
-segundos): con catastro caído no se espera su respuesta en cada página.
+catastro se guardan `srtm.reportes.cache-decisiones` (2 minutos; #263), y su falla, `srtm.reportes.cache-fallo-decisiones`
+(30 segundos): con catastro caído no se espera su respuesta en cada página. Se leen una sola vez aunque las pidan varias
+consultas a la vez (el visor pide juntos su panel, sus predios y sus lotes): las demás esperan esa lectura. Las filas
+tal como las muestran los reportes se arman una vez por lo que las forma (las filas, los titulares, los usos y las
+decisiones guardados) y no en cada consulta, como las del visor y su panel.
 
 *Precalentado (#255).* Cuando una corrida queda TERMINADA, la instancia que la corrió lee en segundo plano sus filas,
 sus titulares y los usos de la organización, como la plataforma de esa organización: la primera consulta del tablero ya
@@ -892,7 +895,9 @@ De catastro, con la cuenta de servicio de la organización (`SRTM_LECTOR`), solo
 vías con arancel y las imágenes WMS. No hace falta iniciar sesión en catastro.
 
 *Parámetros comunes.* `anio` (obligatorio) y `corrida` (opcional; vacía o ausente, la última TERMINADA del año), como
-en los reportes, cuyas filas y caché reutiliza. Toda ruta pide antes lectura sobre `brecha_corrida` y sobre
+en los reportes, cuyas filas y caché reutiliza. Con la caché llena, `/panel` y `/predios` no vuelven a leer las filas
+ni catastro ni a armar sus filas (#263): solo filtran y ordenan. Solo `/lotes` usa las geometrías, guardadas aparte
+como su GeoJSON para las 2 corridas más recientes. Toda ruta pide antes lectura sobre `brecha_corrida` y sobre
 `brecha_predio`. Un parámetro que la ruta no conoce, o que no puede leer, es 422 y se nombra. Filtros de `/predios`,
 `/lotes` y `/predios.csv`: `categoria`, `confianza` y `estado` (listas separadas por comas de los valores del modelo),
 `sector` (como compara el cruce: `01` es `1`), `supera_5_uit` (`true` o `false`; `false` incluye las filas sin
