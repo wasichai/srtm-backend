@@ -225,7 +225,10 @@ data class FilaBrecha(
     val deltaAreaNiveles: BigDecimal? = null,
     // #247: its brecha_nivel rows, written apart (never a field of brecha_predio): null when they were not compared
     @get:JsonIgnore
-    val niveles: List<NivelBrecha>? = null
+    val niveles: List<NivelBrecha>? = null,
+    // #260: whether it had a lote_geom, for a copy kept without it (ReportesService); never a field of brecha_predio
+    @get:JsonIgnore
+    val conLote: Boolean = false
 )
 
 // the corrida as the portal shows it (camelCase, like /liquidacion)

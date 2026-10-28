@@ -109,6 +109,13 @@ guardan en memoria, así que no basta con que `RecordService` las filtre). El re
 contribuyente, con un aviso. La descripción del uso se lee de `uso_predio` si el usuario lo lee. Las decisiones de
 catastro las lee la cuenta de servicio de la brecha (`SRTM_LECTOR`), no el usuario.
 
+|Consultar el visor de brechas +
+`GET /api/srtm/visor/**`
+|`READ` sobre `brecha_corrida` y sobre `brecha_predio`, pedidos antes de leer nada, como en los reportes (#260).
+Los niveles de una fila los sirve `RecordService` y piden además `READ` sobre `brecha_nivel`. Las vías con arancel y
+las imágenes WMS las pide a catastro la cuenta de servicio de la organización (`SRTM_LECTOR`, que lee
+`predio_catastral` y `tramo_via`), no el usuario: no hay que iniciar sesión en catastro.
+
 |Enviar a caja las deudas de un contribuyente +
 `POST /api/srtm/contribuyentes/{id}/caja`
 |`CREATE` sobre `orden_caja`.

@@ -159,7 +159,9 @@ data class FilaReportePredio(
     // every titular, the principal first: q searches them all, contribuyentes splits the Δ among them
     @get:JsonIgnore val titulares: List<Titular> = emptyList(),
     // its position in the corrida (Brecha.ordenadas): the tie-break of every order
-    @get:JsonIgnore val orden: Int = 0
+    @get:JsonIgnore val orden: Int = 0,
+    // #260: whether its lote has a geometry (the visor's con_geometria)
+    @get:JsonIgnore val conGeometria: Boolean = false
 ) {
     val deltaAreaTerreno: BigDecimal? @JsonIgnore get() = diferencia(areaTerrenoDeclarada, areaTerrenoCatastro)
     val deltaAreaConstruida: BigDecimal? @JsonIgnore get() = diferencia(areaConstruidaDeclarada, areaConstruidaCatastro)
@@ -368,7 +370,8 @@ object Reportes {
                 deltaAreaNiveles = f.deltaAreaNiveles,
                 decision = decision,
                 titulares = suyos,
-                orden = f.orden ?: 0
+                orden = f.orden ?: 0,
+                conGeometria = f.conLote || f.loteGeom != null
             )
         }
 
