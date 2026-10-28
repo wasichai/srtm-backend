@@ -9,6 +9,7 @@ import srtm.brecha.Categoria
 import srtm.brecha.FilaBrecha
 import srtm.brecha.NivelBrecha
 import srtm.brecha.RegistroCorrida
+import srtm.reportes.LoteJson
 import srtm.reportes.Reportes
 import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
@@ -197,6 +198,14 @@ class VisorTest {
         assertEquals(true, p["supera_5_uit"])
         assertEquals("CM-0", p["codigo_catastro"])
         assertEquals(1, (Visor.lotes(filas(), lotes, FiltroVisor(estados = setOf("A_FISCALIZAR")))["features"] as List<*>).size)
+    }
+
+    @Test
+    fun `a lote kept as its json goes into the response as it is (#263)`() {
+        val json = """{"type":"Polygon","coordinates":[[[-75.0,-12.0],[-75.1,-12.0],[-75.0,-12.1]]]}"""
+        val fc = Visor.lotes(filas(), mapOf("b0" to LoteJson(json)), FiltroVisor())
+        val escrito = JsonMapper.builder().build().writeValueAsString(fc)
+        assertTrue(escrito.contains("\"geometry\":$json"), escrito)
     }
 
     @Test

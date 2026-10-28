@@ -91,3 +91,15 @@ class Cache<K : Any, V : Any>(
         entradas[clave] = ahora() to valor
     }
 }
+
+// what a value was made of, compared by identity: each part is a cached value, the very same object while its cache
+// keeps it, so an equal Insumos means the value made of them would come out the same (#263)
+class Insumos(
+    vararg partes: Any?
+) {
+    private val partes = partes.toList()
+
+    override fun equals(other: Any?): Boolean = other is Insumos && other.partes.size == partes.size && partes.indices.all { partes[it] === other.partes[it] }
+
+    override fun hashCode(): Int = partes.fold(1) { h, p -> 31 * h + System.identityHashCode(p) }
+}

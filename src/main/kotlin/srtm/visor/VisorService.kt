@@ -23,6 +23,7 @@ import srtm.brecha.SIN_WMS
 import srtm.brecha.delUsuario
 import srtm.rentas.Registros
 import srtm.reportes.Cache
+import srtm.reportes.Insumos
 import srtm.reportes.Lectura
 import srtm.reportes.ReportesService
 import wasichai.core.common.ConflictException
@@ -61,12 +62,20 @@ class VisorService(
     // the layers confirmed per organization (a GetMap of 1 px each): GeoServer publishes them once, rarely changes them
     private val capasPorOrganizacion = Cache<UUID, List<CapaWms>>(VIGENCIA_CAPAS, 64)
 
+    // #263: the visor's rows and its panel, the last made of each of the reportes' rows (ReportesService keeps those
+    // while what they are made of does not change): a request with its cache full makes neither again
+    private val filasDelVisor = Cache<Triple<String, Boolean, Boolean>, Pair<List<Any?>, List<FilaVisor>>>(null, DERIVADAS)
+    private val paneles = Cache<Triple<String, Boolean, Boolean>, Pair<List<Any?>, PanelVisor>>(null, DERIVADAS)
+
     suspend fun panel(
         anio: Int,
         corrida: UUID?
     ): PanelVisor {
         val (l, filas) = leer(anio, corrida)
-        return calcular { Visor.panel(l.corrida, filas, l.conDecisiones, l.avisos) }
+        // the same rows, corrida and avisos: the same panel
+        val insumos = listOf(Insumos(filas), l.corrida, l.avisos)
+        return paneles.get(l.derivada)?.takeIf { it.first == insumos }?.second
+            ?: calcular { Visor.panel(l.corrida, filas, l.conDecisiones, l.avisos) }.also { paneles.put(l.derivada, insumos to it) }
     }
 
     suspend fun predios(
@@ -203,7 +212,12 @@ class VisorService(
     ): Pair<Lectura, List<FilaVisor>> {
         exigir()
         val l = reportes.leer(anio, corrida)
-        return l to calcular { Visor.filas(l.filas, l.conDecisiones, l.umbral) }
+        // the same reportes' rows and the same 5 UIT: the same rows of the visor
+        val insumos = listOf(Insumos(l.filas), l.umbral)
+        val filas =
+            filasDelVisor.get(l.derivada)?.takeIf { it.first == insumos }?.second
+                ?: calcular { Visor.filas(l.filas, l.conDecisiones, l.umbral) }.also { filasDelVisor.put(l.derivada, insumos to it) }
+        return l to filas
     }
 
     private suspend fun exigir() {
@@ -220,6 +234,9 @@ class VisorService(
         private val log = LoggerFactory.getLogger(VisorService::class.java)
         const val ACTO = "consultar el visor de brechas"
         val VIGENCIA_CAPAS: Duration = Duration.ofMinutes(10)
+
+        // the rows and panels kept (#263): up to 4 per corrida, as ReportesService's
+        const val DERIVADAS = 8
 
         // the layers the visor may show, of objects SRTM_LECTOR reads in catastro (never brecha_ficha): object,
         // geometry column, label
