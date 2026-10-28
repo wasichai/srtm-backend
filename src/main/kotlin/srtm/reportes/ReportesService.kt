@@ -90,6 +90,10 @@ class ReportesService(
     private val decisionesPorAnio = Cache<Pair<UUID, Int>, Map<String, String>>(vigenciaDecisiones, corridas)
     private val falloDeDecisiones = Cache<Pair<UUID, Int>, String>(vigenciaFallo, corridas)
 
+    // #260: the lotes of the LOTES most recently used corridas, by brecha_predio id (the visor's map): read with the
+    // rows, from the same read, and kept apart because they are most of its weight
+    private val lotesPorCorrida = Cache<String, Map<String, Map<String, Any?>>>(null, LOTES)
+
     // the corrida last warmed per organization and year
     private val precalentadas = ConcurrentHashMap<Pair<UUID, Int>, String>()
 
@@ -191,6 +195,7 @@ class ReportesService(
         precalentadas.put(organizacion to anio, corrida)?.takeIf { it != corrida }?.let {
             filasPorCorrida.quitar(it)
             titularesPorCorrida.quitar(it)
+            lotesPorCorrida.quitar(it)
         }
         filas(corrida)
         titularesPorCorrida.obtener(corrida) { titulares(anio) }
@@ -200,8 +205,21 @@ class ReportesService(
     // whether the corrida's rows and titulares are kept: for the tests
     internal fun precalentada(corrida: String): Boolean = filasPorCorrida.get(corrida) != null && titularesPorCorrida.get(corrida) != null
 
-    // the corrida's rows, without the lote's geometry (the reports never show it)
-    private suspend fun filas(corrida: String): List<FilaBrecha> = filasPorCorrida.obtener(corrida) { brechas.filas(corrida).map { it.copy(loteGeom = null) } }
+    // the corrida's rows, without the lote's geometry (the reports never show it, the visor reads it from lotes): only
+    // whether they had one. the geometries of the same read are kept for lotes
+    private suspend fun filas(corrida: String): List<FilaBrecha> =
+        filasPorCorrida.obtener(corrida) {
+            val leidas = brechas.filas(corrida)
+            lotesPorCorrida.put(corrida, lotesDe(leidas))
+            leidas.map { it.copy(loteGeom = null, conLote = it.loteGeom != null) }
+        }
+
+    // #260: the corrida's lotes by brecha_predio id. no permission is asked here: the visor calls it after leer, which
+    // asks them; the rows are read again only when the lotes were dropped before them
+    suspend fun lotes(corrida: String): Map<String, Map<String, Any?>> = lotesPorCorrida.obtener(corrida) { lotesDe(brechas.filas(corrida)) }
+
+    private fun lotesDe(filas: List<FilaBrecha>): Map<String, Map<String, Any?>> =
+        filas.mapNotNull { f -> f.id?.let { id -> f.loteGeom?.let { id to it } } }.toMap()
 
     // the vigente DJs of the year and their contribuyentes: each predio's titulares
     private suspend fun titulares(anio: Int): Map<String, List<Titular>> {
@@ -283,5 +301,8 @@ class ReportesService(
         val log = LoggerFactory.getLogger(ReportesService::class.java)
         val CINCO = BigDecimal(5)
         const val SIN_DECISIONES = "Sin las decisiones de catastro"
+
+        // the corridas whose lotes are kept (#260): a corrida of Ica's is some tens of MB of them
+        const val LOTES = 2
     }
 }
