@@ -100,7 +100,7 @@ class VisorService(
         return calcular { Visor.lotes(filas, lotes, filtro) }
     }
 
-    // #265: the predios of a lote, by the codigo of its /lotes feature; a codigo no row of the corrida has: 404. the
+    // #265: the predios of a lote, by the codigo of its /lotes feature; a codigo no feature of the corrida has: 404. the
     // names come from the reportes' cached titulares, read by whoever read them first: shown only to a caller who may
     // read contribuyente and every field of its name
     suspend fun prediosDelLote(
@@ -110,7 +110,8 @@ class VisorService(
     ): List<PredioDelLote> {
         val (l, filas) = leer(anio, corrida)
         val conNombre = permisos.puedeLeerCampos(CONTRIBUYENTE, CAMPOS_DEL_NOMBRE)
-        return calcular { Visor.prediosDelLote(filas, l.filas, codigo, conNombre) }
+        val lotes = reportes.lotes(l.corrida.id!!)
+        return calcular { Visor.prediosDelLote(filas, l.filas, lotes, codigo, conNombre) }
             ?: throw NotFoundException("El lote $codigo no está en la corrida ${l.corrida.id}")
     }
 

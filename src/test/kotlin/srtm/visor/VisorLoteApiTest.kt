@@ -10,7 +10,8 @@ import tools.jackson.databind.JsonNode
 
 // #265: the predios of a lote for the visor's popup, end to end: a TERMINADA corrida of the seeded admin's
 // organization (asked for by its id: other classes write corridas of the same year there), a lote of two predios (one
-// with its DJ, one omiso without contribuyente) of shared codes with dashes, another lote next to it, and callers
+// with its DJ, one omiso without contribuyente) drawn with the same geometry, of shared codes with dashes, another
+// row of the same sector, manzana and lote drawn apart (another feature, so another lote of the map), and callers
 // who may not read contribuyente or the fields of its name
 class VisorLoteApiTest : SrtmApiTest() {
     private class Datos(
@@ -58,12 +59,13 @@ class VisorLoteApiTest : SrtmApiTest() {
         fun fila(
             orden: Int,
             categoria: String,
-            atributos: Map<String, Any?>
+            atributos: Map<String, Any?>,
+            lote: Map<String, Any?> = LOTE
         ) = post(
             "/api/objects/brecha_predio/records",
             mapOf(
                 "attributes" to mapOf("corrida" to corrida, "categoria" to categoria, "orden" to orden, "estimado" to false) + atributos,
-                "geometries" to mapOf("lote_geom" to LOTE)
+                "geometries" to mapOf("lote_geom" to lote)
             )
         )["id"].asString()
         val conDj =
@@ -96,7 +98,8 @@ class VisorLoteApiTest : SrtmApiTest() {
                     "estimado" to true
                 )
             )
-        fila(2, "COINCIDE", mapOf("codigo_catastro" to "M-$sufijo", "sector" to "01", "manzana" to "A", "lote" to "8", "confianza" to "CONFIABLE"))
+        // the same sector, manzana and lote, drawn apart: another feature, another lote of the map
+        fila(2, "COINCIDE", mapOf("codigo_catastro" to "M-$sufijo", "sector" to "01", "manzana" to "A", "lote" to "7", "confianza" to "CONFIABLE"), OTRO_LOTE)
         return Datos(corrida, sufijo, conDj, omiso, predio, contribuyente, declaracion)
     }
 
@@ -244,6 +247,13 @@ class VisorLoteApiTest : SrtmApiTest() {
     companion object {
         private var datosDeLaClase: Datos? = null
         private const val CLAVE = "clave-del-usuario-del-lote"
+
+        private val OTRO_LOTE =
+            mapOf(
+                "type" to "Polygon",
+                "coordinates" to
+                    listOf(listOf(listOf(-75.69, -14.0), listOf(-75.6895, -14.0), listOf(-75.6895, -13.9995), listOf(-75.69, -13.9995), listOf(-75.69, -14.0)))
+            )
 
         private val LOTE =
             mapOf(

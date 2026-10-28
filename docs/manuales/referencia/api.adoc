@@ -941,8 +941,10 @@ delta}]`, por piso (los sótanos primero, sin piso al final); `delta` es catastr
 
 |`GET /lotes/{codigo}/predios?anio&corrida`
 |Los predios del lote de la feature de `/lotes` cuyo `codigo` es `{codigo}` (codificado para la url; un código
-compartido lleva guiones), para el popup del mapa (#265). El lote es el sector, la manzana y el lote de esa fila,
-comparados como en el cruce (`01` es `1`); una fila sin alguno de los tres es un lote por sí sola. Cada predio:
+compartido lleva guiones), para el popup del mapa (#265). La clave es la misma con la que `/lotes` dibuja sus
+features: cada feature es una fila con su `lote_geom`, así que el lote es esa geometría, y sus predios son todas las
+filas de la corrida dibujadas con la misma geometría (las fichas de un mismo terreno la comparten). Una fila sin lote
+no es feature: su código es 404. Cada predio:
 `{id, predio, codigo_predio, declaracion, contribuyente, contribuyente_nombre, categoria, confianza,
 delta_impuesto, estado}`: `id` es el de `brecha_predio`, `predio` el del padrón (`null` en un omiso), `declaracion`
 la DJ vigente del titular principal y `contribuyente` ese titular (`null` sin ellos o sin lectura del padrón).

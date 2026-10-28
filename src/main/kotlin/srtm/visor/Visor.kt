@@ -9,6 +9,7 @@ import srtm.brecha.NivelBrecha
 import srtm.brecha.RegistroCorrida
 import srtm.reportes.ESTADOS_DECISION
 import srtm.reportes.FilaReportePredio
+import srtm.reportes.LoteJson
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import java.math.BigDecimal
@@ -302,21 +303,25 @@ object Visor {
     // a feature's codigo in /lotes: its padrón code, else its catastro code
     fun codigo(f: FilaVisor): String? = f.codigoPredio ?: f.codigoCatastro
 
-    // #265: the predios of the lote of the rows whose /lotes codigo is `codigo` (one with a lote first): every row of
-    // the corrida of its sector, manzana and lote, compared as the cruce compares codes (Brecha.llave); a row without
-    // all three is a lote of its own. visor and reportes are the same rows (Visor.filas keeps their order); conNombre
-    // false leaves contribuyente_nombre null. by codigo_predio (the omisos, without one, last), then the catastro code
-    // and the id. null when no row has that codigo
+    // #265: the predios of the lote of the /lotes feature whose codigo is `codigo`, with the key /lotes draws its
+    // features by: a feature is one row and its lote_geom (lotes: brecha_predio id -> its geometry, a map or its json),
+    // so the lote is that geometry, and its predios are every row of the corrida drawn with the very same one (the
+    // fichas of a parcel share it). a row without a lote is no feature. visor and reportes are the same rows
+    // (Visor.filas keeps their order); conNombre false leaves contribuyente_nombre null. by codigo_predio (the omisos,
+    // without one, last), then the catastro code and the id. null when no feature has that codigo
     fun prediosDelLote(
         visor: List<FilaVisor>,
         reportes: List<FilaReportePredio>,
+        lotes: Map<String, Any>,
         codigo: String,
         conNombre: Boolean
     ): List<PredioDelLote>? {
         val filas = visor.zip(reportes)
-        val elegida = filas.filter { codigo(it.first) == codigo }.maxByOrNull { it.first.conGeometria } ?: return null
-        val lote = llaveDeLote(elegida.first)
-        val delLote = if (lote == null) filas.filter { codigo(it.first) == codigo } else filas.filter { llaveDeLote(it.first) == lote }
+
+        fun geometria(f: FilaVisor): Any? = f.id?.let(lotes::get)?.let { (it as? LoteJson)?.json ?: it }
+        val dibujadas = filas.filter { codigo(it.first) == codigo }.mapNotNull { geometria(it.first) }.toSet()
+        if (dibujadas.isEmpty()) return null
+        val delLote = filas.filter { geometria(it.first) in dibujadas }
         return delLote
             .sortedWith(
                 compareBy<Pair<FilaVisor, FilaReportePredio>, String?>(nullsLast()) { it.first.codigoPredio }
@@ -337,8 +342,6 @@ object Visor {
                 )
             }
     }
-
-    private fun llaveDeLote(f: FilaVisor): List<String>? = listOf(f.sector, f.manzana, f.lote).map { Brecha.llave(it) ?: return null }
 
     // by piso (a sótano is negative, so it goes first), the ones without piso last
     fun niveles(leidos: List<NivelBrecha>): List<NivelVisor> =
