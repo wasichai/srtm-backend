@@ -4,7 +4,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.reactor.awaitSingleOrNull
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
-import org.springframework.core.io.buffer.DataBufferUtils
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import srtm.ParametroInvalido
@@ -184,10 +183,11 @@ class VisorService(
                 etiqueta
         }
 
+    // read to its end, so catastro's connection goes back to the pool: ClienteCatastro.wms already released its
+    // pooled buffers, what comes is on the heap (#264)
     private suspend fun descartar(imagen: ImagenWms) {
         try {
             imagen.cuerpo
-                .doOnNext { DataBufferUtils.release(it) }
                 .then()
                 .awaitSingleOrNull()
         } catch (e: CancellationException) {
