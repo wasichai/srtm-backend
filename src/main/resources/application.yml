@@ -96,6 +96,9 @@ srtm:
     # the srtm organization (its slug or its id) whose catastro the single url and account are. empty: they are no
     # organization's and are not used
     organizacion: ${SRTM_CATASTRO_ORGANIZACION:}
+    # #260: the WMS the visor de brechas relays images from (catastro-ui's nginx in front of GeoServer), the single
+    # entry's; an entry of the map takes _WMS_URL. empty: the visor has no WMS layers
+    wms-url: ${SRTM_CATASTRO_WMS_URL:}
     # #203: every `minutos` srtm reads each organization's GET /api/catastro/cambios (0: never) and, at or after
     # `hora` (America/Lima), starts at most one automatic corrida a day: on cambios, or weekly without them
     seguimiento:

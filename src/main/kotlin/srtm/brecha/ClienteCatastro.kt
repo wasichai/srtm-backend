@@ -6,12 +6,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.io.buffer.DataBuffer
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.web.reactive.function.client.WebClient
 import org.springframework.web.reactive.function.client.WebClientResponseException
 import org.springframework.web.util.UriComponentsBuilder
+import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
 import srtm.PorOrganizacion
 import srtm.TokenDeServicio
@@ -41,6 +43,8 @@ data class CatastroProperties(
     // each request: catastro values a page on the fly. an entry without its own timeout takes this one
     val timeout: Duration = ClienteCatastro.TIMEOUT,
     val organizacion: String = "",
+    // #260: the single entry's WMS (catastro-ui's nginx in front of GeoServer), as CuentaCatastro.wmsUrl
+    val wmsUrl: String = "",
     val organizaciones: Map<String, CuentaCatastro> = emptyMap(),
     // the background reader of catastro's cambios (#203, SeguimientoCatastro)
     val seguimiento: SeguimientoProperties = SeguimientoProperties()
@@ -50,7 +54,7 @@ data class CatastroProperties(
     fun cuentas(): Map<String, CuentaCatastro> {
         val todas = linkedMapOf<String, CuentaCatastro>()
         val unica = organizacion.trim()
-        if (unica.isNotEmpty()) todas[unica.lowercase()] = CuentaCatastro(unica, url, clientId, clientSecret, timeout)
+        if (unica.isNotEmpty()) todas[unica.lowercase()] = CuentaCatastro(unica, url, clientId, clientSecret, timeout, wmsUrl)
         for ((clave, cuenta) in organizaciones) {
             val suya = cuenta.organizacion.trim().ifEmpty { clave.trim() }
             todas[suya.lowercase()] = cuenta.copy(organizacion = suya, timeout = cuenta.timeout ?: timeout)
@@ -75,7 +79,7 @@ data class CatastroProperties(
     // never the secret: this text may end up in a log
     override fun toString() =
         "CatastroProperties(enabled=$enabled, url=$url, clientId=$clientId, timeout=$timeout, organizacion=$organizacion, " +
-            "organizaciones=$organizaciones, seguimiento=$seguimiento)"
+            "wmsUrl=$wmsUrl, organizaciones=$organizaciones, seguimiento=$seguimiento)"
 }
 
 // minutos: how often the cambios are read (0, the default: never); hora: from which hour of the day (Lima) the
@@ -89,19 +93,22 @@ data class SeguimientoProperties(
     }
 }
 
-// one organization's catastro-backend and its service account
+// one organization's catastro-backend and its service account. wmsUrl (#260, optional): the WMS the visor de brechas
+// relays its images from, catastro-ui's nginx in front of GeoServer (http://catastro-ui/geoserver/catastro/wms),
+// which asks catastro-backend to authorize each GetMap; empty, the visor has no WMS layers
 data class CuentaCatastro(
     val organizacion: String = "",
     val url: String = "",
     val clientId: String = "",
     val clientSecret: String = "",
-    val timeout: Duration? = null
+    val timeout: Duration? = null,
+    val wmsUrl: String = ""
 ) {
     // what it lacks to be read
     val faltan: List<String>
         get() = listOf("url" to url, "client-id" to clientId, "client-secret" to clientSecret).filter { it.second.isBlank() }.map { it.first }
 
-    override fun toString() = "CuentaCatastro(organizacion=$organizacion, url=$url, clientId=$clientId, timeout=$timeout)"
+    override fun toString() = "CuentaCatastro(organizacion=$organizacion, url=$url, clientId=$clientId, timeout=$timeout, wmsUrl=$wmsUrl)"
 }
 
 // catastro-backend's valuations of a year, every page of them, and its engine on insumos that are not in it
@@ -137,7 +144,26 @@ interface Catastro {
     // the reportes (#248): every decision_brecha of the year, what catastro decided to do with each predio. a catastro
     // that cannot give them fails with a CatastroException: the reports go on without them
     suspend fun decisiones(anio: Int): List<DecisionCatastral> = throw CatastroException("Este catastro no da sus decisiones de brecha", 404)
+
+    // the visor de brechas (#260): GET /api/catastro/vias/aranceles?anio, catastro's json as it answers it
+    suspend fun vias(anio: Int): String = throw CatastroException("Este catastro no da sus vías con arancel", 404)
+
+    // the id of the catastro organization the service account is of: its WMS layers are named after it
+    suspend fun organizacionCatastral(): String = throw CatastroException("Este catastro no da su organización", 404)
+
+    // whether a WMS is configured (CuentaCatastro.wmsUrl)
+    val conWms: Boolean get() = false
+
+    // a GetMap relayed to the WMS with these parameters (checked by the caller: visor.PedidoWms), its image as it
+    // comes. a refusal fails with catastro's status, and its reason in detalle
+    suspend fun wms(parametros: List<Pair<String, String>>): ImagenWms = throw CatastroException(SIN_WMS, 404)
 }
+
+// a WMS image as catastro serves it: its type and its bytes, streamed
+class ImagenWms(
+    val tipo: MediaType?,
+    val cuerpo: Flux<DataBuffer>
+)
 
 // an arancel as catastro-backend keeps it (its object arancel, catastro-backend's model.json): srtm's VIGENTE one,
 // without its estado nor its signatures. clave is id_aranc|anio, unique in catastro
@@ -170,7 +196,9 @@ enum class CopiaDeArancel { CREADO, ACTUALIZADO, IGUAL, BORRADO, NO_ESTABA }
 // http status, when the failure was one (404 or 403 on /titulares is no failure: callers check it themselves)
 class CatastroException(
     mensaje: String,
-    val estado: Int? = null
+    val estado: Int? = null,
+    // the body of catastro's refusal, cut short: for the log, never for the caller (#260)
+    val detalle: String? = null
 ) : RuntimeException(mensaje)
 
 // the catastros of the install, each its organization's (the key: its id or its slug). a corrida reads its own
@@ -212,6 +240,10 @@ const val NO_CONFIGURADO =
 const val SIN_CATASTRO_CONFIGURADO =
     "Catastro no configurado para esta organización: fije srtm.catastro.organizaciones.<slug o id> con su url, " +
         "client-id y client-secret (SRTM_CATASTRO_ORGANIZACIONES_<ORGANIZACION>_URL, _CLIENT_ID y _CLIENT_SECRET)"
+
+const val SIN_WMS =
+    "WMS de catastro no configurado para esta organización: fije srtm.catastro.organizaciones.<slug o id>.wms-url " +
+        "(SRTM_CATASTRO_ORGANIZACIONES_<ORGANIZACION>_WMS_URL)"
 
 fun dosCatastros(claves: Collection<String>) =
     "Catastro configurado dos veces para esta organización (srtm.catastro.organizaciones: " +
@@ -564,12 +596,80 @@ class ClienteCatastro(
         return DECIMALES.readTree(body.orEmpty())
     }
 
+    override suspend fun vias(anio: Int): String {
+        val uri =
+            UriComponentsBuilder
+                .fromUriString(cuenta.url.trimEnd('/'))
+                .path("/api/catastro/vias/aranceles")
+                .queryParam("anio", anio)
+                .build()
+                .toUri()
+        return autorizado("las vías con arancel de $anio") { token ->
+            client
+                .get()
+                .uri(uri)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer $token")
+                .accept(MediaType.APPLICATION_JSON)
+                .retrieve()
+                .bodyToMono(String::class.java)
+        } ?: throw CatastroException("catastro-backend respondió sin cuerpo a las vías con arancel de $anio")
+    }
+
+    // read once: an account never moves to another organization
+    @Volatile
+    private var organizacionLeida: String? = null
+
+    // GET /api/organizations/current as the account: {id, name, ...}
+    override suspend fun organizacionCatastral(): String {
+        organizacionLeida?.let { return it }
+        val body =
+            autorizado("la organización de la cuenta de servicio") { token ->
+                client
+                    .get()
+                    .uri(cuenta.url.trimEnd('/') + "/api/organizations/current")
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer $token")
+                    .accept(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .bodyToMono(String::class.java)
+            }
+        val id =
+            DECIMALES.readTree(body.orEmpty()).path("id").texto()
+                ?: throw CatastroException("catastro-backend respondió la organización de la cuenta de servicio sin id")
+        organizacionLeida = id
+        return id
+    }
+
+    override val conWms: Boolean get() = cuenta.wmsUrl.isNotBlank()
+
+    // each value url-encoded exactly once (encode() before the template is expanded). the image is not read here:
+    // its bytes go to the caller as they arrive
+    override suspend fun wms(parametros: List<Pair<String, String>>): ImagenWms {
+        if (!conWms) throw CatastroException(SIN_WMS, 404)
+        val builder = UriComponentsBuilder.fromUriString(cuenta.wmsUrl.trim())
+        parametros.forEachIndexed { i, (nombre, _) -> builder.queryParam(nombre, "{v$i}") }
+        val uri =
+            builder
+                .encode()
+                .buildAndExpand(*parametros.map { it.second }.toTypedArray())
+                .toUri()
+        val respuesta =
+            autorizado("la imagen WMS") { token ->
+                client
+                    .get()
+                    .uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer $token")
+                    .retrieve()
+                    .toEntityFlux(DataBuffer::class.java)
+            } ?: throw CatastroException("catastro no respondió la imagen WMS")
+        return ImagenWms(respuesta.headers.contentType, (respuesta.body ?: Flux.empty()).timeout(timeout))
+    }
+
     // a request as the service account; a 401 means the cached token is no longer good: once more with a new one.
-    // que names it in the error
-    private suspend fun autorizado(
+    // que names it in the error, and a refusal's body goes in its detalle
+    private suspend fun <T : Any> autorizado(
         que: String,
-        pedido: (String) -> Mono<String>
-    ): String? {
+        pedido: (String) -> Mono<T>
+    ): T? {
         repeat(2) { intento ->
             try {
                 return pedido(token()).timeout(timeout).awaitSingleOrNull()
@@ -581,7 +681,11 @@ class ClienteCatastro(
                 if (e.statusCode == HttpStatus.UNAUTHORIZED && intento == 0) {
                     servicio.olvidar()
                 } else {
-                    throw CatastroException("catastro-backend respondió ${e.statusCode.value()} ${a(que)}", e.statusCode.value())
+                    throw CatastroException(
+                        "catastro-backend respondió ${e.statusCode.value()} ${a(que)}",
+                        e.statusCode.value(),
+                        e.responseBodyAsString.take(DETALLE).ifEmpty { null }
+                    )
                 }
             } catch (e: Exception) {
                 throw CatastroException("catastro-backend no respondió $que: ${e.javaClass.simpleName}")
@@ -603,6 +707,9 @@ class ClienteCatastro(
 
     companion object {
         const val TAMANIO_PAGINA = 500
+
+        // how much of a refusal's body CatastroException.detalle keeps
+        private const val DETALLE = 300
         private const val REGISTROS_ARANCEL = "/api/objects/arancel/records"
         private const val REGISTROS_DECISION = "/api/objects/decision_brecha/records"
 
