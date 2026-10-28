@@ -21,12 +21,14 @@ import srtm.brecha.RegistroCorrida
 import srtm.brecha.SIN_CATASTRO_CONFIGURADO
 import srtm.brecha.SIN_WMS
 import srtm.brecha.delUsuario
+import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Registros
 import srtm.reportes.Cache
 import srtm.reportes.Lectura
 import srtm.reportes.ReportesService
 import wasichai.core.common.ConflictException
 import wasichai.core.common.ForbiddenException
+import wasichai.core.common.NotFoundException
 import wasichai.core.common.WasichaiException
 import wasichai.core.identity.CurrentUser
 import wasichai.core.organization.OrganizationRepository
@@ -87,6 +89,20 @@ class VisorService(
         val (l, filas) = leer(anio, corrida)
         val lotes = reportes.lotes(l.corrida.id!!)
         return calcular { Visor.lotes(filas, lotes, filtro) }
+    }
+
+    // #265: the predios of a lote, by the codigo of its /lotes feature; a codigo no row of the corrida has: 404. the
+    // names come from the reportes' cached titulares, read by whoever read them first: shown only to a caller who may
+    // read contribuyente and every field of its name
+    suspend fun prediosDelLote(
+        anio: Int,
+        corrida: UUID?,
+        codigo: String
+    ): List<PredioDelLote> {
+        val (l, filas) = leer(anio, corrida)
+        val conNombre = permisos.puedeLeerCampos(CONTRIBUYENTE, CAMPOS_DEL_NOMBRE)
+        return calcular { Visor.prediosDelLote(filas, l.filas, codigo, conNombre) }
+            ?: throw NotFoundException("El lote $codigo no está en la corrida ${l.corrida.id}")
     }
 
     // the niveles of one row of a corrida (brecha_nivel), read as the caller; a row that is none: 404
@@ -220,6 +236,9 @@ class VisorService(
         private val log = LoggerFactory.getLogger(VisorService::class.java)
         const val ACTO = "consultar el visor de brechas"
         val VIGENCIA_CAPAS: Duration = Duration.ofMinutes(10)
+
+        // what nombreCompleto makes a contribuyente's name of
+        val CAMPOS_DEL_NOMBRE = setOf("nombre_completo", "apellido_paterno", "apellido_materno", "nombres", "razon_social")
 
         // the layers the visor may show, of objects SRTM_LECTOR reads in catastro (never brecha_ficha): object,
         // geometry column, label

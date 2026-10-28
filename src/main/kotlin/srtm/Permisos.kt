@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component
 import wasichai.core.common.Actions
 import wasichai.core.common.ForbiddenException
 import wasichai.core.common.NotFoundException
+import wasichai.core.identity.AccessPolicy
 import wasichai.core.identity.CurrentUser
 import wasichai.core.metadata.MetadataService
 
@@ -12,7 +13,8 @@ import wasichai.core.metadata.MetadataService
 @Component
 class Permisos(
     private val currentUser: CurrentUser,
-    private val metadata: MetadataService
+    private val metadata: MetadataService,
+    private val accesos: AccessPolicy
 ) {
     suspend fun exigirCrear(
         objeto: String,
@@ -50,6 +52,20 @@ class Permisos(
                 return false
             }
         return currentUser.hasPermission(usuario, Actions.READ, definicion.obj.id)
+    }
+
+    // whether the caller may read `objeto` and every one of its `campos` (no field restriction of a role hides one):
+    // for what srtm shows of a record it did not read as the caller, like the reportes' cached titulares (#265). a
+    // field the caller's definition lacks counts as hidden
+    suspend fun puedeLeerCampos(
+        objeto: String,
+        campos: Collection<String>
+    ): Boolean {
+        if (!puedeLeer(objeto)) return false
+        val definicion = metadata.definitionOf(objeto)
+        val acceso = accesos.fieldAccess(currentUser.require(), definicion.obj.id)
+        val porNombre = definicion.fields.associateBy { it.name }
+        return campos.all { c -> porNombre[c]?.let { acceso.canRead(it.id) } ?: false }
     }
 
     private suspend fun exigir(

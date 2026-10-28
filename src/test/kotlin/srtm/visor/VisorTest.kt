@@ -200,6 +200,57 @@ class VisorTest {
     }
 
     @Test
+    fun `the predios of a lote, by its sector, manzana and lote, the name only when it may be shown (#265)`() {
+        val lote =
+            listOf(
+                FilaBrecha(
+                    id = "x1",
+                    predio = "p1",
+                    codigoPredio = "0101-7-2",
+                    codigoCatastro = "CM-7",
+                    categoria = "SUBVALUADO",
+                    sector = "01",
+                    manzana = "A",
+                    lote = "7",
+                    deltaImpuesto = d("10"),
+                    conLote = true
+                ),
+                FilaBrecha(id = "x0", codigoCatastro = "CM-7B", categoria = "OMISO", sector = "1", manzana = "a", lote = "07", conLote = true),
+                FilaBrecha(id = "x2", predio = "p2", codigoPredio = "0101-7-1", categoria = "SIN_CATASTRO", sector = "01", manzana = "A", lote = "7"),
+                FilaBrecha(id = "x3", predio = "p3", codigoPredio = "0101-8", categoria = "COINCIDE", sector = "01", manzana = "A", lote = "8", conLote = true),
+                FilaBrecha(id = "x4", predio = "p4", codigoPredio = "SUELTO", categoria = "COINCIDE", sector = "01", manzana = null, lote = "7")
+            )
+        val titulares = mapOf("p1" to listOf(srtm.reportes.Titular("k1", "000001", "FLORES OTINIANO JUNIOR", "d1", BigDecimal(100))))
+        val reportes = Reportes.filas(lote, titulares, emptyMap(), mapOf("CM-7" to "A_INSPECCIONAR"))
+        val visor = Visor.filas(reportes, true, umbral)
+        val p = Visor.prediosDelLote(visor, reportes, "0101-7-2", conNombre = true)!!
+        // by codigo_predio, the omiso without one last
+        assertEquals(listOf("x2", "x1", "x0"), p.map { it.id })
+        val conDj = p[1]
+        assertEquals("p1", conDj.predio)
+        assertEquals("d1", conDj.declaracion)
+        assertEquals("k1", conDj.contribuyente)
+        assertEquals("FLORES OTINIANO JUNIOR", conDj.contribuyenteNombre)
+        assertEquals("A_INSPECCIONAR", conDj.estado)
+        assertNull(p[2].predio)
+        assertNull(p[2].contribuyente)
+        assertEquals("PENDIENTE", p[2].estado)
+        // the omiso's code names the same lote
+        assertEquals(p, Visor.prediosDelLote(visor, reportes, "CM-7B", conNombre = true))
+        assertNull(Visor.prediosDelLote(visor, reportes, "0101-7-2", conNombre = false)!![1].contribuyenteNombre)
+        assertEquals("k1", Visor.prediosDelLote(visor, reportes, "0101-7-2", conNombre = false)!![1].contribuyente)
+        // without its manzana a row is a lote of its own
+        assertEquals(listOf("x4"), Visor.prediosDelLote(visor, reportes, "SUELTO", conNombre = true)!!.map { it.id })
+        assertNull(Visor.prediosDelLote(visor, reportes, "NO-EXISTE", conNombre = true))
+        val json = JsonMapper.builder().build().writeValueAsString(conDj)
+        assertEquals(
+            """{"id":"x1","predio":"p1","codigo_predio":"0101-7-2","declaracion":"d1","contribuyente":"k1","contribuyente_nombre":"FLORES OTINIANO JUNIOR",""" +
+                """"categoria":"SUBVALUADO","confianza":null,"delta_impuesto":10,"estado":"A_INSPECCIONAR"}""",
+            json
+        )
+    }
+
+    @Test
     fun `the niveles by piso, the delta when both sides have an area`() {
         val n =
             Visor.niveles(
