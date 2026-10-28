@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.core.io.buffer.DataBufferUtils
+import org.springframework.core.io.buffer.PooledDataBuffer
 import org.springframework.http.MediaType
 import java.net.InetSocketAddress
 import java.util.concurrent.CopyOnWriteArrayList
@@ -137,6 +138,20 @@ class ClienteCatastroVisorTest {
         assertTrue(pedido.endsWith("&width=256&height=256&format=image/png Bearer t1"), pedido)
         // a ':' or a ',' of a value goes encoded, and nothing twice
         assertTrue(crudas.single().contains("srs=EPSG%3A3857&bbox=-8430000%2C-1240000"), crudas.single())
+    }
+
+    @Test
+    fun `the image comes on the heap, with no buffer of catastro's connection to release (#264)`() {
+        val trozos =
+            runBlocking {
+                cliente()
+                    .wms(getMap)
+                    .cuerpo
+                    .collectList()
+                    .awaitSingle()
+            }
+        assertTrue(trozos.isNotEmpty())
+        assertTrue(trozos.none { it is PooledDataBuffer }, trozos.toString())
     }
 
     @Test

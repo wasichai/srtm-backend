@@ -7,6 +7,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.io.buffer.DataBuffer
+import org.springframework.core.io.buffer.DataBufferUtils
+import org.springframework.core.io.buffer.DefaultDataBufferFactory
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -642,7 +644,10 @@ class ClienteCatastro(
     override val conWms: Boolean get() = cuenta.wmsUrl.isNotBlank()
 
     // each value url-encoded exactly once (encode() before the template is expanded). the image is not read here:
-    // its bytes go to the caller as they arrive
+    // its bytes go to the caller as they arrive. each chunk is copied to the heap as it comes and its pooled buffer
+    // of the catastro connection released right there, once (#264): a pooled buffer must never reach an operator
+    // that may drop it. Flux.timeout drops a chunk that arrives as the browser cancels (a map that pans closes its
+    // tiles half way) without releasing it, and it leaked; what goes on is srtm's own, with nothing to release
     override suspend fun wms(parametros: List<Pair<String, String>>): ImagenWms {
         if (!conWms) throw CatastroException(SIN_WMS, 404)
         val builder = UriComponentsBuilder.fromUriString(cuenta.wmsUrl.trim())
@@ -661,7 +666,19 @@ class ClienteCatastro(
                     .retrieve()
                     .toEntityFlux(DataBuffer::class.java)
             } ?: throw CatastroException("catastro no respondió la imagen WMS")
-        return ImagenWms(respuesta.headers.contentType, (respuesta.body ?: Flux.empty()).timeout(timeout))
+        val cuerpo =
+            (respuesta.body ?: Flux.empty())
+                .map<DataBuffer> { trozo ->
+                    try {
+                        DefaultDataBufferFactory.sharedInstance.wrap(ByteArray(trozo.readableByteCount()).also { trozo.read(it) })
+                    } finally {
+                        DataBufferUtils.release(trozo)
+                    }
+                }
+                // what the webclient discards before the copy is released too
+                .doOnDiscard(DataBuffer::class.java, DataBufferUtils::release)
+                .timeout(timeout)
+        return ImagenWms(respuesta.headers.contentType, cuerpo)
     }
 
     // a request as the service account; a 401 means the cached token is no longer good: once more with a new one.

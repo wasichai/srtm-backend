@@ -955,7 +955,9 @@ una vez). Cada capa se confirma con un GetMap de 1 px, y la lista se guarda 10 m
 
 |`GET /wms?service&version&request&layers&styles&srs\|crs&bbox&width&height&format&transparent`
 |Reenvía un GetMap a `wms-url` (el nginx de catastro-ui delante de GeoServer, que vuelve a autorizarlo con catastro) y
-devuelve la imagen a medida que llega, con `Cache-Control: private, max-age=60`. Antes de reenviar, {sigla} valida
+devuelve la imagen a medida que llega, con `Cache-Control: private, max-age=60`. Cada trozo se copia al llegar y su
+búfer de la conexión con catastro se libera ahí mismo (#264): un pedido que el navegador cierra a medias, como el de
+un mapa que se desplaza, no deja búferes sin liberar ni liberados dos veces. Antes de reenviar, {sigla} valida
 las reglas de catastro: solo GetMap de WMS, `format` `image/png`, `image/png8`, `image/jpeg` o `image/webp`,
 `width` y `height` de 1 a 2048, hasta 10 capas, `styles` vacío o el de una de sus capas, y ningún otro parámetro
 (`exceptions` se descarta). Las capas deben ser de la lista de `/capas` de la organización (con o sin `catastro:`).
