@@ -5,6 +5,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -16,6 +17,16 @@ import java.util.concurrent.atomic.AtomicInteger
 // a missing value read once (#255)
 class CacheTest {
     private var ahora = Instant.parse("2026-10-27T10:00:00Z")
+
+    @Test
+    fun `insumos are equal only of the very same objects (#263)`() {
+        val filas = listOf("a")
+        val titulares = mapOf("p" to 1)
+        assertEquals(Insumos(filas, titulares, null), Insumos(filas, titulares, null))
+        assertEquals(Insumos(filas, titulares).hashCode(), Insumos(filas, titulares).hashCode())
+        assertNotEquals(Insumos(filas, titulares), Insumos(listOf("a"), titulares))
+        assertNotEquals(Insumos(filas, titulares), Insumos(filas, null))
+    }
 
     @Test
     fun `a value is kept for its vigencia`() {

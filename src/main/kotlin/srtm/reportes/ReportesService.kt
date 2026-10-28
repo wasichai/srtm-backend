@@ -1,5 +1,7 @@
 package srtm.reportes
 
+import com.fasterxml.jackson.annotation.JsonRawValue
+import com.fasterxml.jackson.annotation.JsonValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
@@ -25,6 +27,7 @@ import srtm.rentas.Registros
 import srtm.rentas.USO_PREDIO
 import srtm.rentas.UsoPredio
 import srtm.sanciones.Multas
+import tools.jackson.databind.json.JsonMapper
 import wasichai.core.common.ConflictException
 import wasichai.core.common.ForbiddenException
 import wasichai.core.identity.CurrentUser
@@ -38,14 +41,22 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.cancellation.CancellationException
 
 // what a report reads: the corrida, its rows (as brecha_predio keeps them and as the reports show them), whether
-// catastro's decisions are in, 5 UIT of the year (null without the UIT) and what could not be read
+// catastro's decisions are in, 5 UIT of the year (null without the UIT) and what could not be read. derivada names
+// which of the corrida's rows these are (#263): those of who reads the padrón or not, with or without the decisiones;
+// the same filas (the very object) while what they are made of does not change
 class Lectura(
     val corrida: RegistroCorrida,
     val brecha: List<FilaBrecha>,
     val filas: List<FilaReportePredio>,
     val conDecisiones: Boolean,
     val umbral: BigDecimal?,
-    val avisos: List<String>
+    val avisos: List<String>,
+    val derivada: Triple<String, Boolean, Boolean>
+)
+
+// a lote's geometry as its GeoJSON, written as it is into a response (#263): far lighter than its maps
+class LoteJson(
+    @get:JsonValue @get:JsonRawValue val json: String
 )
 
 // a report's rows, all of them (the controller pages them or exports them), and the corrida they come from
@@ -66,10 +77,13 @@ class FaltaUit(
 // corrida for srtm.reportes.cache, the uso catalog per organization the same. a corrida that ends TERMINADA fills
 // them in the background (Precalentador), and a read of what is being read waits for it (Cache.obtener) instead of
 // reading it twice. catastro's decisions are read of the organization's catastro, kept for
-// srtm.reportes.cache-decisiones (a minute: they change as catastro works), and only by what shows them (the resumen,
+// srtm.reportes.cache-decisiones (2 minutes: they change as catastro works; #263), read once however many ask at
+// once (the visor asks for its panel, its predios and its lotes together), and only by what shows them (the resumen,
 // the lists of predios and their exports; not the catalog nor contribuyentes). when catastro cannot answer they are
 // left out with an aviso, never an error, and the failure is kept srtm.reportes.cache-fallo-decisiones (30 s): a
-// catastro down is not waited for on every page. the counting and sorting run off the event loop (Dispatchers.Default)
+// catastro down is not waited for on every page. the rows as the reports show them are made once per what they are
+// made of (Insumos: the same cached rows, titulares, usos and decisiones), not on every request (#263). the counting
+// and sorting run off the event loop (Dispatchers.Default)
 @Service
 class ReportesService(
     private val brechas: BrechaService,
@@ -81,7 +95,7 @@ class ReportesService(
     private val parametros: ParametrosTributarios,
     @param:Value("\${srtm.reportes.cache:10m}") vigencia: Duration,
     @param:Value("\${srtm.reportes.corridas:8}") corridas: Int,
-    @param:Value("\${srtm.reportes.cache-decisiones:1m}") vigenciaDecisiones: Duration,
+    @param:Value("\${srtm.reportes.cache-decisiones:2m}") vigenciaDecisiones: Duration,
     @param:Value("\${srtm.reportes.cache-fallo-decisiones:30s}") vigenciaFallo: Duration
 ) {
     private val filasPorCorrida = Cache<String, List<FilaBrecha>>(null, corridas)
@@ -91,8 +105,13 @@ class ReportesService(
     private val falloDeDecisiones = Cache<Pair<UUID, Int>, String>(vigenciaFallo, corridas)
 
     // #260: the lotes of the LOTES most recently used corridas, by brecha_predio id (the visor's map): read with the
-    // rows, from the same read, and kept apart because they are most of its weight
-    private val lotesPorCorrida = Cache<String, Map<String, Map<String, Any?>>>(null, LOTES)
+    // rows, from the same read, and kept apart because they are most of its weight. kept as their json (LoteJson,
+    // #263): 30 000 lotes are some 19 MiB so, 47 MiB as maps of lists of boxed numbers
+    private val lotesPorCorrida = Cache<String, Map<String, LoteJson>>(null, LOTES)
+
+    // #263: the rows as the reports show them, the last made of each corrida for who reads the padrón and who does
+    // not, with and without the decisiones, with what they were made of: made again only when one of those changed
+    private val filasDerivadas = Cache<Triple<String, Boolean, Boolean>, Pair<Insumos, List<FilaReportePredio>>>(null, DERIVADAS)
 
     // the corrida last warmed per organization and year
     private val precalentadas = ConcurrentHashMap<Pair<UUID, Int>, String>()
@@ -179,8 +198,12 @@ class ReportesService(
         val usos = usosPorOrganizacion.get(organizacion) ?: usos()?.also { usosPorOrganizacion.put(organizacion, it) }.orEmpty()
         val decisiones = if (conDecisiones) decisiones(organizacion, anio, avisos) else null
         val umbral = umbral(anio, avisos)
-        val filas = calcular { Reportes.filas(brecha, titulares, usos, decisiones) }
-        return Lectura(r, brecha, filas, decisiones != null, umbral, avisos)
+        val insumos = Insumos(brecha, titulares, usos, decisiones)
+        val derivada = Triple(id, titulares != null, decisiones != null)
+        val filas =
+            filasDerivadas.get(derivada)?.takeIf { it.first == insumos }?.second
+                ?: calcular { Reportes.filas(brecha, titulares, usos, decisiones) }.also { filasDerivadas.put(derivada, insumos to it) }
+        return Lectura(r, brecha, filas, decisiones != null, umbral, avisos, derivada)
     }
 
     // #255: what leer keeps of a TERMINADA corrida (its rows, its titulares and its organization's usos), read before
@@ -216,10 +239,10 @@ class ReportesService(
 
     // #260: the corrida's lotes by brecha_predio id. no permission is asked here: the visor calls it after leer, which
     // asks them; the rows are read again only when the lotes were dropped before them
-    suspend fun lotes(corrida: String): Map<String, Map<String, Any?>> = lotesPorCorrida.obtener(corrida) { lotesDe(brechas.filas(corrida)) }
+    suspend fun lotes(corrida: String): Map<String, LoteJson> = lotesPorCorrida.obtener(corrida) { lotesDe(brechas.filas(corrida)) }
 
-    private fun lotesDe(filas: List<FilaBrecha>): Map<String, Map<String, Any?>> =
-        filas.mapNotNull { f -> f.id?.let { id -> f.loteGeom?.let { id to it } } }.toMap()
+    private fun lotesDe(filas: List<FilaBrecha>): Map<String, LoteJson> =
+        filas.mapNotNull { f -> f.id?.let { id -> f.loteGeom?.let { id to LoteJson(GEOJSON.writeValueAsString(it)) } } }.toMap()
 
     // the vigente DJs of the year and their contribuyentes: each predio's titulares
     private suspend fun titulares(anio: Int): Map<String, List<Titular>> {
@@ -247,35 +270,46 @@ class ReportesService(
         avisos: MutableList<String>
     ): Map<String, String>? {
         val clave = organizacion to anio
-        decisionesPorAnio.get(clave)?.let { return it }
-        falloDeDecisiones.get(clave)?.let {
-            avisos += it
-            return null
-        }
-        try {
-            val catastro = catastros.delUsuario(currentUser.require(), organizaciones)
-            if (catastro == null) {
-                avisos += "$SIN_DECISIONES: catastro no está configurado para esta organización"
-                return null
+        return try {
+            decisionesPorAnio.obtener(clave) {
+                // who waited on a read that failed tries again: the failure kept answers it, catastro is not asked
+                falloDeDecisiones.get(clave)?.let { throw SinDecisiones(it) }
+                leerDecisiones(clave)
             }
-            val leidas =
-                catastro
-                    .decisiones(anio)
-                    .filter { it.anio == null || it.anio == anio }
-                    .mapNotNull { d -> Brecha.llave(d.codigoMunicipal)?.let { c -> d.estado?.let { c to it } } }
-                    .toMap()
-            decisionesPorAnio.put(organizacion to anio, leidas)
-            return leidas
+        } catch (e: SinDecisiones) {
+            avisos += e.aviso
+            null
+        }
+    }
+
+    // catastro's decisions, or SinDecisiones with the aviso (kept srtm.reportes.cache-fallo-decisiones when catastro
+    // failed; not when the organization has no catastro: that is no failure)
+    private suspend fun leerDecisiones(clave: Pair<UUID, Int>): Map<String, String> {
+        val anio = clave.second
+        try {
+            val catastro =
+                catastros.delUsuario(currentUser.require(), organizaciones)
+                    ?: throw SinDecisiones("$SIN_DECISIONES: catastro no está configurado para esta organización")
+            return catastro
+                .decisiones(anio)
+                .filter { it.anio == null || it.anio == anio }
+                .mapNotNull { d -> Brecha.llave(d.codigoMunicipal)?.let { c -> d.estado?.let { c to it } } }
+                .toMap()
         } catch (e: CancellationException) {
+            throw e
+        } catch (e: SinDecisiones) {
             throw e
         } catch (e: Exception) {
             log.warn("los reportes de {} siguen sin las decisiones de catastro: {}", anio, e.message)
             val aviso = "$SIN_DECISIONES: ${e.message ?: e.javaClass.simpleName}"
             falloDeDecisiones.put(clave, aviso)
-            avisos += aviso
-            return null
+            throw SinDecisiones(aviso)
         }
     }
+
+    private class SinDecisiones(
+        val aviso: String
+    ) : RuntimeException(aviso, null, false, false)
 
     // 5 UIT of the 1st of January (Seguimiento's rule for SUPERA_5_UIT); null with an aviso without it
     private suspend fun umbral(
@@ -304,5 +338,9 @@ class ReportesService(
 
         // the corridas whose lotes are kept (#260): a corrida of Ica's is some tens of MB of them
         const val LOTES = 2
+
+        // the rows made for the reports kept (#263): up to 4 per corrida, each a few MiB (its values are the cached ones')
+        const val DERIVADAS = 8
+        val GEOJSON: JsonMapper = JsonMapper.builder().build()
     }
 }
