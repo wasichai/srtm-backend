@@ -882,3 +882,84 @@ una cabecera estable: los nombres de campo de la fila (`codigoPredio;codigoCatas
 |200; las mismas de la página.
 |===
 
+=== Visor de brechas
+
+Base: `/api/srtm/visor`. Controlador `VisorController` (#260). Es el panel de Brechas de catastro-ui, de solo
+lectura y sobre la corrida de {sigla}, que es lo que catastro carga como corte: los mismos números, los mismos filtros y
+los mismos nombres de campo (en snake_case, como catastro). No decide nada: el estado de cada predio es su
+`decision_brecha` del año en catastro (`PENDIENTE` si no tiene; `null` si catastro no se pudo leer, con un aviso).
+De catastro, con la cuenta de servicio de la organización (`SRTM_LECTOR`), solo se pide lo que {sigla} no tiene: las
+vías con arancel y las imágenes WMS. No hace falta iniciar sesión en catastro.
+
+*Parámetros comunes.* `anio` (obligatorio) y `corrida` (opcional; vacía o ausente, la última TERMINADA del año), como
+en los reportes, cuyas filas y caché reutiliza. Toda ruta pide antes lectura sobre `brecha_corrida` y sobre
+`brecha_predio`. Un parámetro que la ruta no conoce, o que no puede leer, es 422 y se nombra. Filtros de `/predios`,
+`/lotes` y `/predios.csv`: `categoria`, `confianza` y `estado` (listas separadas por comas de los valores del modelo),
+`sector` (como compara el cruce: `01` es `1`), `supera_5_uit` (`true` o `false`; `false` incluye las filas sin
+marca) y `min_delta` (contra \|`delta_impuesto`\|; una fila sin Δ queda fuera). `orden`: `delta_desc` (por omisión),
+`delta_asc` o `codigo` (código de catastro, luego el del padrón).
+
+*Ficha y pendientes.* Una fila sin código de catastro (`SIN_CATASTRO`) no se puede decidir: no cuenta en `pendientes`
+ni en `por_estado` y va en `sin_ficha`, como las fichas sin `codigo_municipal` de catastro. `supera_5_uit` es
+\|Δ autoavalúo\| mayor que 5 UIT del 1 de enero del año (la regla del corte); `null` sin la UIT.
+
+[cols="5,6,4",options="header"]
+|===
+|Método y ruta |Qué hace |Respuestas
+
+|`GET /panel?anio&corrida`
+|`corrida` `{id, anio, estado, terminado, version_catastro}`; `kpis` `{fichas, delta_impuesto,
+delta_impuesto_confiable, omisos_estimado, supera_5_uit, pendientes, con_geometria, sin_ficha}` (`pendientes` es
+`null` sin las decisiones de catastro); `por_categoria` y `por_confianza` `[{clave, fichas, delta_impuesto}]` (todas,
+en su orden; las filas sin confianza como `clave` `null`), `por_estado` `[{clave, fichas}]`, `top_sectores` (los 10
+de mayor Δ impuesto, `[{sector, fichas, delta_impuesto}]`) y `avisos`.
+|200; 404; 409 corrida no TERMINADA; 422.
+
+|`GET /predios?anio&corrida&<filtros>&orden&page&size`
+|Una página `{content, page, size, totalElements, totalPages}` (50 por omisión, hasta 200). Cada fila: `id` (el de
+`brecha_predio`), `predio`, `declaracion` (la DJ del titular principal; `null` sin lectura del padrón),
+`codigo_catastro`, `codigo_predio`, `sector`, `manzana`, `lote`, `uso`, `uso_descripcion`, `categoria`, `confianza`,
+`autoavaluo_declarado`, `autoavaluo_catastro`, `delta_autoavaluo`, `impuesto_declarado`, `impuesto_catastro`,
+`delta_impuesto`, `delta_arbitrios`, `estimado`, `supera_5_uit`, `estado`, `con_geometria` y `niveles_comparados`.
+|200; 404; 409; 422.
+
+|`GET /predios/{id}/niveles`
+|Los pisos de esa fila (`brecha_nivel`, leídos como el usuario): `[{piso, area_rentas, area_catastro, estado,
+delta}]`, por piso (los sótanos primero, sin piso al final); `delta` es catastro menos rentas si tiene ambas.
+|200; 403; 404 fila inexistente.
+
+|`GET /lotes?anio&corrida&<filtros>&orden`
+|Las filas de esos filtros que tienen lote, como GeoJSON (EPSG:4326): un `Feature` por fila, con el `id` de
+`brecha_predio` y las propiedades `codigo`, `codigo_catastro`, `codigo_predio`, `categoria`, `confianza`,
+`delta_impuesto`, `estado` y `supera_5_uit`. `orden` se acepta y se ignora.
+|200; 404; 409; 422.
+
+|`GET /predios.csv?anio&corrida&<filtros>&orden`
+|Todas las filas de esos filtros y ese orden (`visor-brechas-<anio>.csv`): UTF-8 con BOM, separado por `;`, con los
+nombres de campo de la fila como cabecera.
+|200; las mismas de la página.
+
+|`GET /vias?anio`
+|Reenvía `GET /api/catastro/vias/aranceles?anio` de catastro tal como responde: un FeatureCollection de tramos con
+`cod_via_eje, tip_via, nom_via, cuadra, lado, id_aranc, asignacion, anio, valor_m2`.
+|200; 409 sin catastro; 502 si catastro falla.
+
+|`GET /capas`
+|Las capas WMS que el visor ofrece a la organización: `[{layerName, label}]`. Son las de su lista
+(`predio_catastral`, «Predios catastrales», y `tramo_via`, «Tramos de vía»; nunca `brecha_ficha`), con el nombre
+de wasichai-gis `<objeto>__<prefijo>__<geometría>`. El prefijo son los 8 primeros dígitos hexadecimales, sin guiones,
+del id de la organización de catastro de la cuenta de servicio (`GET /api/organizations/current` de catastro, leído
+una vez). Cada capa se confirma con un GetMap de 1 px, y la lista se guarda 10 minutos por organización. Sin
+`wms-url`, `[]`.
+|200; 409 sin catastro; 502 si catastro falla.
+
+|`GET /wms?service&version&request&layers&styles&srs\|crs&bbox&width&height&format&transparent`
+|Reenvía un GetMap a `wms-url` (el nginx de catastro-ui delante de GeoServer, que vuelve a autorizarlo con catastro) y
+devuelve la imagen a medida que llega, con `Cache-Control: private, max-age=60`. Antes de reenviar, {sigla} valida
+las reglas de catastro: solo GetMap de WMS, `format` `image/png`, `image/png8`, `image/jpeg` o `image/webp`,
+`width` y `height` de 1 a 2048, hasta 10 capas, `styles` vacío o el de una de sus capas, y ningún otro parámetro
+(`exceptions` se descarta). Las capas deben ser de la lista de `/capas` de la organización (con o sin `catastro:`).
+|200 imagen; 403 capa ajena o de otra organización (no llega a catastro), o catastro la rechaza (su motivo va al log);
+409 sin catastro o sin `wms-url`; 422 pedido que no se reenvía; 502 si catastro falla o no responde una imagen.
+|===
+

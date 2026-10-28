@@ -252,6 +252,13 @@ configurado».
 |Slug o id de la organización de {sigla} cuyo catastro es. Vacía con el catastro encendido, ninguna corrida empieza
 (409); una corrida de otra organización también es 409.
 
+|`SRTM_CATASTRO_ORGANIZACIONES_<ORG>_WMS_URL` +
+(`srtm.catastro.organizaciones.<org>.wms-url`; la entrada única, `SRTM_CATASTRO_WMS_URL`)
+|vacío
+|El WMS del que el visor de brechas (#260) reenvía las imágenes: el nginx de catastro-ui delante de GeoServer, que
+autoriza cada GetMap con catastro-backend. En el VPS, `http://catastro-ui/geoserver/catastro/wms` (la ruta debe ser
+`/geoserver/catastro/wms`). Vacío, `GET /api/srtm/visor/capas` responde `[]` y `/wms` 409.
+
 |`SRTM_CATASTRO_SEGUIMIENTO_MINUTOS`
 |`0`
 |Cada cuántos minutos lee `GET /api/catastro/cambios` de cada organización con catastro. `0` lo apaga: sin

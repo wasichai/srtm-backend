@@ -56,6 +56,7 @@ ese puerto queda en el loopback del servidor: llega por un túnel, `ssh -N -L 54
 | `SRTM_PIDE_RENIEC_URL` / `_TIMEOUT` | `https://ws2.pide.gob.pe/Rest/RENIEC/Consultar` / `5s` | servicio REST "Consultar" y cuánto se espera |
 | `SRTM_CATASTRO_ENABLED` | `false` | valuaciones de catastro-backend para la brecha (ver [Brecha de recaudación](#brecha-de-recaudación)) y el [autoavalúo sugerido](#autoavalúo-sugerido) |
 | `SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_URL` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_TIMEOUT` | sin entradas / `60s` | el catastro-backend de una organización y su cuenta de servicio `srtm`; `<CLAVE>` es su slug, o cualquiera con `_ORGANIZACION` = su id. El secreto nunca en el repositorio |
+| `SRTM_CATASTRO_ORGANIZACIONES_<CLAVE>_WMS_URL` | vacía | el WMS de catastro (el nginx de catastro-ui, `http://catastro-ui/geoserver/catastro/wms`) del que el visor de brechas reenvía las imágenes; vacía, sin capas WMS |
 | `SRTM_CATASTRO_URL` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_TIMEOUT` | `http://localhost:8091` / vacías / `60s` | la forma de una sola organización: una entrada más del mapa |
 | `SRTM_CATASTRO_ORGANIZACION` | vacía | slug o id de la organización de esa entrada única; vacía, esa cuenta no se usa |
 
