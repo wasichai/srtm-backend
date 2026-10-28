@@ -100,6 +100,10 @@ class VisorService(
         return calcular { Visor.lotes(filas, lotes, filtro) }
     }
 
+    // #270: a page of /predios as the caller may see it: the names only to who may read contribuyente and its name
+    suspend fun paraElUsuario(filas: List<FilaVisor>): List<FilaVisor> =
+        Visor.paraElUsuario(filas, filas.any { it.nombreDelTitular != null } && permisos.puedeLeerCampos(CONTRIBUYENTE, CAMPOS_DEL_NOMBRE))
+
     // #265: the predios of a lote, by the codigo of its /lotes feature; a codigo no feature of the corrida has: 404. the
     // names come from the reportes' cached titulares, read by whoever read them first: shown only to a caller who may
     // read contribuyente and every field of its name

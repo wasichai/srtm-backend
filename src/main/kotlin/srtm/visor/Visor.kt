@@ -46,7 +46,13 @@ data class FilaVisor(
     @get:JsonProperty("supera_5_uit") val supera5Uit: Boolean?,
     val estado: String?,
     val conGeometria: Boolean,
-    val nivelesComparados: Int?
+    val nivelesComparados: Int?,
+    // #270: the principal titular of its vigente DJ (null for an omiso, without a DJ, or for a caller who may not read
+    // the padrón) and its name, only in a response to who may read contribuyente and its name (Visor.paraElUsuario):
+    // a row is kept for everyone with the name apart, never written
+    val contribuyente: String? = null,
+    val contribuyenteNombre: String? = null,
+    @get:JsonIgnore val nombreDelTitular: String? = null
 ) {
     val conFicha: Boolean @JsonIgnore get() = codigoCatastro != null
 }
@@ -210,7 +216,9 @@ object Visor {
                 supera5Uit = if (umbral == null) null else f.deltaAutoavaluo?.let { it.abs() > umbral },
                 estado = if (conDecisiones) f.decision ?: PENDIENTE else null,
                 conGeometria = f.conGeometria,
-                nivelesComparados = f.nivelesComparados
+                nivelesComparados = f.nivelesComparados,
+                contribuyente = f.contribuyente,
+                nombreDelTitular = f.contribuyente?.let { f.nombreContribuyente }
             )
         }
 
@@ -299,6 +307,13 @@ object Visor {
                     )
                 }
         )
+
+    // #270: the rows as `conNombre` (Permisos.puedeLeerCampos of contribuyente and its name, the caller's) may see
+    // them: with contribuyente_nombre, or as they are kept, without it. made at response time, for its page only
+    fun paraElUsuario(
+        filas: List<FilaVisor>,
+        conNombre: Boolean
+    ): List<FilaVisor> = if (conNombre) filas.map { it.copy(contribuyenteNombre = it.nombreDelTitular) } else filas
 
     // a feature's codigo in /lotes: its padrón code, else its catastro code
     fun codigo(f: FilaVisor): String? = f.codigoPredio ?: f.codigoCatastro

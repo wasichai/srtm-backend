@@ -270,6 +270,34 @@ class VisorTest {
     }
 
     @Test
+    fun `a row of predios gives its contribuyente, and its name only to who may read it (#270)`() {
+        val brecha =
+            listOf(
+                FilaBrecha(id = "y1", predio = "p1", codigoPredio = "P-1", codigoCatastro = "CM-1", categoria = "SUBVALUADO"),
+                FilaBrecha(id = "y2", codigoCatastro = "CM-2", categoria = "OMISO")
+            )
+        val titulares = mapOf("p1" to listOf(srtm.reportes.Titular("k1", "000001", "FLORES OTINIANO JUNIOR", "d1", BigDecimal(100))))
+        val filas = Visor.filas(Reportes.filas(brecha, titulares, emptyMap(), null), false, umbral)
+        // kept for everyone without the name
+        assertEquals(listOf("k1", null), filas.map { it.contribuyente })
+        assertTrue(filas.all { it.contribuyenteNombre == null })
+        val conNombre = Visor.paraElUsuario(filas, conNombre = true)
+        assertEquals(listOf("FLORES OTINIANO JUNIOR", null), conNombre.map { it.contribuyenteNombre })
+        assertEquals(filas, Visor.paraElUsuario(filas, conNombre = false))
+        val json = JsonMapper.builder().build().readTree(JsonMapper.builder().build().writeValueAsString(conNombre[0]))
+        assertEquals("k1", json["contribuyente"].asString())
+        assertEquals("FLORES OTINIANO JUNIOR", json["contribuyente_nombre"].asString())
+        // the name kept for the response is never written
+        assertFalse(
+            JsonMapper
+                .builder()
+                .build()
+                .writeValueAsString(filas[0])
+                .contains("FLORES")
+        )
+    }
+
+    @Test
     fun `a lote kept as its json goes into the response as it is (#263)`() {
         val json = """{"type":"Polygon","coordinates":[[[-75.0,-12.0],[-75.1,-12.0],[-75.0,-12.1]]]}"""
         val fc = Visor.lotes(filas(), mapOf("b0" to LoteJson(json)), FiltroVisor())
