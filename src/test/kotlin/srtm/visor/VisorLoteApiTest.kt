@@ -237,6 +237,34 @@ class VisorLoteApiTest : SrtmApiTest() {
         assertEquals("FLORES OTINIANO JUNIOR", leer("L-${d.sufijo}-1", conNombre)[0]["contribuyente_nombre"].asString())
     }
 
+    // #270: /predios gives each row's contribuyente, and its name only to who may read contribuyente and its name
+    @Test
+    fun `the rows of predios give their contribuyente, the name only to who may read it`() {
+        val d = datos()
+
+        fun filas(quien: String) =
+            tree(send("GET", "/api/srtm/visor/predios?anio=2026&corrida=${d.corrida}&orden=codigo", null, HttpStatus.OK, quien))["content"]
+                .values()
+                .associateBy { it["id"].asString() }
+        val conNombre = filas(usuario(listOf(permiso("contribuyente", "READ"))))
+        assertEquals(d.contribuyente, conNombre.getValue(d.conDj)["contribuyente"].asString())
+        assertEquals("FLORES OTINIANO JUNIOR", conNombre.getValue(d.conDj)["contribuyente_nombre"].asString())
+        assertTrue(conNombre.getValue(d.omiso)["contribuyente"].isNull)
+        assertTrue(conNombre.getValue(d.omiso)["contribuyente_nombre"].isNull)
+        // the same cached rows, after who saw the name
+        val sinNombre = filas(usuario(emptyList()))
+        // without reading the padrón (declaracion_predial and contribuyente) its rows have no titular, as in #265
+        assertTrue(sinNombre.getValue(d.conDj)["contribuyente"].isNull)
+        assertTrue(sinNombre.getValue(d.conDj)["contribuyente_nombre"].isNull)
+        // who reads contribuyente but not every field of its name gets the id, not the name
+        val sinCampos = filas(usuario(listOf(permiso("contribuyente", "READ")), ocultos = listOf("razon_social")))
+        assertEquals(d.contribuyente, sinCampos.getValue(d.conDj)["contribuyente"].asString())
+        assertTrue(sinCampos.getValue(d.conDj)["contribuyente_nombre"].isNull)
+        assertTrue(sinNombre.values.all { it["contribuyente_nombre"].isNull })
+        // and the name is back for who may read it
+        assertEquals("FLORES OTINIANO JUNIOR", filas(token).getValue(d.conDj)["contribuyente_nombre"].asString())
+    }
+
     @Test
     fun `the predios of a lote need what the visor needs`() {
         val d = datos()

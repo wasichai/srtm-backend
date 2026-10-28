@@ -53,7 +53,8 @@ class VisorController(
         conocidos(params, BASE + FILTROS + "orden" + "page" + "size")
         val page = params["page"]?.let { entero("page", it, 0..Int.MAX_VALUE) } ?: 0
         val size = params["size"]?.let { entero("size", it, 1..PageRequest.MAX_SIZE) } ?: TAMANO
-        return visor.predios(anio(params), corrida(params), filtro(params), orden(params)).second.pagina(page, size)
+        val pagina = visor.predios(anio(params), corrida(params), filtro(params), orden(params)).second.pagina(page, size)
+        return pagina.copy(content = visor.paraElUsuario(pagina.content))
     }
 
     @GetMapping("/predios/{id}/niveles")

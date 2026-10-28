@@ -925,7 +925,11 @@ de mayor Δ impuesto, `[{sector, fichas, delta_impuesto}]`) y `avisos`.
 `brecha_predio`), `predio`, `declaracion` (la DJ del titular principal; `null` sin lectura del padrón),
 `codigo_catastro`, `codigo_predio`, `sector`, `manzana`, `lote`, `uso`, `uso_descripcion`, `categoria`, `confianza`,
 `autoavaluo_declarado`, `autoavaluo_catastro`, `delta_autoavaluo`, `impuesto_declarado`, `impuesto_catastro`,
-`delta_impuesto`, `delta_arbitrios`, `estimado`, `supera_5_uit`, `estado`, `con_geometria` y `niveles_comparados`.
+`delta_impuesto`, `delta_arbitrios`, `estimado`, `supera_5_uit`, `estado`, `con_geometria`, `niveles_comparados`,
+`contribuyente` (el titular principal de la DJ vigente; `null` en un omiso, sin DJ o sin lectura del padrón:
+`declaracion_predial` y `contribuyente`) y
+`contribuyente_nombre` (#270). El nombre se arma al responder, por usuario, con la regla de `/lotes/{codigo}/predios`:
+solo a quien puede leer `contribuyente` y todos los campos de su nombre; si no, `null`. El CSV no cambia.
 |200; 404; 409; 422.
 
 |`GET /predios/{id}/niveles`
