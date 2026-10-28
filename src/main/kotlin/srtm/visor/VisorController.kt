@@ -71,6 +71,16 @@ class VisorController(
         return visor.lotes(anio(params), corrida(params), filtro(params))
     }
 
+    // #265: the predios of the lote of the /lotes feature whose codigo is {codigo} (url-encoded: a shared code has dashes)
+    @GetMapping("/lotes/{codigo}/predios")
+    suspend fun prediosDelLote(
+        @PathVariable codigo: String,
+        @RequestParam params: Map<String, String>
+    ): List<PredioDelLote> {
+        conocidos(params, BASE)
+        return visor.prediosDelLote(anio(params), corrida(params), codigo)
+    }
+
     @GetMapping("/predios.csv")
     suspend fun csv(
         @RequestParam params: Map<String, String>

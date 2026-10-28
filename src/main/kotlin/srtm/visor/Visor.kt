@@ -9,6 +9,7 @@ import srtm.brecha.NivelBrecha
 import srtm.brecha.RegistroCorrida
 import srtm.reportes.ESTADOS_DECISION
 import srtm.reportes.FilaReportePredio
+import srtm.reportes.LoteJson
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import java.math.BigDecimal
@@ -112,6 +113,23 @@ data class NivelVisor(
     val areaCatastro: BigDecimal?,
     val estado: String?,
     val delta: BigDecimal?
+)
+
+// #265: a predio of a lote, for the map's popup: id is the brecha_predio's, predio the padrón's (null for an omiso),
+// declaracion its principal titular's vigente DJ and contribuyente that titular (null without them, or for a caller
+// who may not read the padrón); contribuyente_nombre only for a caller who may read contribuyente and its names
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class PredioDelLote(
+    val id: String?,
+    val predio: String?,
+    val codigoPredio: String?,
+    val declaracion: String?,
+    val contribuyente: String?,
+    val contribuyenteNombre: String?,
+    val categoria: String?,
+    val confianza: String?,
+    val deltaImpuesto: BigDecimal?,
+    val estado: String?
 )
 
 // /predios, /lotes and /predios.csv: every filter given must hold. a set holds when the row's value is one of it;
@@ -269,7 +287,7 @@ object Visor {
                         "geometry" to geometria,
                         "properties" to
                             linkedMapOf(
-                                "codigo" to (f.codigoPredio ?: f.codigoCatastro),
+                                "codigo" to codigo(f),
                                 "codigo_catastro" to f.codigoCatastro,
                                 "codigo_predio" to f.codigoPredio,
                                 "categoria" to f.categoria,
@@ -281,6 +299,49 @@ object Visor {
                     )
                 }
         )
+
+    // a feature's codigo in /lotes: its padrón code, else its catastro code
+    fun codigo(f: FilaVisor): String? = f.codigoPredio ?: f.codigoCatastro
+
+    // #265: the predios of the lote of the /lotes feature whose codigo is `codigo`, with the key /lotes draws its
+    // features by: a feature is one row and its lote_geom (lotes: brecha_predio id -> its geometry, a map or its json),
+    // so the lote is that geometry, and its predios are every row of the corrida drawn with the very same one (the
+    // fichas of a parcel share it). a row without a lote is no feature. visor and reportes are the same rows
+    // (Visor.filas keeps their order); conNombre false leaves contribuyente_nombre null. by codigo_predio (the omisos,
+    // without one, last), then the catastro code and the id. null when no feature has that codigo
+    fun prediosDelLote(
+        visor: List<FilaVisor>,
+        reportes: List<FilaReportePredio>,
+        lotes: Map<String, Any>,
+        codigo: String,
+        conNombre: Boolean
+    ): List<PredioDelLote>? {
+        val filas = visor.zip(reportes)
+
+        fun geometria(f: FilaVisor): Any? = f.id?.let(lotes::get)?.let { (it as? LoteJson)?.json ?: it }
+        val dibujadas = filas.filter { codigo(it.first) == codigo }.mapNotNull { geometria(it.first) }.toSet()
+        if (dibujadas.isEmpty()) return null
+        val delLote = filas.filter { geometria(it.first) in dibujadas }
+        return delLote
+            .sortedWith(
+                compareBy<Pair<FilaVisor, FilaReportePredio>, String?>(nullsLast()) { it.first.codigoPredio }
+                    .thenBy(nullsLast()) { it.first.codigoCatastro }
+                    .thenBy(nullsLast()) { it.first.id }
+            ).map { (v, r) ->
+                PredioDelLote(
+                    id = v.id,
+                    predio = v.predio,
+                    codigoPredio = v.codigoPredio,
+                    declaracion = v.declaracion,
+                    contribuyente = r.contribuyente,
+                    contribuyenteNombre = if (conNombre && r.contribuyente != null) r.nombreContribuyente else null,
+                    categoria = v.categoria,
+                    confianza = v.confianza,
+                    deltaImpuesto = v.deltaImpuesto,
+                    estado = v.estado
+                )
+            }
+    }
 
     // by piso (a sótano is negative, so it goes first), the ones without piso last
     fun niveles(leidos: List<NivelBrecha>): List<NivelVisor> =

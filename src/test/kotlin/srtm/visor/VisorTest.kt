@@ -201,6 +201,75 @@ class VisorTest {
     }
 
     @Test
+    fun `the predios of a lote are the rows drawn with its feature's geometry, the name only when it may be shown (#265)`() {
+        val lote =
+            listOf(
+                FilaBrecha(
+                    id = "x1",
+                    predio = "p1",
+                    codigoPredio = "0101-7-2",
+                    codigoCatastro = "CM-7",
+                    categoria = "SUBVALUADO",
+                    sector = "01",
+                    manzana = "A",
+                    lote = "7",
+                    deltaImpuesto = d("10"),
+                    conLote = true
+                ),
+                FilaBrecha(id = "x0", codigoCatastro = "CM-7B", categoria = "OMISO", sector = "1", manzana = "a", lote = "07", conLote = true),
+                // no lote: no feature, though its sector, manzana and lote are the same
+                FilaBrecha(id = "x2", predio = "p2", codigoPredio = "0101-7-1", categoria = "SIN_CATASTRO", sector = "01", manzana = "A", lote = "7"),
+                // the same sector, manzana and lote, drawn apart: another feature
+                FilaBrecha(
+                    id = "x3",
+                    predio = "p3",
+                    codigoPredio = "0101-7-3",
+                    categoria = "COINCIDE",
+                    sector = "01",
+                    manzana = "A",
+                    lote = "7",
+                    conLote = true
+                )
+            )
+        val geometrias = mapOf("x1" to LoteJson(G7), "x0" to LoteJson(G7), "x3" to LoteJson(G8))
+        val titulares = mapOf("p1" to listOf(srtm.reportes.Titular("k1", "000001", "FLORES OTINIANO JUNIOR", "d1", BigDecimal(100))))
+        val reportes = Reportes.filas(lote, titulares, emptyMap(), mapOf("CM-7" to "A_INSPECCIONAR"))
+        val visor = Visor.filas(reportes, true, umbral)
+        // /lotes draws x1 and x0 with the same geometry, x3 with its own
+        val fc = Visor.lotes(visor, geometrias, FiltroVisor())
+
+        @Suppress("UNCHECKED_CAST")
+        val codigos = (fc["features"] as List<Map<String, Any?>>).map { (it["properties"] as Map<String, Any?>)["codigo"] }
+        assertEquals(listOf("0101-7-2", "CM-7B", "0101-7-3"), codigos)
+        val p = Visor.prediosDelLote(visor, reportes, geometrias, "0101-7-2", conNombre = true)!!
+        // by codigo_predio, the omiso without one last
+        assertEquals(listOf("x1", "x0"), p.map { it.id })
+        val conDj = p[0]
+        assertEquals("p1", conDj.predio)
+        assertEquals("d1", conDj.declaracion)
+        assertEquals("k1", conDj.contribuyente)
+        assertEquals("FLORES OTINIANO JUNIOR", conDj.contribuyenteNombre)
+        assertEquals("A_INSPECCIONAR", conDj.estado)
+        assertNull(p[1].predio)
+        assertNull(p[1].contribuyente)
+        assertEquals("PENDIENTE", p[1].estado)
+        // the omiso's feature is the same lote
+        assertEquals(p, Visor.prediosDelLote(visor, reportes, geometrias, "CM-7B", conNombre = true))
+        assertNull(Visor.prediosDelLote(visor, reportes, geometrias, "0101-7-2", conNombre = false)!![0].contribuyenteNombre)
+        assertEquals("k1", Visor.prediosDelLote(visor, reportes, geometrias, "0101-7-2", conNombre = false)!![0].contribuyente)
+        assertEquals(listOf("x3"), Visor.prediosDelLote(visor, reportes, geometrias, "0101-7-3", conNombre = true)!!.map { it.id })
+        // a code of a row without a lote, or of none, is no feature
+        assertNull(Visor.prediosDelLote(visor, reportes, geometrias, "0101-7-1", conNombre = true))
+        assertNull(Visor.prediosDelLote(visor, reportes, geometrias, "NO-EXISTE", conNombre = true))
+        val json = JsonMapper.builder().build().writeValueAsString(conDj)
+        assertEquals(
+            """{"id":"x1","predio":"p1","codigo_predio":"0101-7-2","declaracion":"d1","contribuyente":"k1","contribuyente_nombre":"FLORES OTINIANO JUNIOR",""" +
+                """"categoria":"SUBVALUADO","confianza":null,"delta_impuesto":10,"estado":"A_INSPECCIONAR"}""",
+            json
+        )
+    }
+
+    @Test
     fun `a lote kept as its json goes into the response as it is (#263)`() {
         val json = """{"type":"Polygon","coordinates":[[[-75.0,-12.0],[-75.1,-12.0],[-75.0,-12.1]]]}"""
         val fc = Visor.lotes(filas(), mapOf("b0" to LoteJson(json)), FiltroVisor())
@@ -229,5 +298,10 @@ class VisorTest {
             json.readTree(json.writeValueAsString(n[0])).propertyNames().toSet()
         )
         assertFalse(n.isEmpty())
+    }
+
+    private companion object {
+        const val G7 = """{"type":"Polygon","coordinates":[[[-75.0,-12.0],[-75.1,-12.0],[-75.0,-12.1],[-75.0,-12.0]]]}"""
+        const val G8 = """{"type":"Polygon","coordinates":[[[-75.2,-12.0],[-75.3,-12.0],[-75.2,-12.1],[-75.2,-12.0]]]}"""
     }
 }
