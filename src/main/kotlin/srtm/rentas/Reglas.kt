@@ -13,6 +13,10 @@ fun tipoPersona(tipoContribuyente: String?): String? =
         else -> "JURIDICA"
     }
 
+// the fields of contribuyente nombreCompleto makes a name of: who may not read every one of them gets no name of what
+// srtm shows of a contribuyente it did not read as the caller (the visor, #265; the reportes, #269)
+val CAMPOS_DEL_NOMBRE = setOf("nombre_completo", "apellido_paterno", "apellido_materno", "nombres", "razon_social")
+
 // nombre_completo as the padrón writes it: surnames then names for a person, the razón social otherwise
 fun nombreCompleto(c: Contribuyente): String? {
     val persona = listOfNotNull(c.apellidoPaterno, c.apellidoMaterno, c.nombres).map { it.trim() }.filter { it.isNotEmpty() }

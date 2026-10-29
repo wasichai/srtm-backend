@@ -122,6 +122,7 @@ class VisorRendimientoTest {
                         true
                     },
                     "puedeLeerCampos" to { _ -> true },
+                    "leeEntero" to { _ -> true },
                     "exigirLeer" to { _ -> Unit }
                 )
             ) as Permisos

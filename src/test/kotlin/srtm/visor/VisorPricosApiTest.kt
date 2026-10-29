@@ -174,6 +174,23 @@ class VisorPricosApiTest : SrtmApiTest() {
         assertFalse(delLote[0]["prico"].asBoolean())
     }
 
+    // #274's cache: what a reader who may not see prico reads is read again, once, whole by the next who may
+    @Test
+    fun `a first reader who may not see prico does not leave the mark false for everyone`() {
+        val d = sembrar()
+        val quien = sinPrico()
+
+        fun predios(quien: String) =
+            tree(send("GET", "/api/srtm/visor/predios?anio=2026&corrida=${d.corrida}", null, HttpStatus.OK, quien))["content"]
+                .values()
+                .associate { it["id"].asString() to it["prico"].asBoolean() }
+        assertEquals(mapOf(d.dePrico to false, d.deOtro to false), predios(quien))
+        assertEquals(mapOf(d.dePrico to true, d.deOtro to false), predios(token))
+        val k = tree(send("GET", "/api/srtm/visor/panel?anio=2026&corrida=${d.corrida}", null, HttpStatus.OK))["kpis"]
+        assertEquals(1, k["pricos"]["predios"].asInt())
+        assertEquals(mapOf(d.dePrico to false, d.deOtro to false), predios(quien))
+    }
+
     companion object {
         private var datosDeLaClase: Datos? = null
         private const val CLAVE = "clave-del-usuario-de-pricos"
