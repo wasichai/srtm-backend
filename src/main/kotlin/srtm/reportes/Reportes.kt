@@ -11,6 +11,8 @@ import srtm.rentas.Contribuyente
 import srtm.rentas.Declaracion
 import srtm.rentas.grupoDe
 import srtm.rentas.nombreCompleto
+import tools.jackson.databind.PropertyNamingStrategies
+import tools.jackson.databind.annotation.JsonNaming
 import java.math.BigDecimal
 import java.text.Normalizer
 import srtm.rentas.vigente as declaracionVigente
@@ -112,14 +114,42 @@ data class Filtros(
 }
 
 // one of a predio's titulares in the padrón: a contribuyente of its vigente DJs of the year, its código and nombre, the
-// DJ that names it and its share (peso, % of condominio: a sole titular 100)
+// DJ that names it and its share (peso, % of condominio: a sole titular 100), and whether it is a PRICO (#273)
 data class Titular(
     val contribuyente: String,
     val codigo: String?,
     val nombre: String?,
     val declaracion: String?,
-    val peso: BigDecimal
+    val peso: BigDecimal,
+    val prico: Boolean = false
 )
+
+// #273: what the reportes read of a contribuyente: the portal's dto has no prico (a portal save would write it null:
+// core's update replaces every field it is sent), so they read it with this one, by the model's names as the dto
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class ContribuyenteDelReporte(
+    val id: String? = null,
+    val codigo: String? = null,
+    val tipoContribuyente: String? = null,
+    val nombreCompleto: String? = null,
+    val apellidoPaterno: String? = null,
+    val apellidoMaterno: String? = null,
+    val nombres: String? = null,
+    val razonSocial: String? = null,
+    val prico: Boolean? = null
+) {
+    fun contribuyente(): Contribuyente =
+        Contribuyente(
+            id = id,
+            codigo = codigo,
+            tipoContribuyente = tipoContribuyente,
+            nombreCompleto = nombreCompleto,
+            apellidoPaterno = apellidoPaterno,
+            apellidoMaterno = apellidoMaterno,
+            nombres = nombres,
+            razonSocial = razonSocial
+        )
+}
 
 // #269: what a caller may see of the titulares the reportes keep for everyone (read whole, by the platform or by who
 // reads the padrón whole): the name to who may read contribuyente and every field of its name (CAMPOS_DEL_NOMBRE, as
@@ -175,7 +205,9 @@ data class FilaReportePredio(
     // its position in the corrida (Brecha.ordenadas): the tie-break of every order
     @get:JsonIgnore val orden: Int = 0,
     // #260: whether its lote has a geometry (the visor's con_geometria)
-    @get:JsonIgnore val conGeometria: Boolean = false
+    @get:JsonIgnore val conGeometria: Boolean = false,
+    // #273: whether its principal titular is a PRICO (the visor shows it, by the caller's access to the field)
+    @get:JsonIgnore val prico: Boolean = false
 ) {
     val deltaAreaTerreno: BigDecimal? @JsonIgnore get() = diferencia(areaTerrenoDeclarada, areaTerrenoCatastro)
     val deltaAreaConstruida: BigDecimal? @JsonIgnore get() = diferencia(areaConstruidaDeclarada, areaConstruidaCatastro)
@@ -309,10 +341,12 @@ object Reportes {
 
     // each predio's titulares from its vigente DJs of the year: per secuencia de uso, each contribuyente's % of
     // condominio (Brecha.conPorcentaje fills the ones left empty; a sole titular is 100), added over the secuencias.
-    // the largest share first, then by código. the DJ named is the one of the largest share of that contribuyente
+    // the largest share first, then by código. the DJ named is the one of the largest share of that contribuyente.
+    // pricos: the ids of the contribuyentes marked PRICO (#273)
     fun titulares(
         declaraciones: List<Declaracion>,
-        contribuyentes: Map<String, Contribuyente>
+        contribuyentes: Map<String, Contribuyente>,
+        pricos: Set<String> = emptySet()
     ): Map<String, List<Titular>> =
         declaraciones
             .filter { it.predio != null && it.contribuyente != null && declaracionVigente(it) }
@@ -332,7 +366,8 @@ object Reportes {
                             codigo = c?.codigo,
                             nombre = c?.let(::nombreCompleto),
                             declaracion = deEl.maxByOrNull { it.second }?.first?.id,
-                            peso = deEl.fold(BigDecimal.ZERO) { s, p -> s + p.second }
+                            peso = deEl.fold(BigDecimal.ZERO) { s, p -> s + p.second },
+                            prico = id in pricos
                         )
                     }.sortedWith(compareByDescending<Titular> { it.peso }.thenBy(nullsLast()) { it.codigo })
             }
@@ -385,7 +420,8 @@ object Reportes {
                 decision = decision,
                 titulares = suyos,
                 orden = f.orden ?: 0,
-                conGeometria = f.conLote || f.loteGeom != null
+                conGeometria = f.conLote || f.loteGeom != null,
+                prico = principal?.prico == true
             )
         }
 

@@ -136,7 +136,17 @@ class VisorTest {
         val json = JsonMapper.builder().build()
         val p = json.readTree(json.writeValueAsString(Visor.panel(corrida, filas(), true, emptyList())))
         assertEquals(
-            setOf("fichas", "delta_impuesto", "delta_impuesto_confiable", "omisos_estimado", "supera_5_uit", "pendientes", "con_geometria", "sin_ficha"),
+            setOf(
+                "fichas",
+                "delta_impuesto",
+                "delta_impuesto_confiable",
+                "omisos_estimado",
+                "supera_5_uit",
+                "pendientes",
+                "con_geometria",
+                "sin_ficha",
+                "pricos"
+            ),
             p["kpis"].propertyNames().toSet()
         )
         assertEquals(setOf("corrida", "kpis", "por_categoria", "por_confianza", "por_estado", "top_sectores", "avisos"), p.propertyNames().toSet())
@@ -264,9 +274,69 @@ class VisorTest {
         val json = JsonMapper.builder().build().writeValueAsString(conDj)
         assertEquals(
             """{"id":"x1","predio":"p1","codigo_predio":"0101-7-2","declaracion":"d1","contribuyente":"k1","contribuyente_nombre":"FLORES OTINIANO JUNIOR",""" +
-                """"categoria":"SUBVALUADO","confianza":null,"delta_impuesto":10,"estado":"A_INSPECCIONAR"}""",
+                """"categoria":"SUBVALUADO","confianza":null,"delta_impuesto":10,"estado":"A_INSPECCIONAR","prico":false}""",
             json
         )
+    }
+
+    // #273
+    @Test
+    fun `a predio is a PRICO by its principal titular, filtered and summed, the mark only to who may read it`() {
+        val brecha =
+            listOf(
+                FilaBrecha(id = "q1", predio = "p1", codigoPredio = "P-1", codigoCatastro = "CM-1", categoria = "SUBVALUADO", deltaImpuesto = d("300")),
+                FilaBrecha(id = "q2", predio = "p2", codigoPredio = "P-2", codigoCatastro = "CM-2", categoria = "SUBVALUADO", deltaImpuesto = d("100")),
+                // a PRICO as a second titular: the predio is not a PRICO's
+                FilaBrecha(id = "q3", predio = "p3", codigoPredio = "P-3", codigoCatastro = "CM-3", categoria = "SOBREVALUADO", deltaImpuesto = d("-40")),
+                FilaBrecha(id = "q4", codigoCatastro = "CM-4", categoria = "OMISO", deltaImpuesto = d("50"))
+            )
+        val titulares =
+            Reportes.titulares(
+                listOf(
+                    srtm.rentas.Declaracion(id = "d1", contribuyente = "k1", predio = "p1", anio = 2026, porcentajeCondominio = BigDecimal(100)),
+                    srtm.rentas.Declaracion(id = "d2", contribuyente = "k2", predio = "p2", anio = 2026, porcentajeCondominio = BigDecimal(100)),
+                    srtm.rentas.Declaracion(id = "d3", contribuyente = "k2", predio = "p3", anio = 2026, porcentajeCondominio = BigDecimal(60)),
+                    srtm.rentas.Declaracion(id = "d4", contribuyente = "k1", predio = "p3", anio = 2026, porcentajeCondominio = BigDecimal(40))
+                ),
+                mapOf("k1" to srtm.rentas.Contribuyente(id = "k1", codigo = "000001"), "k2" to srtm.rentas.Contribuyente(id = "k2", codigo = "000002")),
+                pricos = setOf("k1")
+            )
+        val filas = Visor.filas(Reportes.filas(brecha, titulares, emptyMap(), null), false, umbral)
+        assertEquals(listOf(true, false, false, false), filas.map { it.pricoDelTitular })
+        // kept for everyone without the mark
+        assertTrue(filas.none { it.prico })
+
+        fun ids(filtro: FiltroVisor) = filas.filter(filtro::admite).map { it.id }
+        assertEquals(listOf("q1"), ids(FiltroVisor(prico = true)))
+        assertEquals(listOf("q2", "q3", "q4"), ids(FiltroVisor(prico = false)))
+        assertEquals(listOf("q1"), ids(FiltroVisor(prico = true, categorias = setOf("SUBVALUADO"))))
+        assertEquals(emptyList<String>(), ids(FiltroVisor(prico = true, categorias = setOf("OMISO"))))
+        // who may not read the mark sees no PRICO
+        assertEquals(emptyList<String>(), ids(FiltroVisor(prico = true, verPrico = false)))
+        assertEquals(listOf("q1", "q2", "q3", "q4"), ids(FiltroVisor(prico = false, verPrico = false)))
+        val k = Visor.panel(corrida, filas, false, emptyList()).kpis.pricos!!
+        assertEquals(1, k.predios)
+        assertEquals(0, BigDecimal(300).compareTo(k.deltaImpuesto))
+        assertEquals(listOf(true, false, false, false), Visor.paraElUsuario(filas, conNombre = false, conPrico = true).map { it.prico })
+        assertTrue(Visor.paraElUsuario(filas, conNombre = true, conPrico = false).none { it.prico })
+        val json = JsonMapper.builder().build()
+        val fila = json.readTree(json.writeValueAsString(Visor.paraElUsuario(filas, conNombre = false, conPrico = true)[0]))
+        assertTrue(fila["prico"].asBoolean())
+        assertFalse(fila.has("prico_del_titular"))
+        val geometria = mapOf("type" to "Point", "coordinates" to listOf(-75.0, -12.0))
+
+        @Suppress("UNCHECKED_CAST")
+        fun pricosDelMapa(filtro: FiltroVisor) =
+            (Visor.lotes(filas, mapOf("q1" to geometria, "q2" to geometria), filtro)["features"] as List<Map<String, Any?>>).map {
+                (it["properties"] as Map<String, Any?>)["prico"]
+            }
+        assertEquals(listOf(true, false), pricosDelMapa(FiltroVisor()))
+        assertEquals(listOf(false, false), pricosDelMapa(FiltroVisor(verPrico = false)))
+        assertEquals(listOf(true), pricosDelMapa(FiltroVisor(prico = true)))
+        val reportes = Reportes.filas(brecha, titulares, emptyMap(), null)
+        val lote = mapOf("q1" to geometria, "q2" to geometria)
+        assertEquals(listOf(true, false), Visor.prediosDelLote(filas, reportes, lote, "P-1", conNombre = false, conPrico = true)!!.map { it.prico })
+        assertEquals(listOf(false, false), Visor.prediosDelLote(filas, reportes, lote, "P-1", conNombre = false, conPrico = false)!!.map { it.prico })
     }
 
     @Test

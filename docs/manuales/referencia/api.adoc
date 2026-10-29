@@ -909,21 +909,28 @@ como su GeoJSON para las 2 corridas más recientes. Toda ruta pide antes lectura
 `brecha_predio`. Un parámetro que la ruta no conoce, o que no puede leer, es 422 y se nombra. Filtros de `/predios`,
 `/lotes` y `/predios.csv`: `categoria`, `confianza` y `estado` (listas separadas por comas de los valores del modelo),
 `sector` (como compara el cruce: `01` es `1`), `supera_5_uit` (`true` o `false`; `false` incluye las filas sin
-marca) y `min_delta` (contra \|`delta_impuesto`\|; una fila sin Δ queda fuera). `orden`: `delta_desc` (por omisión),
+marca), `min_delta` (contra \|`delta_impuesto`\|; una fila sin Δ queda fuera) y `prico` (`true` o `false`, #273: si el
+titular principal, el de la DJ vigente, tiene `contribuyente.prico`). `orden`: `delta_desc` (por omisión),
 `delta_asc` o `codigo` (código de catastro, luego el del padrón).
 
 *Ficha y pendientes.* Una fila sin código de catastro (`SIN_CATASTRO`) no se puede decidir: no cuenta en `pendientes`
 ni en `por_estado` y va en `sin_ficha`, como las fichas sin `codigo_municipal` de catastro. `supera_5_uit` es
 \|Δ autoavalúo\| mayor que 5 UIT del 1 de enero del año (la regla del corte); `null` sin la UIT.
 
+*PRICO (#273).* Un predio es PRICO si su titular principal (el de mayor % en las DJ vigentes del año) tiene
+`contribuyente.prico = true`. Se calcula al responder, desde los titulares que los reportes ya tienen en caché; la
+corrida no cambia. La marca va solo a quien puede leer el campo `prico` de `contribuyente`: para los demás, `prico` es
+`false` en toda fila, `prico=true` no encuentra ninguna y `kpis.pricos` es `null`.
+
 [cols="5,6,4",options="header"]
 |===
 |Método y ruta |Qué hace |Respuestas
 
-|`GET /panel?anio&corrida`
+|`GET /panel?anio&corrida&prico`
 |`corrida` `{id, anio, estado, terminado, version_catastro}`; `kpis` `{fichas, delta_impuesto,
-delta_impuesto_confiable, omisos_estimado, supera_5_uit, pendientes, con_geometria, sin_ficha}` (`pendientes` es
-`null` sin las decisiones de catastro); `por_categoria` y `por_confianza` `[{clave, fichas, delta_impuesto}]` (todas,
+delta_impuesto_confiable, omisos_estimado, supera_5_uit, pendientes, con_geometria, sin_ficha, pricos}` (`pendientes` es
+`null` sin las decisiones de catastro; `pricos` `{predios, delta_impuesto}`, los predios PRICO y su Δ impuesto, `null`
+para quien no lee `contribuyente.prico`). Con `prico=true` o `false`, el panel es solo de esas filas; `por_categoria` y `por_confianza` `[{clave, fichas, delta_impuesto}]` (todas,
 en su orden; las filas sin confianza como `clave` `null`), `por_estado` `[{clave, fichas}]`, `top_sectores` (los 10
 de mayor Δ impuesto, `[{sector, fichas, delta_impuesto}]`) y `avisos`.
 |200; 404; 409 corrida no TERMINADA; 422.
@@ -935,8 +942,8 @@ de mayor Δ impuesto, `[{sector, fichas, delta_impuesto}]`) y `avisos`.
 `autoavaluo_declarado`, `autoavaluo_catastro`, `delta_autoavaluo`, `impuesto_declarado`, `impuesto_catastro`,
 `delta_impuesto`, `delta_arbitrios`, `estimado`, `supera_5_uit`, `estado`, `con_geometria`, `niveles_comparados`,
 `contribuyente` (el titular principal de la DJ vigente; `null` en un omiso, sin DJ o sin lectura del padrón:
-`declaracion_predial` y `contribuyente`) y
-`contribuyente_nombre` (#270). El nombre se arma al responder, por usuario, con la regla de `/lotes/{codigo}/predios`:
+`declaracion_predial` y `contribuyente`),
+`contribuyente_nombre` (#270) y `prico` (#273). El nombre se arma al responder, por usuario, con la regla de `/lotes/{codigo}/predios`:
 solo a quien puede leer `contribuyente` y todos los campos de su nombre; si no, `null`. El CSV no cambia.
 |200; 404; 409; 422.
 
@@ -948,7 +955,7 @@ delta}]`, por piso (los sótanos primero, sin piso al final); `delta` es catastr
 |`GET /lotes?anio&corrida&<filtros>&orden`
 |Las filas de esos filtros que tienen lote, como GeoJSON (EPSG:4326): un `Feature` por fila, con el `id` de
 `brecha_predio` y las propiedades `codigo`, `codigo_catastro`, `codigo_predio`, `categoria`, `confianza`,
-`delta_impuesto`, `estado` y `supera_5_uit`. `orden` se acepta y se ignora.
+`delta_impuesto`, `estado`, `supera_5_uit` y `prico` (#273). `orden` se acepta y se ignora.
 |200; 404; 409; 422.
 
 |`GET /lotes/{codigo}/predios?anio&corrida`
@@ -958,10 +965,11 @@ features: cada feature es una fila con su `lote_geom`, así que el lote es esa g
 filas de la corrida dibujadas con la misma geometría (las fichas de un mismo terreno la comparten). Una fila sin lote
 no es feature: su código es 404. Cada predio:
 `{id, predio, codigo_predio, declaracion, contribuyente, contribuyente_nombre, categoria, confianza,
-delta_impuesto, estado}`: `id` es el de `brecha_predio`, `predio` el del padrón (`null` en un omiso), `declaracion`
+delta_impuesto, estado, prico}`: `id` es el de `brecha_predio`, `predio` el del padrón (`null` en un omiso), `declaracion`
 la DJ vigente del titular principal y `contribuyente` ese titular (`null` sin ellos o sin lectura del padrón).
 `contribuyente_nombre` va solo a quien puede leer `contribuyente` y todos los campos de su nombre (`nombre_completo`,
-`apellido_paterno`, `apellido_materno`, `nombres`, `razon_social`); si no, `null`. Por `codigo_predio` (los omisos,
+`apellido_paterno`, `apellido_materno`, `nombres`, `razon_social`); si no, `null`. `prico`, con la regla de PRICO de
+arriba. Por `codigo_predio` (los omisos,
 sin él, al final).
 |200; 403; 404 código que la corrida no tiene; 409; 422.
 
