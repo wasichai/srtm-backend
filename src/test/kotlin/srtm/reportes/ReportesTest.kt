@@ -175,6 +175,31 @@ class ReportesTest {
         assertEquals(emptyList<String>(), Reportes.filtrar(todas, Filtros(q = "nadie")).map { it.lote })
     }
 
+    // #269
+    @Test
+    fun `a caller who may not see the name or the codigo gets them in null, and q does not find by them`() {
+        val todas =
+            filas(
+                listOf(fila(Categoria.SUBVALUADO, predio = "p1", codigoPredio = "01-01-0001", deltaImpuesto = "10")),
+                mapOf("p1" to listOf(Titular("k1", "000123", "QUISPE MAMANI, JUAN", "d1", BigDecimal(100))))
+            )
+        val sinNombre = Vista(nombre = false, codigo = true)
+        val sinCodigo = Vista(nombre = true, codigo = false)
+        assertEquals(emptyList<String>(), Reportes.filtrar(todas, Filtros(q = "quispe"), sinNombre).map { it.lote })
+        assertEquals(listOf("0"), Reportes.filtrar(todas, Filtros(q = "000123"), sinNombre).map { it.lote })
+        assertEquals(emptyList<String>(), Reportes.filtrar(todas, Filtros(q = "000123"), sinCodigo).map { it.lote })
+        assertEquals(listOf("0"), Reportes.filtrar(todas, Filtros(q = "01-01-0001"), Vista(nombre = false, codigo = false)).map { it.lote })
+        val f = Reportes.paraElUsuario(todas, sinNombre).single()
+        assertEquals(listOf("k1", "000123", null), listOf(f.contribuyente, f.codigoContribuyente, f.nombreContribuyente))
+        assertEquals(listOf<String?>(null), f.titulares.map { it.nombre })
+        assertEquals(listOf<String?>(null), Reportes.contribuyentes(Reportes.paraElUsuario(todas, sinNombre)).map { it.nombreContribuyente })
+        val g = Reportes.paraElUsuario(todas, sinCodigo).single()
+        assertEquals(listOf(null, "QUISPE MAMANI, JUAN"), listOf(g.codigoContribuyente, g.nombreContribuyente))
+        assertEquals(listOf<String?>(null), g.titulares.map { it.codigo })
+        // who sees it all gets the very rows: nothing copied
+        assertTrue(Reportes.paraElUsuario(todas, Vista.TODO) === todas)
+    }
+
     // the rows
 
     @Test

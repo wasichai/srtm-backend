@@ -21,6 +21,7 @@ import srtm.brecha.RegistroCorrida
 import srtm.brecha.SIN_CATASTRO_CONFIGURADO
 import srtm.brecha.SIN_WMS
 import srtm.brecha.delUsuario
+import srtm.rentas.CAMPOS_DEL_NOMBRE
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Registros
 import srtm.reportes.Cache
@@ -255,9 +256,6 @@ class VisorService(
         private val log = LoggerFactory.getLogger(VisorService::class.java)
         const val ACTO = "consultar el visor de brechas"
         val VIGENCIA_CAPAS: Duration = Duration.ofMinutes(10)
-
-        // what nombreCompleto makes a contribuyente's name of
-        val CAMPOS_DEL_NOMBRE = setOf("nombre_completo", "apellido_paterno", "apellido_materno", "nombres", "razon_social")
 
         // the rows and panels kept (#263): up to 4 per corrida, as ReportesService's
         const val DERIVADAS = 8

@@ -114,7 +114,17 @@ class VisorRendimientoTest {
     private fun servicios(vigenciaDecisiones: Duration = Duration.ofMinutes(2)): Pair<ReportesService, VisorService> {
         val usuario = AuthenticatedUser(UUID.randomUUID(), organizacion, "visor@prueba.local", listOf("ADMIN"), null)
         val currentUser = mockDe(CurrentUser::class.java, mapOf("require" to { _ -> usuario })) as CurrentUser
-        val permisos = mockDe(Permisos::class.java, mapOf("puedeLeer" to { _ -> true }, "exigirLeer" to { _ -> Unit })) as Permisos
+        val permisos =
+            mockDe(
+                Permisos::class.java,
+                mapOf(
+                    "puedeLeer" to { _ ->
+                        true
+                    },
+                    "leeEntero" to { _ -> true },
+                    "exigirLeer" to { _ -> Unit }
+                )
+            ) as Permisos
         val brechas =
             mockDe(
                 BrechaService::class.java,

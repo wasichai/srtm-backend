@@ -121,6 +121,20 @@ data class Titular(
     val peso: BigDecimal
 )
 
+// #269: what a caller may see of the titulares the reportes keep for everyone (read whole, by the platform or by who
+// reads the padrón whole): the name to who may read contribuyente and every field of its name (CAMPOS_DEL_NOMBRE, as
+// the visor since #265), its código to who may read that field. decided per response, never kept
+data class Vista(
+    val nombre: Boolean,
+    val codigo: Boolean
+) {
+    val todo: Boolean get() = nombre && codigo
+
+    companion object {
+        val TODO = Vista(nombre = true, codigo = true)
+    }
+}
+
 // a row of GET /reportes/{clave}: a brecha_predio of the corrida with its principal contribuyente (the titular of the
 // largest share; null for an omiso), the uso's description and catastro's decision on it (null without one, or when
 // catastro could not be read)
@@ -400,9 +414,11 @@ object Reportes {
     // a row compared: with a Δ
     private fun conDelta(f: FilaReportePredio) = f.deltaImpuesto != null || f.deltaAutoavaluo != null
 
+    // vista: what of the titulares q may search (#269: a name the caller may not see finds nothing)
     fun filtrar(
         filas: List<FilaReportePredio>,
-        filtros: Filtros
+        filtros: Filtros,
+        vista: Vista = Vista.TODO
     ): List<FilaReportePredio> {
         val sector = Brecha.llave(filtros.sector)
         val manzana = Brecha.llave(filtros.manzana)
@@ -413,12 +429,34 @@ object Reportes {
                 (manzana == null || Brecha.llave(f.manzana) == manzana) &&
                 (uso == null || f.uso?.trim()?.startsWith(uso) == true) &&
                 (filtros.confianza == null || f.confianza == filtros.confianza) &&
-                (q == null || textos(f).any { plano(it).contains(q) })
+                (q == null || textos(f, vista).any { plano(it).contains(q) })
         }
     }
 
-    private fun textos(f: FilaReportePredio): List<String> =
-        listOfNotNull(f.codigoPredio, f.codigoCatastro) + f.titulares.flatMap { listOfNotNull(it.codigo, it.nombre) }
+    private fun textos(
+        f: FilaReportePredio,
+        vista: Vista
+    ): List<String> =
+        listOfNotNull(f.codigoPredio, f.codigoCatastro) +
+            f.titulares.flatMap { listOfNotNull(it.codigo.takeIf { vista.codigo }, it.nombre.takeIf { vista.nombre }) }
+
+    // #269: the rows as `vista` lets the caller see them: the name and the código of their titulares (the principal's
+    // and every one's) left null when it may not see them. made at response time, of the rows of its response only
+    fun paraElUsuario(
+        filas: List<FilaReportePredio>,
+        vista: Vista
+    ): List<FilaReportePredio> =
+        if (vista.todo) {
+            filas
+        } else {
+            filas.map { f ->
+                f.copy(
+                    codigoContribuyente = f.codigoContribuyente.takeIf { vista.codigo },
+                    nombreContribuyente = f.nombreContribuyente.takeIf { vista.nombre },
+                    titulares = f.titulares.map { t -> t.copy(codigo = t.codigo.takeIf { vista.codigo }, nombre = t.nombre.takeIf { vista.nombre }) }
+                )
+            }
+        }
 
     // lower case, without accents nor surrounding blanks: q's comparison
     private fun plano(texto: String): String =
