@@ -21,12 +21,12 @@ import srtm.brecha.RegistroCorrida
 import srtm.impuesto.ParametroTributario
 import srtm.impuesto.ParametrosTributarios
 import srtm.impuesto.UIT
-import srtm.rentas.Contribuyente
 import srtm.rentas.DECLARACION
 import srtm.rentas.Declaracion
 import srtm.rentas.Registros
 import srtm.rentas.USO_PREDIO
 import srtm.rentas.UsoPredio
+import srtm.reportes.ContribuyenteDelReporte
 import srtm.reportes.ReportesService
 import wasichai.core.identity.AuthenticatedUser
 import wasichai.core.identity.CurrentUser
@@ -121,6 +121,7 @@ class VisorRendimientoTest {
                     "puedeLeer" to { _ ->
                         true
                     },
+                    "puedeLeerCampos" to { _ -> true },
                     "leeEntero" to { _ -> true },
                     "exigirLeer" to { _ -> Unit }
                 )
@@ -151,7 +152,7 @@ class VisorRendimientoTest {
                     },
                     "byIds" to { inv ->
                         @Suppress("UNCHECKED_CAST")
-                        (inv.arguments[2] as Collection<String>).associateWith { Contribuyente(id = it, nombreCompleto = "CONTRIBUYENTE $it") }
+                        (inv.arguments[2] as Collection<String>).associateWith { ContribuyenteDelReporte(id = it, nombreCompleto = "CONTRIBUYENTE $it") }
                     }
                 )
             ) as Registros

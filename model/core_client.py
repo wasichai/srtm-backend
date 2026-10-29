@@ -23,9 +23,9 @@ class Client:
         self.base_url = base_url.rstrip("/")
         self.token = None
 
-    def _call(self, method, path, body=None, use_auth=True):
+    def _call(self, method, path, body=None, use_auth=True, headers=None):
         url = self.base_url + path
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", **(headers or {})}
         if use_auth and self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         data = json.dumps(body).encode("utf-8") if body is not None else None
@@ -65,9 +65,10 @@ class Client:
     def put(self, path, body):
         return self._call("PUT", path, body)
 
-    def patch(self, path, body):
-        """Core's JSON merge on a record's attributes: only the keys sent are written (ADR-051)."""
-        return self._call("PATCH", path, body)
+    def patch(self, path, body, headers=None):
+        """Core's JSON merge on a record's attributes: only the keys sent are written (ADR-051). headers: extra ones,
+        like X-Change-Reason for the audit."""
+        return self._call("PATCH", path, body, headers=headers)
 
     def delete(self, path):
         return self._call("DELETE", path)

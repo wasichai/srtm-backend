@@ -402,7 +402,9 @@
         {"name": "fecha_fallecimiento", "label": "Fecha de fallecimiento", "type": "DATE"},
         {"name": "estado_civil", "label": "Estado civil", "type": "ENUM", "enum": "estado_civil"},
         {"name": "sexo", "label": "Sexo", "type": "ENUM", "enum": "sexo"},
-        {"name": "observacion", "label": "Observación", "type": "LONG_TEXT"}
+        {"name": "observacion", "label": "Observación", "type": "LONG_TEXT"},
+        {"name": "prico", "label": "Principal contribuyente (PRICO)", "type": "BOOLEAN",
+          "description": "Principal contribuyente (#273): lo marca model/marcar_pricos.py desde el padrón vinculado (en Ica, las columnas pricos y pricos_codigo). El visor de brechas marca PRICO el predio cuyo titular principal lo es. Vacío cuenta como false."}
       ]
     },
     {

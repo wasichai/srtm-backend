@@ -77,7 +77,15 @@ python3 -I import_catalogos.py --distrito 110101 --municipalidad-json data/ica/m
   --obras-csv data/ica/obras_complementarias_costa.csv --dry-run
 python3 -I import_parametros.py --dry-run         # UIT, tramos, mínimo: sin ellos la brecha queda FALLIDA
 python3 -I import_padron_ica.py --excel <PADRON_CONSTRUCCION.xlsx> --dry-run
+python3 -I marcar_pricos.py --excel <padrón vinculado.xlsx> --anio 2026 --dry-run
 ```
+
+**PRICOs (#273):** `marcar_pricos.py` marca `contribuyente.prico` desde el padrón vinculado del SAT. Busca la primera
+hoja con las columnas `pricos` (1 o vacío) y `pricos_codigo` (el código del contribuyente); `--hoja`, `--col-prico` y
+`--col-codigo` las cambian, y si falta una se detiene sin escribir (sale con 2). Desmarca a quien ya no figura, salvo
+con `--sin-desmarcar`. Cada cambio es un PATCH de `prico` con `X-Change-Reason: pricos:<archivo>`, y solo imprime
+conteos (marcados, desmarcados, sin cambios y códigos sin contribuyente). Va después de `import_padron_ica.py`, que crea
+los contribuyentes por su código.
 
 Hay dos fallas esperadas antes de aplicar el modelo: `import_catalogos.py` y `import_parametros.py` responden 404
 (`object ubigeo does not exist`). Por eso `apply.py` va primero de verdad, y después se repiten los dry-run.

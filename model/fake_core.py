@@ -46,6 +46,8 @@ class FakeCoreHandler(BaseHTTPRequestHandler):
         body = self._body()
         with server.lock:
             server.requests.append((method, self.path, self.headers.get("Authorization"), body))
+            if self.headers.get("X-Change-Reason") is not None:
+                server.change_reasons.append((method, self.path, self.headers.get("X-Change-Reason")))
             status, payload = server.script(method, self.path, body)
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -110,6 +112,8 @@ class FakeCore:
         self.requests = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeCoreHandler)
         self.server.requests = self.requests
+        self.change_reasons = []  # (method, path, X-Change-Reason) of each request that sent one
+        self.server.change_reasons = self.change_reasons
         self.server.script = self._script
         self.server.lock = threading.Lock()
         self.port = self.server.server_address[1]
