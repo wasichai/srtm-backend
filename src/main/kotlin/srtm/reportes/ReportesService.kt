@@ -19,6 +19,7 @@ import srtm.brecha.RegistroCorrida
 import srtm.brecha.TERMINADA
 import srtm.brecha.delUsuario
 import srtm.impuesto.ParametrosTributarios
+import srtm.rentas.CAMPOS_DEL_NOMBRE
 import srtm.rentas.CONTRIBUYENTE
 import srtm.rentas.Contribuyente
 import srtm.rentas.DECLARACION
@@ -65,6 +66,14 @@ class Listado<T>(
     val filas: List<T>
 )
 
+// #269: a corrida's titulares as they were read, and whether whole: by the platform (Precalentador) or by a caller who
+// reads declaracion_predial and contribuyente whole (Permisos.leeEntero). what each caller sees of them is decided per
+// response (Vista), never by who read them
+class TitularesLeidos(
+    val titulares: Map<String, List<Titular>>,
+    val enteros: Boolean
+)
+
 // the UIT of 1 de enero is missing: mayores-5-uit cannot be told
 class FaltaUit(
     faltan: List<String>
@@ -74,7 +83,9 @@ class FaltaUit(
 // asked on every request, before any cache is touched) and kept in memory per corrida: its rows never change once
 // TERMINADA, so they are kept with no vigencia, the srtm.reportes.corridas most recently used (#255). the padrón's
 // titulares of its predios (read only for a caller who may read declaracion_predial and contribuyente) do change: per
-// corrida for srtm.reportes.cache, the uso catalog per organization the same. a corrida that ends TERMINADA fills
+// corrida for srtm.reportes.cache, the uso catalog per organization the same. the titulares are kept for everyone as
+// they are, read whole (#269: TitularesLeidos), and each response shows of them what its caller may see (Vista: the
+// name and the código of the contribuyente by its field permissions, in the rows, contribuyentes and the exports). a corrida that ends TERMINADA fills
 // them in the background (Precalentador), and a read of what is being read waits for it (Cache.obtener) instead of
 // reading it twice. catastro's decisions are read of the organization's catastro, kept for
 // srtm.reportes.cache-decisiones (2 minutes: they change as catastro works; #263), read once however many ask at
@@ -99,7 +110,7 @@ class ReportesService(
     @param:Value("\${srtm.reportes.cache-fallo-decisiones:30s}") vigenciaFallo: Duration
 ) {
     private val filasPorCorrida = Cache<String, List<FilaBrecha>>(null, corridas)
-    private val titularesPorCorrida = Cache<String, Map<String, List<Titular>>>(vigencia, corridas)
+    private val titularesPorCorrida = Cache<String, TitularesLeidos>(vigencia, corridas)
     private val usosPorOrganizacion = Cache<UUID, Map<String, String>>(vigencia, corridas)
     private val decisionesPorAnio = Cache<Pair<UUID, Int>, Map<String, String>>(vigenciaDecisiones, corridas)
     private val falloDeDecisiones = Cache<Pair<UUID, Int>, String>(vigenciaFallo, corridas)
@@ -143,11 +154,15 @@ class ReportesService(
     ): Listado<FilaReportePredio> {
         val l = leer(anio, corrida)
         if (reporte == Reporte.MAYORES_5_UIT && l.umbral == null) throw FaltaUit(listOf("UIT $anio"))
-        return Listado(l.corrida, calcular { Reportes.ordenar(Reportes.filtrar(Reportes.del(reporte, l.filas, l.umbral), filtros), orden, dir) })
+        val vista = vista(l)
+        return Listado(
+            l.corrida,
+            calcular { Reportes.paraElUsuario(Reportes.ordenar(Reportes.filtrar(Reportes.del(reporte, l.filas, l.umbral), filtros, vista), orden, dir), vista) }
+        )
     }
 
-    // the contribuyentes: the padrón's, so its readers only. the predios filtered (all but q), then grouped, then q
-    // over the contribuyentes
+    // the contribuyentes: the padrón's, so its readers only. the predios filtered (all but q), as the caller may see
+    // them (Vista), then grouped, then q over the contribuyentes
     suspend fun contribuyentes(
         anio: Int,
         corrida: UUID?,
@@ -158,10 +173,11 @@ class ReportesService(
         permisos.exigirLeer(CONTRIBUYENTE, "consultar el reporte de contribuyentes")
         permisos.exigirLeer(DECLARACION, "consultar el reporte de contribuyentes")
         val l = leer(anio, corrida, conDecisiones = false)
+        val vista = vista(l)
         return Listado(
             l.corrida,
             calcular {
-                val predios = Reportes.filtrar(Reportes.del(Reporte.CONTRIBUYENTES, l.filas, l.umbral), filtros.copy(q = null))
+                val predios = Reportes.paraElUsuario(Reportes.filtrar(Reportes.del(Reporte.CONTRIBUYENTES, l.filas, l.umbral), filtros.copy(q = null)), vista)
                 Reportes.ordenarContribuyentes(Reportes.buscarContribuyentes(Reportes.contribuyentes(predios), filtros.q), orden, dir)
             }
         )
@@ -189,7 +205,7 @@ class ReportesService(
         val brecha = filas(id)
         val titulares =
             if (permisos.puedeLeer(DECLARACION) && permisos.puedeLeer(CONTRIBUYENTE)) {
-                titularesPorCorrida.obtener(id) { titulares(anio) }
+                titularesDe(id, anio)
             } else {
                 avisos += "Sin lectura del padrón (declaracion_predial y contribuyente): las filas no traen su contribuyente"
                 null
@@ -221,7 +237,9 @@ class ReportesService(
             lotesPorCorrida.quitar(it)
         }
         filas(corrida)
-        titularesPorCorrida.obtener(corrida) { titulares(anio) }
+        if (!titularesPorCorrida.obtener(corrida) { TitularesLeidos(titulares(anio), enteros = true) }.enteros) {
+            titularesPorCorrida.put(corrida, TitularesLeidos(titulares(anio), enteros = true))
+        }
         if (usosPorOrganizacion.get(organizacion) == null) usos()?.let { usosPorOrganizacion.put(organizacion, it) }
     }
 
@@ -243,6 +261,36 @@ class ReportesService(
 
     private fun lotesDe(filas: List<FilaBrecha>): Map<String, LoteJson> =
         filas.mapNotNull { f -> f.id?.let { id -> f.loteGeom?.let { id to LoteJson(GEOJSON.writeValueAsString(it)) } } }.toMap()
+
+    // #269: what the caller may see of the titulares of the rows it reads; all of it when they have none (who may not
+    // read the padrón: nothing to hide, nothing asked)
+    private suspend fun vista(l: Lectura): Vista =
+        if (!l.derivada.second) {
+            Vista.TODO
+        } else {
+            Vista(
+                nombre = permisos.puedeLeerCampos(CONTRIBUYENTE, CAMPOS_DEL_NOMBRE),
+                codigo = permisos.puedeLeerCampos(CONTRIBUYENTE, CAMPO_CODIGO)
+            )
+        }
+
+    // #269: the corrida's titulares, kept for everyone. a caller reads them as itself when they are missing (asPlatform
+    // refuses inside a request, ADR-039), and they are kept as whole or not by whether it reads the padrón whole.
+    // what was not read whole is read again, once, by the first caller who reads it whole, and kept for everyone: no
+    // caller's restrictions ever reach another's response. the platform's warm-up (precalentar) reads them whole
+    private suspend fun titularesDe(
+        corrida: String,
+        anio: Int
+    ): Map<String, List<Titular>> {
+        var entero: Boolean? = null
+
+        suspend fun leeEntero() = entero ?: (permisos.leeEntero(DECLARACION) && permisos.leeEntero(CONTRIBUYENTE)).also { entero = it }
+        val leidos = titularesPorCorrida.obtener(corrida) { TitularesLeidos(titulares(anio), leeEntero()) }
+        if (leidos.enteros || !leeEntero()) return leidos.titulares
+        // dropped first: who reads it whole at the same time waits for this read instead of making its own
+        titularesPorCorrida.quitar(corrida)
+        return titularesPorCorrida.obtener(corrida) { TitularesLeidos(titulares(anio), enteros = true) }.titulares
+    }
 
     // the vigente DJs of the year and their contribuyentes: each predio's titulares
     private suspend fun titulares(anio: Int): Map<String, List<Titular>> {
@@ -335,6 +383,7 @@ class ReportesService(
         val log = LoggerFactory.getLogger(ReportesService::class.java)
         val CINCO = BigDecimal(5)
         const val SIN_DECISIONES = "Sin las decisiones de catastro"
+        val CAMPO_CODIGO = setOf("codigo")
 
         // the corridas whose lotes are kept (#260): a corrida of Ica's is some tens of MB of them
         const val LOTES = 2

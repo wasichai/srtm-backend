@@ -807,7 +807,11 @@ no está TERMINADA, 409.
 brecha. Las filas de una corrida TERMINADA no cambian: se guardan en memoria sin vencimiento por tiempo, para las
 `srtm.reportes.corridas` (8) corridas más usadas (la menos usada sale primero; `0` apaga la caché). Los titulares del
 padrón de sus predios y el catálogo de usos sí cambian: se guardan `srtm.reportes.cache` (10 minutos), y un cambio del
-padrón (una DJ nueva o rectificada) aparece en el contribuyente de las filas al vencer esa caché. Las decisiones de
+padrón (una DJ nueva o rectificada) aparece en el contribuyente de las filas al vencer esa caché. Los titulares se
+guardan una vez para todos los usuarios, leídos enteros (#269): por el precalentado, o por el primer usuario que lee
+`declaracion_predial` y `contribuyente` sin campos ocultos. Si los leyó antes un usuario con campos ocultos, el primero
+que los lee enteros los vuelve a leer, una sola vez, para todos. Lo que cada uno ve de ellos se decide al responder
+(ver la lista de un reporte). Las decisiones de
 catastro se guardan `srtm.reportes.cache-decisiones` (2 minutos; #263), y su falla, `srtm.reportes.cache-fallo-decisiones`
 (30 segundos): con catastro caído no se espera su respuesta en cada página. Se leen una sola vez aunque las pidan varias
 consultas a la vez (el visor pide juntos su panel, sus predios y sus lotes): las demás esperan esa lectura. Las filas
@@ -865,13 +869,17 @@ predio o de catastro) o del código o nombre de cualquiera de sus contribuyentes
 `terreno` y `construccion` por su diferencia de área; `mayores-5-uit` por Δ autoavalúo). Cada fila: `id` (el de
 `brecha_predio`, el mismo de `/brecha/{anio}/lotes`), `predio`, `codigoPredio`, `codigoCatastro`, `contribuyente`,
 `codigoContribuyente`, `nombreContribuyente` y `declaracion` (el titular de mayor % de condominio en las DJ vigentes
-del año; `null` en un omiso o sin lectura del padrón), `sector`, `manzana`, `lote`, `uso`, `usoDescripcion`,
+del año; `null` en un omiso o sin lectura del padrón; `nombreContribuyente` solo para quien lee `contribuyente` y
+todos los campos de su nombre, y `codigoContribuyente` solo para quien lee su campo `codigo`, como el visor: #269),
+`sector`, `manzana`, `lote`, `uso`, `usoDescripcion`,
 `categoria`, `confianza`, `autoavaluoDeclarado`, `autoavaluoCatastro`, `deltaAutoavaluo`, `impuestoDeclarado`,
 `impuestoCatastro`, `deltaImpuesto`, `deltaArbitrios`, `estimado`, `areaTerrenoDeclarada`, `areaTerrenoCatastro`,
 `areaConstruidaDeclarada`, `areaConstruidaCatastro`, `nivelesComparados`, `nivelesCatastroMayor`, `deltaAreaNiveles`
 y `decision`. En `contribuyentes` cada fila es `{contribuyente, codigoContribuyente, nombreContribuyente, predios,
 deltaAutoavaluo, deltaImpuesto}`: sus predios comparados (con un Δ) y su parte del Δ de cada uno, por su % de
-condominio (al céntimo, sin perder nada); los filtros de predio se aplican antes de agrupar, `q` después.
+condominio (al céntimo, sin perder nada); los filtros de predio se aplican antes de agrupar, `q` después. El nombre y
+el código del contribuyente siguen la misma regla por usuario en las filas, en `contribuyentes` y en las
+exportaciones, y `q` no encuentra por un nombre o código que el usuario no puede ver.
 |200; 403 (`contribuyentes` pide además `READ` sobre `contribuyente` y `declaracion_predial`); 404 reporte o corrida;
 409; 422 `confianza`, `orden`, `dir`, `page` o `size` inválidos, un orden de área en `contribuyentes`, o falta la UIT en
 `mayores-5-uit` (`faltan`).

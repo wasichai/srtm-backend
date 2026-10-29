@@ -68,6 +68,18 @@ class Permisos(
         return campos.all { c -> porNombre[c]?.let { acceso.canRead(it.id) } ?: false }
     }
 
+    // #269: whether the caller reads every record and every field of `objeto` (ADMIN, or roles that hide none and do not
+    // keep it to its own records): what it reads of it is what the platform would read. srtm narrows no read with a
+    // RecordReadScope (ADR-048); one that did would have to be asked here too
+    suspend fun leeEntero(objeto: String): Boolean {
+        if (!puedeLeer(objeto)) return false
+        val usuario = currentUser.require()
+        val definicion = metadata.loadDefinition(usuario.organizationId, objeto)
+        if (accesos.ownRecordsOnly(usuario)) return false
+        val acceso = accesos.fieldAccess(usuario, definicion.obj.id)
+        return definicion.fields.all { acceso.canRead(it.id) }
+    }
+
     private suspend fun exigir(
         accion: String,
         permiso: String,
