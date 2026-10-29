@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.5.0](https://github.com/wasichai/srtm-backend/compare/v2.4.0...v2.5.0) (2026-10-29)
+
+
+### Features
+
+* **visor:** marca PRICO y filtro en el visor ([#278](https://github.com/wasichai/srtm-backend/issues/278)) ([c9cd4eb](https://github.com/wasichai/srtm-backend/commit/c9cd4eb10d4a6b3a72983260263a11265d3dea20)), closes [#273](https://github.com/wasichai/srtm-backend/issues/273)
+
+
+### Bug Fixes
+
+* **pruebas:** la UI de pruebas no cachea index.html y un chunk que falta es 404 ([#275](https://github.com/wasichai/srtm-backend/issues/275)) ([f956830](https://github.com/wasichai/srtm-backend/commit/f956830689981ca1179fe1899114760c55dea430)), closes [#272](https://github.com/wasichai/srtm-backend/issues/272)
+* **reportes:** el nombre y el código del contribuyente se deciden por usuario al responder ([#274](https://github.com/wasichai/srtm-backend/issues/274)) ([d116949](https://github.com/wasichai/srtm-backend/commit/d1169494fdeefccd2f006601ae3e9f0573ee5eb2)), closes [#269](https://github.com/wasichai/srtm-backend/issues/269)
+
 ## [2.4.0](https://github.com/wasichai/srtm-backend/compare/v2.3.0...v2.4.0) (2026-10-28)
 
 
