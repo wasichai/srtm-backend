@@ -52,7 +52,11 @@ data class FilaVisor(
     // a row is kept for everyone with the name apart, never written
     val contribuyente: String? = null,
     val contribuyenteNombre: String? = null,
-    @get:JsonIgnore val nombreDelTitular: String? = null
+    @get:JsonIgnore val nombreDelTitular: String? = null,
+    // #273: whether its principal titular is a PRICO (contribuyente.prico), only in a response to who may read that
+    // field (Visor.paraElUsuario); delTitular is the mark as kept for everyone, never written
+    val prico: Boolean = false,
+    @get:JsonIgnore val pricoDelTitular: Boolean = false
 ) {
     val conFicha: Boolean @JsonIgnore get() = codigoCatastro != null
 }
@@ -77,7 +81,16 @@ data class KpisVisor(
     val pendientes: Int?,
     val conGeometria: Int,
     // rows without a ficha: they cannot be decided, so they are no pendientes
-    val sinFicha: Int
+    val sinFicha: Int,
+    // #273: the rows whose principal titular is a PRICO and their Δ impuesto; null for a caller who may not read
+    // contribuyente.prico
+    val pricos: PricosVisor? = null
+)
+
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+data class PricosVisor(
+    val predios: Int,
+    val deltaImpuesto: BigDecimal
 )
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
@@ -135,19 +148,24 @@ data class PredioDelLote(
     val categoria: String?,
     val confianza: String?,
     val deltaImpuesto: BigDecimal?,
-    val estado: String?
+    val estado: String?,
+    // #273: whether its principal titular is a PRICO; false for a caller who may not read contribuyente.prico
+    val prico: Boolean = false
 )
 
 // /predios, /lotes and /predios.csv: every filter given must hold. a set holds when the row's value is one of it;
 // sector compares as the cruce compares codes (Brecha.llave: 01 is 1); min_delta against |delta_impuesto|, so a row
-// without one is out; supera_5_uit false takes the rows without the mark too
+// without one is out; supera_5_uit false takes the rows without the mark too. prico (#273) by the principal titular's
+// mark as the caller sees it: verPrico false (who may not read contribuyente.prico) sees no row as a PRICO
 data class FiltroVisor(
     val categorias: Set<String>? = null,
     val confianzas: Set<String>? = null,
     val sector: String? = null,
     val estados: Set<String>? = null,
     val supera5Uit: Boolean? = null,
-    val minDelta: BigDecimal? = null
+    val minDelta: BigDecimal? = null,
+    val prico: Boolean? = null,
+    val verPrico: Boolean = true
 ) {
     private val llaveSector = Brecha.llave(sector)
 
@@ -157,7 +175,11 @@ data class FiltroVisor(
             (llaveSector == null || Brecha.llave(f.sector) == llaveSector) &&
             (estados == null || f.estado in estados) &&
             (supera5Uit == null || (f.supera5Uit ?: false) == supera5Uit) &&
-            (minDelta == null || (f.deltaImpuesto != null && f.deltaImpuesto.abs() >= minDelta))
+            (minDelta == null || (f.deltaImpuesto != null && f.deltaImpuesto.abs() >= minDelta)) &&
+            (prico == null || esPrico(f) == prico)
+
+    // the row's mark as the caller may see it
+    fun esPrico(f: FilaVisor): Boolean = verPrico && f.pricoDelTitular
 }
 
 // catastro's orders: by Δ impuesto (a row without one last), or by código de catastro, then the padrón's and the id
@@ -218,7 +240,8 @@ object Visor {
                 conGeometria = f.conGeometria,
                 nivelesComparados = f.nivelesComparados,
                 contribuyente = f.contribuyente,
-                nombreDelTitular = f.contribuyente?.let { f.nombreContribuyente }
+                nombreDelTitular = f.contribuyente?.let { f.nombreContribuyente },
+                pricoDelTitular = f.prico
             )
         }
 
@@ -237,6 +260,8 @@ object Visor {
         var pendientes = 0
         var conGeometria = 0
         var sinFicha = 0
+        var pricos = 0
+        var deltaPricos = CERO
         val categorias = linkedMapOf<String?, Acumulado>().apply { Categoria.entries.forEach { put(it.name, Acumulado()) } }
         val confianzas = linkedMapOf<String?, Acumulado>().apply { Confianza.entries.forEach { put(it.name, Acumulado()) } }
         val estados = linkedMapOf<String, Int>().apply { ESTADOS_DECISION.forEach { put(it, 0) } }
@@ -253,6 +278,10 @@ object Visor {
                 pendientes++
             }
             if (f.conGeometria) conGeometria++
+            if (f.pricoDelTitular) {
+                pricos++
+                deltaPricos += d
+            }
             categorias.getOrPut(f.categoria) { Acumulado() }.suma(d)
             confianzas.getOrPut(f.confianza) { Acumulado() }.suma(d)
             if (f.conFicha && f.estado != null) estados.merge(f.estado, 1, Int::plus)
@@ -263,7 +292,18 @@ object Visor {
         }
         return PanelVisor(
             corrida = CorridaDelVisor(corrida.id!!, corrida.anio, corrida.estado, corrida.terminado, corrida.versionCatastro),
-            kpis = KpisVisor(filas.size, delta, confiable, omisos, supera, pendientes.takeIf { conDecisiones }, conGeometria, sinFicha),
+            kpis =
+                KpisVisor(
+                    filas.size,
+                    delta,
+                    confiable,
+                    omisos,
+                    supera,
+                    pendientes.takeIf { conDecisiones },
+                    conGeometria,
+                    sinFicha,
+                    PricosVisor(pricos, deltaPricos)
+                ),
             porCategoria = categorias.map { (clave, a) -> CuentaVisor(clave, a.fichas, a.delta) },
             porConfianza = confianzas.filter { (clave, a) -> clave != null || a.fichas > 0 }.map { (clave, a) -> CuentaVisor(clave, a.fichas, a.delta) },
             porEstado = estados.map { (clave, n) -> CuentaDeEstadoVisor(clave, n) },
@@ -302,18 +342,31 @@ object Visor {
                                 "confianza" to f.confianza,
                                 "delta_impuesto" to f.deltaImpuesto,
                                 "estado" to f.estado,
-                                "supera_5_uit" to f.supera5Uit
+                                "supera_5_uit" to f.supera5Uit,
+                                "prico" to filtro.esPrico(f)
                             )
                     )
                 }
         )
 
     // #270: the rows as `conNombre` (Permisos.puedeLeerCampos of contribuyente and its name, the caller's) may see
-    // them: with contribuyente_nombre, or as they are kept, without it. made at response time, for its page only
+    // them: with contribuyente_nombre, or as they are kept, without it; and with prico for `conPrico` (who may read
+    // contribuyente.prico, #273). made at response time, for its page only
     fun paraElUsuario(
         filas: List<FilaVisor>,
-        conNombre: Boolean
-    ): List<FilaVisor> = if (conNombre) filas.map { it.copy(contribuyenteNombre = it.nombreDelTitular) } else filas
+        conNombre: Boolean,
+        conPrico: Boolean = false
+    ): List<FilaVisor> =
+        if (conNombre || conPrico) {
+            filas.map {
+                it.copy(
+                    contribuyenteNombre = if (conNombre) it.nombreDelTitular else null,
+                    prico = conPrico && it.pricoDelTitular
+                )
+            }
+        } else {
+            filas
+        }
 
     // a feature's codigo in /lotes: its padrón code, else its catastro code
     fun codigo(f: FilaVisor): String? = f.codigoPredio ?: f.codigoCatastro
@@ -329,7 +382,8 @@ object Visor {
         reportes: List<FilaReportePredio>,
         lotes: Map<String, Any>,
         codigo: String,
-        conNombre: Boolean
+        conNombre: Boolean,
+        conPrico: Boolean = false
     ): List<PredioDelLote>? {
         val filas = visor.zip(reportes)
 
@@ -353,7 +407,8 @@ object Visor {
                     categoria = v.categoria,
                     confianza = v.confianza,
                     deltaImpuesto = v.deltaImpuesto,
-                    estado = v.estado
+                    estado = v.estado,
+                    prico = conPrico && v.pricoDelTitular
                 )
             }
     }

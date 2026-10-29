@@ -21,12 +21,12 @@ import srtm.brecha.RegistroCorrida
 import srtm.impuesto.ParametroTributario
 import srtm.impuesto.ParametrosTributarios
 import srtm.impuesto.UIT
-import srtm.rentas.Contribuyente
 import srtm.rentas.DECLARACION
 import srtm.rentas.Declaracion
 import srtm.rentas.Registros
 import srtm.rentas.USO_PREDIO
 import srtm.rentas.UsoPredio
+import srtm.reportes.ContribuyenteDelReporte
 import srtm.reportes.ReportesService
 import wasichai.core.identity.AuthenticatedUser
 import wasichai.core.identity.CurrentUser
@@ -114,7 +114,17 @@ class VisorRendimientoTest {
     private fun servicios(vigenciaDecisiones: Duration = Duration.ofMinutes(2)): Pair<ReportesService, VisorService> {
         val usuario = AuthenticatedUser(UUID.randomUUID(), organizacion, "visor@prueba.local", listOf("ADMIN"), null)
         val currentUser = mockDe(CurrentUser::class.java, mapOf("require" to { _ -> usuario })) as CurrentUser
-        val permisos = mockDe(Permisos::class.java, mapOf("puedeLeer" to { _ -> true }, "exigirLeer" to { _ -> Unit })) as Permisos
+        val permisos =
+            mockDe(
+                Permisos::class.java,
+                mapOf(
+                    "puedeLeer" to { _ ->
+                        true
+                    },
+                    "puedeLeerCampos" to { _ -> true },
+                    "exigirLeer" to { _ -> Unit }
+                )
+            ) as Permisos
         val brechas =
             mockDe(
                 BrechaService::class.java,
@@ -141,7 +151,7 @@ class VisorRendimientoTest {
                     },
                     "byIds" to { inv ->
                         @Suppress("UNCHECKED_CAST")
-                        (inv.arguments[2] as Collection<String>).associateWith { Contribuyente(id = it, nombreCompleto = "CONTRIBUYENTE $it") }
+                        (inv.arguments[2] as Collection<String>).associateWith { ContribuyenteDelReporte(id = it, nombreCompleto = "CONTRIBUYENTE $it") }
                     }
                 )
             ) as Registros

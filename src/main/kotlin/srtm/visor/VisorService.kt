@@ -69,15 +69,26 @@ class VisorService(
     private val filasDelVisor = Cache<Triple<String, Boolean, Boolean>, Pair<List<Any?>, List<FilaVisor>>>(null, DERIVADAS)
     private val paneles = Cache<Triple<String, Boolean, Boolean>, Pair<List<Any?>, PanelVisor>>(null, DERIVADAS)
 
+    // prico (#273): the panel of the rows that are (true) or are not (false) PRICOs, as the caller sees the mark, made
+    // for its request; without it, the corrida's, kept. kpis.pricos only for who may read contribuyente.prico
     suspend fun panel(
         anio: Int,
-        corrida: UUID?
+        corrida: UUID?,
+        prico: Boolean? = null
     ): PanelVisor {
         val (l, filas) = leer(anio, corrida)
-        // the same rows, corrida and avisos: the same panel
-        val insumos = listOf(Insumos(filas), l.corrida, l.avisos)
-        return paneles.get(l.derivada)?.takeIf { it.first == insumos }?.second
-            ?: calcular { Visor.panel(l.corrida, filas, l.conDecisiones, l.avisos) }.also { paneles.put(l.derivada, insumos to it) }
+        val conPrico = conPrico()
+        val panel =
+            if (prico != null) {
+                val filtro = FiltroVisor(prico = prico, verPrico = conPrico)
+                calcular { Visor.panel(l.corrida, filas.filter(filtro::admite), l.conDecisiones, l.avisos) }
+            } else {
+                // the same rows, corrida and avisos: the same panel
+                val insumos = listOf(Insumos(filas), l.corrida, l.avisos)
+                paneles.get(l.derivada)?.takeIf { it.first == insumos }?.second
+                    ?: calcular { Visor.panel(l.corrida, filas, l.conDecisiones, l.avisos) }.also { paneles.put(l.derivada, insumos to it) }
+            }
+        return if (conPrico) panel else panel.copy(kpis = panel.kpis.copy(pricos = null))
     }
 
     suspend fun predios(
@@ -87,7 +98,8 @@ class VisorService(
         orden: OrdenVisor
     ): Pair<RegistroCorrida, List<FilaVisor>> {
         val (l, filas) = leer(anio, corrida)
-        return l.corrida to calcular { filas.filter(filtro::admite).sortedWith(orden.comparador) }
+        val visto = if (filtro.prico != null) filtro.copy(verPrico = conPrico()) else filtro
+        return l.corrida to calcular { filas.filter(visto::admite).sortedWith(orden.comparador) }
     }
 
     suspend fun lotes(
@@ -97,12 +109,18 @@ class VisorService(
     ): Map<String, Any?> {
         val (l, filas) = leer(anio, corrida)
         val lotes = reportes.lotes(l.corrida.id!!)
-        return calcular { Visor.lotes(filas, lotes, filtro) }
+        val visto = filtro.copy(verPrico = conPrico())
+        return calcular { Visor.lotes(filas, lotes, visto) }
     }
 
-    // #270: a page of /predios as the caller may see it: the names only to who may read contribuyente and its name
+    // #270: a page of /predios as the caller may see it: the names only to who may read contribuyente and its name,
+    // the PRICO mark only to who may read contribuyente.prico (#273)
     suspend fun paraElUsuario(filas: List<FilaVisor>): List<FilaVisor> =
-        Visor.paraElUsuario(filas, filas.any { it.nombreDelTitular != null } && permisos.puedeLeerCampos(CONTRIBUYENTE, CAMPOS_DEL_NOMBRE))
+        Visor.paraElUsuario(
+            filas,
+            filas.any { it.nombreDelTitular != null } && permisos.puedeLeerCampos(CONTRIBUYENTE, CAMPOS_DEL_NOMBRE),
+            filas.any { it.pricoDelTitular } && conPrico()
+        )
 
     // #265: the predios of a lote, by the codigo of its /lotes feature; a codigo no feature of the corrida has: 404. the
     // names come from the reportes' cached titulares, read by whoever read them first: shown only to a caller who may
@@ -114,8 +132,9 @@ class VisorService(
     ): List<PredioDelLote> {
         val (l, filas) = leer(anio, corrida)
         val conNombre = permisos.puedeLeerCampos(CONTRIBUYENTE, CAMPOS_DEL_NOMBRE)
+        val conPrico = conPrico()
         val lotes = reportes.lotes(l.corrida.id!!)
-        return calcular { Visor.prediosDelLote(filas, l.filas, lotes, codigo, conNombre) }
+        return calcular { Visor.prediosDelLote(filas, l.filas, lotes, codigo, conNombre, conPrico) }
             ?: throw NotFoundException("El lote $codigo no está en la corrida ${l.corrida.id}")
     }
 
@@ -241,6 +260,10 @@ class VisorService(
         return l to filas
     }
 
+    // #273: whether the caller may read the PRICO mark (contribuyente.prico): it comes from the reportes' cached
+    // titulares, not from a read of the caller's
+    private suspend fun conPrico(): Boolean = permisos.puedeLeerCampos(CONTRIBUYENTE, CAMPO_PRICO)
+
     private suspend fun exigir() {
         permisos.exigirLeer(BRECHA_CORRIDA, ACTO)
         permisos.exigirLeer(BRECHA_PREDIO, ACTO)
@@ -254,6 +277,7 @@ class VisorService(
     companion object {
         private val log = LoggerFactory.getLogger(VisorService::class.java)
         const val ACTO = "consultar el visor de brechas"
+        val CAMPO_PRICO = setOf("prico")
         val VIGENCIA_CAPAS: Duration = Duration.ofMinutes(10)
 
         // what nombreCompleto makes a contribuyente's name of

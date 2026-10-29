@@ -175,6 +175,28 @@ class ReportesTest {
         assertEquals(emptyList<String>(), Reportes.filtrar(todas, Filtros(q = "nadie")).map { it.lote })
     }
 
+    // #273: a contribuyente's record as the reportes read it, by the model's field names, with its prico
+    @Test
+    fun `a contribuyente read for the reportes keeps its name fields and its prico`() {
+        val leido =
+            srtm.rentas.Records.read(
+                ContribuyenteDelReporte::class.java,
+                "k1",
+                mapOf(
+                    "codigo" to "000001",
+                    "tipo_contribuyente" to "PERSONA NATURAL",
+                    "apellido_paterno" to "QUISPE",
+                    "apellido_materno" to "MAMANI",
+                    "nombres" to "JUAN",
+                    "prico" to true,
+                    "otro_campo" to "x"
+                )
+            )
+        assertEquals(true, leido.prico)
+        assertEquals("QUISPE MAMANI JUAN", srtm.rentas.nombreCompleto(leido.contribuyente()))
+        assertEquals("000001", leido.contribuyente().codigo)
+    }
+
     // the rows
 
     @Test

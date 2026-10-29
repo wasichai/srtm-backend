@@ -20,7 +20,6 @@ import srtm.brecha.TERMINADA
 import srtm.brecha.delUsuario
 import srtm.impuesto.ParametrosTributarios
 import srtm.rentas.CONTRIBUYENTE
-import srtm.rentas.Contribuyente
 import srtm.rentas.DECLARACION
 import srtm.rentas.Declaracion
 import srtm.rentas.Registros
@@ -247,8 +246,9 @@ class ReportesService(
     // the vigente DJs of the year and their contribuyentes: each predio's titulares
     private suspend fun titulares(anio: Int): Map<String, List<Titular>> {
         val declaraciones = registros.all(DECLARACION, Declaracion::class.java, filters = mapOf("anio" to "$anio"))
-        val contribuyentes = registros.byIds(CONTRIBUYENTE, Contribuyente::class.java, declaraciones.mapNotNull { it.contribuyente }.distinct())
-        return Reportes.titulares(declaraciones, contribuyentes)
+        val leidos = registros.byIds(CONTRIBUYENTE, ContribuyenteDelReporte::class.java, declaraciones.mapNotNull { it.contribuyente }.distinct())
+        val pricos = leidos.filterValues { it.prico == true }.keys
+        return Reportes.titulares(declaraciones, leidos.mapValues { it.value.contribuyente() }, pricos)
     }
 
     // uso_predio's código (Brecha.llave) -> its uso; null for a caller who may not read the catalog

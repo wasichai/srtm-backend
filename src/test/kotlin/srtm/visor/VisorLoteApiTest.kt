@@ -194,7 +194,8 @@ class VisorLoteApiTest : SrtmApiTest() {
                 "categoria",
                 "confianza",
                 "delta_impuesto",
-                "estado"
+                "estado",
+                "prico"
             ),
             conDj.propertyNames().toSet()
         )

@@ -42,8 +42,8 @@ class VisorController(
     suspend fun panel(
         @RequestParam params: Map<String, String>
     ): PanelVisor {
-        conocidos(params, BASE)
-        return visor.panel(anio(params), corrida(params))
+        conocidos(params, BASE + "prico")
+        return visor.panel(anio(params), corrida(params), booleano(params, "prico"))
     }
 
     @GetMapping("/predios")
@@ -154,20 +154,27 @@ class VisorController(
             confianzas = lista(params, "confianza", Confianza.entries.map { it.name }),
             sector = params["sector"]?.trim()?.ifEmpty { null },
             estados = lista(params, "estado", ESTADOS_DECISION),
-            supera5Uit =
-                params["supera_5_uit"]?.let {
-                    when (it.trim().lowercase()) {
-                        "true" -> true
-                        "false" -> false
-                        else -> throw ParametroInvalido("supera_5_uit", "debe ser true o false")
-                    }
-                },
+            supera5Uit = booleano(params, "supera_5_uit"),
+            prico = booleano(params, "prico"),
             minDelta =
                 params["min_delta"]?.let {
                     it.trim().toBigDecimalOrNull()?.takeIf { d -> d >= BigDecimal.ZERO }
                         ?: throw ParametroInvalido("min_delta", "debe ser un número mayor o igual a 0")
                 }
         )
+
+    // true or false; another value is a 422
+    private fun booleano(
+        params: Map<String, String>,
+        nombre: String
+    ): Boolean? =
+        params[nombre]?.let {
+            when (it.trim().lowercase()) {
+                "true" -> true
+                "false" -> false
+                else -> throw ParametroInvalido(nombre, "debe ser true o false")
+            }
+        }
 
     // a comma-separated list of the model's options; an option it does not have is a 422
     private fun lista(
@@ -198,7 +205,7 @@ class VisorController(
 
     private companion object {
         val BASE = setOf("anio", "corrida")
-        val FILTROS = setOf("categoria", "confianza", "sector", "estado", "supera_5_uit", "min_delta")
+        val FILTROS = setOf("categoria", "confianza", "sector", "estado", "supera_5_uit", "min_delta", "prico")
         const val TAMANO = 50
         val CSV = MediaType.parseMediaType("text/csv;charset=UTF-8")
 

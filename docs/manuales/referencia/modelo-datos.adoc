@@ -81,8 +81,9 @@ importados del padrón no los tienen.
 |===
 |Objeto y propósito |Campos |Claves, relaciones y reglas
 a|`contribuyente` +
-Contribuyente. Persona natural, persona jurídica o sucesión obligada al pago de tributos municipales.
-|28 (3)
+Contribuyente. Persona natural, persona jurídica o sucesión obligada al pago de tributos municipales. `prico` lo
+marca como principal contribuyente (#273): lo carga `marcar_pricos.py` desde el padrón vinculado.
+|29 (3)
 a|Únicos: `numero_documento`, `codigo`
 a|`predio` +
 Predio. Predio urbano o rústico del distrito: identidad y ubicación. Código `SS-MM-NNNN`, el código municipal de su lote o `P-NNNNNN`.
