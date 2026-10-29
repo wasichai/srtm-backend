@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.4.0](https://github.com/wasichai/srtm-backend/compare/v2.3.0...v2.4.0) (2026-10-28)
+
+
+### Features
+
+* **visor:** las filas de /predios traen su contribuyente y su nombre por usuario ([#271](https://github.com/wasichai/srtm-backend/issues/271)) ([8493e66](https://github.com/wasichai/srtm-backend/commit/8493e667bd64ac19422fd86461a8d1a9becc8efb)), closes [#270](https://github.com/wasichai/srtm-backend/issues/270)
+* **visor:** los predios de un lote, con su contribuyente, para el popup ([#268](https://github.com/wasichai/srtm-backend/issues/268)) ([319775e](https://github.com/wasichai/srtm-backend/commit/319775e6937bf107365443eef813da94fc7ae186))
+* **visor:** visor de brechas de solo lectura en /api/srtm/visor ([#261](https://github.com/wasichai/srtm-backend/issues/261)) ([e2517c5](https://github.com/wasichai/srtm-backend/commit/e2517c5ffcec2097a66ca8801478c39312c8b5ed))
+
+
+### Bug Fixes
+
+* **visor:** el reenvío WMS copia cada trozo y libera su búfer una sola vez ([#266](https://github.com/wasichai/srtm-backend/issues/266)) ([1153028](https://github.com/wasichai/srtm-backend/commit/1153028ba3345e05d7846bd3be4dc3f6e656f322)), closes [#264](https://github.com/wasichai/srtm-backend/issues/264)
+
+
+### Performance Improvements
+
+* **visor:** el panel y los predios no rehacen sus filas ni releen catastro con caché ([#267](https://github.com/wasichai/srtm-backend/issues/267)) ([38d0eaa](https://github.com/wasichai/srtm-backend/commit/38d0eaa36c03f3d0ca243d06c95849396a8cb13b)), closes [#263](https://github.com/wasichai/srtm-backend/issues/263)
+
 ## [2.3.0](https://github.com/wasichai/srtm-backend/compare/v2.2.0...v2.3.0) (2026-10-27)
 
 
