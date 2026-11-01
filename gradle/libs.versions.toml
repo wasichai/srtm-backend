@@ -8,7 +8,7 @@ logback = "1.5.38"
 # srtm.emision.almacen=s3: aws sdk v2, the bom aligns its modules
 awssdk = "2.57.1"
 # the maintained fork of openhtmltopdf, on pdfbox 3
-openhtmltopdf = "1.1.97"
+openhtmltopdf = "1.1.103"
 pdfbox = "3.0.8"
 thymeleaf = "3.1.5.RELEASE"
 # srtm.reportes: the xlsx export (Apache 2.0; its only dependency, opczip, Apache 2.0 too); its reader parses it in the tests
