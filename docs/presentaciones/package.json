@@ -37,7 +37,7 @@
     "@remotion/eslint-config-flat": "4.0.522",
     "@types/node": "24.9.2",
     "@types/react": "19.2.7",
-    "eslint": "9.19.0",
+    "eslint": "9.39.5",
     "typescript": "5.9.3"
   }
 }
