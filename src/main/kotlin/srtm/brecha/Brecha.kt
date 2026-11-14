@@ -527,7 +527,9 @@ object Brecha {
                 areaCatastro,
                 estado.name,
                 nivelesRentas = r?.size,
-                detalleRentas = r?.let { ns -> DETALLE.writeValueAsString(ns.map { detalle(it, it.id?.let(valores::get)) }) }
+                detalleRentas = r?.let { ns -> DETALLE.writeValueAsString(ns.map { detalle(it, it.id?.let(valores::get)) }) },
+                // #304: each sección of the piso as catastro-backend#84 sends it; null when the catastro sends none
+                detalleCatastro = c?.takeIf { s -> s.all { it.detalle != null } }?.let { s -> DETALLE.writeValueAsString(s.map { it.detalle }) }
             )
         }
     }
@@ -668,7 +670,8 @@ object Brecha {
             terrenoCatastro = item?.terreno,
             construccionCatastro = item?.construccion,
             obrasCatastro = item?.obras,
-            frenteCatastro = item?.longitudFrente
+            frenteCatastro = item?.longitudFrente,
+            arancelCatastro = item?.arancelM2
         )
     }
 
@@ -884,6 +887,13 @@ object Brecha {
     }
 
     private fun sinLevantar(item: ValuacionCatastral) = item.estadoLevantamiento == SIN_LEVANTAR
+
+    // #304: the aviso of an older catastro, without catastro-backend#84's keys (the corrida does not fail; its
+    // arancel_catastro and detalle_catastro stay null); null when some item sends them
+    fun sinDetalle(items: List<ValuacionCatastral>): String? = if (items.isNotEmpty() && items.none { it.conDetalle }) SIN_DETALLE else null
+
+    const val SIN_DETALLE =
+        "El catastro no manda el arancel ni las características por piso (catastro-backend#84): arancel_catastro y detalle_catastro quedan vacíos"
 
     // a nivel_construccion's estado that is not declared any more, and the tipo_nivel of a floor with a number
     private const val INACTIVO = "INACTIVO"

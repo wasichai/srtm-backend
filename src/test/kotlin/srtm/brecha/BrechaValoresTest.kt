@@ -152,6 +152,43 @@ class BrechaValoresTest {
         assertNull(piso.detalleCatastro)
     }
 
+    // #304 (catastro-backend#84): catastro's secciones of a piso, each in detalle_catastro with rentas' keys; a catastro
+    // that sends no detalle leaves it null
+    @Test
+    fun `a piso with two secciones in catastro keeps both in detalle_catastro`() {
+        fun seccion(
+            n: Int,
+            area: String,
+            estado: String
+        ) = ConstruccionCatastral(
+            piso = 1,
+            seccion = n,
+            areaConstruida = BigDecimal(area),
+            detalle = DetalleNivel(area = BigDecimal(area), material = "CONCRETO", estadoConservacion = estado, valor = BigDecimal("1000.00"))
+        )
+        val piso = Brecha.niveles(listOf(nivel("n1", 1, "100")), listOf(seccion(1, "60", "BUENO"), seccion(2, "40", "REGULAR"))).single()
+        assertEquals(EstadoNivel.PAR.name, piso.estado)
+        val d = detalle(piso.detalleCatastro)
+        assertEquals(listOf("BUENO", "REGULAR"), d.map { it["estadoConservacion"] })
+        assertEquals(listOf(60, 40), d.map { (it["area"] as Number).toInt() })
+        val sinDetalle = Brecha.niveles(listOf(nivel("n1", 1, "100")), listOf(ConstruccionCatastral(1, 1, BigDecimal("100")))).single()
+        assertNull(sinDetalle.detalleCatastro)
+    }
+
+    @Test
+    fun `the row keeps catastro's arancel, and an older catastro is told once`() {
+        val predio = Predio(id = "p1", codigo = "01-01-0001")
+        val solo = listOf(dj("1", "a", "1", "250000.00").copy(porcentajeCondominio = null))
+        val conArancel = item("01-01-0001").copy(arancelM2 = BigDecimal("45.50"), conDetalle = true)
+        val medida = Brecha.medir(anio, listOf(conArancel), Padron(listOf(predio), solo), parametros, null, hoy)
+        assertEquals(BigDecimal("45.50"), medida.filas.single().arancelCatastro)
+        assertNull(Brecha.sinDetalle(listOf(conArancel, item("X"))))
+        val antiguo = Brecha.medir(anio, listOf(item("01-01-0001")), Padron(listOf(predio), solo), parametros, null, hoy)
+        assertNull(antiguo.filas.single().arancelCatastro)
+        assertEquals(Brecha.SIN_DETALLE, Brecha.sinDetalle(listOf(item("01-01-0001"), item("X"))))
+        assertNull(Brecha.sinDetalle(emptyList()))
+    }
+
     @Test
     fun `a piso only in catastro has no rentas detalle`() {
         val piso = Brecha.niveles(emptyList(), listOf(ConstruccionCatastral(piso = 1, seccion = 1, areaConstruida = BigDecimal("50")))).single()

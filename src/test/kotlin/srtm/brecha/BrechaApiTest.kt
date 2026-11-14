@@ -335,10 +335,25 @@ class BrechaApiTest : SrtmApiTest() {
         post("/api/objects/nivel_construccion/records", mapOf("attributes" to nivel + mapOf("numero_piso" to 1, "area_construida" to 100)), org)
         post("/api/objects/nivel_construccion/records", mapOf("attributes" to nivel + mapOf("numero_piso" to 2, "area_construida" to 50)), org)
         post("/api/objects/nivel_construccion/records", mapOf("attributes" to nivel + mapOf("numero_piso" to 3, "area_construida" to 20)), org)
-        val construcciones =
-            """[{"piso":null,"seccion":1,"areaConstruida":15},{"piso":1,"seccion":1,"areaConstruida":70},""" +
-                """{"piso":1,"seccion":2,"areaConstruida":50},{"piso":2,"seccion":1,"areaConstruida":40}]"""
-        ITEMS_ICA.set(listOf(item("N-$sufijo", "100000.00", llavesCrudas = mapOf("construcciones" to construcciones)), item("S-$sufijo", "100000.00")))
+
+        // #304 (catastro-backend#84): each construcción with its características and value; piso 2 is REGULAR in
+        // catastro and BUENO in rentas
+        fun c(
+            piso: String,
+            seccion: Int,
+            area: Int,
+            estado: String = "BUENO"
+        ) = """{"piso":$piso,"seccion":$seccion,"areaConstruida":$area,"anioConstruccion":2010,"material":"CONCRETO",""" +
+            """"estadoConservacion":"$estado","murosColumnas":null,"techos":null,"pisos":null,"puertasVentanas":null,""" +
+            """"revestimientos":null,"banos":null,"instalaciones":null,"techoIncluido":null,"clasificacion":null,""" +
+            """"valorUnitario":500.00,"incremento":0,"porcentajeDepreciacion":10,"valorUnitarioDepreciado":450.00,"valor":${area * 450}}"""
+        val construcciones = "[" + listOf(c("null", 1, 15), c("1", 1, 70), c("1", 2, 50), c("2", 1, 40, "REGULAR")).joinToString(",") + "]"
+        ITEMS_ICA.set(
+            listOf(
+                item("N-$sufijo", "100000.00", llavesCrudas = mapOf("construcciones" to construcciones, "arancelM2" to "45.50")),
+                item("S-$sufijo", "100000.00", llavesCrudas = mapOf("arancelM2" to "null"))
+            )
+        )
 
         val corrida = corrida(org, 2026)
         assertEquals(TERMINADA, corrida["estado"].asString(), corrida.toString())
@@ -390,13 +405,21 @@ class BrechaApiTest : SrtmApiTest() {
         assertEquals(BigDecimal("60000.00"), dec(guardada["construccion_declarada"]))
         assertEquals(BigDecimal("1.00"), dec(guardada["terreno_catastro"]))
         assertEquals(BigDecimal("10.50"), dec(guardada["frente_catastro"]))
-        assertTrue(guardada.path("arancel_catastro").let { it.isNull || it.isMissingNode }, guardada.toString())
         val piso1 = niveles.single { it.path("piso").asString() == "1" }
         assertEquals(1, piso1.path("niveles_rentas").asInt(), piso1.toString())
         val detalle = tree(piso1.path("detalle_rentas").asString()).single()
         assertEquals("CONCRETO", detalle["material"].asString())
         assertEquals(2010, detalle["anioConstruccion"].asInt())
-        assertTrue(piso1.path("detalle_catastro").let { it.isNull || it.isMissingNode }, piso1.toString())
+        // the catastro's two secciones of piso 1, as catastro-backend#84 sent them
+        val secciones = tree(piso1.path("detalle_catastro").asString())
+        assertEquals(listOf(70, 50), secciones.values().map { it["area"].asInt() })
+        assertEquals(BigDecimal("45.50"), dec(guardada["arancel_catastro"]))
+        // this catastro sends #84's keys: no aviso
+        assertFalse(corrida.path("mensaje").asString("").contains("catastro-backend#84"), corrida.toString())
+        // #303: piso 2 is a PAR with one nivel on each side: its estado differs
+        val delPredio = tree(send("GET", "/api/srtm/brecha/2026/predios/$conNiveles", null, HttpStatus.OK, org))
+        val piso2 = delPredio["niveles"].single { it["piso"].asInt(-1) == 2 }
+        assertEquals(listOf("estadoConservacion"), piso2["diferencias"].values().map { it["campo"].asString() }, piso2.toString())
         // the other row's DJ has no valuación de origen: nothing is recalculated
         val otra = tree(send("GET", "/api/objects/brecha_predio/records/${sinConstrucciones["id"].asString()}", null, HttpStatus.OK, org))["attributes"]
         assertTrue(otra.path("terreno_declarado").let { it.isNull || it.isMissingNode }, otra.toString())
@@ -633,6 +656,8 @@ class BrechaApiTest : SrtmApiTest() {
         ITEMS_ICA.set(items("150000.00"))
         val primera = corrida(org, 2023)
         assertEquals(TERMINADA, primera["estado"].asString(), primera.toString())
+        // #304: a catastro without catastro-backend#84's keys: the corrida ends and says it once
+        assertEquals(1, primera["mensaje"].asString().lines().count { it == Brecha.SIN_DETALLE }, primera.toString())
         ITEMS_ICA.set(items("160000.00"))
         val segunda = corrida(org, 2023)
         assertEquals(TERMINADA, segunda["estado"].asString(), segunda.toString())

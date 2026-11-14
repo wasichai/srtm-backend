@@ -77,7 +77,11 @@ data class ValuacionCatastral(
     val codigoReferenciaCatastral: String? = null,
     // #247 (catastro-backend#71): each piso and sección of its ficha, [] when it has none; null from an older catastro
     // that does not send them (then the row compares no nivel)
-    val construcciones: List<ConstruccionCatastral>? = null
+    val construcciones: List<ConstruccionCatastral>? = null,
+    // #304 (catastro-backend#84): the arancel per m2 the engine valued the terreno with (null without one), and whether
+    // the catastro sends #84's keys at all (an older one does not: then arancel and detalle stay null)
+    val arancelM2: BigDecimal? = null,
+    val conDetalle: Boolean = false
 )
 
 // one construcción of a ValuacionCatastral: piso null when the ficha's is no number (S1, a sótano), and a piso may
@@ -85,7 +89,10 @@ data class ValuacionCatastral(
 data class ConstruccionCatastral(
     val piso: Int? = null,
     val seccion: Int? = null,
-    val areaConstruida: BigDecimal? = null
+    val areaConstruida: BigDecimal? = null,
+    // #304 (catastro-backend#84): its características and the engine's figures, under rentas' keys; null from an
+    // older catastro
+    val detalle: DetalleNivel? = null
 )
 
 // #247: how a piso of a predio paired (Brecha.niveles): once on each side (PAR), on one side only (SOLO_RENTAS,
