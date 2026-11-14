@@ -778,6 +778,12 @@ sin `construcciones` o una corrida anterior). Los niveles mismos se leen con
 `GET /api/objects/brecha_nivel/records?brecha_predio=<id>`.
 |200; 404; 422 categoría o confianza inválida.
 
+|`GET /{anio}/predios/{predio}?corrida`
+|La brecha de un predio (#303), por el id de su registro `predio`, tal como la midió la corrida: `corrida`, `fila`,
+`niveles` por piso (con `delta`, `detalleRentas`, `detalleCatastro` y sus `diferencias`), `diferencias` (solo lo que
+pasa las tolerancias: 0,5 m² o m y S/ 1,00), `iguales`, `avisos` y `tolerancias`. Sin titulares ni documentos.
+|200; 403; 404 sin corrida TERMINADA, `corrida` de otro año, o predio sin fila en la corrida.
+
 |`GET /{anio}/lotes?corrida`
 |`FeatureCollection` GeoJSON (EPSG:4326) con `{categoria, codigo, deltaImpuesto}`.
 |200; 404.

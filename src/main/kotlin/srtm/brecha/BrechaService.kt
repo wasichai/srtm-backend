@@ -33,11 +33,14 @@ import srtm.rentas.DECLARACION
 import srtm.rentas.Declaracion
 import srtm.rentas.NIVEL_CONSTRUCCION
 import srtm.rentas.NivelConstruccion
+import srtm.rentas.OBRA_COMPLEMENTARIA
 import srtm.rentas.ORIGEN_MODIFICADO
 import srtm.rentas.PREDIO
 import srtm.rentas.Predio
 import srtm.rentas.Records
 import srtm.rentas.Registros
+import srtm.rentas.USO_PREDIO
+import srtm.rentas.UsoPredio
 import srtm.sanciones.Multas
 import wasichai.core.common.Actions
 import wasichai.core.common.ConflictException
@@ -225,6 +228,76 @@ class BrechaService(
             .all(BRECHA_CORRIDA, RegistroCorrida::class.java, filters = mapOf("anio" to "$anio", "estado" to TERMINADA), sort = "created_at", descending = true)
             .firstOrNull()
             ?: throw NotFoundException("No hay una corrida terminada de la brecha de $anio")
+    }
+
+    // #303: GET /{anio}/predios/{predio}: the row of `predio` in the corrida (the one given, else the latest TERMINADA
+    // of the year) with its niveles, what differs and the avisos. read as the caller: a predio of another organization
+    // has no row (404). besides the row and its niveles, it reads the uso catalog (none for a caller who may not), the
+    // UIT of the year, the last save of the predio's vigente DJs of the year and of their niveles and obras, and, only
+    // for a SIN_CATASTRO row of a derived predio, its siblings' rows
+    suspend fun delPredio(
+        anio: Int,
+        predio: UUID,
+        corrida: UUID?
+    ): BrechaDelPredio {
+        val r = corridaDelAnio(anio, corrida)
+        val id = r.id!!
+        val fila =
+            registros.all(BRECHA_PREDIO, FilaBrecha::class.java, filters = mapOf("corrida" to id, "predio" to predio.toString())).firstOrNull()
+                ?: throw NotFoundException("El predio $predio no tiene fila en la corrida $id")
+        val niveles = registros.all(BRECHA_NIVEL, NivelBrecha::class.java, filters = mapOf("brecha_predio" to fila.id!!))
+        val usos =
+            try {
+                registros.all(USO_PREDIO, UsoPredio::class.java).filter { it.codigo != null }.associateBy { it.codigo!!.trim() }
+            } catch (_: ForbiddenException) {
+                emptyMap()
+            }
+        val uit = Multas.uit(parametrosTributarios.todos(), LocalDate.of(anio, 1, 1)).valor?.valorNumerico
+        val contexto =
+            ContextoDelPredio(
+                usos = usos,
+                uit = uit,
+                guardados = guardadosDe(predio.toString(), anio),
+                codigoCompartido = fila.categoria == Categoria.SIN_CATASTRO.name && compartido(predio, id)
+            )
+        return ComparacionDelPredio.comparar(r, fila, niveles, contexto)
+    }
+
+    // when the predio's vigente DJs of the year, their niveles and their obras were last saved
+    private suspend fun guardadosDe(
+        predio: String,
+        anio: Int
+    ): List<Instant?> {
+        val vigentes =
+            registros
+                .all(DECLARACION, Declaracion::class.java, filters = mapOf("predio" to predio, "anio" to "$anio"))
+                .filter(::declaracionVigente)
+                .mapNotNull { it.id }
+        if (vigentes.isEmpty()) return emptyList()
+        val djs = registros.actualizados(DECLARACION, filters = mapOf("predio" to predio, "anio" to "$anio")).filterKeys { it in vigentes }
+        val entre = listOf(declaracionEntre(vigentes))
+        return djs.values + registros.actualizados(NIVEL_CONSTRUCCION, criteria = entre).values +
+            registros.actualizados(OBRA_COMPLEMENTARIA, criteria = entre).values
+    }
+
+    // #207: a derived predio (codigo_origen other than its código) another predio of whose codigo_origen crossed in
+    // the corrida
+    private suspend fun compartido(
+        predio: UUID,
+        corrida: String
+    ): Boolean {
+        val propio = registros.get(PREDIO, Predio::class.java, predio)
+        val origen = propio.codigoOrigen?.trim()?.ifEmpty { null } ?: return false
+        if (origen == propio.codigo?.trim()) return false
+        return registros
+            .all(PREDIO, Predio::class.java, filters = mapOf("codigo_origen" to origen))
+            .mapNotNull { it.id }
+            .filter { it != predio.toString() }
+            .any { hermano ->
+                registros
+                    .all(BRECHA_PREDIO, FilaBrecha::class.java, filters = mapOf("corrida" to corrida, "predio" to hermano))
+                    .any { it.categoria != Categoria.SIN_CATASTRO.name }
+            }
     }
 
     // every row of a corrida

@@ -83,6 +83,17 @@ class BrechaController(
         return brechas.pagina(r.id!!, deCategoria, sector?.trim()?.ifEmpty { null }, deConfianza, page, size)
     }
 
+    // #303: the brecha of one predio (its predio record's id) as the corrida measured it
+    @GetMapping("/{anio}/predios/{predio}")
+    suspend fun predio(
+        @PathVariable anio: Int,
+        @PathVariable predio: UUID,
+        @RequestParam(required = false) corrida: UUID?
+    ): BrechaDelPredio {
+        leer()
+        return brechas.delPredio(anio, predio, corrida)
+    }
+
     @GetMapping("/{anio}/lotes")
     suspend fun lotes(
         @PathVariable anio: Int,

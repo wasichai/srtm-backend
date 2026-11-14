@@ -59,6 +59,16 @@ class Registros(
             RecordQuery(page = PageRequest.of(0, PageRequest.MAX_SIZE), sort = sort, filters = filters, criteria = criteria, count = false)
         ).map { read(type, it) }
 
+    // #303: when each matching record was last saved, by id (the srtm's "fecha de actualización"), without reading it
+    // into a dto
+    suspend fun actualizados(
+        objectName: String,
+        filters: Map<String, String> = emptyMap(),
+        criteria: List<RecordCriterion> = emptyList()
+    ): Map<String, java.time.Instant?> =
+        todas(objectName, RecordQuery(page = PageRequest.of(0, PageRequest.MAX_SIZE), filters = filters, criteria = criteria, count = false))
+            .associate { it.id to it.updatedAt }
+
     private suspend fun todas(
         objectName: String,
         primera: RecordQuery

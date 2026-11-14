@@ -605,6 +605,86 @@ class BrechaApiTest : SrtmApiTest() {
         assertTrue(reportes.panelGuardado(organizacionDe(org), primera["id"].asString()))
     }
 
+    // #303: the brecha of one predio: its row, its niveles and only what differs, of the latest TERMINADA corrida of the
+    // year or the one given; 404 without a corrida, for a predio out of it or of another organization. Ica's 2023,
+    // which no other test runs
+    @Test
+    fun `the brecha of a predio answers its row and only what differs, of the latest corrida or the one given`() {
+        val org = organizacionIca()
+        val sufijo = uniqueDocumento()
+        val areas = mapOf("area_terreno" to 200, "area_construida" to 100)
+        val ids =
+            listOf("SUB", "SOB", "COI", "SV").associateWith { c ->
+                predio(org, "$c-$sufijo").also { declarar(org, contribuyente(org), it, "100000.00", anio = 2023, delPadron = areas) }
+            }
+        val sinFila = predio(org, "X-$sufijo")
+
+        fun items(sub: String) =
+            listOf(
+                item("SUB-$sufijo", sub),
+                item("SOB-$sufijo", "50000.00"),
+                item("COI-$sufijo", "100000.00"),
+                item("SV-$sufijo", "null", llavesNuevas = mapOf("motivo" to "SIN_ARANCEL"))
+            )
+        ITEMS_ICA.set(items("150000.00"))
+        val primera = corrida(org, 2023)
+        assertEquals(TERMINADA, primera["estado"].asString(), primera.toString())
+        ITEMS_ICA.set(items("160000.00"))
+        val segunda = corrida(org, 2023)
+        assertEquals(TERMINADA, segunda["estado"].asString(), segunda.toString())
+
+        fun delPredio(
+            predio: String,
+            consulta: String = ""
+        ) = tree(send("GET", "/api/srtm/brecha/2023/predios/$predio$consulta", null, HttpStatus.OK, org))
+
+        val sub = delPredio(ids.getValue("SUB"))
+        assertEquals(segunda["id"].asString(), sub["corrida"]["id"].asString())
+        assertEquals("SUBVALUADO", sub["fila"]["categoria"].asString())
+        val autoavaluo = sub["diferencias"].single { it["campo"].asString() == "autoavaluo" }
+        assertEquals(BigDecimal("60000.00"), dec(autoavaluo["delta"]))
+        assertEquals("VALORES", autoavaluo["grupo"].asString())
+        assertEquals("SOLES", autoavaluo["unidad"].asString())
+        // the same areas on both sides: compared and equal
+        assertTrue(sub["iguales"].values().map { it.asString() }.containsAll(listOf("areaTerreno", "areaConstruida")), sub.toString())
+        assertFalse(sub["diferencias"].any { it["grupo"].asString() == "AREAS" }, sub.toString())
+        assertEquals(BigDecimal("0.50"), dec(sub["tolerancias"]["area"]))
+        // ?corrida= the earlier one
+        val antes = delPredio(ids.getValue("SUB"), "?corrida=${primera["id"].asString()}")
+        assertEquals(BigDecimal("50000.00"), dec(antes["diferencias"].single { it["campo"].asString() == "autoavaluo" }["delta"]))
+
+        assertEquals("SOBREVALUADO", delPredio(ids.getValue("SOB"))["fila"]["categoria"].asString())
+        val coi = delPredio(ids.getValue("COI"))
+        assertEquals("COINCIDE", coi["fila"]["categoria"].asString())
+        assertFalse(coi["diferencias"].any { it["campo"].asString() == "autoavaluo" }, coi.toString())
+        assertTrue(coi["iguales"].any { it.asString() == "autoavaluo" }, coi.toString())
+        val sv = delPredio(ids.getValue("SV"))
+        assertEquals("SIN_VALOR", sv["fila"]["categoria"].asString())
+        assertFalse(sv["diferencias"].any { it["campo"].asString() == "autoavaluo" } || sv["iguales"].any { it.asString() == "autoavaluo" })
+
+        // no name nor documento anywhere: no key of the response names one (confianzaMotivo may say "titulares")
+        fun claves(n: JsonNode): List<String> =
+            when {
+                n.isObject -> n.propertyNames().flatMap { k -> listOf(k.lowercase()) + claves(n[k]) }
+                n.isArray -> n.values().flatMap(::claves)
+                else -> emptyList()
+            }
+        val todas = claves(sub)
+        for (campo in listOf("nombre", "documento", "titular", "contribuyente")) assertFalse(todas.any { campo in it }, campo)
+
+        // a DJ saved after the corrida
+        val dj = tree(send("GET", "/api/objects/declaracion_predial/records?predio=${ids.getValue("COI")}&anio=2023", null, HttpStatus.OK, org))["content"][0]
+        send("PUT", "/api/objects/declaracion_predial/records/${dj["id"].asString()}", mapOf("attributes" to fields(dj["attributes"])), HttpStatus.OK, org)
+        assertTrue(delPredio(ids.getValue("COI"))["avisos"].any { it["codigo"].asString() == "DJ_POSTERIOR_A_LA_CORRIDA" })
+        assertFalse(sub["avisos"].any { it["codigo"].asString() == "DJ_POSTERIOR_A_LA_CORRIDA" }, sub.toString())
+
+        // 404: a predio out of the corrida, a predio of another organization, a year without a corrida TERMINADA
+        send("GET", "/api/srtm/brecha/2023/predios/$sinFila", null, HttpStatus.NOT_FOUND, org)
+        val deOtra = predio(organizacion(), "O-$sufijo")
+        send("GET", "/api/srtm/brecha/2023/predios/$deOtra", null, HttpStatus.NOT_FOUND, org)
+        send("GET", "/api/srtm/brecha/2041/predios/${ids.getValue("SUB")}", null, HttpStatus.NOT_FOUND, org)
+    }
+
     private fun esperarPrecalentada(corrida: String) {
         repeat(100) {
             if (reportes.precalentada(corrida)) return
@@ -618,6 +698,8 @@ class BrechaApiTest : SrtmApiTest() {
         val lector = funcionario(listOf(permiso("predio", "READ")))
         send("POST", "/api/srtm/brecha/corridas", mapOf("anio" to 2026), HttpStatus.FORBIDDEN, lector)
         send("GET", "/api/srtm/brecha/2026/panel", null, HttpStatus.FORBIDDEN, lector)
+        // #303: the brecha of a predio asks the same read
+        send("GET", "/api/srtm/brecha/2026/predios/${java.util.UUID.randomUUID()}", null, HttpStatus.FORBIDDEN, lector)
         // #306: the panel is kept, so it asks the read of the rows it counts before the cache is touched
         val deLaCorrida = funcionario(listOf(permiso(BRECHA_CORRIDA, "READ")))
         send("GET", "/api/srtm/brecha/2026/panel", null, HttpStatus.FORBIDDEN, deLaCorrida)
