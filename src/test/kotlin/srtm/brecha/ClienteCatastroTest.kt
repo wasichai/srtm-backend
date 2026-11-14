@@ -189,6 +189,43 @@ class ClienteCatastroTest {
             items[0].construcciones
         )
         assertEquals(emptyList<ConstruccionCatastral>(), items[1].construcciones)
+        // an older catastro: no #84 keys
+        assertNull(items[0].arancelM2)
+        assertEquals(false, items[0].conDetalle)
+    }
+
+    // #304 (catastro-backend#84): each construcción's características and the engine's figures, read under rentas'
+    // keys (DetalleNivel), and the item's arancel; keys present and null are null
+    @Test
+    fun `an item carries the caracteristicas and value of each construccion and its arancel`() {
+        server.removeContext("/api/catastro/valuaciones")
+        val construccion =
+            "{\"piso\":1,\"seccion\":1,\"areaConstruida\":80,\"anioConstruccion\":2010,\"material\":\"CONCRETO\"," +
+                "\"estadoConservacion\":\"BUENO\",\"murosColumnas\":\"C\",\"techos\":\"D\",\"pisos\":null,\"puertasVentanas\":\"E\"," +
+                "\"revestimientos\":null,\"banos\":null,\"instalaciones\":null,\"techoIncluido\":null,\"clasificacion\":null," +
+                "\"valorUnitario\":829.28,\"incremento\":0,\"porcentajeDepreciacion\":5.00,\"valorUnitarioDepreciado\":787.82,\"valor\":63025.60}"
+        val conDetalle = ITEM_VALORADO.dropLast(1) + ",\"arancelM2\":45.50,\"construcciones\":[$construccion]}"
+        server.createContext("/api/catastro/valuaciones") { ex ->
+            responder(ex, 200, "{\"anio\":2026,\"version\":\"valuacion-v3\",\"page\":0,\"size\":500,\"total\":1,\"items\":[$conDetalle]}")
+        }
+        val item = runBlocking { cliente().valuaciones(2026) }.items.single()
+        assertEquals(BigDecimal("45.50"), item.arancelM2)
+        assertEquals(true, item.conDetalle)
+        assertEquals(
+            DetalleNivel(
+                area = BigDecimal("80"),
+                anioConstruccion = 2010,
+                material = "CONCRETO",
+                estadoConservacion = "BUENO",
+                murosColumnas = "C",
+                techos = "D",
+                puertasVentanas = "E",
+                valorUnitario = BigDecimal("829.28"),
+                porcentajeDepreciacion = BigDecimal("5.00"),
+                valor = BigDecimal("63025.60")
+            ),
+            item.construcciones!!.single().detalle
+        )
     }
 
     @Test

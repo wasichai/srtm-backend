@@ -772,7 +772,9 @@ class ClienteCatastro(
                         .path("construcciones")
                         .takeIf { it.isArray }
                         ?.values()
-                        ?.map(::construccion)
+                        ?.map(::construccion),
+                arancelM2 = n.path("arancelM2").decimal(),
+                conDetalle = n.has("arancelM2")
             )
         }
 
@@ -781,7 +783,28 @@ class ClienteCatastro(
             ConstruccionCatastral(
                 piso = n.path("piso").entero(),
                 seccion = n.path("seccion").entero(),
-                areaConstruida = n.path("areaConstruida").decimal()
+                areaConstruida = n.path("areaConstruida").decimal(),
+                // #304: catastro-backend#84's keys, present (null without data) in a catastro that sends them
+                detalle =
+                    n.takeIf { it.has("material") }?.let {
+                        DetalleNivel(
+                            area = it.path("areaConstruida").decimal(),
+                            anioConstruccion = it.path("anioConstruccion").entero(),
+                            material = it.path("material").texto(),
+                            estadoConservacion = it.path("estadoConservacion").texto(),
+                            murosColumnas = it.path("murosColumnas").texto(),
+                            techos = it.path("techos").texto(),
+                            pisos = it.path("pisos").texto(),
+                            puertasVentanas = it.path("puertasVentanas").texto(),
+                            revestimientos = it.path("revestimientos").texto(),
+                            banos = it.path("banos").texto(),
+                            instalaciones = it.path("instalaciones").texto(),
+                            clasificacion = it.path("clasificacion").texto(),
+                            valorUnitario = it.path("valorUnitario").decimal(),
+                            porcentajeDepreciacion = it.path("porcentajeDepreciacion").decimal(),
+                            valor = it.path("valor").decimal()
+                        )
+                    }
             )
 
         // the attributes of a decision_brecha record (#248): its anio an INTEGER, or its text

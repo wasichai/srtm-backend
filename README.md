@@ -921,7 +921,7 @@ una corrida anterior los deja vacíos.
 | Rentas | `obras_declaradas` | `valor_obras`, y si no hay, las otras instalaciones del padrón (#208). |
 | Rentas | `arancel_declarado`, `uso_declarado`, `frente_declarado` | La DJ de mayor autoavalúo. |
 | Catastro | `terreno_catastro`, `construccion_catastro`, `obras_catastro`, `frente_catastro` | El ítem de `/valuaciones`; las obras con las de la DJ si se sumaron (#208). |
-| Catastro | `arancel_catastro` | El `arancelM2` del ítem; queda vacío hasta catastro-backend#84. |
+| Catastro | `arancel_catastro` | El `arancelM2` del ítem (catastro-backend#84): el arancel con que el motor valorizó el terreno. |
 | Ficha | `estado_levantamiento`, `vinculo_metodo` | La ficha tal como la leyó la corrida. |
 
 Los componentes declarados se guardan **tal como vinieron**, aunque no sumen el autoavalúo declarado, que sigue siendo
@@ -933,8 +933,10 @@ Cada `brecha_nivel` agrega `niveles_rentas` (cuántos niveles de la DJ suma el p
 lista de esos niveles. Cada nivel lleva `{area, anioConstruccion, material, estadoConservacion, murosColumnas, techos,
 pisos, puertasVentanas, revestimientos, banos, instalaciones, clasificacion}`, y `valorUnitario`,
 `porcentajeDepreciacion` y `valor` solo cuando vienen del padrón importado. Las claves vacías se omiten.
-`detalle_catastro` tendrá las secciones de la ficha con las mismas claves cuando catastro-backend#84 las mande; hasta
-entonces queda vacío. El corte analítico exporta todos estos campos, que no llevan datos personales, y la vista
+`detalle_catastro` lleva, con las mismas claves, las secciones de la ficha en ese piso tal como las manda
+catastro-backend#84: sus características y el `valorUnitario`, `porcentajeDepreciacion` y `valor` del motor. Con un
+catastro anterior a #84, que no manda `arancelM2`, `arancel_catastro` y `detalle_catastro` quedan vacíos, la corrida
+termina igual y `mensaje` lo dice una vez. El corte analítico exporta todos estos campos, que no llevan datos personales, y la vista
 `v_diferencias_por_categoria` cuenta por categoría cuántos predios difieren en cada uno (0,5 m² y S/ 1,00 de tolerancia).
 
 **La brecha de un predio** (#303, `GET /{anio}/predios/{predio}`). La respuesta solo lista en `diferencias` los campos
@@ -951,8 +953,8 @@ un igual. El orden es fijo:
 
 Un piso `PAR` con un nivel en cada lado compara además, uno por uno, `material`, `estadoConservacion`,
 `anioConstruccion`, `murosColumnas`, `techos` y `clasificacion`, y las cinco partidas de acabados juntas en
-`acabados` (por ejemplo `I·I·I·I·I` contra `F·F·D·F·F`). Hasta catastro-backend#84 no hay detalle del catastro, así
-que esa lista queda vacía.
+`acabados` (por ejemplo `I·I·I·I·I` contra `F·F·D·F·F`). Con un catastro anterior a catastro-backend#84 o una corrida
+anterior a él no hay detalle del catastro, y esa lista queda vacía.
 
 Tolerancias: un área o un frente difiere si \|Δ\| ≥ la tolerancia de área (0,5 por omisión); un importe, si
 \|Δ\| ≥ la de monto (S/ 1,00 por omisión); un número, si es distinto; un texto, si es distinto sin contar mayúsculas

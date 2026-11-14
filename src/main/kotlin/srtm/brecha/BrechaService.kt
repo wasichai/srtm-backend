@@ -467,7 +467,7 @@ class BrechaService(
                     "delta_impuesto_confiable" to porConfianza.getValue(Confianza.CONFIABLE.name).deltaImpuesto,
                     "delta_impuesto_dudoso" to porConfianza.getValue(Confianza.DUDOSO.name).deltaImpuesto,
                     "delta_impuesto_sin_levantar" to porConfianza.getValue(Confianza.SIN_LEVANTAR.name).deltaImpuesto,
-                    "mensaje" to medicion.avisos.joinToString("\n").ifEmpty { null }
+                    "mensaje" to (medicion.avisos + listOfNotNull(Brecha.sinDetalle(valuaciones.items))).joinToString("\n").ifEmpty { null }
                 )
             )
             avisarTerminada({ eventos.publishEvent(it) }, CorridaTerminada(organizacion, anio, id.toString()))
