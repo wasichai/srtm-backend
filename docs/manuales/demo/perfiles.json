@@ -163,6 +163,9 @@
         "brecha_nivel": [
           "READ"
         ],
+        "observacion_importacion": [
+          "READ"
+        ],
         "cuota_predial": [
           "CREATE",
           "READ"
@@ -289,6 +292,9 @@
         "brecha_nivel": [
           "READ"
         ],
+        "observacion_importacion": [
+          "READ"
+        ],
         "cuota_predial": [
           "CREATE",
           "READ"
@@ -386,6 +392,9 @@
         "brecha_nivel": [
           "READ"
         ],
+        "observacion_importacion": [
+          "READ"
+        ],
         "arancel": [
           "READ"
         ]
@@ -440,6 +449,9 @@
           "READ"
         ],
         "brecha_nivel": [
+          "READ"
+        ],
+        "observacion_importacion": [
           "READ"
         ],
         "arancel": [
@@ -581,6 +593,9 @@
           "READ"
         ],
         "brecha_nivel": [
+          "READ"
+        ],
+        "observacion_importacion": [
           "READ"
         ],
         "cuota_predial": [

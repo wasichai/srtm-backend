@@ -256,6 +256,123 @@ class ConstruccionTests(unittest.TestCase):
         self.assertEqual(n["construcciones_sin_predio"], 1)
 
 
+def observaciones_padron(rows, alias=None):
+    for i, row in enumerate(rows, start=2):
+        row.setdefault("_fila", i)
+    obs = []
+    conv.convertir_padron(rows, dict(conv.PADRON_COLUMNS), CODIGOS, alias or {}, observaciones=obs)
+    return obs
+
+
+def observaciones_construcciones(rows, titulares, compartidos=()):
+    for i, row in enumerate(rows, start=2):
+        row.setdefault("_fila", i)
+    obs = []
+    conv.convertir_construcciones(rows, dict(conv.CONSTRUCCION_COLUMNS), titulares, CODIGOS, LETRAS, compartidos,
+                                  observaciones=obs)
+    return obs
+
+
+def resumen(obs):
+    return [(o["regla"], o["objeto"], o["codigo_predio"], o["codigo_contribuyente"], o["hoja"], o["fila"]) for o in obs]
+
+
+class ObservacionesPadronTests(unittest.TestCase):
+    """#297: each row the converter emptied, read by an assumption or flagged gets one observation."""
+
+    def test_an_st_read_as_sector_is_observed_on_its_row(self):
+        obs = observaciones_padron([sat(), sat(COD_CONTRIB="900002", **{"TIPO_UNIDAD URBANA_ARMO": "ST."})],
+                                   alias={"ST.": "SECTOR"})
+        self.assertEqual(resumen(obs), [("TIPO_UU_ST_COMO_SECTOR", "predio", "000000001-0001-0001", "900002",
+                                         "Hoja 1", 3)])
+        self.assertEqual(obs[0]["detalle"], 'tipo_de_unidad_urbana "ST." → SECTOR')
+
+    def test_another_alias_is_otra(self):
+        obs = observaciones_padron([sat(**{"TIPO_UNIDAD URBANA_ARMO": "SEC."})], alias={"SEC.": "SECTOR"})
+        self.assertEqual([(o["regla"], o["detalle"]) for o in obs],
+                         [("OTRA", 'tipo_de_unidad_urbana "SEC." → SECTOR (--tipo-unidad)')])
+
+    def test_an_alias_the_table_already_reads_is_no_observation(self):
+        self.assertEqual(observaciones_padron([sat(**{"TIPO_UNIDAD URBANA_ARMO": "C.P."})],
+                                              alias={"C.P.": "CENTRO POBLADO"}), [])
+
+    def test_a_tipo_without_option_or_code_is_observed(self):
+        obs = observaciones_padron([sat(TIPO_VIA_ARMO="AL.", **{"TIPO_UNIDAD URBANA_ARMO": "ST."})])
+        self.assertEqual([(o["regla"], o["objeto"], o["detalle"]) for o in obs], [
+            ("TIPO_VIA_NO_LEIDO", "predio", 'tipo_de_via "AL." → vacío'),
+            ("TIPO_UU_NO_LEIDO", "predio", 'tipo_de_unidad_urbana "ST." → vacío')])
+
+    def test_unmapped_codes_are_observed_the_documento_once_per_contribuyente(self):
+        obs = observaciones_padron([
+            sat(**{"Condición_predio": "7", "TIP_DOC": "6", "Código_uso": "25"}),
+            sat(COD_PREDIO="000000002-0001-0001", TIP_DOC="6")])
+        self.assertEqual(resumen(obs), [
+            ("CONDICION_SIN_MAPEO", "declaracion_predial", "000000001-0001-0001", "900001", "Hoja 1", 2),
+            ("DOCUMENTO_SIN_MAPEO", "contribuyente", None, "900001", "Hoja 1", 2),
+            ("USO_SIN_MAPEO", "declaracion_predial", "000000001-0001-0001", "900001", "Hoja 1", 2)])
+        self.assertEqual([o["detalle"] for o in obs], [
+            'condicion_predio "7" sin código en data/ica/codigos.json',
+            'tipo_documento "6" sin código en data/ica/codigos.json',
+            'codigo_uso "25" sin código de srtm en data/ica/codigos.json'])
+
+    def test_a_clean_row_has_no_observation(self):
+        self.assertEqual(observaciones_padron([sat()]), [])
+
+    def test_every_regla_and_objeto_is_an_option_of_the_model(self):
+        model = ipi.load_model(ipi.default_model_path())
+        obs = observaciones_padron([sat(TIPO_VIA_ARMO="AL.", **{"TIPO_UNIDAD URBANA_ARMO": "ST.", "Condición_predio": "7",
+                                                               "TIP_DOC": "6", "Código_uso": "25"}),
+                                    sat(COD_CONTRIB="900002", **{"TIPO_UNIDAD URBANA_ARMO": "ST."}),
+                                    sat(COD_CONTRIB="900003", **{"TIPO_UNIDAD URBANA_ARMO": "SEC."}),
+                                    sat(COD_CONTRIB="900004", **{"TIPO_UNIDAD URBANA_ARMO": "XX."})],
+                                   alias={"ST.": "SECTOR", "SEC.": "SECTOR"})
+        obs += observaciones_construcciones(
+            [construccion(techos_rentas="0", material_rentas="QUINCHA", estado_conservacion_rentas="PESIMO",
+                          nivel_rentas="AZ", ano_rentas="S/F"), construccion(cod_predio="000000099-0001-0001")],
+            {"000000001-0001-0001": ["900001", "900002"]}, {"000000001-0001-0001"})
+        self.assertEqual(len({o["regla"] for o in obs}), 15)
+        self.assertTrue({o["regla"] for o in obs} <= set(model["enums"]["regla_observacion_importacion"]))
+        self.assertTrue({o["objeto"] for o in obs} <= set(model["enums"]["objeto_importado"]))
+
+
+class ObservacionesConstruccionTests(unittest.TestCase):
+    TITULARES = {"000000001-0001-0001": ["900001"]}
+
+    def test_the_letters_of_a_row_out_of_range_are_one_observation(self):
+        obs = observaciones_construcciones([construccion(techos_rentas="0", puertas_rentas="j")], self.TITULARES)
+        self.assertEqual(resumen(obs), [("LETRA_FUERA_DE_RANGO", "nivel_construccion", "000000001-0001-0001",
+                                         "900001", "construccion_rentas", 2)])
+        self.assertEqual(obs[0]["detalle"], 'techos "0", puertas_y_ventanas "j" → vacías')
+
+    def test_unreadable_material_estado_nivel_and_year(self):
+        obs = observaciones_construcciones([construccion(material_rentas="QUINCHA", estado_conservacion_rentas="PESIMO",
+                                                         nivel_rentas="AZ", ano_rentas="S/F")], self.TITULARES)
+        self.assertEqual([(o["regla"], o["detalle"]) for o in obs], [
+            ("NIVEL_NO_LEIDO", 'nivel "AZ" → vacío'), ("ANIO_NO_LEIDO", 'ano_construccion "S/F" → vacío'),
+            ("MATERIAL_NO_LEIDO", 'material_predominante "QUINCHA" → vacío'),
+            ("ESTADO_NO_LEIDO", 'estado_de_conservacion "PESIMO" → vacío')])
+
+    def test_a_copied_nivel_is_observed_on_the_cotitulars_dj_with_the_rows_own_observations(self):
+        titulares = {"000000001-0001-0001": ["900001", "900002"]}
+        obs = observaciones_construcciones([construccion(techos_rentas="0")], titulares)
+        self.assertEqual([(o["regla"], o["codigo_contribuyente"]) for o in obs], [
+            ("LETRA_FUERA_DE_RANGO", "900001"), ("LETRA_FUERA_DE_RANGO", "900002"),
+            ("NIVEL_COPIADO_A_COTITULAR", "900002")])
+        self.assertEqual(obs[-1]["detalle"], "nivel 1 copiado a la DJ del co-titular 2 de 2 (contribuyente 900002)")
+
+    def test_a_nivel_of_a_shared_code_is_observed_in_each_dj(self):
+        titulares = {"000000001-0001-0001": ["900001", "900002"]}
+        obs = observaciones_construcciones([construccion()], titulares, {"000000001-0001-0001"})
+        self.assertEqual([(o["regla"], o["codigo_contribuyente"]) for o in obs], [
+            ("CODIGO_COMPARTIDO_DIVIDIDO", "900001"), ("CODIGO_COMPARTIDO_DIVIDIDO", "900002"),
+            ("NIVEL_COPIADO_A_COTITULAR", "900002")])
+
+    def test_a_nivel_without_predio_is_observed_and_dropped(self):
+        obs = observaciones_construcciones([construccion(cod_predio="000000099-0001-0001")], self.TITULARES)
+        self.assertEqual(resumen(obs), [("NIVEL_SIN_PREDIO", "nivel_construccion", "000000099-0001-0001", None,
+                                         "construccion_rentas", 2)])
+
+
 class MainTests(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
@@ -285,14 +402,87 @@ class MainTests(unittest.TestCase):
         self.assertEqual(code, 0)
         libro = os.path.join(self.salida, conv.LIBRO)
         padron_rows, construccion_rows = read_xlsx(libro, "padron"), read_xlsx(libro, "construcciones")
-        self.assertEqual(list(padron_rows[0])[:-1], conv.PADRON_SALIDA)
-        self.assertEqual(list(construccion_rows[0])[:-1], conv.CONSTRUCCION_SALIDA)
+        self.assertEqual(list(padron_rows[0])[:-1], conv.PADRON_SALIDA + conv.ORIGEN)
+        self.assertEqual(list(construccion_rows[0])[:-1], conv.CONSTRUCCION_SALIDA + conv.ORIGEN)
+        # #297: each row carries its sheet and row of the source
+        self.assertEqual([(r["hoja_origen"], r["fila_origen"]) for r in padron_rows],
+                         [("Hoja 1", "2"), ("Hoja 1", "3"), ("Hoja 1", "4")])
+        self.assertEqual([(r["hoja_origen"], r["fila_origen"]) for r in construccion_rows],
+                         [("construccion_rentas", "2"), ("construccion_rentas", "3"), ("construccion_rentas", "3")])
         data = ipi.build_dataset(padron_rows, construccion_rows, 2026, ipi.load_model(ipi.default_model_path()),
                                  CODIGOS, ipi.read_usos_srtm(ipi.default_usos_path()),
                                  ipi.read_depreciacion(ipi.default_depreciacion_path()))
         self.assertEqual((len(data.predios), len(data.declaraciones), len(data.niveles)), (2, 3, 3))
         self.assertEqual(Counter(r["categoria"] for r in data.reporte)["rechazada"], 0)
         self.assertIn("niveles: 3\n", out)
+
+    def test_writes_the_observaciones_sheet(self):
+        write_source(self.padron, "Hoja 1", SAT_HEADER, [
+            sat(**{"TIPO_UNIDAD URBANA_ARMO": "ST."}), sat(COD_PREDIO="000000002-0001-0001", TIP_DOC="6")])
+        code, out, _ = self.run_main("--tipo-unidad", "ST.=SECTOR")
+        self.assertEqual(code, 0)
+        rows = read_xlsx(os.path.join(self.salida, conv.LIBRO), "observaciones")
+        self.assertEqual(list(rows[0])[:-1], conv.OBSERVACIONES_SALIDA)
+        self.assertEqual(conv.OBSERVACIONES_SALIDA, ["codigo_predio", "codigo_contribuyente", "objeto", "regla",
+                                                     "detalle", "hoja", "fila"])
+        # the second row's TIP_DOC is not its contribuyente's first: the importer reads the document from the first
+        self.assertEqual([(r["regla"], r["codigo_predio"], r["hoja"], r["fila"]) for r in rows],
+                         [("TIPO_UU_ST_COMO_SECTOR", "000000001-0001-0001", "Hoja 1", "2")])
+        self.assertIn("observaciones: 1\n", out)
+        # codes and catalog values only: never a name nor a document (Ley 29733)
+        texto = " ".join(str(v) for r in rows for v in r.values())
+        for dato in ("PRUEBA", "FICTICIA", "ANA", "40000001"):
+            self.assertNotIn(dato, texto)
+
+    def test_the_importer_carries_the_observations_to_the_original_rows(self):
+        write_source(self.padron, "Hoja 1", SAT_HEADER, [
+            sat(**{"TIPO_UNIDAD URBANA_ARMO": "ST."}),
+            sat(COD_PREDIO="000000002-0001-0001", **{"Condición_predio": "5"}),
+            sat(COD_PREDIO="000000002-0001-0001", COD_CONTRIB="900002", N_DOC="40000002", **{"Condición_predio": "5"})])
+        self.assertEqual(self.run_main("--tipo-unidad", "ST.=SECTOR")[0], 0)
+        libro = os.path.join(self.salida, conv.LIBRO)
+        padron_rows, construccion_rows = read_xlsx(libro, "padron"), read_xlsx(libro, "construcciones")
+        data = ipi.build_dataset(padron_rows, construccion_rows, 2026, ipi.load_model(ipi.default_model_path()),
+                                 CODIGOS, ipi.read_usos_srtm(ipi.default_usos_path()),
+                                 ipi.read_depreciacion(ipi.default_depreciacion_path()))
+        obs = ipi.observaciones_de(data, "C1", padron_rows, construccion_rows, read_xlsx(libro, "observaciones"))
+        por_regla = {o["regla"]: o for o in obs}
+        self.assertEqual((por_regla["TIPO_UU_ST_COMO_SECTOR"]["hoja"], por_regla["TIPO_UU_ST_COMO_SECTOR"]["fila"]),
+                         ("Hoja 1", 2))
+        self.assertEqual((por_regla["CONDOMINIO_SIN_PORCENTAJE"]["hoja"], por_regla["CONDOMINIO_SIN_PORCENTAJE"]["fila"],
+                          por_regla["CONDOMINIO_SIN_PORCENTAJE"]["codigo"]), ("Hoja 1", 3, "000000002-0001-0001"))
+        # the nivel of predio 2 goes to both DJ: the copy carries the row of construccion_rentas
+        [nivel] = [o for o in obs if o["objeto"] == "nivel_construccion"]
+        self.assertEqual((nivel["regla"], nivel["codigo"], nivel["hoja"], nivel["fila"]),
+                         ("NIVEL_COPIADO_A_COTITULAR", "000000002-0001-0001/900002", "construccion_rentas", 3))
+        # the importer's report of the converted rows points to the SAT's rows too
+        self.assertEqual({o["hoja"] for o in obs}, {"Hoja 1", "construccion_rentas"})
+
+    def test_excluded_predios_leave_every_sheet(self):
+        excluir = os.path.join(self.dir.name, "excluir.csv")
+        with open(excluir, "w", encoding="utf-8") as f:
+            f.write("codigo_predio,motivo\n000000002-0001-0001,duplicado\n000000099-0001-0001,no está\n")
+        write_source(self.padron, "Hoja 1", SAT_HEADER, [
+            sat(), sat(COD_PREDIO="000000002-0001-0001", TIP_DOC="6"),
+            sat(COD_PREDIO="000000002-0001-0001", COD_CONTRIB="900002")])
+        code, out, err = self.run_main("--excluir-predios", excluir)
+        self.assertEqual(code, 0, msg=err)
+        libro = os.path.join(self.salida, conv.LIBRO)
+        for hoja in ("padron", "construcciones", "observaciones"):
+            with self.subTest(hoja=hoja):
+                self.assertNotIn("000000002-0001-0001", {r.get("codigo_predio") for r in read_xlsx(libro, hoja)})
+        self.assertIn("predios_excluidos: 1\n", out)
+        self.assertIn("filas_padron: 1\n", out)
+        self.assertIn("construcciones_sin_predio: 0\n", out)
+
+    def test_an_exclusion_csv_without_codigo_predio_exits_2(self):
+        excluir = os.path.join(self.dir.name, "excluir.csv")
+        with open(excluir, "w", encoding="utf-8") as f:
+            f.write("codigo\n000000002-0001-0001\n")
+        code, _, err = self.run_main("--excluir-predios", excluir)
+        self.assertEqual(code, 2)
+        self.assertIn("codigo_predio", err)
+        self.assertFalse(os.path.exists(self.salida))
 
     def test_the_workbook_is_readable_only_by_its_owner(self):
         self.run_main()

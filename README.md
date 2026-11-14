@@ -1431,11 +1431,11 @@ dev está el entorno de [develop/pruebas](develop/pruebas/README.md).
 
    - **Opciones:** `--anio` (default 2026), `--limit N` (los primeros N predios, cada uno con todos sus titulares y sus
      niveles), `--workers`, `--report` (default `model/reports/padron_ica.csv`), `--codigos`, `--model`, `--core`,
-     `--email` y `--password`.
+     `--email`, `--password` y `--carga` (las observaciones de importación, abajo).
    - **`-I`:** el xlsx es un archivo de afuera, así que Python no carga nada del directorio actual. El script agrega
      solo su propio directorio.
    - **Salida:** `0` ok; `1` Core rechazó algo (se muestra la fila); `2` el modelo no tiene un campo que el importador
-     llena (falta #124), y no se envía nada.
+     llena (falta #124) o, con `--carga`, el objeto `observacion_importacion` (#297), y no se envía nada.
    - **Si Core rechaza algo,** la carga se detiene en ese registro. Lo ya creado queda: se corrige o se quita la fila y
      se vuelve a correr, y la nueva corrida omite lo que ya está.
 
@@ -1527,6 +1527,35 @@ códigos, sin nombres ni documentos, pero no se versiona.
 | `depreciacion_vs_rnt` | La columna `depreciacion` difiere del % del RNT para su antigüedad (casi siempre un tramo atrás). Se carga la del padrón |
 | `formula_nivel` | `valor_total_nivel` distinto de redondear a 2 decimales (valor unitario + incremento) × (1 − % del RNT) y multiplicar por el área, por más de S/ 0,05. Sin celda del RNT, se usa la columna del padrón |
 
+**Observaciones de importación** (#297). Con `--carga CODIGO` (letras, dígitos y `. _ : -`, de 1 a 64; por ejemplo
+`PADRON-SAT-2026-11`), después de cargar lo demás el importador crea un registro `observacion_importacion` por cada
+observación de esa carga, y el portal las muestra en el predio. Sin `--carga` no se lee ni se envía nada de esto.
+
+```bash
+python3 -I import_padron_ica.py --excel ~/ica/padron-2026-11/PADRON_CONSTRUCCION.xlsx --carga PADRON-SAT-2026-11 --dry-run
+python3 -I import_padron_ica.py --excel ~/ica/padron-2026-11/PADRON_CONSTRUCCION.xlsx --carga PADRON-SAT-2026-11
+```
+
+- **De dónde salen:** de la hoja `observaciones` del libro, si la tiene (la escribe `convertir_padron_sat_ica.py`; un
+  libro sin ella sigue sirviendo), de cada fila del reporte (cada categoría tiene su regla: `condominio_100_n` es
+  CONDOMINIO_SIN_PORCENTAJE, `titulares_en_conflicto` TITULAR_EN_CONFLICTO, `niveles_vs_padron` NIVELES_NO_CUADRAN,
+  `rechazada` REGISTRO_RECHAZADO…; una categoría nueva es OTRA) y de cada fila con un código que `codigos.json` no
+  tiene (el reporte junta esas en una fila por valor).
+- **Campos:** `carga`, `objeto` (predio, contribuyente, declaracion_predial, nivel_construccion…), `codigo`, `predio`
+  (el id, cuando la observación es del predio o de algo que cuelga de él; ninguno para un contribuyente), `regla`,
+  `detalle` (el valor original y qué se hizo, solo códigos y valores de catálogo: nunca un nombre ni un documento,
+  Ley 29733), y `hoja` y `fila` del archivo original: el del SAT, cuando el libro viene del convertidor.
+- **`codigo`:** el del predio en srtm, `<codigo>-<n>` si el SAT lo compartía (#207); el del contribuyente; y el de una
+  DJ o un nivel, `<codigo del predio>/<codigo del contribuyente>`. Una observación de un código compartido sin
+  contribuyente (`codigo_compartido`) va a cada uno de sus predios.
+- **Idempotente:** `clave` es `<carga>|<objeto>|<codigo>|<regla>|<hoja>|<fila>`, única. Lo que Core ya tiene se omite,
+  así que una segunda corrida no crea ninguna; la misma observación del convertidor y del importador es una sola.
+- **`--dry-run --carga`:** cuenta las que crearía, por regla (`observaciones (carga X): N` y una línea por regla), sin
+  llamar a Core.
+- **Reglas:** las 35 opciones de `regla_observacion_importacion`, con la etiqueta que muestra el portal, están en
+  `model/data/reglas_observacion_importacion.csv`.
+- **Permisos:** los perfiles que leen `predio` leen también `observacion_importacion`; ninguno la escribe.
+
 Con el extracto de 2026-10 (7 829 filas del padrón y 3 762 de construcciones), el `--dry-run` da 588 vías, 161
 unidades urbanas, 1 458 contribuyentes, 7 521 predios, 7 829 declaraciones y 3 758 niveles, con 4 filas rechazadas. El
 extracto es parte de un padrón de unas 32 000 filas: hasta tener el completo, la brecha de Ica infla los OMISOS.
@@ -1548,6 +1577,21 @@ python3 -I import_padron_ica.py --excel ~/ica/padron-2026-11/PADRON_CONSTRUCCION
 
 - **Salida:** `PADRON_CONSTRUCCION.xlsx` (modo 600) en `--salida`, que tiene que estar fuera del repositorio porque
   lleva datos personales (Ley 29733). Por stdout salen solo conteos `<clave>: <n>`, nunca un valor.
+- **Hoja `observaciones`** (#297): una fila por cada cosa que el convertidor vacía, lee por supuesto o marca (lo mismo
+  que cuenta), con `codigo_predio`, `codigo_contribuyente`, `objeto`, `regla`, `detalle`, `hoja` y `fila` de la hoja
+  del SAT. Por ejemplo, con `--tipo-unidad ST.=SECTOR` cada fila del padrón cuya unidad urbana se leyó así lleva
+  TIPO_UU_ST_COMO_SECTOR (`tipo_de_unidad_urbana "ST." → SECTOR`); un tipo de vía o de unidad urbana sin código,
+  TIPO_VIA_NO_LEIDO o TIPO_UU_NO_LEIDO; una condición, un tipo de documento (en la primera fila de su contribuyente) o
+  un uso sin mapeo, CONDICION_SIN_MAPEO, DOCUMENTO_SIN_MAPEO o USO_SIN_MAPEO. Las de un nivel (letras fuera de A–I,
+  material, estado, nivel o año ilegibles) van en cada DJ a la que va el nivel; la copia a otro titular lleva además
+  NIVEL_COPIADO_A_COTITULAR, la de un código compartido CODIGO_COMPARTIDO_DIVIDIDO, y un nivel sin predio en el padrón
+  NIVEL_SIN_PREDIO. `import_padron_ica.py --carga` las convierte en registros (arriba). Las hojas `padron` y
+  `construcciones` llevan también `hoja_origen` y `fila_origen`, para que las observaciones del importador apunten a
+  la fila del SAT. El tipo de predio vacío y las celdas `'-` se siguen contando, sin observación: son de todas las
+  filas.
+- **`--excluir-predios CSV`:** un CSV con una columna `codigo_predio`. Las filas de esos predios no salen en ninguna
+  de las tres hojas, y se cuentan en `predios_excluidos` (los que el padrón o las construcciones tenían). Sin la
+  columna, sale con `2` y no escribe nada.
 - **Columnas:** cada columna que lee el importador sale de su fuente (`COD_PREDIO`, `COD_CONTRIB`,
   `Condición_predio`, `TIP_DOC`, `Código_uso`, `area_construida_nivel_rentas`…). `--map-padron campo=COLUMNA` y
   `--map-construccion campo=COLUMNA` cambian la fuente (el campo es la columna del libro de salida), y `campo=` la

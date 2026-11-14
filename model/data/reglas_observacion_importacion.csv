@@ -1,0 +1,36 @@
+regla,etiqueta
+TIPO_UU_ST_COMO_SECTOR,"Tipo de unidad urbana ""ST."" leído como SECTOR"
+TIPO_UU_NO_LEIDO,Tipo de unidad urbana sin opción del modelo: vacío
+TIPO_VIA_NO_LEIDO,Tipo de vía sin código: vacío
+LETRA_FUERA_DE_RANGO,Letra de categoría fuera de A–I: vacía
+MATERIAL_NO_LEIDO,Material sin código: vacío
+ESTADO_NO_LEIDO,Estado de conservación sin código: vacío
+NIVEL_NO_LEIDO,Nivel sin dígitos: vacío
+ANIO_NO_LEIDO,Año de construcción que no es número: vacío
+CONDICION_SIN_MAPEO,Condición del predio sin mapeo en codigos.json
+DOCUMENTO_SIN_MAPEO,Tipo de documento sin mapeo en codigos.json
+USO_SIN_MAPEO,Uso sin mapeo a un código de srtm
+CODIGO_SIN_MAPEO,Otro código sin mapeo en codigos.json
+NIVEL_COPIADO_A_COTITULAR,Nivel copiado a la DJ de un co-titular
+NIVEL_SIN_PREDIO,Nivel de un predio que el padrón no tiene: descartado
+CODIGO_COMPARTIDO_DIVIDIDO,Código del SAT compartido: dividido en predios <codigo>-<n>
+CODIGO_DERIVADO_REPETIDO,Código derivado que el padrón ya usa: no se carga
+CODIGO_COMPARTIDO_EN_CORE,Código compartido que Core ya tiene sin dividir: omitido
+CONDOMINIO_SIN_PORCENTAJE,Condominio sin porcentaje: 100/n a cada titular
+CONDOMINO_SOLO,Condómino sin otros titulares: propietario único al 100 %
+TITULAR_EN_CONFLICTO,Propietario único con otros titulares
+NIVELES_NO_CUADRAN,Los niveles no suman el área o el valor construido del padrón
+REGISTRO_RECHAZADO,Registro rechazado: no encaja en el modelo
+DOCUMENTO_RELLENADO,DNI completado con ceros a la izquierda
+DOCUMENTO_SIN_NUMERO,Tipo de documento sin número: SIN DOCUMENTO
+DOCUMENTO_REPETIDO,Número de documento de otro contribuyente: sin número
+DOCUMENTO_EN_CORE,Número de documento que Core ya tiene con otro código: sin número
+FECHA_RELLENO,Fecha de adquisición 1900-01-01: vacía
+FECHA_INVALIDA,Fecha de adquisición ilegible: vacía
+DIRECCION_COMPUESTA,Dirección armada con sus partes
+VALOR_PREDIO_NO_CUADRA,Valor del predio distinto de la suma de sus partes
+DEPRECIACION_VS_RNT,Depreciación distinta de la del RNT
+FORMULA_NIVEL,Valor total del nivel fuera de la fórmula
+VARIOS_CODIGOS_VIA_MISMO_VALOR,Varios códigos de vía del mismo valor: el más frecuente
+VARIOS_CODIGOS_VIA_DISTINTOS,Varios códigos de vía de valores distintos: por revisar
+OTRA,Otra observación

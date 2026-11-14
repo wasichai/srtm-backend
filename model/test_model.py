@@ -3,6 +3,7 @@
 Run: cd model && python3 -m unittest -v
 """
 import copy
+import csv
 import json
 import os
 import unittest
@@ -17,7 +18,7 @@ OPCIONALES = {
     "papeleta_notificacion_previa", "resolucion_descargo", "notif_resolucion_plazo", "anuncio_predio",
     "movimiento_parametro", "brecha_predio_predio", "orden_caja_cuota_arbitrio", "orden_caja_cuota_predial",
     "pago_caja_contribuyente", "pago_caja_detalle_orden", "pago_caja_detalle_contribuyente",
-    "sincronizacion_catastro_corrida",
+    "sincronizacion_catastro_corrida", "observacion_importacion_predio",
 }
 
 # #156: the fields each object gained for the derivados of the declaración, in order (field -> type)
@@ -112,8 +113,8 @@ class ShippedModelTests(unittest.TestCase):
     def test_objects_in_topological_order(self):
         names = [o["name"] for o in self.model["objects"]]
         self.assertEqual(names[:3], ["contribuyente", "predio", "declaracion_predial"])
-        self.assertEqual(len(names), 50)
-        self.assertEqual(len(self.model["relationships"]), 55)
+        self.assertEqual(len(names), 51)
+        self.assertEqual(len(self.model["relationships"]), 56)
 
     def test_the_municipalidad_holds_the_documents_header(self):
         # the PU and HR's header, one record per organization edited in the admin, its escudo an image of wasichai-files
@@ -277,8 +278,9 @@ class ShippedModelTests(unittest.TestCase):
         # srtm.normativa (#188): the valor arancelario of a tramo de vía in a year. srtm owns it and catastro-backend
         # copies it (sincronizado_en, error_sincronizacion). clave is id_aranc|anio, not unique: an ANULADO keeps it
         names = [o["name"] for o in self.model["objects"]]
-        # the last object of #188; #203 appends sincronizacion_catastro and cambio_catastro after it, #247 brecha_nivel
-        self.assertEqual(names[-4], "arancel")
+        # the last object of #188; #203 appends sincronizacion_catastro and cambio_catastro after it, #247 brecha_nivel,
+        # #297 observacion_importacion
+        self.assertEqual(names[-5], "arancel")
         arancel = next(o for o in self.model["objects"] if o["name"] == "arancel")
         self.assertEqual((arancel["label"], arancel["pluralLabel"]), ("Arancel", "Aranceles"))
         for palabra in ("catastro", "POR_VERIFICAR", "doble firma"):
@@ -739,6 +741,56 @@ class ValidationTests(unittest.TestCase):
     def test_a_long_text_is_not_indexed(self):
         errors = self.mutate(lambda m: next(o for o in m["objects"] if o["name"] == "emision_lote").update(indexes=[["contribuyentes"]]))
         self.assertIn("object emision_lote: index (contribuyentes) names 'contribuyentes', a LONG_TEXT, which Core does not index", errors)
+
+
+# the reglas of an observación de importación (#297): the srtm-ui shows them by these names
+REGLAS_OBSERVACION = {
+    "TIPO_UU_ST_COMO_SECTOR", "TIPO_UU_NO_LEIDO", "TIPO_VIA_NO_LEIDO", "LETRA_FUERA_DE_RANGO", "CONDICION_SIN_MAPEO",
+    "DOCUMENTO_SIN_MAPEO", "USO_SIN_MAPEO", "NIVEL_COPIADO_A_COTITULAR", "CODIGO_COMPARTIDO_DIVIDIDO",
+    "CONDOMINIO_SIN_PORCENTAJE", "TITULAR_EN_CONFLICTO", "NIVELES_NO_CUADRAN", "OTRA",
+}
+
+
+class ObservacionImportacionTests(unittest.TestCase):
+    """What an imported record had at import (convertir_padron_sat_ica.py, import_padron_ica.py --carga)."""
+
+    def setUp(self):
+        self.model = load_model()
+        self.objeto = next(o for o in self.model["objects"] if o["name"] == "observacion_importacion")
+        self.campos = {f["name"]: f for f in self.objeto["fields"]}
+
+    def test_its_fields(self):
+        self.assertEqual(self.objeto["label"], "Observación de importación")
+        self.assertEqual({n: f["type"] for n, f in self.campos.items()}, {
+            "clave": "TEXT", "carga": "TEXT", "objeto": "ENUM", "codigo": "TEXT", "regla": "ENUM",
+            "detalle": "LONG_TEXT", "hoja": "TEXT", "fila": "INTEGER"})
+        self.assertEqual({n for n, f in self.campos.items() if f.get("required")}, {"clave", "carga", "objeto", "regla"})
+        self.assertEqual({n for n, f in self.campos.items() if f.get("unique")}, {"clave"})
+        self.assertEqual((self.campos["objeto"]["enum"], self.campos["regla"]["enum"]),
+                         ("objeto_importado", "regla_observacion_importacion"))
+
+    def test_its_enums(self):
+        self.assertEqual(self.model["enums"]["objeto_importado"],
+                         ["predio", "unidad_urbana", "via", "contribuyente", "declaracion_predial", "nivel_construccion"])
+        reglas = self.model["enums"]["regla_observacion_importacion"]
+        self.assertTrue(REGLAS_OBSERVACION <= set(reglas))
+        self.assertEqual(reglas[-1], "OTRA")
+
+    def test_the_predio_is_an_optional_relationship_and_carga_and_predio_are_indexed(self):
+        [rel] = [r for r in self.model["relationships"] if r["source"] == "observacion_importacion"]
+        self.assertEqual((rel["name"], rel["target"], rel["fieldName"], rel.get("required", False)),
+                         ("observacion_importacion_predio", "predio", "predio", False))
+        self.assertEqual(self.objeto["indexes"], [["carga"], ["predio"]])
+
+    def test_every_regla_has_its_spanish_label(self):
+        # srtm-ui shows the label; model/data/reglas_observacion_importacion.csv is where it reads them from
+        with open(os.path.join(os.path.dirname(__file__), "data", "reglas_observacion_importacion.csv"),
+                  encoding="utf-8") as f:
+            etiquetas = list(csv.DictReader(f))
+        self.assertEqual([e["regla"] for e in etiquetas], self.model["enums"]["regla_observacion_importacion"])
+        self.assertTrue(all(e["etiqueta"].strip() for e in etiquetas))
+        por_regla = {e["regla"]: e["etiqueta"] for e in etiquetas}
+        self.assertEqual(por_regla["TIPO_UU_ST_COMO_SECTOR"], 'Tipo de unidad urbana "ST." leído como SECTOR')
 
 
 if __name__ == "__main__":

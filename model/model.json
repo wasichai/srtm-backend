@@ -359,7 +359,16 @@
     "operacion_catastro": ["CREATE", "UPDATE", "DELETE"],
     "estado_orden_caja": ["POR_ENVIAR", "ENVIADA", "POR_RETIRAR", "RETIRADA", "CANCELADA", "PAGADA_EN_CAJA", "CONFLICTO", "ERROR"],
     "tipo_orden_caja": ["PREDIAL", "ARBITRIO"],
-    "tipo_pago_caja": ["PAGO_REGISTRADO", "PAGO_ANULADO"]
+    "tipo_pago_caja": ["PAGO_REGISTRADO", "PAGO_ANULADO"],
+    "objeto_importado": ["predio", "unidad_urbana", "via", "contribuyente", "declaracion_predial", "nivel_construccion"],
+    "regla_observacion_importacion": ["TIPO_UU_ST_COMO_SECTOR", "TIPO_UU_NO_LEIDO", "TIPO_VIA_NO_LEIDO",
+      "LETRA_FUERA_DE_RANGO", "MATERIAL_NO_LEIDO", "ESTADO_NO_LEIDO", "NIVEL_NO_LEIDO", "ANIO_NO_LEIDO",
+      "CONDICION_SIN_MAPEO", "DOCUMENTO_SIN_MAPEO", "USO_SIN_MAPEO", "CODIGO_SIN_MAPEO", "NIVEL_COPIADO_A_COTITULAR",
+      "NIVEL_SIN_PREDIO", "CODIGO_COMPARTIDO_DIVIDIDO", "CODIGO_DERIVADO_REPETIDO", "CODIGO_COMPARTIDO_EN_CORE",
+      "CONDOMINIO_SIN_PORCENTAJE", "CONDOMINO_SOLO", "TITULAR_EN_CONFLICTO", "NIVELES_NO_CUADRAN",
+      "REGISTRO_RECHAZADO", "DOCUMENTO_RELLENADO", "DOCUMENTO_SIN_NUMERO", "DOCUMENTO_REPETIDO", "DOCUMENTO_EN_CORE",
+      "FECHA_RELLENO", "FECHA_INVALIDA", "DIRECCION_COMPUESTA", "VALOR_PREDIO_NO_CUADRA", "DEPRECIACION_VS_RNT",
+      "FORMULA_NIVEL", "VARIOS_CODIGOS_VIA_MISMO_VALOR", "VARIOS_CODIGOS_VIA_DISTINTOS", "OTRA"]
   },
   "objects": [
     {
@@ -1591,6 +1600,31 @@
         {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_nivel_brecha", "required": true,
           "description": "PAR: el piso una sola vez en cada lado. SOLO_RENTAS o SOLO_CATASTRO: en un lado. AMBIGUO: rentas lo repite en varios niveles, o no tiene número."}
       ]
+    },
+    {
+      "name": "observacion_importacion",
+      "label": "Observación de importación",
+      "pluralLabel": "Observaciones de importación",
+      "description": "Lo que un registro importado tuvo al importarse: un valor vaciado, leído por supuesto o marcado por el convertidor o el importador del padrón (convertir_padron_sat_ica.py, import_padron_ica.py --carga, #297). Solo códigos y valores de catálogo, nunca un nombre ni un documento de una persona (Ley 29733).",
+      "indexes": [["carga"], ["predio"]],
+      "fields": [
+        {"name": "clave", "label": "Clave", "type": "TEXT", "required": true, "unique": true,
+          "description": "<carga>|<objeto>|<codigo>|<regla>|<hoja>|<fila>: la misma observación de la misma carga no se crea dos veces."},
+        {"name": "carga", "label": "Carga", "type": "TEXT", "required": true,
+          "description": "El código de la carga (--carga del importador), por ejemplo PADRON-SAT-2026-11."},
+        {"name": "objeto", "label": "Objeto", "type": "ENUM", "enum": "objeto_importado", "required": true,
+          "description": "El objeto del registro observado."},
+        {"name": "codigo", "label": "Código", "type": "TEXT",
+          "description": "El código natural del registro: el del predio (el de srtm, <codigo>-<n> si el SAT lo compartía) o el del contribuyente; de una DJ o un nivel, <codigo del predio>/<codigo del contribuyente>."},
+        {"name": "regla", "label": "Regla", "type": "ENUM", "enum": "regla_observacion_importacion", "required": true,
+          "description": "Qué se observó. Las etiquetas de cada opción están en model/data/reglas_observacion_importacion.csv."},
+        {"name": "detalle", "label": "Detalle", "type": "LONG_TEXT",
+          "description": "El valor original y qué se hizo con él, por ejemplo tipo_de_unidad_urbana \"ST.\" → SECTOR."},
+        {"name": "hoja", "label": "Hoja", "type": "TEXT",
+          "description": "La hoja del archivo original (el del SAT cuando pasó por el convertidor)."},
+        {"name": "fila", "label": "Fila", "type": "INTEGER",
+          "description": "La fila de Excel de esa hoja; vacía cuando la observación no sale de una fila."}
+      ]
     }
   ],
   "relationships": [
@@ -2088,6 +2122,15 @@
       "target": "brecha_predio",
       "fieldName": "brecha_predio",
       "required": true
+    },
+    {
+      "name": "observacion_importacion_predio",
+      "label": "Predio",
+      "inverseLabel": "Observaciones de importación",
+      "source": "observacion_importacion",
+      "target": "predio",
+      "fieldName": "predio",
+      "required": false
     }
   ]
 }
