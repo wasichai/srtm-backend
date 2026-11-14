@@ -201,8 +201,9 @@ class VistasTests(ConCorte, unittest.TestCase):
                 "SELECT view_name FROM duckdb_views() WHERE NOT internal ORDER BY view_name"
             ).fetchall()
         ]
-        # the 8 views of task 6, the 5 tablero-only views of #206 task 8 and v_niveles_catastro_mayor (#256)
-        self.assertEqual(len(vistas), 14)
+        # the 8 views of task 6, the 5 tablero-only views of #206 task 8, v_niveles_catastro_mayor (#256) and
+        # the 4 of the informe de brechas (#301)
+        self.assertEqual(len(vistas), 18)
         for vista in vistas:
             with self.subTest(vista=vista):
                 # v_corte carries leido_en as TIMESTAMPTZ; fetching it as is would need duckdb's Python

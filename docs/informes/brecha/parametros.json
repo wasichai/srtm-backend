@@ -3,6 +3,10 @@
   "publicacion": {
     "s3": "s3://sgtm-dev/analitica"
   },
+  "informe": {
+    "_comentario": "Informe de brechas (informe.py): un grupo con menos predios (o contribuyentes) que umbral_celda muestra cuántos son, nunca sus montos (Ley 29733).",
+    "umbral_celda": 5
+  },
   "organizaciones": {
     "perene": {
       "nombre": "Municipalidad Distrital de Perené"

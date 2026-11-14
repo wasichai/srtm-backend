@@ -1,0 +1,24 @@
+// Hallazgos en los datos: lo que la revisión de los datos de origen enseñó, antes de las cifras de la brecha.
+// Por ejemplo: códigos catastrales que no enlazan, declaraciones sin valores de origen, fichas sin construcciones
+// clasificadas, pisos que solo aparecen en uno de los dos sistemas. Cada hallazgo: qué se vio, cuántos casos
+// (atributos de generado/cifras.adoc), por qué importa y qué se propone. Nunca un caso individual.
+[[hallazgos]]
+== Hallazgos en los datos
+
+=== Enlace entre rentas y catastro
+
+// Cuántos predios enlazan con una ficha y por qué método; qué pasa con los que no.
+De los {predios} predios de la corrida, {predios-sin-levantar} no tienen levantamiento catastral y
+{predios-dudoso} tienen un dato de catastro dudoso.
+
+=== Construcciones y clases
+
+// La clase de construcción predominante de cada ficha sale de sus construcciones; «Sin clasificación» indica
+// fichas cuyas construcciones no traen clasificación y «Sin ficha» predios cuyo código no tiene ficha.
+Clases de construcción predominantes en la corrida: {clases} (el detalle está en <<estado>>).
+
+=== Pisos (niveles)
+
+// Si muchos pisos aparecen solo en un sistema, la comparación de áreas pierde valor: dilo aquí.
+Se compararon {niveles} niveles: {niveles-par} aparecen en ambos sistemas, {niveles-solo-rentas} solo en rentas,
+{niveles-solo-catastro} solo en catastro y {niveles-ambiguo} no se pudieron emparejar.

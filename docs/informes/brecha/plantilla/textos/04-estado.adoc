@@ -1,0 +1,51 @@
+// Estado actual de los entornos: las cifras de la corrida del corte. Las tablas y los gráficos se generan; el
+// texto alrededor interpreta lo que muestran. Si una celda dice «reservado», no la reconstruyas a mano.
+[[estado]]
+== Estado actual de los entornos
+
+=== La corrida en cifras
+
+tabla::totales[]
+
+En total, el autoavalúo cambiaría en {delta-autoavaluo} ({pct-delta-autoavaluo}) y el impuesto predial en
+{delta-impuesto}. {predios-estimados} predios llevan un valor estimado por el motor.
+
+=== Corrida por categoría
+
+grafico::categorias[]
+
+tabla::categorias[]
+
+// Comenta las categorías que concentran el Δ impuesto ({categoria-mayor-delta}: {delta-categoria-mayor}) y las
+// que lo reducen ({categoria-menor-delta}: {delta-categoria-menor}).
+
+tabla::clases[]
+
+=== Predios y Δ impuesto según confianza
+
+grafico::confianza[]
+
+tabla::confianza[]
+
+Solo la brecha de los predios confiables ({delta-impuesto-confiable}) se puede llevar a fiscalización sin otra
+revisión; la de los dudosos ({delta-impuesto-dudoso}) necesita verificar la ficha antes.
+
+=== El predial en tres columnas
+
+grafico::predial[]
+
+tabla::predial[]
+
+Para {contribuyentes} contribuyentes, el motor de rentas liquida {predial-motor-rentas} y con los datos de
+catastro liquidaría {predial-motor-catastro}: {predial-dif-catastro} ({pct-predial-dif-catastro}).
+
+=== Niveles
+
+grafico::niveles[]
+
+tabla::niveles[]
+
+tabla::niveles-catastro-mayor[]
+
+En {predios-catastro-mayor} predios hay {niveles-catastro-mayor} pisos con más área en catastro que en rentas,
+por {delta-area-niveles} en total.

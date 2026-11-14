@@ -1,0 +1,21 @@
+// Resumen ejecutivo: media página. Abre con la conclusión, no con el método. Cada cifra es un atributo de
+// generado/cifras.adoc (make informe lo regenera); ninguna se teclea. Distingue lo comprobado en los datos, la
+// interpretación y la recomendación. Reescribe este texto con lo que muestra el corte de la edición.
+[[resumen]]
+== Resumen ejecutivo
+
+[.lead]
+La corrida de brechas {anio} de {municipalidad}, leída en el corte analítico del {fecha-corte}, compara
+{predios} predios del padrón de rentas con su ficha de catastro. Con el autoavalúo de catastro, el impuesto
+predial cambiaría en {delta-impuesto} ({pct-delta-impuesto} del impuesto declarado).
+
+* *Lo que se puede usar ya:* {predios-confiable} predios ({pct-predios-confiable}) tienen un dato de catastro
+  confiable; su Δ impuesto es {delta-impuesto-confiable}.
+* *Lo que hay que revisar:* {predios-dudoso} predios ({pct-predios-dudoso}) quedan como dudosos, con un Δ impuesto
+  de {delta-impuesto-dudoso}.
+* *Lo que falta levantar:* {predios-sin-levantar} predios ({pct-predios-sin-levantar}) aún no tienen
+  levantamiento catastral.
+* *Dónde se concentra:* entre los confiables, la categoría con mayor Δ impuesto es _{categoria-mayor-delta}_
+  ({delta-categoria-mayor}).
+
+// Una o dos frases con la decisión que se pide a la municipalidad (véase <<pendientes>>).

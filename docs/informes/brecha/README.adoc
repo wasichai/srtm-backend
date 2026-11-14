@@ -361,6 +361,136 @@ make respaldo ORG=perene             # respaldo de su metabase-postgres (un cron
 real. Nunca corre contra datos reales por sí solo: el despliegue se prueba primero con una organización
 ficticia (`make corte-ficticio`), como describe esa guía.
 
+[[informe-de-brechas]]
+== Informe de brechas
+
+El informe de brechas de una organización se genera a partir de un corte, como el informe de recaudación
+(`../recaudacion`): la plantilla y los textos están versionados aquí, y cada _edición_ vive *fuera del
+repositorio*. `informe.py` calcula los indicadores *solo* a partir de las vistas del `.duckdb` del corte, dibuja
+los gráficos en SVG, arma un HTML autocontenido y lo valida (srtm-backend#301).
+
+[IMPORTANT]
+====
+*Ley 29733.* El informe solo lleva agregados: ningún nombre, documento, código de predio ni monto de un predio
+individual. Un grupo de menos de `informe.umbral_celda` predios (`parametros.json`, 5 por omisión) muestra
+cuántos son, pero sus montos salen como «reservado». Si en un conjunto que suma un total publicado queda un solo
+grupo reservado, se reserva también el siguiente más pequeño, para que no se pueda deducir por diferencia.
+`make informe` falla si la validación encuentra un dato personal o identificador.
+====
+
+=== Paso a paso
+
+. *La corrida.* En srtm, correr la brecha del año de la organización hasta que quede `TERMINADA` (Brecha →
+  Nueva corrida). El corte toma la última corrida terminada.
+. *El corte.* Tomar el corte de la organización y, si se va a compartir, publicarlo (véase «Cómo correr un corte»):
++
+[source,bash]
+----
+make corte ORG=ica                          # o make extraer ORG=ica, sin publicar
+----
++
+Para probar sin datos reales: `make corte-ficticio ORG=ficticia-a SEMILLA=7 FECHA=2026-11-01`.
+. *El DuckDB.* Armar el `.duckdb` del corte (verifica el manifiesto y crea las vistas de `vistas.sql`):
++
+[source,bash]
+----
+make local CORTE=~/cortes/analitica/ica/2026-11-01      # -> ~/cortes/analitica/ica/2026-11-01.duckdb
+----
+. *La edición.* Crear la carpeta de la edición. Copia `plantilla/textos/*.adoc` y escribe `edicion.json`
+  (organización, nombre de la municipalidad, corte, versión), sin pisar nada de lo que ya exista:
++
+[source,bash]
+----
+make nueva-edicion EDICION=~/informes/brecha/ica/2026-11 ORG=ica CORTE=~/cortes/analitica/ica/2026-11-01
+----
++
+Para una organización que no está en `parametros.json` (una ficticia), agregar
+`NOMBRE="Municipalidad Ficticia A"`.
+. *El informe.* Calcular indicadores, gráficos y HTML, y validar:
++
+[source,bash]
+----
+make informe EDICION=~/informes/brecha/ica/2026-11
+# con la comparación con un corte anterior (ya armado con make local):
+make informe EDICION=~/informes/brecha/ica/2026-11 CORTE_ANTERIOR=~/cortes/analitica/ica/2026-10-01
+----
++
+El corte anterior también puede quedar fijo en `edicion.json` (`"corte_anterior"`). La salida es
+`salida/informe-brechas.html`.
+. *Los textos.* Leer el HTML y reescribir `textos/*.adoc` con la interpretación de la edición; volver a correr
+  `make informe` hasta que valide. `generado/cifras.adoc` lista todos los atributos disponibles.
+. *La versión.* En `edicion.json`, poner `version` (por ejemplo `1.0`) y `elaborado` (por ejemplo, «elaborado
+  el 15 de noviembre de 2026»); `make informe` una última vez.
+. *La publicación.* El HTML es un solo archivo, sin peticiones externas: se entrega tal cual (correo, carpeta
+  compartida o el bucket de informes, con el mismo cuidado que la edición de recaudación:
+  `aws s3 cp salida/informe-brechas.html s3://<bucket>/informes/brecha-<org>/<edición>/ --sse AES256`). El PDF
+  sale del navegador (Imprimir → Guardar como PDF): la hoja de estilos trae reglas de impresión. Guardar la
+  carpeta de la edición completa (textos, `edicion.json`, `generado/`) para poder regenerarla.
+
+=== La edición
+
+[cols="1,3",options="header"]
+|===
+|Carpeta o archivo |Qué tiene
+|`edicion.json` |Organización, nombre de la municipalidad, corte, corte anterior (opcional), versión y elaboración.
+|`textos/` |La redacción: un archivo por sección, en el orden de su nombre (resumen, método, hallazgos, estado de
+los entornos, comparación, lecciones, pendientes, glosario). Se puede agregar o quitar archivos.
+|`generado/` |`indicadores.json` (las cifras, al céntimo), `cifras.json` y `cifras.adoc` (los atributos que citan
+los textos) y `graficos/*.svg`. Se reescribe en cada `make informe`.
+|`salida/informe-brechas.html` |El informe: un solo archivo con su CSS y sus gráficos en línea, en modo claro y
+oscuro según el sistema del lector.
+|===
+
+=== Cómo se escriben los textos
+
+Los textos usan un subconjunto de AsciiDoc (`herramientas/informe_html.py`): `==`/`===`/`====` para los
+títulos (con `[[ancla]]` arriba), párrafos, `[.lead]`, viñetas `*`, pasos `.`, glosario `Término:: definición`,
+`NOTE:`/`IMPORTANT:`, `+*negrita*+`, `+_cursiva_+`, `+`código`+`, `+<<ancla,texto>>+` y comentarios `//`. Las tablas y
+los gráficos generados se insertan con `tabla::<nombre>[]` y `grafico::<nombre>[]`:
+
+* tablas: `corte`, `avisos`, `totales`, `confianza`, `categorias`, `clases`, `predial`, `niveles`,
+  `niveles-catastro-mayor` y, con un corte anterior, `comparacion` y `comparacion-categorias`;
+* gráficos: `confianza`, `categorias`, `predial`, `niveles` y, con un corte anterior, `comparacion`.
+
+Lo que solo vale con un corte anterior va entre `ifdef::comparacion[]` y `endif::[]` (`ifndef::` para lo
+contrario).
+
+*Ninguna cifra se teclea.* Los textos citan atributos (`+{predios}+`, `+{delta-impuesto-confiable}+`,
+`+{pct-predios-dudoso}+`, `+{var-delta-impuesto}+`…). La validación falla con un monto, un porcentaje o un número
+de cuatro o más cifras escrito a mano (salvo un año o el número de una norma, como Ley 29733), y con un atributo
+sin definir.
+
+=== Qué vista da cada cifra del informe
+
+[cols="3,3",options="header"]
+|===
+|Cifra |Vista
+|Corte, motor y avisos |`v_corte`
+|Estado, origen y fecha de la corrida |`v_brecha_corrida`
+|Totales: predios, autoavalúo declarado y de catastro, Δ autoavalúo, impuestos y Δ impuesto |`v_brecha_totales`
+|Desglose por confianza (confiable, dudoso, sin levantar) |`v_brecha_por_confianza`
+|Brecha por categoría |`v_segmentos`
+|Brecha por clase de construcción |`v_brecha_por_clase`
+|Predial en tres columnas |`v_predial_tres_columnas`
+|Niveles `PAR`, `SOLO_RENTAS`, `SOLO_CATASTRO` y `AMBIGUO` |`v_niveles_por_estado`
+|Pisos con más área en catastro (solo el total) |`v_niveles_catastro_mayor`
+|===
+
+=== Validaciones
+
+`make informe` termina con `make validar-informe`, que falla si:
+
+* una salida (`salida/`, `generado/`, `textos/`) lleva un identificador del corte (código de predio, de ficha o
+  de contribuyente, seudónimo o id de srtm), el monto al céntimo de un predio individual, un número de 8 u 11
+  dígitos (DNI o RUC), un correo o el nombre de un campo personal;
+* un grupo de menos predios que el umbral publica sus montos;
+* un texto lleva una cifra tecleada o un atributo sin definir;
+* el HTML carga algo de fuera (script, hoja de estilos, imagen, fuente o URL);
+* el corte es de otra organización que la edición, o los grupos de confianza no suman el total.
+
+Las pruebas (`pruebas/test_informe.py`, dentro de `make pruebas`) generan el informe sobre cortes ficticios y
+comprueban cada una de estas fallas.
+
 == Requisitos
 
 * Python 3.11 o superior; las dependencias (`duckdb`, `pyarrow`) van fijas en `requirements.txt`, instaladas en

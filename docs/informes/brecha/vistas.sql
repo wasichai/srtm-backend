@@ -230,5 +230,45 @@ WHERE n.estado = 'PAR' AND n.area_rentas > 0 AND n.area_catastro > n.area_rentas
 GROUP BY b.sector, b.manzana, b.uso
 ORDER BY b.sector, b.manzana, b.uso;
 
+-- srtm-backend#301: the views only the informe de brechas reads (informe.py). Aggregates only, never a predio.
+
+-- The corrida of the corte (corte_manifiesto.brecha_corrida_id), one row; none when the srtm had no corrida
+-- TERMINADA. Its instants as ISO text in UTC: the report only shows the day, and a TIMESTAMPTZ would make the
+-- python duckdb client import pytz to hand it over.
+CREATE OR REPLACE VIEW v_brecha_corrida AS
+SELECT c.id, c.anio, c.estado, c.version_catastro, c.origen, c.total_predios,
+       strftime(make_timestamp(epoch_us(c.iniciado)), '%Y-%m-%dT%H:%M:%SZ') AS iniciado,
+       strftime(make_timestamp(epoch_us(c.terminado)), '%Y-%m-%dT%H:%M:%SZ') AS terminado
+FROM srtm_brecha_corrida c, corte_manifiesto m
+WHERE c.id = m.brecha_corrida_id;
+
+-- The totals of the corrida over v_brecha_predio: one row, even with no brecha_predio (predios 0, sums NULL).
+CREATE OR REPLACE VIEW v_brecha_totales AS
+SELECT count(*) AS predios, sum(autoavaluo_declarado) AS autoavaluo_declarado,
+       sum(autoavaluo_catastro) AS autoavaluo_catastro, sum(delta_autoavaluo) AS delta_autoavaluo,
+       sum(impuesto_declarado) AS impuesto_declarado, sum(impuesto_catastro) AS impuesto_catastro,
+       sum(delta_impuesto) AS delta_impuesto, sum(delta_arbitrios) AS delta_arbitrios,
+       count(*) FILTER (estimado) AS estimados
+FROM v_brecha_predio;
+
+-- The same totals by confianza (CONFIABLE, DUDOSO, SIN_LEVANTAR; SIN_DATO for an srtm without #204).
+CREATE OR REPLACE VIEW v_brecha_por_confianza AS
+SELECT confianza, count(*) AS predios, sum(autoavaluo_declarado) AS autoavaluo_declarado,
+       sum(autoavaluo_catastro) AS autoavaluo_catastro, sum(delta_autoavaluo) AS delta_autoavaluo,
+       sum(impuesto_declarado) AS impuesto_declarado, sum(impuesto_catastro) AS impuesto_catastro,
+       sum(delta_impuesto) AS delta_impuesto
+FROM v_brecha_predio
+GROUP BY confianza
+ORDER BY confianza;
+
+-- The niveles (pisos) compared by the corrida, by estado: PAR, SOLO_RENTAS, SOLO_CATASTRO, AMBIGUO (SIN_DATO when
+-- srtm left it empty). Empty when the srtm had no brecha_nivel yet.
+CREATE OR REPLACE VIEW v_niveles_por_estado AS
+SELECT coalesce(nullif(trim(estado), ''), 'SIN_DATO') AS estado, count(DISTINCT brecha_predio) AS predios,
+       count(*) AS niveles, sum(area_rentas) AS area_rentas, sum(area_catastro) AS area_catastro
+FROM srtm_brecha_nivel
+GROUP BY ALL
+ORDER BY estado;
+
 -- The corte's manifest at a glance, for the scalar card above each tablero.
 CREATE OR REPLACE VIEW v_corte AS SELECT * FROM corte_manifiesto;
