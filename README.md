@@ -1523,7 +1523,7 @@ códigos, sin nombres ni documentos, pero no se versiona.
 | `fecha_invalida` | `fecha_adquisicion` que no se lee como fecha, cargada vacía |
 | `direccion_compuesta` | Predio sin dirección, armada con sus partes |
 | `valor_predio_no_cuadra` | `valor_predio` distinto de terreno + construcción + otras instalaciones |
-| `niveles_vs_padron` | La suma de los niveles de un par no da su `valor_area_construida` o su `area_construida` |
+| `niveles_vs_padron` | La suma de los niveles de un par no da su `valor_area_construida` o su `area_construida`. Si ningún nivel del par trae `valor_total_nivel` (el padrón del SAT), el valor no se compara, solo el área, y el par se cuenta en `niveles_sin_valor` del resumen |
 | `depreciacion_vs_rnt` | La columna `depreciacion` difiere del % del RNT para su antigüedad (casi siempre un tramo atrás). Se carga la del padrón |
 | `formula_nivel` | `valor_total_nivel` distinto de redondear a 2 decimales (valor unitario + incremento) × (1 − % del RNT) y multiplicar por el área, por más de S/ 0,05. Sin celda del RNT, se usa la columna del padrón |
 
@@ -1615,8 +1615,8 @@ python3 -I import_padron_ica.py --excel ~/ica/padron-2026-11/PADRON_CONSTRUCCION
     una vía del catálogo por cada par de código y nombre.
 - **Sin fuente:** el tipo de predio (urbano o rústico) no viene, así que va vacío y se cuenta (`tipo_predio_vacio`).
   Sin él, la regla para varios códigos de vía no marca ningún predio. Las construcciones no traen clasificación,
-  valor unitario, incremento, depreciación ni valor total: van vacías, y `niveles_vs_padron` reporta el valor de casi
-  todo par con niveles, porque estos suman 0. Lo que cuenta de esa categoría es el área.
+  valor unitario, incremento, depreciación ni valor total: van vacías: `niveles_vs_padron` no compara el valor de
+  esos pares (los cuenta en `niveles_sin_valor`) y solo reporta el área.
 - **Varios contribuyentes:** un nivel va a la DJ de cada contribuyente de su predio, en el orden del padrón, como los
   repite `PADRON_CONSTRUCCION.xlsx` en la DJ de cada condómino (`niveles_copiados`).
   - Un código que el importador parte en predios distintos (#207) da los niveles a cada uno:
