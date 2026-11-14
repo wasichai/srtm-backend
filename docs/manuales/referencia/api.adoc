@@ -781,7 +781,8 @@ sin `construcciones` o una corrida anterior). Los niveles mismos se leen con
 |`GET /{anio}/predios/{predio}?corrida`
 |La brecha de un predio (#303), por el id de su registro `predio`, tal como la midió la corrida: `corrida`, `fila`,
 `niveles` por piso (con `delta`, `detalleRentas`, `detalleCatastro` y sus `diferencias`), `diferencias` (solo lo que
-pasa las tolerancias: 0,5 m² o m y S/ 1,00), `iguales`, `avisos` y `tolerancias`. Sin titulares ni documentos.
+pasa las tolerancias de la organización, `TOLERANCIA_BRECHA` de Normativa, por omisión 0,5 m² o m y S/ 1,00),
+`iguales`, `avisos` y `tolerancias` (las que usó). Sin titulares ni documentos.
 |200; 403; 404 sin corrida TERMINADA, `corrida` de otro año, o predio sin fila en la corrida.
 
 |`GET /{anio}/lotes?corrida`

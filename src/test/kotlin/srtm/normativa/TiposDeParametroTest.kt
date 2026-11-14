@@ -8,6 +8,7 @@ import srtm.impuesto.TIPOS_PREDIAL
 import java.io.File
 import srtm.anuncios.Llaves as LlavesAnuncios
 import srtm.arbitrios.Llaves as LlavesArbitrios
+import srtm.brecha.Llaves as LlavesBrecha
 import srtm.sanciones.Llaves as LlavesSanciones
 
 // the catalog of the tipos is written once more: what the code reads (each module's Llaves), what the importer checks
@@ -17,7 +18,7 @@ class TiposDeParametroTest {
 
     @Test
     fun `the catalog is the tipos the modules read, each once`() {
-        val leidos = TIPOS_PREDIAL + LlavesArbitrios.TIPOS + LlavesSanciones.TIPOS + LlavesAnuncios.TIPOS
+        val leidos = TIPOS_PREDIAL + LlavesArbitrios.TIPOS + LlavesSanciones.TIPOS + LlavesAnuncios.TIPOS + LlavesBrecha.TIPOS
         assertEquals(leidos.sorted(), catalogo.sorted())
         assertEquals(catalogo.size, catalogo.toSet().size)
     }
@@ -55,7 +56,7 @@ class TiposDeParametroTest {
     fun `each tipo says how it is written`() {
         TiposDeParametro.TODOS.forEach {
             assertTrue(it.etiqueta.isNotBlank(), it.tipo)
-            assertTrue(it.modulo in setOf("impuesto", "arbitrios", "sanciones", "anuncios"), it.tipo)
+            assertTrue(it.modulo in setOf("impuesto", "arbitrios", "sanciones", "anuncios", "brecha"), it.tipo)
         }
         val uit = TiposDeParametro.de("UIT")!!
         assertEquals(false, uit.usaClave)

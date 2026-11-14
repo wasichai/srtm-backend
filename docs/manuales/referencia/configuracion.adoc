@@ -270,6 +270,11 @@ seguimiento, sin corridas automáticas.
 automática del día. Fuera de 0-23, {sigla} no arranca.
 |===
 
+NOTE: Las tolerancias con que la brecha de un predio (`GET /api/srtm/brecha/\{anio}/predios/\{predio}`) decide qué
+difiere entre rentas y catastro no son variables de entorno. Son parámetros tributarios de cada organización,
+`TOLERANCIA_BRECHA` con clave `AREA` (m², por omisión 0,5) o `MONTO` (soles, por omisión 1,00), y se registran en
+Normativa con su doble firma (#305). Sin parámetro vigente se usan los valores por omisión.
+
 NOTE: La primera vuelta del seguimiento, con `sincronizacion_catastro` aún sin `cursor`, lee toda la historia de
 cambios del catastro desde el principio. Por eso el primer aviso del año (`GET /api/srtm/brecha/\{anio}/cambios`)
 lista todos los predios de la carga inicial del catastro, no solo los que cambiaron después: revíselo como la línea
