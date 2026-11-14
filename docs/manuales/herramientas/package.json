@@ -11,7 +11,7 @@
         "diagramas": "./diagramas.sh"
     },
     "devDependencies": {
-        "@mermaid-js/mermaid-cli": "12.0.0",
+        "@mermaid-js/mermaid-cli": "12.2.0",
         "playwright": "1.60.0"
     }
 }
