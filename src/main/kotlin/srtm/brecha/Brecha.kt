@@ -822,54 +822,87 @@ object Brecha {
     // declared). SIN_CATASTRO and SIN_VALOR have one side only and stay out, so declarado + Δ = catastro on the panel
     val COMPARADAS = setOf(Categoria.SUBVALUADO.name, Categoria.SOBREVALUADO.name, Categoria.COINCIDE.name, Categoria.OMISO.name)
 
-    // GET /brecha/{anio}/panel: the corrida's rows counted (PanelService's way: read, then count in memory). the padrón
-    // is every row but the omisos and the SIN_LEVANTAR ones without a declared autoavalúo (an empty ficha with no predio
-    // of the padrón), the catastro every row but those SIN_CATASTRO. autoavalúo declarado, catastro and Δ are
-    // over COMPARADAS (they reconcile); the *Total ones over every row, for reference. Δ arbitrios is null while no row
-    // has one. porConfianza has every Confianza, over the rows that have one: an older corrida's are all zero
+    // GET /brecha/{anio}/panel: the corrida's rows counted. the padrón is every row but the omisos and the SIN_LEVANTAR
+    // ones without a declared autoavalúo (an empty ficha with no predio of the padrón), the catastro every row but those
+    // SIN_CATASTRO. autoavalúo declarado, catastro and Δ are over COMPARADAS (they reconcile); the *Total ones over every
+    // row, for reference. Δ arbitrios is null while no row has one. porConfianza has every Confianza, over the rows that
+    // have one: an older corrida's are all zero. the run counts its rows here; the route counts them in sql (#306), in
+    // the same groups (panelDe)
     fun panel(
         corrida: RegistroCorrida,
         filas: List<FilaBrecha>
+    ): PanelBrecha = panelDe(corrida, grupos(filas))
+
+    // #306: the rows by categoría, confianza and sector as stored, counted and summed: PanelesDeBrecha's sql, in memory
+    fun grupos(filas: List<FilaBrecha>): List<GrupoBrecha> =
+        filas
+            .groupBy { Triple(it.categoria, it.confianza, it.sector) }
+            .map { (clave, suyas) ->
+                GrupoBrecha(
+                    categoria = clave.first,
+                    confianza = clave.second,
+                    sector = clave.third,
+                    predios = suyas.size,
+                    conDeclarado = suyas.count { it.autoavaluoDeclarado != null },
+                    autoavaluoDeclarado = sumaONull(suyas.map { it.autoavaluoDeclarado }),
+                    autoavaluoCatastro = sumaONull(suyas.map { it.autoavaluoCatastro }),
+                    deltaAutoavaluo = sumaONull(suyas.map { it.deltaAutoavaluo }),
+                    deltaImpuesto = sumaONull(suyas.map { it.deltaImpuesto }),
+                    deltaArbitrios = sumaONull(suyas.map { it.deltaArbitrios })
+                )
+            }
+
+    // the panel of the corrida's groups (grupos, or PanelesDeBrecha's sql): a sum of their sums is the sum of their rows,
+    // and a sum that is null in every group is null in all of them
+    fun panelDe(
+        corrida: RegistroCorrida,
+        grupos: List<GrupoBrecha>
     ): PanelBrecha {
-        fun de(c: Categoria) = filas.count { it.categoria == c.name }
-        val comparadas = filas.filter { it.categoria in COMPARADAS }
+        fun predios(suyos: List<GrupoBrecha>) = suyos.sumOf { it.predios }
+
+        fun de(c: Categoria) = predios(grupos.filter { it.categoria == c.name })
+        val comparados = grupos.filter { it.categoria in COMPARADAS }
         val porCategoria =
             Categoria.entries.map { c ->
-                val suyas = filas.filter { it.categoria == c.name }
+                val suyos = grupos.filter { it.categoria == c.name }
                 PorCategoria(
                     c.name,
-                    suyas.size,
-                    suma(suyas.map { it.deltaAutoavaluo }),
-                    suma(suyas.map { it.deltaImpuesto }),
-                    sumaONull(suyas.map { it.deltaArbitrios })
+                    predios(suyos),
+                    suma(suyos.map { it.deltaAutoavaluo }),
+                    suma(suyos.map { it.deltaImpuesto }),
+                    sumaONull(suyos.map { it.deltaArbitrios })
                 )
             }
         val porConfianza =
             Confianza.entries.associate { c ->
-                val suyas = filas.filter { it.confianza == c.name }
-                c.name to PorConfianza(suyas.size, suma(suyas.map { it.deltaImpuesto }), suma(suyas.map { it.deltaAutoavaluo }))
+                val suyos = grupos.filter { it.confianza == c.name }
+                c.name to PorConfianza(predios(suyos), suma(suyos.map { it.deltaImpuesto }), suma(suyos.map { it.deltaAutoavaluo }))
             }
         val porSector =
-            filas
+            grupos
                 .groupBy { it.sector?.trim()?.ifEmpty { null } }
                 .toSortedMap(nullsLast())
-                .map { (sector, suyas) ->
+                .map { (sector, suyos) ->
                     PorSector(
                         sector,
-                        suyas.size,
-                        suma(suyas.map { it.deltaImpuesto }),
-                        sumaONull(suyas.map { it.deltaArbitrios }),
-                        suyas.count { it.categoria == Categoria.OMISO.name },
-                        suyas.count { it.categoria == Categoria.SUBVALUADO.name }
+                        predios(suyos),
+                        suma(suyos.map { it.deltaImpuesto }),
+                        sumaONull(suyos.map { it.deltaArbitrios }),
+                        predios(suyos.filter { it.categoria == Categoria.OMISO.name }),
+                        predios(suyos.filter { it.categoria == Categoria.SUBVALUADO.name })
                     )
                 }
         return PanelBrecha(
             CorridaDelPanel(corrida.id!!, corrida.terminado, corrida.versionCatastro),
             Kpis(
-                prediosCatastro = filas.size - de(Categoria.SIN_CATASTRO),
+                prediosCatastro = predios(grupos) - de(Categoria.SIN_CATASTRO),
                 prediosPadron =
-                    filas.count {
-                        it.categoria != Categoria.OMISO.name && (it.categoria != Categoria.SIN_LEVANTAR.name || it.autoavaluoDeclarado != null)
+                    grupos.sumOf {
+                        when (it.categoria) {
+                            Categoria.OMISO.name -> 0
+                            Categoria.SIN_LEVANTAR.name -> it.conDeclarado
+                            else -> it.predios
+                        }
                     },
                 omisos = de(Categoria.OMISO),
                 subvaluados = de(Categoria.SUBVALUADO),
@@ -878,14 +911,14 @@ object Brecha {
                 sinCatastro = de(Categoria.SIN_CATASTRO),
                 sinValor = de(Categoria.SIN_VALOR),
                 sinLevantar = de(Categoria.SIN_LEVANTAR),
-                autoavaluoDeclarado = suma(comparadas.map { it.autoavaluoDeclarado }),
-                autoavaluoCatastro = suma(comparadas.map { it.autoavaluoCatastro }),
-                deltaAutoavaluo = suma(comparadas.map { it.deltaAutoavaluo }),
-                deltaImpuesto = suma(filas.map { it.deltaImpuesto }),
-                deltaArbitrios = sumaONull(filas.map { it.deltaArbitrios }),
-                deltaImpuestoOmisosEstimado = suma(filas.filter { it.categoria == Categoria.OMISO.name }.map { it.deltaImpuesto }),
-                autoavaluoDeclaradoTotal = suma(filas.map { it.autoavaluoDeclarado }),
-                autoavaluoCatastroTotal = suma(filas.map { it.autoavaluoCatastro })
+                autoavaluoDeclarado = suma(comparados.map { it.autoavaluoDeclarado }),
+                autoavaluoCatastro = suma(comparados.map { it.autoavaluoCatastro }),
+                deltaAutoavaluo = suma(comparados.map { it.deltaAutoavaluo }),
+                deltaImpuesto = suma(grupos.map { it.deltaImpuesto }),
+                deltaArbitrios = sumaONull(grupos.map { it.deltaArbitrios }),
+                deltaImpuestoOmisosEstimado = suma(grupos.filter { it.categoria == Categoria.OMISO.name }.map { it.deltaImpuesto }),
+                autoavaluoDeclaradoTotal = suma(grupos.map { it.autoavaluoDeclarado }),
+                autoavaluoCatastroTotal = suma(grupos.map { it.autoavaluoCatastro })
             ),
             porCategoria,
             porConfianza,

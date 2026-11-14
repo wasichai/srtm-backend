@@ -32,6 +32,9 @@ class BrechaApiTest : SrtmApiTest() {
     @Autowired
     private lateinit var reportes: ReportesService
 
+    @Autowired
+    private lateinit var paneles: PanelesDeBrecha
+
     // the organization of the catastro, with the model and the verified predial parameters: its admin's token
     private fun organizacion(): String = organizacionDelCatastro ?: crearOrganizacion(SLUG).also { organizacionDelCatastro = it }
 
@@ -536,6 +539,103 @@ class BrechaApiTest : SrtmApiTest() {
             Thread.sleep(100)
         }
         error("los reportes de la corrida $corrida no se precalentaron")
+    }
+
+    // #306: the panel is counted in sql and kept per organization, year and corrida. its corrida's end warms it; a new
+    // corrida of the year is answered at once and drops the one before it, in its own organization only; an older
+    // corrida (?corrida=) keeps answering, with its own entry. counted as the run counts its rows in memory: the panel
+    // says what the corrida stored. 2024 of both organizations
+    @Test
+    fun `the panel is warmed per organization, year and corrida, and a new corrida replaces it in its organization only`() {
+        val perene = organizacion()
+        val ica = organizacionIca()
+        val dePerene = organizacionDe(perene)
+        val deIca = organizacionDe(ica)
+        val sufijo = uniqueDocumento()
+        declarar(perene, contribuyente(perene), predio(perene, "PP-$sufijo"), "100000.00", anio = 2024)
+        declarar(ica, contribuyente(ica), predio(ica, "PI-$sufijo"), "100000.00", anio = 2024)
+        ITEMS.set(listOf(item("PP-$sufijo", "150000.00")))
+        ITEMS_ICA.set(listOf(item("PI-$sufijo", "80000.00")))
+        val primera = corrida(perene, 2024)
+        val laDeIca = corrida(ica, 2024)
+        assertEquals(TERMINADA, primera["estado"].asString(), primera.toString())
+        assertEquals(TERMINADA, laDeIca["estado"].asString(), laDeIca.toString())
+        esperarPanel(dePerene, 2024, primera["id"].asString())
+        esperarPanel(deIca, 2024, laDeIca["id"].asString())
+
+        val panelDeIca = panel(ica, 2024)
+        assertEquals(laDeIca["id"].asString(), panelDeIca["corrida"]["id"].asString())
+        comoLaCorrida(laDeIca, panelDeIca)
+        val panelPrimera = panel(perene, 2024)
+        assertEquals(primera["id"].asString(), panelPrimera["corrida"]["id"].asString())
+        comoLaCorrida(primera, panelPrimera)
+        // the same panel, from the cache
+        assertEquals(panelPrimera, panel(perene, 2024))
+
+        // a new corrida of perene's 2024, with one more item of catastro
+        ITEMS.set(listOf(item("PP-$sufijo", "150000.00"), item("NN-$sufijo", "40000.00")))
+        val segunda = corrida(perene, 2024)
+        assertEquals(TERMINADA, segunda["estado"].asString(), segunda.toString())
+        esperarPanel(dePerene, 2024, segunda["id"].asString())
+        assertFalse(paneles.precalentado(dePerene, 2024, primera["id"].asString()))
+        val panelSegunda = panel(perene, 2024)
+        assertEquals(segunda["id"].asString(), panelSegunda["corrida"]["id"].asString())
+        comoLaCorrida(segunda, panelSegunda)
+        assertEquals(panelPrimera["kpis"]["prediosCatastro"].asInt() + 1, panelSegunda["kpis"]["prediosCatastro"].asInt())
+        assertEquals(panelPrimera["kpis"]["omisos"].asInt() + 1, panelSegunda["kpis"]["omisos"].asInt())
+
+        // the other organization's is untouched
+        assertTrue(paneles.precalentado(deIca, 2024, laDeIca["id"].asString()))
+        assertEquals(panelDeIca, panel(ica, 2024))
+
+        // the first one by ?corrida=: its own panel, kept again apart from the second's
+        assertEquals(panelPrimera, panel(perene, 2024, primera["id"].asString()))
+        assertTrue(paneles.precalentado(dePerene, 2024, primera["id"].asString()))
+        assertTrue(paneles.precalentado(dePerene, 2024, segunda["id"].asString()))
+        assertEquals(panelSegunda, panel(perene, 2024))
+        // another organization's corrida is none of the caller's
+        send("GET", "/api/srtm/brecha/2024/panel?corrida=${laDeIca["id"].asString()}", null, HttpStatus.NOT_FOUND, perene)
+        // the panel counts brecha_predio: who may read the corridas only gets none
+        val lector = funcionario(listOf(permiso(BRECHA_CORRIDA, "READ")))
+        send("GET", "/api/srtm/brecha/2024/panel", null, HttpStatus.FORBIDDEN, lector)
+    }
+
+    private fun panel(
+        org: String,
+        anio: Int,
+        corrida: String? = null
+    ): JsonNode = tree(send("GET", "/api/srtm/brecha/$anio/panel" + (corrida?.let { "?corrida=$it" } ?: ""), null, HttpStatus.OK, org))
+
+    // the panel counted in sql says what the run counted of its rows in memory and stored in its corrida
+    private fun comoLaCorrida(
+        corrida: JsonNode,
+        panel: JsonNode
+    ) {
+        val k = panel["kpis"]
+        val c = panel["porConfianza"]
+        assertEquals(dec(corrida["declarado"]), dec(k["autoavaluoDeclarado"]))
+        assertEquals(dec(corrida["catastro"]), dec(k["autoavaluoCatastro"]))
+        assertEquals(dec(corrida["deltaImpuesto"]), dec(k["deltaImpuesto"]))
+        assertEquals(corrida["deltaArbitrios"].isNull, k["deltaArbitrios"].isNull)
+        assertEquals(corrida["totalPredios"].asInt(), panel["porCategoria"].sumOf { it["predios"].asInt() })
+        assertEquals(corrida["prediosConfiables"].asInt(), c["CONFIABLE"]["predios"].asInt())
+        assertEquals(corrida["prediosDudosos"].asInt(), c["DUDOSO"]["predios"].asInt())
+        assertEquals(corrida["prediosSinLevantar"].asInt(), c["SIN_LEVANTAR"]["predios"].asInt())
+        assertEquals(dec(corrida["deltaImpuestoConfiable"]), dec(c["CONFIABLE"]["deltaImpuesto"]))
+        assertEquals(dec(corrida["deltaImpuestoDudoso"]), dec(c["DUDOSO"]["deltaImpuesto"]))
+        assertEquals(dec(corrida["deltaImpuestoSinLevantar"]), dec(c["SIN_LEVANTAR"]["deltaImpuesto"]))
+    }
+
+    private fun esperarPanel(
+        organizacion: java.util.UUID,
+        anio: Int,
+        corrida: String
+    ) {
+        repeat(100) {
+            if (paneles.precalentado(organizacion, anio, corrida)) return
+            Thread.sleep(100)
+        }
+        error("el panel de la corrida $corrida no se precalentó")
     }
 
     @Test

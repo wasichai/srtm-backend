@@ -356,6 +356,23 @@ data class PanelBrecha(
     val porSector: List<PorSector>
 )
 
+// #306: the rows of a corrida that share categoría, confianza and sector (as stored, not trimmed), counted and summed:
+// what the panel is made of (Brecha.panelDe), counted in memory (Brecha.grupos) or in sql (PanelesDeBrecha). a sum is
+// null when no row of the group has that value
+data class GrupoBrecha(
+    val categoria: String?,
+    val confianza: String?,
+    val sector: String?,
+    val predios: Int,
+    // its rows with an autoavalúo declarado
+    val conDeclarado: Int,
+    val autoavaluoDeclarado: BigDecimal?,
+    val autoavaluoCatastro: BigDecimal?,
+    val deltaAutoavaluo: BigDecimal?,
+    val deltaImpuesto: BigDecimal?,
+    val deltaArbitrios: BigDecimal?
+)
+
 data class CorridaDelPanel(
     val id: String,
     val terminado: String?,

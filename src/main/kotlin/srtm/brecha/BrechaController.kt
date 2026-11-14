@@ -14,6 +14,7 @@ import srtm.Permisos
 import srtm.pagina
 import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
+import wasichai.core.identity.CurrentUser
 import java.time.LocalDate
 import java.util.UUID
 
@@ -24,7 +25,9 @@ import java.util.UUID
 @RequestMapping("/api/srtm/brecha")
 class BrechaController(
     private val brechas: BrechaService,
-    private val permisos: Permisos
+    private val paneles: PanelesDeBrecha,
+    private val permisos: Permisos,
+    private val currentUser: CurrentUser
 ) {
     @PostMapping("/corridas")
     @ResponseStatus(HttpStatus.ACCEPTED)
@@ -54,8 +57,10 @@ class BrechaController(
         @RequestParam(required = false) corrida: UUID?
     ): PanelBrecha {
         leer()
+        // #306: its rows are counted in sql, not read as the caller: who may not read them gets no panel
+        permisos.exigirLeer(BRECHA_PREDIO, "consultar el panel de la brecha")
         val r = brechas.corridaDelAnio(anio, corrida)
-        return Brecha.panel(r, brechas.filas(r.id!!))
+        return paneles.panel(currentUser.require().organizationId, anio, r)
     }
 
     @GetMapping("/{anio}/predios")

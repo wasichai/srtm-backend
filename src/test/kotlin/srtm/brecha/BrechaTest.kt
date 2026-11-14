@@ -1049,6 +1049,59 @@ class BrechaTest {
         assertEquals(1, k.coinciden)
     }
 
+    // #306: the route counts the rows in sql, by categoría, confianza and sector as stored: a panel of groups however
+    // split (a row each, sectors spelled with spaces) is the panel of their rows
+    @Test
+    fun `the panel of the rows' groups is the panel of the rows, however they are grouped`() {
+        val corrida = RegistroCorrida(id = "c", anio = anio, terminado = "2026-10-19T10:00:00Z", versionCatastro = "valuacion-v1")
+        val filas =
+            listOf(
+                FilaBrecha(
+                    categoria = "SUBVALUADO",
+                    confianza = "CONFIABLE",
+                    sector = "01",
+                    autoavaluoDeclarado = BigDecimal("100.00"),
+                    autoavaluoCatastro = BigDecimal("200.00"),
+                    deltaAutoavaluo = BigDecimal("100.00"),
+                    deltaImpuesto = BigDecimal("5.00"),
+                    deltaArbitrios = BigDecimal("2.00")
+                ),
+                FilaBrecha(
+                    categoria = "SUBVALUADO",
+                    confianza = "CONFIABLE",
+                    sector = " 01 ",
+                    autoavaluoDeclarado = BigDecimal("10.00"),
+                    autoavaluoCatastro = BigDecimal("30.00"),
+                    deltaAutoavaluo = BigDecimal("20.00"),
+                    deltaImpuesto = BigDecimal("1.50")
+                ),
+                FilaBrecha(
+                    categoria = "OMISO",
+                    confianza = "DUDOSO",
+                    sector = "01",
+                    autoavaluoCatastro = BigDecimal("50.00"),
+                    deltaImpuesto = BigDecimal("33.00")
+                ),
+                FilaBrecha(categoria = "SIN_LEVANTAR", confianza = "SIN_LEVANTAR", sector = "", autoavaluoDeclarado = BigDecimal("20.00")),
+                FilaBrecha(categoria = "SIN_LEVANTAR", confianza = "SIN_LEVANTAR", sector = null),
+                FilaBrecha(categoria = "SIN_CATASTRO", sector = "02", autoavaluoDeclarado = BigDecimal("70.00")),
+                FilaBrecha(categoria = "COINCIDE", sector = "02", autoavaluoDeclarado = BigDecimal("10.00"), autoavaluoCatastro = BigDecimal("10.00"))
+            )
+        val p = Brecha.panel(corrida, filas)
+        val grupos = Brecha.grupos(filas)
+        // the two SIN_LEVANTAR rows apart ("" and null), the two SUBVALUADO too ("01" and " 01 ")
+        assertEquals(filas.size, grupos.size)
+        assertEquals(p, Brecha.panelDe(corrida, grupos.shuffled(java.util.Random(306))))
+        assertEquals(p, Brecha.panelDe(corrida, Brecha.grupos(filas.map { it.copy(sector = it.sector?.trim()) })))
+        assertEquals(listOf("01", "02", null), p.porSector.map { it.sector })
+        assertEquals(PorSector("01", 3, BigDecimal("39.50"), BigDecimal("2.00"), 1, 2), p.porSector.first())
+        assertEquals(5, p.kpis.prediosPadron)
+        // a group without a value has no sum: Δ arbitrios stays null while no row has it
+        assertNull(Brecha.grupos(filas.drop(1)).firstNotNullOfOrNull { it.deltaArbitrios })
+        assertNull(Brecha.panelDe(corrida, Brecha.grupos(filas.drop(1))).kpis.deltaArbitrios)
+        assertEquals(Brecha.panel(corrida, emptyList()), Brecha.panelDe(corrida, emptyList()))
+    }
+
     @Test
     fun `the lotes are a FeatureCollection of the rows with a polygon`() {
         val cuadrado =

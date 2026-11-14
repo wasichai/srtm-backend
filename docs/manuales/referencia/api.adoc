@@ -767,8 +767,9 @@ FALLIDA. Terminada, trae los predios y el Δ impuesto por confianza (`prediosCon
 
 |`GET /{anio}/panel?corrida`
 |KPIs, por categoría, por confianza (`porConfianza`: CONFIABLE, DUDOSO y SIN_LEVANTAR, cada una con `predios`,
-`deltaImpuesto` y `deltaAutoavaluo`) y por sector, de la última corrida TERMINADA del año (o de `corrida`).
-|200; 404 si no hay.
+`deltaImpuesto` y `deltaAutoavaluo`) y por sector, de la última corrida TERMINADA del año (o de `corrida`). Pide
+además lectura sobre `brecha_predio`. Ver _Panel: cálculo y caché_.
+|200; 403; 404 si no hay.
 
 |`GET /{anio}/predios?categoria&sector&confianza&page&size&corrida`
 |Página de filas (25 por omisión), con su `confianza` y `confianzaMotivo`, y sus áreas (#247):
@@ -792,6 +793,17 @@ año (#203). Lee `cambio_catastro` directo de su tabla, de la organización del 
 catastro), `page` o `size` inválidos, o falta la UIT del año (`faltan`).
 |===
 
+*Panel: cálculo y caché (#306).* El panel no lee las filas de la corrida una por una: las cuenta y suma en SQL sobre la
+tabla de `brecha_predio` de la organización, agrupadas por categoría, confianza y sector (unos cientos de grupos), y
+arma el panel con las mismas reglas con que la corrida cuenta sus filas al terminar. Antes leía todas sus filas en cada
+consulta: unos 75 s con unos 80 000 predios. El panel de una corrida TERMINADA no cambia: se guarda en memoria por
+organización, año y corrida, sin vencimiento por tiempo, para los `srtm.brecha.paneles` (32) más usados (`0` apaga la
+caché). Cuando una corrida queda TERMINADA, la instancia que la corrió calcula su panel en segundo plano, junto con el
+precalentado de los reportes, y saca de la caché el de la corrida anterior de la misma organización y año. La última
+corrida TERMINADA del año se busca en cada consulta, así que una corrida nueva se responde de inmediato; una anterior
+pedida con `corrida` sigue respondiendo, con su propia entrada. Una corrida que no está TERMINADA se cuenta en cada
+consulta. La caché es de cada instancia, y nunca se comparte entre organizaciones.
+
 [[ref-api-reportes]]
 === Reportes de brechas
 
@@ -803,8 +815,8 @@ catastro (`decision_brecha`): solo muestra su estado.
 pide antes lectura sobre `brecha_corrida` y sobre `brecha_predio`. Una corrida de otro año o inexistente es 404; una que
 no está TERMINADA, 409.
 
-*Cálculo y caché.* Los agregados y las listas se calculan en memoria desde las filas de la corrida, como el panel de la
-brecha. Las filas de una corrida TERMINADA no cambian: se guardan en memoria sin vencimiento por tiempo, para las
+*Cálculo y caché.* Los agregados y las listas se calculan en memoria desde las filas de la corrida, como el panel del
+visor. Las filas de una corrida TERMINADA no cambian: se guardan en memoria sin vencimiento por tiempo, para las
 `srtm.reportes.corridas` (8) corridas más usadas (la menos usada sale primero; `0` apaga la caché). Los titulares del
 padrón de sus predios y el catálogo de usos sí cambian: se guardan `srtm.reportes.cache` (10 minutos), y un cambio del
 padrón (una DJ nueva o rectificada) aparece en el contribuyente de las filas al vencer esa caché. Los titulares se
