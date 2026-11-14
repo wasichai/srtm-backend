@@ -1531,6 +1531,61 @@ Con el extracto de 2026-10 (7 829 filas del padrón y 3 762 de construcciones), 
 unidades urbanas, 1 458 contribuyentes, 7 521 predios, 7 829 declaraciones y 3 758 niveles, con 4 filas rechazadas. El
 extracto es parte de un padrón de unas 32 000 filas: hasta tener el completo, la brecha de Ica infla los OMISOS.
 
+### Convertir el padrón SAT depurado
+
+El padrón completo llegó en 2026-11 en otro formato (#289): `BASE DE RENTAS DEPURADA_<fecha>.xlsx` (hoja `Hoja 1`,
+una fila por predio y contribuyente) y las construcciones en `REPORTE_SUBVALUADOS.xlsx` (hoja `construccion_rentas`,
+una fila por sección de nivel, unidas al padrón solo por `cod_predio`). `convertir_padron_sat_ica.py` (solo stdlib)
+arma con ellos el libro de dos hojas que lee `import_padron_ica.py`, sin cambiar el importador:
+
+```bash
+cd model
+python3 -I convertir_padron_sat_ica.py --padron "/ruta/BASE DE RENTAS DEPURADA_13_11_2026.xlsx" \
+  --construcciones /ruta/REPORTE_SUBVALUADOS.xlsx --salida ~/ica/padron-2026-11
+python3 -I import_padron_ica.py --excel ~/ica/padron-2026-11/PADRON_CONSTRUCCION.xlsx --dry-run \
+  --report ~/ica/padron-2026-11/padron_ica.csv
+```
+
+- **Salida:** `PADRON_CONSTRUCCION.xlsx` (modo 600) en `--salida`, que tiene que estar fuera del repositorio porque
+  lleva datos personales (Ley 29733). Por stdout salen solo conteos `<clave>: <n>`, nunca un valor.
+- **Columnas:** cada columna que lee el importador sale de su fuente (`COD_PREDIO`, `COD_CONTRIB`,
+  `Condición_predio`, `TIP_DOC`, `Código_uso`, `area_construida_nivel_rentas`…). `--map-padron campo=COLUMNA` y
+  `--map-construccion campo=COLUMNA` cambian la fuente (el campo es la columna del libro de salida), y `campo=` la
+  deja sin leer. `--hoja-padron` y `--hoja-construcciones` cambian las hojas.
+- **Vacíos:** `'-` y las celdas en blanco van vacías.
+- **Códigos:** llegan como los traduce `data/ica/codigos.json`. El tipo de vía abreviado (`CA.`, `AV.`, `JR.`,
+  `PJE.`, `PRLG.`) pasa a su código; el material y el estado en texto (`LADRILLO`, `BUENO`), al suyo. La condición,
+  el tipo de documento y el uso ya vienen como código y pasan tal cual; los que `codigos.json` no tiene se cuentan
+  (`<campo>_sin_mapeo`) y el importador los vuelve a reportar.
+- **Tipo de unidad urbana:** pasa a la opción del modelo, entera o por su abreviatura de
+  `data/tipos_unidad_urbana.csv` (`URB.`, `AA.HH.`…). `--tipo-unidad TEXTO=TIPO` lee una más, por ejemplo
+  `--tipo-unidad ST.=SECTOR`.
+- **Nada se adivina:** un valor sin código (vía `AL.` o `ST.`, una unidad urbana `ST.`, un material o estado
+  desconocido, una letra fuera de A–I, un nivel sin dígitos, un año que no es número) va vacío y se cuenta.
+- **Catálogos:** cada vía y unidad urbana del catálogo junta un código con su propio nombre.
+  - La unidad urbana es la de la armonización: `CODHHUU_ARMO`, con su tipo y su nombre, que tiene un solo nombre por
+    código. `Codigo_Habilitación_Urbana` del SAT tiene varios nombres de la armonización por código.
+  - El código de vía es el del SAT (`Codigo_de_via_MUNICIPAL`, el que lee el arancel por vía, #226). El padrón no trae
+    su nombre, y los de la armonización no casan con él, así que `nombre_de_la_via` no se lee: no se crean vías del
+    catálogo y la dirección del predio nombra la vía. `--map-padron nombre_de_la_via=NOMBRE_VIA_ARMO` lo lee, con
+    una vía del catálogo por cada par de código y nombre.
+- **Sin fuente:** el tipo de predio (urbano o rústico) no viene, así que va vacío y se cuenta (`tipo_predio_vacio`).
+  Sin él, la regla para varios códigos de vía no marca ningún predio. Las construcciones no traen clasificación,
+  valor unitario, incremento, depreciación ni valor total: van vacías, y `niveles_vs_padron` reporta el valor de casi
+  todo par con niveles, porque estos suman 0. Lo que cuenta de esa categoría es el área.
+- **Varios contribuyentes:** un nivel va a la DJ de cada contribuyente de su predio, en el orden del padrón, como los
+  repite `PADRON_CONSTRUCCION.xlsx` en la DJ de cada condómino (`niveles_copiados`).
+  - Un código que el importador parte en predios distintos (#207) da los niveles a cada uno:
+    `niveles_en_codigos_compartidos` los cuenta.
+  - Un nivel de un predio que el padrón no tiene se descarta (`construcciones_sin_predio`).
+- **Salida del comando:** `0` ok; `2` falta una hoja o una columna (la nombra), o un flag está mal, y no se escribe
+  nada.
+
+Con la entrega del 2026-11-13 da 85 663 filas del padrón (80 689 predios, 59 655 contribuyentes) y 41 766 niveles
+(los 40 284 de construcciones, 1 482 copiados a otros titulares). Quedan sin tipo 26 664 unidades urbanas `ST.` y 925
+vías `AL.` o `ST.`, y se vacían 16 letras. El `--dry-run` del importador sobre esa salida da 81 659 predios (900
+códigos compartidos), 85 663 declaraciones y 41 766 niveles, con 0 filas rechazadas.
+
 ### Recalcular con las obras del padrón
 
 Las DJ importadas de Ica no tienen obras complementarias propias: su `valor_otras_instalaciones` es un monto fijo del
