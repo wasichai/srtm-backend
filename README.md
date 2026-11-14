@@ -937,6 +937,40 @@ pisos, puertasVentanas, revestimientos, banos, instalaciones, clasificacion}`, y
 entonces queda vacío. El corte analítico exporta todos estos campos, que no llevan datos personales, y la vista
 `v_diferencias_por_categoria` cuenta por categoría cuántos predios difieren en cada uno (0,5 m² y S/ 1,00 de tolerancia).
 
+**La brecha de un predio** (#303, `GET /{anio}/predios/{predio}`). La respuesta solo lista en `diferencias` los campos
+que difieren, cada uno `{grupo, campo, rentas, catastro, delta, unidad}` (`delta` = catastro − rentas). Los campos
+comparados que no difieren van en `iguales`. Un campo vacío en un lado no está disponible: no es una diferencia ni
+un igual. El orden es fijo:
+
+| Grupo | Campos | Unidad |
+|---|---|---|
+| `AREAS` | `areaTerreno`, `areaConstruida` | `M2` |
+| `NIVELES` | `pisosConConstruccion` (pisos con área mayor que 0 en cada lado) | `NUMERO` |
+| `VALORES` | `terreno`, `construccion`, `obras`, `arancel`, `autoavaluo`, `impuesto`, `deltaArbitrios` (sin lados, solo su Δ) | `SOLES` |
+| `USO` | `usoClase` y `usoSubclase` por `uso_predio` si los dos códigos están en el catálogo, si no `uso`; `frente` | `TEXTO`, `M` |
+
+Un piso `PAR` con un nivel en cada lado compara además, uno por uno, `material`, `estadoConservacion`,
+`anioConstruccion`, `murosColumnas`, `techos` y `clasificacion`, y las cinco partidas de acabados juntas en
+`acabados` (por ejemplo `I·I·I·I·I` contra `F·F·D·F·F`). Hasta catastro-backend#84 no hay detalle del catastro, así
+que esa lista queda vacía.
+
+Tolerancias (`ComparacionDelPredio`, #305 las hará parámetro): un área o un frente difiere si \|Δ\| ≥ 0,5 m; un
+importe, si \|Δ\| ≥ S/ 1,00; un número, si es distinto; un texto, si es distinto sin contar mayúsculas ni espacios.
+
+| Aviso | Cuándo |
+|---|---|
+| `CATASTRO_SIN_CONSTRUCCION` | Rentas declara área construida y el catastro no tiene. |
+| `RENTAS_SIN_CONSTRUCCION` | Al revés. |
+| `SUPERA_5_UIT` | \|Δ autoavalúo\| supera 5 UIT del 1 de enero del año, como en `/cambios`; sin UIT no va. |
+| `OBRAS_DE_LA_DJ` | El lado del catastro sumó las obras de la DJ (`obrasDj` > 0, #208). |
+| `SIN_DELTA_ARBITRIOS` | Un predio comparado sin Δ arbitrios. |
+| `DJ_POSTERIOR_A_LA_CORRIDA` | Una DJ vigente del predio, o uno de sus niveles u obras, se guardó después de `terminado`. |
+| `CODIGO_COMPARTIDO` | Fila SIN_CATASTRO de un predio derivado (`codigo_origen` ≠ `codigo`) cuyo hermano cruzó en la corrida (#207); no lo nombra. |
+| `COMPONENTES_NO_SUMAN` | Terreno + construcción + obras declarados no suman el autoavalúo declarado (#304). |
+
+La respuesta no lleva titulares, nombres ni documentos. Lee la fila y sus niveles, el catálogo de usos, la UIT y las
+fechas de guardado de las DJ vigentes del predio, de sus niveles y de sus obras.
+
 **Impuesto.** Por cada contribuyente con DJ vigente del año:
 - el valor catastral de cada predio cruzado y valorizado se reparte entre sus secuencias de uso según el autoavalúo
   declarado de cada una; si todas declaran 0, según su área construida; si tampoco, en partes iguales (D12), al
@@ -1032,6 +1066,7 @@ lectura ve el panel con 403. Lanzar una corrida queda para quien tenga creación
 | GET | `/api/srtm/brecha/corridas/{id}` | Una corrida, con su avance (`totalPredios`, `procesados`) y, terminada, sus conteos por confianza (`prediosConfiables`, `prediosDudosos`, `prediosSinLevantar`, `deltaImpuestoConfiable`, `deltaImpuestoDudoso`, `deltaImpuestoSinLevantar`; null en una corrida anterior a #204). |
 | GET | `/api/srtm/brecha/{anio}/panel?corrida` | KPIs, por categoría, por confianza (`porConfianza: {CONFIABLE, DUDOSO, SIN_LEVANTAR}`, cada una `{predios, deltaImpuesto, deltaAutoavaluo}`) y por sector de la última corrida TERMINADA del año (o de `corrida`); 404 si no hay. Pide lectura sobre `brecha_corrida` y `brecha_predio`. El de una corrida TERMINADA se guarda en memoria por organización y corrida, sin vencimiento, porque sus filas ya no cambian (#306). Se arma con las mismas filas en caché que reportes y el visor, y se precalienta al terminar la corrida (#255): la primera visita ya es rápida. Una corrida nueva del año es otra entrada y la anterior se suelta; `?corrida=` de una anterior arma la suya. Una corrida que no está TERMINADA se cuenta en cada pedido y no se guarda. |
 | GET | `/api/srtm/brecha/{anio}/predios?categoria&sector&confianza&page&size&corrida` | Página de filas por su `orden` (código del predio, luego código catastral), con sus áreas y el resumen de sus niveles (#247: `areaTerrenoDeclarada`, `areaTerrenoCatastro`, `areaConstruidaDeclarada`, `areaConstruidaCatastro`, `nivelesComparados`, `nivelesCatastroMayor`, `deltaAreaNiveles`); 422 si `categoria` no es una de las siete o `confianza` no es una de las tres. |
+| GET | `/api/srtm/brecha/{anio}/predios/{predio}?corrida` | La brecha de un predio (#303), por el id de su registro `predio`, de la última corrida TERMINADA del año (o de `corrida`), tal como la midió la corrida: nunca lee catastro en vivo. Responde `corrida` `{id, anio, terminado, versionCatastro, origen}`, `fila` (la de `/predios`), `niveles` (por piso, los sin número al final: `{piso, areaRentas, areaCatastro, estado, delta, nivelesRentas, detalleRentas, detalleCatastro, diferencias}`; `delta` null si falta un área), `diferencias`, `iguales`, `avisos` `[{codigo, texto}]` y `tolerancias`. Ver «La brecha de un predio». 404 sin corrida TERMINADA del año, si `corrida` no es del año, o si el predio no tiene fila en ella (también el de otra organización). |
 | GET | `/api/srtm/brecha/{anio}/lotes?corrida` | GeoJSON `FeatureCollection` (EPSG:4326) con `{categoria, codigo, deltaImpuesto}`. |
 | GET | `/api/srtm/brecha/{anio}/cambios?corrida&desde&marca&objeto&page&size` | Predios con cambios en catastro desde `desde` (AAAA-MM-DD, por omisión el 1 de enero del año), con el Δ autoavalúo de la última corrida TERMINADA (o de `corrida`) y `marca = SUPERA_5_UIT` cuando \|Δ\| pasa de 5 UIT del 1 de enero del año; marcados primero, luego \|Δ\| de mayor a menor y por código municipal; 404 sin corrida TERMINADA del año; 422 si `marca`, `objeto`, `desde`, `page` o `size` son inválidos, o falta la UIT del año (`faltan`). |
 
