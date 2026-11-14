@@ -10,7 +10,7 @@ awssdk = "2.57.5"
 # the maintained fork of openhtmltopdf, on pdfbox 3
 openhtmltopdf = "1.1.103"
 pdfbox = "3.0.8"
-thymeleaf = "3.1.5.RELEASE"
+thymeleaf = "3.1.6.RELEASE"
 # srtm.reportes: the xlsx export (Apache 2.0; its only dependency, opczip, Apache 2.0 too); its reader parses it in the tests
 fastexcel = "0.20.2"
 
