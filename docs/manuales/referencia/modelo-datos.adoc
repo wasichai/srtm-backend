@@ -409,6 +409,14 @@ Cambio del catastro. Un cambio leído de `GET /api/catastro/cambios`, para dispa
 |6 (4)
 a|Sin campos únicos ni relaciones. +
 `appendOnly`; índices (en), (codigo_municipal)
+a|`observacion_importacion` +
+Observación de importación. Lo que un registro importado tuvo al importarse: un valor que el convertidor o el
+importador del padrón vació, leyó por supuesto o marcó (`objeto`, `codigo`, `regla`, `detalle`, y la `hoja` y la
+`fila` del archivo original). Solo códigos y valores de catálogo, nunca un nombre ni un documento (#297).
+|8 (4)
+a|Único: `clave` +
+`predio` → `predio` (opcional) +
+índices (carga), (predio)
 |===
 
 [[ref-modelo-relaciones]]
@@ -604,6 +612,10 @@ a|`brecha_nivel.brecha_predio` +
 → `brecha_predio`
 |sí
 |`brecha_nivel_brecha_predio`
+a|`observacion_importacion.predio` +
+→ `predio`
+|no
+|`observacion_importacion_predio`
 |===
 
 [[ref-modelo-unicidad]]
@@ -648,6 +660,9 @@ se devenga una vez.
 
 |`zona_arbitrio_ubicacion.clave`
 |`servicio\|tipo_via\|via\|manzana\|numero_inicial\|numero_final\|paridad\|vigencia_desde`.
+
+|`observacion_importacion.clave`
+|`carga\|objeto\|codigo\|regla\|hoja\|fila`: una segunda corrida de la misma carga no crea nada.
 |===
 
 Un valor único repetido responde *409* (`srtm.Duplicados`, en castellano y sin `errors[].field`), nunca 500.
@@ -669,8 +684,9 @@ Un valor único repetido responde *409* (`srtm.Duplicados`, en castellano y sin 
 
 `cuota_arbitrio` declara `(anio, predio)` y `(anio, contribuyente)` en `indexes`. Core los crea en la tabla de cada
 organización, también en una que se cree después. Un año trae de 540 000 a 900 000 cuotas; medido en el CI sobre
-505 000 filas, listar un predio pasó de 62 ms a 3,3 ms. Ningún otro objeto declara índices: Core indexa
-`organization_id`, el estado y los campos únicos.
+505 000 filas, listar un predio pasó de 62 ms a 3,3 ms. `observacion_importacion` declara `(carga)` y `(predio)`: el
+importador lee las de una carga y el portal las de un predio (#297). Los índices de los demás objetos están en su fila
+de la tabla de objetos; sin ellos, Core indexa `organization_id`, el estado y los campos únicos.
 
 [[ref-modelo-geometrias]]
 === Geometrías
@@ -761,6 +777,19 @@ por ENSAMBLANDO).
 
 |`tipo_unidad_urbana`
 |Los 43 tipos del dominio `TIPO_UU` del catastro fiscal (`model/data/tipos_unidad_urbana.csv`).
+
+|`objeto_importado`
+|predio, unidad_urbana, via, contribuyente, declaracion_predial, nivel_construccion: el objeto de una observación de
+importación.
+
+|`regla_observacion_importacion`
+|Las 35 reglas de una observación de importación, con su etiqueta en castellano en
+`model/data/reglas_observacion_importacion.csv` (la que muestra el portal). Las del convertidor: TIPO_UU_ST_COMO_SECTOR,
+TIPO_UU_NO_LEIDO, TIPO_VIA_NO_LEIDO, LETRA_FUERA_DE_RANGO, MATERIAL_NO_LEIDO, ESTADO_NO_LEIDO, NIVEL_NO_LEIDO,
+ANIO_NO_LEIDO, CONDICION_SIN_MAPEO, DOCUMENTO_SIN_MAPEO, USO_SIN_MAPEO, NIVEL_COPIADO_A_COTITULAR, NIVEL_SIN_PREDIO y
+CODIGO_COMPARTIDO_DIVIDIDO. Las demás son una por categoría del reporte del importador (CONDOMINIO_SIN_PORCENTAJE,
+TITULAR_EN_CONFLICTO, NIVELES_NO_CUADRAN, REGISTRO_RECHAZADO…); OTRA, la de una categoría o regla que no tiene la
+suya.
 |===
 
 `apply.py` sincroniza las opciones: agrega las que faltan y quita las que `model.json` ya no lista si ningún registro

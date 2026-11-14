@@ -372,7 +372,7 @@ notificación, panel.
 
 |`{p-consulta}`
 |Solo lectura del modelo entero, la brecha incluida.
-|Nada: `READ` sobre los 48 objetos.
+|Nada: `READ` sobre los 49 objetos.
 
 |`{p-normativa}`
 |Normativa: registrar, corregir, verificar, anular e importar los parámetros tributarios y los aranceles
@@ -387,6 +387,11 @@ cada rol. Solo un rol con los permisos de la tabla de arriba puede lanzar una co
 configuración de la ordenanza de arbitrios (ordenanza, servicios, inafectaciones, zonas) se carga con los
 importadores: ningún perfil sugerido la escribe. Los parámetros tributarios y los aranceles los escribe el perfil
 `{p-normativa}`, con doble firma, o los importadores con el CSV ya verificado. Los demás perfiles leen `arancel`.
+
+Los cinco perfiles que leen `predio` leen también `observacion_importacion`: lo que cada registro del padrón tuvo al
+importarse (#297). Ninguno la escribe: solo la crea `import_padron_ica.py --carga` con la cuenta de administración de
+la organización, y un ADMIN puede corregirla o borrarla como cualquier registro. El rol `ANALITICA` (`model/roles.json`)
+no la lee: el corte analítico no la extrae.
 
 La caja de la municipalidad entra con su propia cuenta de servicio, de rol `CAJA`, que solo recibe los avisos de
 pago y consulta la vigencia de una orden. No es un perfil para personas: se crea al dar de alta la caja

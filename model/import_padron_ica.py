@@ -15,6 +15,11 @@ fit is rejected to the report, with what hangs from it, and the rest is loaded. 
 what needs a look: condominios without a %, shared codes, titulares in conflict, unmapped codes, niveles that do not add
 up to the padrón.
 
+--carga CODIGO (#297) also creates, after the rest, one observacion_importacion per observation of the load: the
+converter's `observaciones` sheet when the workbook has it and the report's rows (each categoria its regla, an unknown
+one OTRA), each linked to its predio (a split code's <codigo>-<n> too), idempotent by clave. Without --carga nothing of
+it is read nor sent; --dry-run --carga counts them by regla.
+
 Stdlib only. See README.md («Cargar la Municipalidad de Ica»).
 
 Run: python3 -I import_padron_ica.py --excel PADRON_CONSTRUCCION.xlsx --dry-run
@@ -408,6 +413,8 @@ class Dataset:
     compartidos: list = field(default_factory=list)  # the SAT codes of distinct predios, as codigos_derivados lists them
     srtm: dict = field(default_factory=dict)  # (SAT code, contribuyente) -> srtm code; None: codigo_derivado_repetido
     titulares: dict = field(default_factory=dict)  # srtm code -> contribuyente -> its first row, in the sheet's order
+    sin_mapeo: list = field(default_factory=list)  # every (hoja, fila, columna, valor) of a code codigos.json lacks
+    reglas: list = field(default_factory=list)  # the model's regla_observacion_importacion options
     errores: list = field(default_factory=list)  # the model lacks a field: nothing can be loaded
 
 
@@ -430,7 +437,7 @@ class _Builder:
         self.model = model
         self.codigos = codigos
         self.usos = usos
-        self.data = Dataset()
+        self.data = Dataset(reglas=list(model["enums"].get("regla_observacion_importacion", [])))
         self.sin_mapeo = Counter()  # (columna, valor) -> rows
         self.primera = {}  # (columna, valor) -> (hoja, fila)
         self.campos = defaultdict(set)  # object -> every attribute it was given
@@ -444,6 +451,7 @@ class _Builder:
     def unmapped(self, hoja, row, columna):
         key = (columna, codigo(row.get(columna)))
         self.sin_mapeo[key] += 1
+        self.data.sin_mapeo.append((hoja, row["_fila"], *key))
         self.primera.setdefault(key, (hoja, row["_fila"]))
 
     def mapped(self, hoja, row, tabla):
@@ -812,6 +820,130 @@ def build_dataset(padron, construcciones, anio, model, codigos, usos, depreciaci
     return builder.finish()
 
 
+# ---------------------------------------------------------------------------
+# observaciones de importación (pure, #297)
+# ---------------------------------------------------------------------------
+
+CARGA = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
+OBJETO_OBSERVACION = "observacion_importacion"
+OBJETOS_IMPORTADOS = ("predio", "unidad_urbana", "via", "contribuyente", "declaracion_predial", "nivel_construccion")
+# a category of the report -> its regla of observacion_importacion; one not listed is OTRA
+REGLA_DE_CATEGORIA = {
+    "rechazada": "REGISTRO_RECHAZADO", "condominio_100_n": "CONDOMINIO_SIN_PORCENTAJE",
+    "codigo_compartido": "CODIGO_COMPARTIDO_DIVIDIDO", "codigo_derivado_repetido": "CODIGO_DERIVADO_REPETIDO",
+    "codigo_compartido_en_core": "CODIGO_COMPARTIDO_EN_CORE", "titulares_en_conflicto": "TITULAR_EN_CONFLICTO",
+    "condomino_solo": "CONDOMINO_SOLO", "codigo_sin_mapeo": "CODIGO_SIN_MAPEO",
+    "documento_rellenado": "DOCUMENTO_RELLENADO", "documento_sin_numero": "DOCUMENTO_SIN_NUMERO",
+    "documento_repetido": "DOCUMENTO_REPETIDO", "documento_en_core": "DOCUMENTO_EN_CORE",
+    "fecha_relleno": "FECHA_RELLENO", "fecha_invalida": "FECHA_INVALIDA", "direccion_compuesta": "DIRECCION_COMPUESTA",
+    "valor_predio_no_cuadra": "VALOR_PREDIO_NO_CUADRA", "niveles_vs_padron": "NIVELES_NO_CUADRAN",
+    "depreciacion_vs_rnt": "DEPRECIACION_VS_RNT", "formula_nivel": "FORMULA_NIVEL",
+    MISMO_VALOR: "VARIOS_CODIGOS_VIA_MISMO_VALOR", VALORES_DISTINTOS: "VARIOS_CODIGOS_VIA_DISTINTOS",
+}
+# a code codigos.json lacks, by its column: (regla, objeto); any other column of the padrón is the predio's
+SIN_MAPEO = {"tipo_documento": ("DOCUMENTO_SIN_MAPEO", "contribuyente"),
+             "codigo_uso": ("USO_SIN_MAPEO", "declaracion_predial")}
+
+
+def regla_de(categoria):
+    return REGLA_DE_CATEGORIA.get(categoria, "OTRA")
+
+
+def parse_carga(value):
+    """--carga: letters, digits and . _ : -, 1 to 64."""
+    if not CARGA.fullmatch(value or ""):
+        raise argparse.ArgumentTypeError(f"'{value}': expected 1-64 of A-Z a-z 0-9 . _ : -")
+    return value
+
+
+def _entero(value):
+    text = codigo(value)
+    return int(text) if text and text.isdigit() else None
+
+
+def observaciones_de(data, carga, padron, construcciones, hoja=()):
+    """The observacion_importacion records of a load: the converter's sheet (`hoja`, its rows), the report's rows and
+    every code codigos.json lacks. Each as {clave, carga, objeto, codigo, codigo_predio (srtm, to link the predio),
+    regla, detalle, hoja, fila}, hoja and fila those of the original file when the row says them (hoja_origen,
+    fila_origen of a converted workbook). One per clave: the first wins.
+
+    codigo: a predio's srtm code (<codigo>-<n> of a code the SAT shared, #207), a contribuyente's code, and of a DJ or a
+    nivel <predio>/<contribuyente>."""
+    filas = {"padron": {r["_fila"]: r for r in padron}, "construcciones": {r["_fila"]: r for r in construcciones}}
+
+    def origen(nombre, fila):
+        row = filas.get(nombre, {}).get(fila)
+        if row is not None and codigo(row.get("hoja_origen")) and _entero(row.get("fila_origen")) is not None:
+            return codigo(row.get("hoja_origen")), _entero(row.get("fila_origen"))
+        return nombre, fila
+
+    def predios_de(sat, contribuyente):
+        """The srtm codes of a code: its own pair's, else every predio a split code gave (none: the code itself)."""
+        if sat is None:
+            return [None]
+        if contribuyente is not None:
+            return [data.srtm.get((sat, contribuyente)) or sat]
+        derivados = sorted({v for (c, _), v in data.srtm.items() if c == sat and v}, key=_orden)
+        return derivados or [sat]
+
+    salida = {}
+
+    def agregar(objeto, sat, contribuyente, regla, detalle, nombre, fila):
+        for predio in predios_de(sat, contribuyente) if objeto != "contribuyente" else [None]:
+            if objeto == "predio":
+                code = predio
+            elif objeto == "contribuyente":
+                code = contribuyente
+            else:
+                code = "/".join(c for c in (predio, contribuyente) if c) or None
+            partes = [carga, objeto, code, regla, nombre, fila]
+            clave = "|".join("" if p is None else str(p) for p in partes)
+            salida.setdefault(clave, {"clave": clave, "carga": carga, "objeto": objeto, "codigo": code,
+                                      "codigo_predio": predio, "regla": regla, "detalle": detalle, "hoja": nombre,
+                                      "fila": fila})
+
+    for row in hoja:
+        regla, detalle = clean_text(row.get("regla")), clean_text(row.get("detalle"))
+        objeto = clean_text(row.get("objeto"))
+        if objeto not in OBJETOS_IMPORTADOS:
+            objeto = "predio" if codigo(row.get("codigo_predio")) else "contribuyente"
+        if regla not in data.reglas:
+            detalle, regla = f"{regla}: {detalle or ''}".strip(), "OTRA"
+        agregar(objeto, codigo(row.get("codigo_predio")), codigo(row.get("codigo_contribuyente")), regla, detalle,
+                clean_text(row.get("hoja")), _entero(row.get("fila")))
+
+    for r in data.reporte:
+        if r["categoria"] == "codigo_sin_mapeo":
+            continue  # every row of it, below
+        predio, contribuyente, nombre, fila = r["codigo_predio"], r["codigo_contribuyente"], r["hoja"], r["fila"]
+        if predio is None and contribuyente is None and fila in filas.get(nombre, {}):
+            row = filas[nombre][fila]
+            predio, contribuyente = codigo(row.get("codigo_predio")), codigo(row.get("codigo_contribuyente"))
+        objeto = _objeto_de(r, predio, contribuyente, nombre)
+        agregar(objeto, predio, contribuyente, regla_de(r["categoria"]), r["detalle"], *origen(nombre, fila))
+
+    for nombre, fila, columna, valor in data.sin_mapeo:
+        row = filas.get(nombre, {}).get(fila, {})
+        regla, objeto = SIN_MAPEO.get(columna, ("CODIGO_SIN_MAPEO", "predio"))
+        if nombre == "construcciones":
+            objeto = "nivel_construccion"
+        de_srtm = " de srtm" if columna == "codigo_uso" else ""
+        agregar(objeto, codigo(row.get("codigo_predio")), codigo(row.get("codigo_contribuyente")), regla,
+                f'{columna} "{valor}" sin código{de_srtm} en data/ica/codigos.json', *origen(nombre, fila))
+    return list(salida.values())
+
+
+def _objeto_de(r, predio, contribuyente, hoja):
+    """The object a report row concerns: a rejected one names it; otherwise the codes it carries say it."""
+    if r["categoria"] == "rechazada":
+        nombre = r["detalle"].partition(":")[0]
+        if nombre in OBJETOS_IMPORTADOS:
+            return nombre
+    if predio and contribuyente:
+        return "nivel_construccion" if hoja == "construcciones" else "declaracion_predial"
+    return "contribuyente" if contribuyente else "predio"
+
+
 def limit_predios(padron, construcciones, limit):
     """The padrón rows of the first `limit` predios (each with all its titulares) and the niveles of their DJ."""
     predios = dict.fromkeys(codigo(r.get("codigo_predio")) for r in padron)
@@ -948,6 +1080,39 @@ def load(client, data, anio, workers):
     return created, skipped
 
 
+def cargar_observaciones(client, observaciones, carga, workers):
+    """Creates the observaciones Core lacks, by clave, each with its predio's id when Core has the predio. Returns
+    (created, skipped)."""
+    predios = {r["attributes"].get("codigo"): r["id"] for r in client.list_all("predio")}
+    existentes = {r["attributes"].get("clave") for r in client.list_all(OBJETO_OBSERVACION, carga=carga)}
+    todo = []
+    for o in observaciones:
+        if o["clave"] in existentes:
+            continue
+        attributes = {k: o[k] for k in ("clave", "carga", "objeto", "codigo", "regla", "detalle", "hoja", "fila")}
+        attributes["predio"] = predios.get(o["codigo_predio"])
+        todo.append((o["clave"], o["fila"], attributes))
+    new = post_all(client, OBJETO_OBSERVACION, todo, workers)
+    print(f"{OBJETO_OBSERVACION}: {len(new)} created, {len(observaciones) - len(todo)} skipped", flush=True)
+    return len(new), len(observaciones) - len(todo)
+
+
+def leer_observaciones(path):
+    """The converter's observaciones sheet; none in a workbook that lacks it (one older than #297)."""
+    try:
+        return read_xlsx(path, "observaciones")
+    except ValueError:
+        return []
+
+
+def limit_observaciones(rows, padron):
+    """The sheet's rows of the predios and contribuyentes --limit kept."""
+    predios = {codigo(r.get("codigo_predio")) for r in padron}
+    contribuyentes = {codigo(r.get("codigo_contribuyente")) for r in padron}
+    return [r for r in rows if (codigo(r.get("codigo_predio")) in predios if codigo(r.get("codigo_predio"))
+                                else codigo(r.get("codigo_contribuyente")) in contribuyentes)]
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -965,6 +1130,8 @@ def _parse_args(argv):
     p.add_argument("--limit", type=int, default=None, help="only the first N predios, each with all its titulares")
     p.add_argument("--workers", type=int, default=4, help="parallel POSTs (default 4)")
     p.add_argument("--report", default=os.path.join(HERE, "reports", "padron_ica.csv"))
+    p.add_argument("--carga", type=parse_carga, metavar="CODIGO",
+                   help="create the observacion_importacion of this load (A-Z a-z 0-9 . _ : -, 1-64), idempotent")
     return p.parse_args(argv)
 
 
@@ -974,10 +1141,15 @@ def main(argv=None):
 
     padron = read_xlsx(args.excel, "padron")
     construcciones = read_xlsx(args.excel, "construcciones")
+    hoja = leer_observaciones(args.excel) if args.carga else []
     if args.limit:
         padron, construcciones = limit_predios(padron, construcciones, args.limit)
-    data = build_dataset(padron, construcciones, args.anio, load_model(args.model), load_codigos(args.codigos),
+        hoja = limit_observaciones(hoja, padron)
+    model = load_model(args.model)
+    data = build_dataset(padron, construcciones, args.anio, model, load_codigos(args.codigos),
                          read_usos_srtm(default_usos_path()), read_depreciacion(default_depreciacion_path()))
+    if args.carga and not any(o["name"] == OBJETO_OBSERVACION for o in model["objects"]):
+        data.errores.append(f"--carga: el modelo no tiene el objeto {OBJETO_OBSERVACION} (#297)")
 
     print(f"filas: {len(padron)} del padrón, {len(construcciones)} de construcciones")
     print(f"vías: {len(data.vias)}")
@@ -1001,12 +1173,22 @@ def main(argv=None):
         print("the model lacks fields the importer fills (apply #124's model.json): nothing was sent to Core", file=sys.stderr)
         return 2
     if args.dry_run:
+        if args.carga:
+            observaciones = observaciones_de(data, args.carga, padron, construcciones, hoja)
+            print(f"observaciones (carga {args.carga}): {len(observaciones)}")
+            for regla, n in sorted(Counter(o["regla"] for o in observaciones).items()):
+                print(f"  {regla}: {n}")
         return 0
 
     client = Client(args.core)
     try:
         client.login(args.email, args.password)
         created, skipped = load(client, data, args.anio, args.workers)
+        if args.carga:
+            # after the load: the report has what it added (documento_en_core, codigo_compartido_en_core)
+            new, same = cargar_observaciones(client, observaciones_de(data, args.carga, padron, construcciones, hoja),
+                                             args.carga, args.workers)
+            created, skipped = created + new, skipped + same
     except LoadError as e:
         write_report(args.report, data.reporte)
         print(f"error POST /api/objects/{e.object_name}/records (fila {e.fila}) -> {e.error.status}\n{e.error.body}", file=sys.stderr)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Turns Ica's padrón SAT depurado and the construcciones of its reporte de subvaluados into the two-sheet workbook
-(`padron`, `construcciones`) that import_padron_ica.py reads, in the format of PADRON_CONSTRUCCION.xlsx.
+"""Turns Ica's padrón SAT depurado and the construcciones of its reporte de subvaluados into the workbook that
+import_padron_ica.py reads, in the format of PADRON_CONSTRUCCION.xlsx (`padron`, `construcciones`), plus a third sheet,
+`observaciones` (#297).
 
 Sources (wasichai/srtm-backend#289):
   padrón: BASE DE RENTAS DEPURADA_<fecha>.xlsx, sheet `Hoja 1`, one row per (predio, contribuyente).
@@ -33,6 +34,13 @@ Rules:
     them. A nivel of a predio the padrón lacks is dropped (construcciones_sin_predio). A letter outside the model's
     letra_categoria, a nivel without digits and a year that is not a number go empty and are counted.
 
+Observaciones (#297): every row it empties, reads by an alias or flags (what it counts) also goes to the `observaciones`
+sheet (codigo_predio, codigo_contribuyente, objeto, regla, detalle, hoja, fila), hoja and fila those of the SAT's file,
+so that import_padron_ica.py --carga gives each record its observacion_importacion. A nivel's go once per DJ it goes
+to. detalle carries codes and catalog values, never a name nor a document. Each row of padron and construcciones
+carries its source too (hoja_origen, fila_origen), for the importer's own observations. --excluir-predios CSV (a
+codigo_predio column) leaves those predios out of the three sheets (predios_excluidos).
+
 --map-padron and --map-construccion campo=COLUMNA override a source (campo is a column of the output workbook);
 campo= (empty) leaves it unread. Every mapped column is required: a missing sheet or column exits 2 naming it, before
 anything is written. The workbook (PADRON_CONSTRUCCION.xlsx, mode 0600) goes in --salida, which must be outside the
@@ -43,6 +51,7 @@ Run: python3 -I convertir_padron_sat_ica.py --padron "BASE DE RENTAS DEPURADA.xl
 Exit: 0 ok, 2 a missing sheet or column or a bad flag (nothing is written).
 """
 import argparse
+import csv
 import json
 import os
 import re
@@ -83,6 +92,12 @@ CONSTRUCCION_SALIDA = [
     "valor_total_nivel", "area_comun",
 ]
 
+# #297: each row of padron and construcciones says where it came from, for the importer's observaciones
+ORIGEN = ["hoja_origen", "fila_origen"]
+# the third sheet: one row per observation of a record (what the converter emptied, read by an assumption or flagged)
+OBSERVACIONES_SALIDA = ["codigo_predio", "codigo_contribuyente", "objeto", "regla", "detalle", "hoja", "fila"]
+CODIGOS_JSON = "data/ica/codigos.json"
+
 # output column -> source column; None: no source by default (it goes empty)
 PADRON_COLUMNS = {
     "codigo_contribuyente": "COD_CONTRIB", "codigo_predio": "COD_PREDIO",
@@ -119,6 +134,10 @@ ABREVIATURAS_VIA = {"AV.": "AVENIDA", "JR.": "JIRON", "CA.": "CALLE", "CLL.": "C
 # the code columns of the padrón that pass as they are, and their table in codigos.json
 CODIGOS_PADRON = {"condicion_predio": "condicion_propiedad", "tipo_documento": "tipo_documento",
                   "codigo_uso": "uso"}
+# the observation of each: its regla and the object it concerns
+SIN_MAPEO = {"condicion_predio": ("CONDICION_SIN_MAPEO", "declaracion_predial"),
+             "tipo_documento": ("DOCUMENTO_SIN_MAPEO", "contribuyente"),
+             "codigo_uso": ("USO_SIN_MAPEO", "declaracion_predial")}
 
 CONTEOS_PADRON = ["filas_padron", "predios", "contribuyentes", "celdas_guion", "tipo_via_sin_codigo",
                   "tipo_unidad_urbana_sin_tipo", "tipo_predio_vacio", "condicion_predio_sin_mapeo",
@@ -205,12 +224,25 @@ def _sin_mapeo(code, tabla, codigos):
 
 
 def _tipo_unidad(value, alias):
+    return _tipo_unidad_leido(value, alias)[0]
+
+
+def _tipo_unidad_leido(value, alias):
+    """(the option, True when only an alias read it so)."""
     texto = (limpio(value) or "").upper()
     if not texto:
-        return None
+        return None, False
+    propio = next((nombre for t, nombre in TIPOS_UNIDAD_URBANA if t == texto), None)
     if texto in alias:
-        return alias[texto]
-    return next((nombre for t, nombre in TIPOS_UNIDAD_URBANA if t == texto), None)
+        return alias[texto], alias[texto] != propio
+    return propio, False
+
+
+def observar(observaciones, regla, objeto, predio, contribuyente, detalle, hoja, fila):
+    """One row of the observaciones sheet; none when the caller keeps no list."""
+    if observaciones is not None:
+        observaciones.append({"codigo_predio": predio, "codigo_contribuyente": contribuyente, "objeto": objeto,
+                              "regla": regla, "detalle": detalle, "hoja": hoja, "fila": fila})
 
 
 def _celda(row, columna, n):
@@ -222,28 +254,54 @@ def _celda(row, columna, n):
     return limpio(value)
 
 
-def convertir_padron(rows, mapa, codigos, alias):
-    """(rows of the output's padron sheet, counts) from the padrón SAT depurado."""
+def convertir_padron(rows, mapa, codigos, alias, hoja=HOJA_PADRON, observaciones=None):
+    """(rows of the output's padron sheet, counts) from the padrón SAT depurado. What it empties, reads by an alias or
+    flags goes to `observaciones` (#297), one per row: the tipo de vía and de unidad urbana are the predio's, the
+    condición and the uso the DJ's, the tipo de documento its contribuyente's first row (the one the importer reads)."""
     n = Counter(dict.fromkeys(CONTEOS_PADRON, 0))
-    filas = []
+    filas, vistos = [], set()
     for i, row in enumerate(rows, start=1):
         fila = dict.fromkeys(PADRON_SALIDA)
         fila["id"] = str(i)
         for campo, columna in mapa.items():
             fila[campo] = _celda(row, columna, n)
-        tipo_via = fila["tipo_de_via"]
-        fila["tipo_de_via"] = _codigo_o_texto(tipo_via, "tipo_via", codigos, ABREVIATURAS_VIA)
-        n["tipo_via_sin_codigo"] += tipo_via is not None and fila["tipo_de_via"] is None
-        tipo_unidad = fila["tipo_de_unidad_urbana"]
-        fila["tipo_de_unidad_urbana"] = _tipo_unidad(tipo_unidad, alias)
-        n["tipo_unidad_urbana_sin_tipo"] += tipo_unidad is not None and fila["tipo_de_unidad_urbana"] is None
-        n["tipo_predio_vacio"] += fila["tipo_predio"] is None
-        for campo, tabla in CODIGOS_PADRON.items():
-            fila[campo] = codigo(fila[campo])
-            n[f"{campo}_sin_mapeo"] += fila[campo] is not None and _sin_mapeo(fila[campo], tabla, codigos)
         fila["codigo_predio"], fila["codigo_contribuyente"] = codigo(fila["codigo_predio"]), codigo(
             fila["codigo_contribuyente"])
         fila["_fila"] = row.get("_fila", i + 1)
+        fila["hoja_origen"], fila["fila_origen"] = hoja, fila["_fila"]
+        predio, contribuyente = fila["codigo_predio"], fila["codigo_contribuyente"]
+
+        def obs(regla, objeto, detalle, codigo_predio=predio):
+            observar(observaciones, regla, objeto, codigo_predio, contribuyente, detalle, hoja, fila["_fila"])
+
+        tipo_via = fila["tipo_de_via"]
+        fila["tipo_de_via"] = _codigo_o_texto(tipo_via, "tipo_via", codigos, ABREVIATURAS_VIA)
+        if tipo_via is not None and fila["tipo_de_via"] is None:
+            n["tipo_via_sin_codigo"] += 1
+            obs("TIPO_VIA_NO_LEIDO", "predio", f'tipo_de_via "{tipo_via}" → vacío')
+        tipo_unidad = fila["tipo_de_unidad_urbana"]
+        fila["tipo_de_unidad_urbana"], por_alias = _tipo_unidad_leido(tipo_unidad, alias)
+        if tipo_unidad is not None and fila["tipo_de_unidad_urbana"] is None:
+            n["tipo_unidad_urbana_sin_tipo"] += 1
+            obs("TIPO_UU_NO_LEIDO", "predio", f'tipo_de_unidad_urbana "{tipo_unidad}" → vacío')
+        elif por_alias:
+            st = tipo_unidad.upper() == "ST." and fila["tipo_de_unidad_urbana"] == "SECTOR"
+            obs("TIPO_UU_ST_COMO_SECTOR" if st else "OTRA", "predio",
+                f'tipo_de_unidad_urbana "{tipo_unidad}" → {fila["tipo_de_unidad_urbana"]}'
+                + ("" if st else " (--tipo-unidad)"))
+        n["tipo_predio_vacio"] += fila["tipo_predio"] is None
+        primera = contribuyente not in vistos
+        vistos.add(contribuyente)
+        for campo, tabla in CODIGOS_PADRON.items():
+            fila[campo] = codigo(fila[campo])
+            if fila[campo] is not None and _sin_mapeo(fila[campo], tabla, codigos):
+                n[f"{campo}_sin_mapeo"] += 1
+                regla, objeto = SIN_MAPEO[campo]
+                if objeto == "contribuyente" and not primera:
+                    continue
+                de_srtm = " de srtm" if tabla == "uso" else ""
+                obs(regla, objeto, f'{campo} "{fila[campo]}" sin código{de_srtm} en {CODIGOS_JSON}',
+                    None if objeto == "contribuyente" else predio)
         filas.append(fila)
     n["filas_padron"] = len(filas)
     n["predios"] = len({f["codigo_predio"] for f in filas if f["codigo_predio"]})
@@ -260,48 +318,78 @@ def titulares_de(filas):
     return {code: list(t) for code, t in titulares.items()}
 
 
-def convertir_construcciones(rows, mapa, titulares, codigos, letras, compartidos=()):
+def convertir_construcciones(rows, mapa, titulares, codigos, letras, compartidos=(), hoja=HOJA_CONSTRUCCIONES,
+                             observaciones=None):
     """(rows of the output's construcciones sheet, counts): each nivel once per contribuyente of its predio.
-    `compartidos` are the SAT codes the importer splits into distinct predios (#207)."""
+    `compartidos` are the SAT codes the importer splits into distinct predios (#207). What it empties or flags goes to
+    `observaciones` (#297) once per DJ the nivel goes to, so each copy carries it."""
     n = Counter(dict.fromkeys(CONTEOS_CONSTRUCCIONES, 0))
     compartidos = set(compartidos)
     filas, con_niveles = [], set()
     for row in rows:
         n["filas_construcciones"] += 1
+        fila_origen = row.get("_fila")
         base = dict.fromkeys(CONSTRUCCION_SALIDA)
         for campo, columna in mapa.items():
             base[campo] = _celda(row, columna, Counter())
+        base["hoja_origen"], base["fila_origen"] = hoja, fila_origen
         code = codigo(base["codigo_predio"])
         if code not in titulares:
             n["construcciones_sin_predio"] += 1
+            observar(observaciones, "NIVEL_SIN_PREDIO", "nivel_construccion", code, None,
+                     f"cod_predio {code} no está en el padrón: el nivel se descarta", hoja, fila_origen)
             continue
         base["codigo_predio"] = code
+        propias = []  # (regla, detalle) of this row, for each DJ it goes to
         nivel = codigo(base["nivel"])
         if nivel is not None and not nivel.isdigit():
             n["niveles_sin_numero"] += 1
+            propias.append(("NIVEL_NO_LEIDO", f'nivel "{nivel}" → vacío'))
             nivel = None
         base["nivel"] = nivel
         anio = codigo(base["ano_construccion"])
         if anio is not None and not anio.isdigit():
             n["anios_ilegibles"] += 1
+            propias.append(("ANIO_NO_LEIDO", f'ano_construccion "{anio}" → vacío'))
             anio = None
         base["ano_construccion"] = anio
-        for campo, tabla, clave in (("material_predominante", "material", "materiales_sin_codigo"),
-                                    ("estado_de_conservacion", "estado_conservacion", "estados_sin_codigo")):
+        for campo, tabla, clave, regla in (
+                ("material_predominante", "material", "materiales_sin_codigo", "MATERIAL_NO_LEIDO"),
+                ("estado_de_conservacion", "estado_conservacion", "estados_sin_codigo", "ESTADO_NO_LEIDO")):
             valor = base[campo]
             base[campo] = _codigo_o_texto(valor, tabla, codigos)
-            n[clave] += valor is not None and base[campo] is None
+            if valor is not None and base[campo] is None:
+                n[clave] += 1
+                propias.append((regla, f'{campo} "{valor}" → vacío'))
+        vaciadas = []
         for campo in LETRAS:
             letra = (base[campo] or "").upper()
             if letra and letra not in letras:
                 n["letras_vaciadas"] += 1
+                vaciadas.append(f'{campo} "{base[campo]}"')
                 letra = ""
             base[campo] = letra or None
+        if vaciadas:
+            propias.append(("LETRA_FUERA_DE_RANGO", ", ".join(vaciadas) + (" → vacías" if len(vaciadas) > 1
+                                                                              else " → vacía")))
         con_niveles.add(code)
-        for posicion, contribuyente in enumerate(titulares[code]):
+        todos = titulares[code]
+        for posicion, contribuyente in enumerate(todos):
             filas.append({**base, "id": str(len(filas) + 1), "codigo_contribuyente": contribuyente})
-            n["niveles_copiados"] += posicion > 0
-            n["niveles_en_codigos_compartidos"] += code in compartidos
+
+            def obs(regla, detalle):
+                observar(observaciones, regla, "nivel_construccion", code, contribuyente, detalle, hoja, fila_origen)
+
+            for regla, detalle in propias:
+                obs(regla, detalle)
+            if code in compartidos:
+                n["niveles_en_codigos_compartidos"] += 1
+                obs("CODIGO_COMPARTIDO_DIVIDIDO", f"el código {code} se divide en predios {code}-<n> (#207): el nivel "
+                                                  "va a la DJ de cada titular")
+            if posicion > 0:
+                n["niveles_copiados"] += 1
+                obs("NIVEL_COPIADO_A_COTITULAR", f"nivel {nivel or 'sin número'} copiado a la DJ del co-titular "
+                                                 f"{posicion + 1} de {len(todos)} (contribuyente {contribuyente})")
     n["niveles"] = len(filas)
     n["predios_con_niveles"] = len(con_niveles)
     return filas, n
@@ -402,9 +490,32 @@ def _parse_args(argv):
                        help="the source column of an output column (repeatable; CAMPO= leaves it empty)")
     p.add_argument("--tipo-unidad", action="append", default=[], metavar="TEXTO=TIPO",
                    help="a tipo de unidad urbana text that means an option of tipo_unidad_urbana (repeatable)")
+    p.add_argument("--excluir-predios", metavar="CSV",
+                   help="a csv with a codigo_predio column: those predios leave the three sheets (predios_excluidos)")
     p.add_argument("--codigos", default=default_codigos_path(), help="Ica's code tables (default data/ica/codigos.json)")
     p.add_argument("--model", default=default_model_path())
     return p.parse_args(argv)
+
+
+def leer_excluidos(path):
+    """The codigo_predio column of a csv, as codes."""
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        if "codigo_predio" not in (reader.fieldnames or []):
+            raise ValueError(f"--excluir-predios {path}: no column 'codigo_predio'")
+        return {code for code in (codigo(r["codigo_predio"]) for r in reader) if code}
+
+
+def excluir(rows, columna, excluidos):
+    """(the rows whose predio is not excluded, the excluded codes found)."""
+    quedan, vistos = [], set()
+    for row in rows:
+        code = codigo(row.get(columna)) if columna else None
+        if code in excluidos:
+            vistos.add(code)
+        else:
+            quedan.append(row)
+    return quedan, vistos
 
 
 def _error(problems):
@@ -423,6 +534,7 @@ def main(argv=None):
         mapa_construccion = parse_map(args.map_construccion, CONSTRUCCION_COLUMNS)
         alias = parse_alias(args.tipo_unidad)
         codigos, letras = load_codigos(args.codigos), load_letras(args.model)
+        excluidos = leer_excluidos(args.excluir_predios) if args.excluir_predios else set()
     except (OSError, ValueError, KeyError) as e:
         return _error([str(e)])
     try:
@@ -435,14 +547,21 @@ def main(argv=None):
     if problems:
         return _error(problems)
 
-    padron, n_padron = convertir_padron(padron_rows, mapa_padron, codigos, alias)
+    padron_rows, fuera = excluir(padron_rows, mapa_padron["codigo_predio"], excluidos)
+    construccion_rows, fuera_niveles = excluir(construccion_rows, mapa_construccion["codigo_predio"], excluidos)
+
+    observaciones = []
+    padron, n_padron = convertir_padron(padron_rows, mapa_padron, codigos, alias, args.hoja_padron, observaciones)
     _, compartidos = codigos_derivados(padron)
     niveles, n_niveles = convertir_construcciones(construccion_rows, mapa_construccion, titulares_de(padron), codigos,
-                                                  letras, {c["codigo"] for c in compartidos})
+                                                  letras, {c["codigo"] for c in compartidos},
+                                                  args.hoja_construcciones, observaciones)
     try:
         os.makedirs(args.salida, mode=0o700, exist_ok=True)
         write_xlsx(os.path.join(args.salida, LIBRO),
-                   [("padron", PADRON_SALIDA, padron), ("construcciones", CONSTRUCCION_SALIDA, niveles)])
+                   [("padron", PADRON_SALIDA + ORIGEN, padron),
+                    ("construcciones", CONSTRUCCION_SALIDA + ORIGEN, niveles),
+                    ("observaciones", OBSERVACIONES_SALIDA, observaciones)])
     except OSError as e:
         return _error([f"output: {e}"])
 
@@ -450,6 +569,8 @@ def main(argv=None):
         for clave in conteos:
             print(f"{clave}: {n[clave]}")
     print(f"codigos_compartidos: {len(compartidos)}")
+    print(f"predios_excluidos: {len(fuera | fuera_niveles)}")
+    print(f"observaciones: {len(observaciones)}")
     return 0
 
 

@@ -590,6 +590,129 @@ class CodigoCompartidoTests(unittest.TestCase):
             self.assertNotIn(dato, texto)
 
 
+def observaciones(padron_rows, construcciones_rows=(), hoja=(), carga="PADRON-SAT-2026-11"):
+    """The observaciones (#297) of a build: the rows as read_xlsx reads them, the dataset and the sheet's rows."""
+    padron_rows, construcciones_rows = numbered(padron_rows), numbered(construcciones_rows)
+    data = ipi.build_dataset(padron_rows, construcciones_rows, 2026, MODEL, CODIGOS, USOS, RNT)
+    return ipi.observaciones_de(data, carga, padron_rows, construcciones_rows, numbered(hoja))
+
+
+def de_regla(obs, regla):
+    return [o for o in obs if o["regla"] == regla]
+
+
+def hoja_obs(**overrides):
+    base = {"codigo_predio": "000000001-0001-0001", "codigo_contribuyente": "900001", "objeto": "predio",
+            "regla": "TIPO_UU_ST_COMO_SECTOR", "detalle": 'tipo_de_unidad_urbana "ST." → SECTOR', "hoja": "Hoja 1",
+            "fila": "7"}
+    base.update(overrides)
+    return base
+
+
+class ObservacionesTests(unittest.TestCase):
+    """#297: what each record had at import, from the converter's sheet and the importer's own report."""
+    P = "000000009-0001-0001"
+
+    def test_a_report_row_becomes_an_observation_with_its_clave(self):
+        obs = observaciones([padron(), padron(codigo_contribuyente="900002", nro_documento="40000002")])
+        [o] = de_regla(obs, "CONDOMINIO_SIN_PORCENTAJE")
+        self.assertEqual({k: o[k] for k in ("carga", "objeto", "codigo", "codigo_predio", "hoja", "fila")},
+                         {"carga": "PADRON-SAT-2026-11", "objeto": "predio", "codigo": "000000001-0001-0001",
+                          "codigo_predio": "000000001-0001-0001", "hoja": "padron", "fila": 2})
+        self.assertEqual(o["clave"], "PADRON-SAT-2026-11|predio|000000001-0001-0001|CONDOMINIO_SIN_PORCENTAJE|padron|2")
+        self.assertEqual(o["detalle"], "2 titulares del mismo predio y sin %: 100/2 cada uno")
+
+    def test_each_category_has_its_regla_and_an_unknown_one_is_otra(self):
+        self.assertEqual(ipi.regla_de("titulares_en_conflicto"), "TITULAR_EN_CONFLICTO")
+        self.assertEqual(ipi.regla_de("niveles_vs_padron"), "NIVELES_NO_CUADRAN")
+        self.assertEqual(ipi.regla_de("condominio_100_n"), "CONDOMINIO_SIN_PORCENTAJE")
+        self.assertEqual(ipi.regla_de("codigo_compartido"), "CODIGO_COMPARTIDO_DIVIDIDO")
+        self.assertEqual(ipi.regla_de("una_categoria_nueva"), "OTRA")
+        # every regla it gives is an option of the model
+        reglas = set(MODEL["enums"]["regla_observacion_importacion"])
+        self.assertTrue(set(ipi.REGLA_DE_CATEGORIA.values()) <= reglas)
+
+    def test_a_dj_and_a_nivel_are_coded_by_their_predio_and_contribuyente(self):
+        obs = observaciones([padron(valor_predio="1")], [construccion(valor_total_nivel="1")])
+        [dj] = de_regla(obs, "VALOR_PREDIO_NO_CUADRA")
+        self.assertEqual((dj["objeto"], dj["codigo"], dj["codigo_predio"]),
+                         ("declaracion_predial", "000000001-0001-0001/900001", "000000001-0001-0001"))
+        [nivel] = de_regla(obs, "FORMULA_NIVEL")
+        self.assertEqual((nivel["objeto"], nivel["codigo"], nivel["hoja"], nivel["fila"]),
+                         ("nivel_construccion", "000000001-0001-0001/900001", "construcciones", 2))
+
+    def test_a_contribuyente_has_no_predio(self):
+        obs = observaciones([padron(nro_documento="4000001")])
+        [o] = de_regla(obs, "DOCUMENTO_RELLENADO")
+        self.assertEqual((o["objeto"], o["codigo"], o["codigo_predio"]), ("contribuyente", "900001", None))
+
+    def test_a_rejected_record_names_its_object(self):
+        obs = observaciones([padron()], [construccion(techos="J")])
+        [o] = de_regla(obs, "REGISTRO_RECHAZADO")
+        self.assertEqual((o["objeto"], o["codigo"]), ("nivel_construccion", "000000001-0001-0001/900001"))
+
+    def test_a_row_without_codes_takes_them_from_its_row(self):
+        obs = observaciones([padron(), padron(codigo_predio="000000002-0001-0001", fecha_adquisicion="1900-01-01")])
+        [o] = de_regla(obs, "FECHA_RELLENO")
+        self.assertEqual((o["objeto"], o["codigo"], o["fila"]),
+                         ("declaracion_predial", "000000002-0001-0001/900001", 3))
+
+    def test_an_unmapped_code_is_observed_on_every_row(self):
+        obs = observaciones([padron(codigo_uso="999"), padron(codigo_predio="000000002-0001-0001", codigo_uso="999")])
+        self.assertEqual([(o["objeto"], o["codigo"], o["fila"]) for o in de_regla(obs, "USO_SIN_MAPEO")],
+                         [("declaracion_predial", "000000001-0001-0001/900001", 2),
+                          ("declaracion_predial", "000000002-0001-0001/900001", 3)])
+        self.assertEqual(de_regla(obs, "CODIGO_SIN_MAPEO"), [])
+
+    def test_a_shared_code_is_observed_on_each_of_its_predios(self):
+        P = self.P
+        obs = observaciones([padron(codigo_predio=P),
+                             padron(codigo_predio=P, codigo_contribuyente="900002", nro_documento="40000002",
+                                    direccion_del_predio_completa="JR LIMA 200")])
+        self.assertEqual([(o["objeto"], o["codigo"], o["codigo_predio"]) for o in de_regla(obs, "CODIGO_COMPARTIDO_DIVIDIDO")],
+                         [("predio", f"{P}-1", f"{P}-1"), ("predio", f"{P}-2", f"{P}-2")])
+
+    def test_the_sheet_rows_resolve_a_split_code_to_its_predio(self):
+        P = self.P
+        obs = observaciones([padron(codigo_predio=P),
+                             padron(codigo_predio=P, codigo_contribuyente="900002", nro_documento="40000002",
+                                    direccion_del_predio_completa="JR LIMA 200")],
+                            hoja=[hoja_obs(codigo_predio=P, codigo_contribuyente="900002"),
+                                  hoja_obs(codigo_predio=None, objeto="contribuyente", regla="DOCUMENTO_SIN_MAPEO",
+                                           detalle='tipo_documento "6" sin código en data/ica/codigos.json'),
+                                  hoja_obs(regla="UNA_REGLA_NUEVA", fila="8")])
+        [st] = de_regla(obs, "TIPO_UU_ST_COMO_SECTOR")
+        self.assertEqual((st["objeto"], st["codigo"], st["codigo_predio"], st["hoja"], st["fila"]),
+                         ("predio", f"{P}-2", f"{P}-2", "Hoja 1", 7))
+        self.assertEqual(st["clave"], f"PADRON-SAT-2026-11|predio|{P}-2|TIPO_UU_ST_COMO_SECTOR|Hoja 1|7")
+        [doc] = de_regla(obs, "DOCUMENTO_SIN_MAPEO")
+        self.assertEqual((doc["objeto"], doc["codigo"], doc["codigo_predio"]), ("contribuyente", "900001", None))
+        [otra] = de_regla(obs, "OTRA")
+        self.assertIn("UNA_REGLA_NUEVA", otra["detalle"])
+
+    def test_the_rows_of_a_converted_workbook_point_to_the_original_file(self):
+        obs = observaciones([padron(hoja_origen="Hoja 1", fila_origen="40"),
+                             padron(codigo_contribuyente="900002", nro_documento="40000002", hoja_origen="Hoja 1",
+                                    fila_origen="41")])
+        [o] = de_regla(obs, "CONDOMINIO_SIN_PORCENTAJE")
+        self.assertEqual((o["hoja"], o["fila"]), ("Hoja 1", 40))
+
+    def test_the_same_observation_from_the_sheet_and_the_report_is_one(self):
+        # the converter and the importer both see an unmapped uso: one clave, one observation
+        obs = observaciones([padron(codigo_uso="999", hoja_origen="Hoja 1", fila_origen="40")],
+                            hoja=[hoja_obs(objeto="declaracion_predial", regla="USO_SIN_MAPEO", fila="40",
+                                           detalle='codigo_uso "999" sin código de srtm en data/ica/codigos.json')])
+        self.assertEqual(len(de_regla(obs, "USO_SIN_MAPEO")), 1)
+        self.assertEqual(len({o["clave"] for o in obs}), len(obs))
+
+    def test_no_detalle_names_a_person(self):
+        obs = observaciones([padron(nro_documento="4000001"), padron(codigo_contribuyente="900002", nro_documento="4000001",
+                                                                     codigo_predio="000000002-0001-0001")])
+        texto = json.dumps(obs)
+        for dato in ("4000001", "QUISPE", "MAMANI", "ANA"):
+            self.assertNotIn(dato, texto)
+
+
 class BuildNivelesTests(unittest.TestCase):
     def test_a_letter_out_of_the_table_rejects_the_row(self):
         data = build([padron()], [construccion(techos="J")])
@@ -746,19 +869,26 @@ def _sheet_xml(header, rows):
     return f'<worksheet {ns}><sheetData>{"".join(xml_rows)}</sheetData></worksheet>'
 
 
-def write_xlsx(path, padron_rows, construcciones_rows):
-    """A minimal two-sheet xlsx, every value an inline string, as read_xlsx reads it."""
+OBSERVACIONES = ["codigo_predio", "codigo_contribuyente", "objeto", "regla", "detalle", "hoja", "fila"]
+
+
+def write_xlsx(path, padron_rows, construcciones_rows, observaciones_rows=None):
+    """A minimal xlsx of two sheets (three with observaciones, #297), every value an inline string, as read_xlsx reads
+    it."""
     ns = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
     rel_ns = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+    hojas = [("padron", PADRON, padron_rows), ("construcciones", CONSTRUCCIONES, construcciones_rows)]
+    if observaciones_rows is not None:
+        hojas.append(("observaciones", OBSERVACIONES, observaciones_rows))
+    sheets = "".join(f'<sheet name="{n}" sheetId="{i}" r:id="rId{i}"/>' for i, (n, _, _) in enumerate(hojas, start=1))
+    rels = "".join(f'<Relationship Id="rId{i}" Target="worksheets/sheet{i}.xml"/>' for i in range(1, len(hojas) + 1))
     with zipfile.ZipFile(path, "w") as z:
-        z.writestr("xl/workbook.xml", f'<workbook {ns} {rel_ns}><sheets><sheet name="padron" sheetId="1" r:id="rId1"/>'
-                                      '<sheet name="construcciones" sheetId="2" r:id="rId2"/></sheets></workbook>')
+        z.writestr("xl/workbook.xml", f'<workbook {ns} {rel_ns}><sheets>{sheets}</sheets></workbook>')
         z.writestr("xl/_rels/workbook.xml.rels",
-                   '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                   '<Relationship Id="rId1" Target="worksheets/sheet1.xml"/>'
-                   '<Relationship Id="rId2" Target="worksheets/sheet2.xml"/></Relationships>')
-        z.writestr("xl/worksheets/sheet1.xml", _sheet_xml(PADRON, padron_rows))
-        z.writestr("xl/worksheets/sheet2.xml", _sheet_xml(CONSTRUCCIONES, construcciones_rows))
+                   f'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{rels}'
+                   '</Relationships>')
+        for i, (_, header, rows) in enumerate(hojas, start=1):
+            z.writestr(f"xl/worksheets/sheet{i}.xml", _sheet_xml(header, rows))
 
 
 SHARED = "000000009-0001-0001"
@@ -924,6 +1054,79 @@ class CliTests(unittest.TestCase):
         code, out, err = self.run_cli()
         self.assertEqual(code, 1)
         self.assertIn("predio", err)
+
+    # #297 ------------------------------------------------------------------
+
+    def observaciones(self):
+        return [r["attributes"] for r in self.core.records.get("observacion_importacion", [])]
+
+    def test_without_carga_no_observation_is_created_nor_read(self):
+        code, out, err = self.run_cli()
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(self.observaciones(), [])
+        self.assertFalse(any("observacion_importacion" in r[1] for r in self.core.requests))
+
+    def test_carga_creates_the_observations_linked_to_their_predio(self):
+        write_xlsx(self.excel, SAMPLE_PADRON, SAMPLE_CONSTRUCCIONES, [
+            {"codigo_predio": SHARED, "codigo_contribuyente": "900002", "objeto": "predio",
+             "regla": "TIPO_UU_ST_COMO_SECTOR", "detalle": 'tipo_de_unidad_urbana "ST." → SECTOR', "hoja": "Hoja 1",
+             "fila": "9"}])
+        code, out, err = self.run_cli(["--carga", "PADRON-SAT-2026-11"])
+        self.assertEqual(code, 0, msg=err)
+        predios = {r["id"]: r["attributes"]["codigo"] for r in self.core.records["predio"]}
+        obs = self.observaciones()
+        [st] = [o for o in obs if o["regla"] == "TIPO_UU_ST_COMO_SECTOR"]
+        self.assertEqual(predios[st["predio"]], f"{SHARED}-2")
+        self.assertEqual((st["carga"], st["objeto"], st["codigo"], st["hoja"], st["fila"]),
+                         ("PADRON-SAT-2026-11", "predio", f"{SHARED}-2", "Hoja 1", 9))
+        self.assertEqual(st["clave"], f"PADRON-SAT-2026-11|predio|{SHARED}-2|TIPO_UU_ST_COMO_SECTOR|Hoja 1|9")
+        compartidos = [o for o in obs if o["regla"] == "CODIGO_COMPARTIDO_DIVIDIDO"]
+        self.assertEqual(sorted(predios[o["predio"]] for o in compartidos), [f"{SHARED}-1", f"{SHARED}-2"])
+        [condominio] = [o for o in obs if o["regla"] == "CONDOMINIO_SIN_PORCENTAJE"]
+        self.assertEqual(predios[condominio["predio"]], "000000002-0001-0001")
+        # a contribuyente's observation has no predio
+        self.assertTrue(all("predio" not in o for o in obs if o["objeto"] == "contribuyente"))
+        self.assertIn(f"observacion_importacion: {len(obs)} created, 0 skipped", out)
+        texto = json.dumps(obs)
+        for dato in ("QUISPE", "EMPRESA", "40000001", "20100000001"):
+            self.assertNotIn(dato, texto)
+
+    def test_a_second_run_of_a_carga_creates_no_observation(self):
+        self.assertEqual(self.run_cli(["--carga", "C1"])[0], 0)
+        primeras = len(self.observaciones())
+        self.assertGreater(primeras, 0)
+        code, out, err = self.run_cli(["--carga", "C1"])
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(len(self.observaciones()), primeras)
+        self.assertIn(f"observacion_importacion: 0 created, {primeras} skipped", out)
+        self.assertIn("done: 0 created", out)
+
+    def test_a_dry_run_counts_the_observations_by_regla(self):
+        code, out, err = self.run_cli(["--dry-run", "--carga", "C1"])
+        self.assertEqual(code, 0, msg=err)
+        self.assertEqual(self.core.requests, [])
+        self.assertIn("observaciones (carga C1): ", out)
+        self.assertIn("  CONDOMINIO_SIN_PORCENTAJE: 1", out)
+        self.assertIn("  CODIGO_COMPARTIDO_DIVIDIDO: 2", out)
+
+    def test_a_bad_carga_exits_2(self):
+        for carga in ("con espacio", "", "x" * 65, "a|b"):
+            with self.subTest(carga=carga), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as e:
+                ipi.main(["--excel", self.excel, "--carga", carga, "--dry-run"])
+            self.assertEqual(e.exception.code, 2)
+
+    def test_a_model_without_the_object_exits_2_with_carga(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        model = json.loads(json.dumps(MODEL))
+        model["objects"] = [o for o in model["objects"] if o["name"] != "observacion_importacion"]
+        path = os.path.join(tmp.name, "model.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(model, f)
+        code, out, err = self.run_cli(["--model", path, "--carga", "C1"])
+        self.assertEqual(code, 2)
+        self.assertIn("observacion_importacion", err)
+        self.assertEqual(self.core.requests, [])
 
     def test_an_older_model_exits_2_and_sends_nothing(self):
         tmp = tempfile.TemporaryDirectory()
