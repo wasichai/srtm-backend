@@ -260,6 +260,19 @@ def minimos():
             sector="01",
             manzana="01",
             uso="CASA HABITACIÓN",
+            # srtm-backend#304: the values of each side (catastro's arancel arrives with catastro-backend#84)
+            terreno_declarado=20000.00,
+            construccion_declarada=30000.00,
+            obras_declaradas=0,
+            arancel_declarado=50.00,
+            uso_declarado="010101",
+            frente_declarado=10,
+            terreno_catastro=24000.00,
+            construccion_catastro=31000.00,
+            obras_catastro=0,
+            frente_catastro=10,
+            estado_levantamiento="COMPLETO",
+            vinculo_metodo="CODIGO_RENTAS",
         ),
         _registro(
             BP2,
@@ -288,7 +301,7 @@ def minimos():
         ),
     ]
 
-    def _nivel_brecha(id_, corrida, brecha_predio, piso, area_rentas, area_catastro, estado):
+    def _nivel_brecha(id_, corrida, brecha_predio, piso, area_rentas, area_catastro, estado, **mas):
         return _registro(
             id_,
             corrida=corrida,
@@ -297,13 +310,25 @@ def minimos():
             area_rentas=area_rentas,
             area_catastro=area_catastro,
             estado=estado,
+            **mas,
         )
 
     niveles_brecha = [
         # a decoy under R1 (not the chosen corrida), like BP0
         _nivel_brecha(BN0, R1, BP0, 1, 60, 90, "PAR"),
         # BP1: piso 1 with 40 m2 more in catastro; piso 2 only in catastro
-        _nivel_brecha(BN1, R2, BP1, 1, 60, 100.50, "PAR"),
+        # srtm-backend#304: its rentas nivel's características as the corrida keeps them (JSON text)
+        _nivel_brecha(
+            BN1,
+            R2,
+            BP1,
+            1,
+            60,
+            100.50,
+            "PAR",
+            niveles_rentas=1,
+            detalle_rentas='[{"area":60,"anioConstruccion":1990,"material":"CONCRETO","pisos":"I"}]',
+        ),
         _nivel_brecha(BN2, R2, BP1, 2, None, 30, "SOLO_CATASTRO"),
         # BP2: a rentas nivel without a number (a sótano, say) and a piso 1 equal on both sides
         _nivel_brecha(BN3, R2, BP2, None, 20, None, "AMBIGUO"),
@@ -739,6 +764,16 @@ def datos(semilla, contribuyentes=40):
                 delta_impuesto=round(impuesto_catastro - impuesto_declarado, 2),
                 confianza=rng.choice(_CONFIANZAS),
                 orden=i + 1,
+                # srtm-backend#304: each side's values; no rng, so the earlier figures stay
+                terreno_declarado=valor_terreno,
+                construccion_declarada=valor_construccion,
+                obras_declaradas=0,
+                uso_declarado="010101",
+                terreno_catastro=float(valor_terreno),
+                construccion_catastro=float(valor_construccion),
+                obras_catastro=0.0,
+                estado_levantamiento="COMPLETO",
+                vinculo_metodo="CODIGO_RENTAS",
             )
         )
         # no rng here: the draws above keep the figures every earlier corte of datos() had

@@ -308,7 +308,16 @@ class BrechaApiTest : SrtmApiTest() {
         val sufijo = uniqueDocumento()
         val conNiveles = predio(org, "N-$sufijo")
         val sinNiveles = predio(org, "S-$sufijo")
-        val dj = declarar(org, contribuyente(org), conNiveles, "100000.00", anio = 2026, delPadron = mapOf("area_terreno" to 200, "area_construida" to 150))
+        // #304: with the external padrón's valuación de origen, kept as it came
+        val dj =
+            declarar(
+                org,
+                contribuyente(org),
+                conNiveles,
+                "100000.00",
+                anio = 2026,
+                delPadron = mapOf("area_terreno" to 200, "area_construida" to 150, "valor_terreno" to 40000, "valor_construccion" to 60000)
+            )
         declarar(org, contribuyente(org), sinNiveles, "100000.00", anio = 2026, delPadron = mapOf("area_terreno" to 90))
         val id = dj["id"].asString()
         val nivel =
@@ -370,6 +379,23 @@ class BrechaApiTest : SrtmApiTest() {
         assertTrue(sinConstrucciones.path("nivelesComparados").let { it.isNull || it.isMissingNode }, sinConstrucciones.toString())
         val deLaOtra = tree(send("GET", "/api/objects/brecha_nivel/records?brecha_predio=${sinConstrucciones["id"].asString()}", null, HttpStatus.OK, org))
         assertEquals(0, deLaOtra.path("content").size(), deLaOtra.toString())
+
+        // #304: the row keeps each side's values, and each piso its rentas niveles' características
+        val guardada = tree(send("GET", "/api/objects/brecha_predio/records/${fila["id"].asString()}", null, HttpStatus.OK, org))["attributes"]
+        assertEquals(BigDecimal("40000.00"), dec(guardada["terreno_declarado"]))
+        assertEquals(BigDecimal("60000.00"), dec(guardada["construccion_declarada"]))
+        assertEquals(BigDecimal("1.00"), dec(guardada["terreno_catastro"]))
+        assertEquals(BigDecimal("10.50"), dec(guardada["frente_catastro"]))
+        assertTrue(guardada.path("arancel_catastro").let { it.isNull || it.isMissingNode }, guardada.toString())
+        val piso1 = niveles.single { it.path("piso").asString() == "1" }
+        assertEquals(1, piso1.path("niveles_rentas").asInt(), piso1.toString())
+        val detalle = tree(piso1.path("detalle_rentas").asString()).single()
+        assertEquals("CONCRETO", detalle["material"].asString())
+        assertEquals(2010, detalle["anioConstruccion"].asInt())
+        assertTrue(piso1.path("detalle_catastro").let { it.isNull || it.isMissingNode }, piso1.toString())
+        // the other row's DJ has no valuación de origen: nothing is recalculated
+        val otra = tree(send("GET", "/api/objects/brecha_predio/records/${sinConstrucciones["id"].asString()}", null, HttpStatus.OK, org))["attributes"]
+        assertTrue(otra.path("terreno_declarado").let { it.isNull || it.isMissingNode }, otra.toString())
     }
 
     @Test

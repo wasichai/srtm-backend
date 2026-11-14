@@ -95,9 +95,21 @@ _TIPOS = {
         "niveles_comparados": ENTERO,
         "niveles_catastro_mayor": ENTERO,
         "delta_area_niveles": DECIMAL,
+        # srtm-backend#304 (uso_declarado, estado_levantamiento and vinculo_metodo stay strings)
+        "terreno_declarado": DECIMAL,
+        "construccion_declarada": DECIMAL,
+        "obras_declaradas": DECIMAL,
+        "arancel_declarado": DECIMAL,
+        "frente_declarado": DECIMAL,
+        "terreno_catastro": DECIMAL,
+        "construccion_catastro": DECIMAL,
+        "obras_catastro": DECIMAL,
+        "arancel_catastro": DECIMAL,
+        "frente_catastro": DECIMAL,
     },
     # srtm-backend#256 (estado stays a string)
-    "srtm_brecha_nivel": {"piso": ENTERO, "area_rentas": DECIMAL, "area_catastro": DECIMAL},
+    # srtm-backend#304: detalle_rentas and detalle_catastro stay strings (JSON text)
+    "srtm_brecha_nivel": {"piso": ENTERO, "area_rentas": DECIMAL, "area_catastro": DECIMAL, "niveles_rentas": ENTERO},
     "srtm_parametro": {"vigencia_desde": FECHA, "vigencia_hasta": FECHA, "valor_numerico": DECIMAL},
     "srtm_arancel": {"anio": ENTERO, "valor_m2": DECIMAL},
     # catastro: areas, amounts, porcentaje and longitud_frente are DECIMAL; piso and seccion stay strings

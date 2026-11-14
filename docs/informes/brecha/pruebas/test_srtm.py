@@ -113,9 +113,16 @@ class ExtraccionMinimosTests(unittest.TestCase):
                 "area_rentas": 60,
                 "area_catastro": Decimal("100.50"),
                 "estado": "PAR",
+                # srtm-backend#304: what it keeps of each side's niveles; catastro's arrive with catastro-backend#84
+                "niveles_rentas": 1,
+                "detalle_rentas": '[{"area":60,"anioConstruccion":1990,"material":"CONCRETO","pisos":"I"}]',
+                "detalle_catastro": None,
             },
         )
         self.assertIsNone(por_id[BN2]["area_rentas"])  # SOLO_CATASTRO
+        # a corrida from before #304 leaves them null
+        self.assertIsNone(por_id[BN2]["niveles_rentas"])
+        self.assertIsNone(por_id[BN2]["detalle_rentas"])
         self.assertIsNone(por_id[BN3]["piso"])  # AMBIGUO, sin número
         self.assertEqual(por_id[BN3]["brecha_predio"], BP2)
         self.assertFalse(any("brecha_nivel" in aviso for aviso in self.ext.avisos))

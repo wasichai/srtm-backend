@@ -1429,7 +1429,33 @@
         {"name": "niveles_catastro_mayor", "label": "Niveles con más área en catastro", "type": "INTEGER",
           "description": "Los PAR cuya área catastral supera la de rentas, con la de rentas mayor que 0 (#247)."},
         {"name": "delta_area_niveles", "label": "Δ área de los niveles (m2)", "type": "DECIMAL",
-          "description": "La suma de las diferencias positivas (catastro − rentas) de los PAR (#247)."}
+          "description": "La suma de las diferencias positivas (catastro − rentas) de los PAR (#247)."},
+        {"name": "terreno_declarado", "label": "Valor del terreno declarado (S/)", "type": "DECIMAL",
+          "description": "El valor_terreno de la valuación de origen del padrón importado. Cada secuencia de uso una vez, la DJ de mayor autoavalúo de sus titulares, como el autoavalúo declarado (#304). Vacío si alguna DJ no lo trae o tiene origen_modificado: nunca se recalcula. Puede no sumar el autoavalúo declarado, porque se guarda como vino."},
+        {"name": "construccion_declarada", "label": "Valor de la construcción declarado (S/)", "type": "DECIMAL",
+          "description": "El valor_construccion de la valuación de origen del padrón importado, con la misma regla que terreno_declarado (#304)."},
+        {"name": "obras_declaradas", "label": "Obras declaradas (S/)", "type": "DECIMAL",
+          "description": "Las obras de las DJ: valor_obras, y si no hay, las otras instalaciones del padrón importado (#208). Cada secuencia de uso una vez, la DJ de mayor autoavalúo de sus titulares, como el autoavalúo declarado (#304)."},
+        {"name": "arancel_declarado", "label": "Arancel declarado (S/ por m2)", "type": "DECIMAL",
+          "description": "El arancel de la DJ de mayor autoavalúo (#304)."},
+        {"name": "uso_declarado", "label": "Uso declarado", "type": "TEXT",
+          "description": "El código de uso (seis dígitos) de la DJ de mayor autoavalúo (#304)."},
+        {"name": "frente_declarado", "label": "Frente declarado (m)", "type": "DECIMAL",
+          "description": "La longitud_frente de la DJ de mayor autoavalúo (#304)."},
+        {"name": "terreno_catastro", "label": "Valor del terreno catastral (S/)", "type": "DECIMAL",
+          "description": "El terreno de la valuación de la ficha (#304)."},
+        {"name": "construccion_catastro", "label": "Valor de la construcción catastral (S/)", "type": "DECIMAL",
+          "description": "La construcción de la valuación de la ficha (#304)."},
+        {"name": "obras_catastro", "label": "Obras catastrales (S/)", "type": "DECIMAL",
+          "description": "Las obras de la valuación de la ficha, con las de la DJ si se sumaron (obras_dj, #208) (#304)."},
+        {"name": "arancel_catastro", "label": "Arancel catastral (S/ por m2)", "type": "DECIMAL",
+          "description": "El arancelM2 de la valuación de la ficha; vacío con un catastro anterior a catastro-backend#84 (#304)."},
+        {"name": "frente_catastro", "label": "Frente catastral (m)", "type": "DECIMAL",
+          "description": "La longitudFrente de la ficha (#304)."},
+        {"name": "estado_levantamiento", "label": "Estado del levantamiento", "type": "TEXT",
+          "description": "El estado de levantamiento de la ficha (#304)."},
+        {"name": "vinculo_metodo", "label": "Método del vínculo", "type": "TEXT",
+          "description": "Cómo se vinculó la ficha con el código municipal (#304)."}
       ]
     },
     {
@@ -1598,7 +1624,13 @@
         {"name": "area_catastro", "label": "Área en catastro (m2)", "type": "DECIMAL",
           "description": "La suma de las secciones de la ficha con ese piso; vacía si catastro no lo tiene."},
         {"name": "estado", "label": "Estado", "type": "ENUM", "enum": "estado_nivel_brecha", "required": true,
-          "description": "PAR: el piso una sola vez en cada lado. SOLO_RENTAS o SOLO_CATASTRO: en un lado. AMBIGUO: rentas lo repite en varios niveles, o no tiene número."}
+          "description": "PAR: el piso una sola vez en cada lado. SOLO_RENTAS o SOLO_CATASTRO: en un lado. AMBIGUO: rentas lo repite en varios niveles, o no tiene número."},
+        {"name": "niveles_rentas", "label": "Niveles de rentas", "type": "INTEGER",
+          "description": "Cuántos niveles de la DJ suma el piso; vacío si rentas no lo tiene (#304)."},
+        {"name": "detalle_rentas", "label": "Detalle en rentas", "type": "LONG_TEXT",
+          "description": "JSON: la lista de niveles de la DJ del piso, cada uno {area, anioConstruccion, material, estadoConservacion, murosColumnas, techos, pisos, puertasVentanas, revestimientos, banos, instalaciones, clasificacion, valorUnitario, porcentajeDepreciacion, valor}. Los valores solo si vienen del padrón importado (#304)."},
+        {"name": "detalle_catastro", "label": "Detalle en catastro", "type": "LONG_TEXT",
+          "description": "JSON: la lista de secciones de la ficha del piso, con las mismas claves que detalle_rentas; vacío con un catastro anterior a catastro-backend#84 (#304)."}
       ]
     },
     {

@@ -1,6 +1,7 @@
 package srtm.brecha
 
 import com.fasterxml.jackson.annotation.JsonIgnore
+import com.fasterxml.jackson.annotation.JsonInclude
 import srtm.Faltan
 import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
@@ -98,7 +99,34 @@ data class NivelBrecha(
     val piso: Int? = null,
     val areaRentas: BigDecimal? = null,
     val areaCatastro: BigDecimal? = null,
-    val estado: String? = null
+    val estado: String? = null,
+    // #304: how many rentas niveles the piso adds (null when rentas lacks it), and each side's niveles or secciones as
+    // JSON (a list of DetalleNivel): rentas' always, catastro's from catastro-backend#84 (null before it)
+    val nivelesRentas: Int? = null,
+    val detalleRentas: String? = null,
+    val detalleCatastro: String? = null
+)
+
+// #304: a nivel of rentas (or a sección of catastro, catastro-backend#84) as brecha_nivel keeps it in detalle_rentas
+// and detalle_catastro: its características, always, and its valuación when its side has one (rentas: only the
+// external padrón's, PADRON_EXTERNO_NIVEL). the same keys on both sides, so the two compare key by key (#303)
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class DetalleNivel(
+    val area: BigDecimal? = null,
+    val anioConstruccion: Int? = null,
+    val material: String? = null,
+    val estadoConservacion: String? = null,
+    val murosColumnas: String? = null,
+    val techos: String? = null,
+    val pisos: String? = null,
+    val puertasVentanas: String? = null,
+    val revestimientos: String? = null,
+    val banos: String? = null,
+    val instalaciones: String? = null,
+    val clasificacion: String? = null,
+    val valorUnitario: BigDecimal? = null,
+    val porcentajeDepreciacion: BigDecimal? = null,
+    val valor: BigDecimal? = null
 )
 
 // #247: what a row sums of its niveles: how many are PAR, how many PAR have a catastro area larger than a positive
@@ -223,6 +251,25 @@ data class FilaBrecha(
     val nivelesComparados: Int? = null,
     val nivelesCatastroMayor: Int? = null,
     val deltaAreaNiveles: BigDecimal? = null,
+    // #304: the values of each side, as the corrida read them, so the comparison explains the Δ autoavalúo without
+    // reading the DJ of today. rentas: the external padrón's valuación de origen (terreno, construcción: null when a DJ
+    // lacks it or has origen_modificado, never recalculated, and kept as it came, even when it does not add up to the
+    // autoavalúo), the DJs' obras (obrasDeLaDj), and the arancel, uso and frente of the DJ of highest autoavalúo
+    // (Brecha.declarados). catastro: the item's (its obras with the DJ's it was given, #208; its arancel from
+    // catastro-backend#84). the ficha's estado de levantamiento and how it was linked
+    val terrenoDeclarado: BigDecimal? = null,
+    val construccionDeclarada: BigDecimal? = null,
+    val obrasDeclaradas: BigDecimal? = null,
+    val arancelDeclarado: BigDecimal? = null,
+    val usoDeclarado: String? = null,
+    val frenteDeclarado: BigDecimal? = null,
+    val terrenoCatastro: BigDecimal? = null,
+    val construccionCatastro: BigDecimal? = null,
+    val obrasCatastro: BigDecimal? = null,
+    val arancelCatastro: BigDecimal? = null,
+    val frenteCatastro: BigDecimal? = null,
+    val estadoLevantamiento: String? = null,
+    val vinculoMetodo: String? = null,
     // #247: its brecha_nivel rows, written apart (never a field of brecha_predio): null when they were not compared
     @get:JsonIgnore
     val niveles: List<NivelBrecha>? = null,

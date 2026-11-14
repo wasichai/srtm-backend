@@ -37,6 +37,9 @@ class BrechaNivelesTest {
         estado: EstadoNivel
     ) = NivelBrecha(piso, rentas?.let(::BigDecimal), catastro?.let(::BigDecimal), estado.name)
 
+    // #247's view of the niveles: their piso, areas and estado, without #304's detalle
+    private fun areas(niveles: List<NivelBrecha>?) = niveles?.map { it.copy(nivelesRentas = null, detalleRentas = null, detalleCatastro = null) }
+
     @Test
     fun `a piso once on each side is a PAR, the secciones of a catastro piso summed first`() {
         val niveles =
@@ -44,7 +47,7 @@ class BrechaNivelesTest {
                 listOf(nivel(1, "100"), nivel(2, "80")),
                 listOf(construccion(1, "60", seccion = 1), construccion(1, "50", seccion = 2), construccion(2, "80"))
             )
-        assertEquals(listOf(par(1, "100", "110", EstadoNivel.PAR), par(2, "80", "80", EstadoNivel.PAR)), niveles)
+        assertEquals(listOf(par(1, "100", "110", EstadoNivel.PAR), par(2, "80", "80", EstadoNivel.PAR)), areas(niveles))
     }
 
     @Test
@@ -56,7 +59,7 @@ class BrechaNivelesTest {
                 par(2, null, "70", EstadoNivel.SOLO_CATASTRO),
                 par(3, "40", null, EstadoNivel.SOLO_RENTAS)
             ),
-            niveles
+            areas(niveles)
         )
     }
 
@@ -68,19 +71,19 @@ class BrechaNivelesTest {
                 listOf(nivel(1, "60"), nivel(1, "40"), nivel(1, "30", tipo = "SOTANO")),
                 listOf(construccion(1, "100"), construccion(null, "35"), construccion(null, "5", seccion = 2))
             )
-        assertEquals(listOf(par(1, "100", "100", EstadoNivel.AMBIGUO), par(null, "30", "40", EstadoNivel.AMBIGUO)), niveles)
+        assertEquals(listOf(par(1, "100", "100", EstadoNivel.AMBIGUO), par(null, "30", "40", EstadoNivel.AMBIGUO)), areas(niveles))
     }
 
     @Test
     fun `a nivel without tipo is a piso, a piso without number is AMBIGUO`() {
         val niveles = Brecha.niveles(listOf(nivel(1, "100", tipo = null), nivel(null, "20")), listOf(construccion(1, "100")))
-        assertEquals(listOf(par(1, "100", "100", EstadoNivel.PAR), par(null, "20", null, EstadoNivel.AMBIGUO)), niveles)
+        assertEquals(listOf(par(1, "100", "100", EstadoNivel.PAR), par(null, "20", null, EstadoNivel.AMBIGUO)), areas(niveles))
     }
 
     @Test
     fun `an inactive nivel is not declared, and an area that is missing is null`() {
         val niveles = Brecha.niveles(listOf(nivel(1, "100", estado = "INACTIVO"), nivel(2, null)), listOf(construccion(1, "90")))
-        assertEquals(listOf(par(1, null, "90", EstadoNivel.SOLO_CATASTRO), par(2, null, null, EstadoNivel.SOLO_RENTAS)), niveles)
+        assertEquals(listOf(par(1, null, "90", EstadoNivel.SOLO_CATASTRO), par(2, null, null, EstadoNivel.SOLO_RENTAS)), areas(niveles))
     }
 
     @Test
@@ -171,7 +174,7 @@ class BrechaNivelesTest {
         assertEquals(BigDecimal("150"), fila.areaConstruidaDeclarada)
         assertEquals(BigDecimal("300"), fila.areaTerrenoCatastro)
         assertEquals(BigDecimal("190"), fila.areaConstruidaCatastro)
-        assertEquals(listOf(par(1, "100", "120", EstadoNivel.PAR), par(2, "50", "70", EstadoNivel.PAR)), fila.niveles)
+        assertEquals(listOf(par(1, "100", "120", EstadoNivel.PAR), par(2, "50", "70", EstadoNivel.PAR)), areas(fila.niveles))
         assertEquals(2, fila.nivelesComparados)
         assertEquals(2, fila.nivelesCatastroMayor)
         assertEquals(BigDecimal("40"), fila.deltaAreaNiveles)
@@ -203,7 +206,7 @@ class BrechaNivelesTest {
         assertNull(sinCatastro.niveles)
         // an empty construcciones is a catastro that says the predio has none: every declared nivel is SOLO_RENTAS
         val cruzada = filas.single { it.predio == "p1" }
-        assertEquals(listOf(par(1, "100", null, EstadoNivel.SOLO_RENTAS), par(2, "50", null, EstadoNivel.SOLO_RENTAS)), cruzada.niveles)
+        assertEquals(listOf(par(1, "100", null, EstadoNivel.SOLO_RENTAS), par(2, "50", null, EstadoNivel.SOLO_RENTAS)), areas(cruzada.niveles))
         assertEquals(0, cruzada.nivelesComparados)
     }
 
