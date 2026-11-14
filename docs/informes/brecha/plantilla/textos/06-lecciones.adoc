@@ -1,0 +1,12 @@
+// Lecciones y consideraciones: lo que el equipo aprendió al preparar la corrida y lo que debe tener en cuenta
+// quien use las cifras. Una viñeta por lección, con su consecuencia práctica.
+[[lecciones]]
+== Lecciones y consideraciones
+
+* La brecha es una estimación del motor con los datos de cada sistema, no una deuda determinada: cada caso se
+  verifica antes de una fiscalización.
+* La confianza depende de la calidad del levantamiento; un predio «dudoso» no es un error de rentas, sino un
+  dato que todavía no se puede usar.
+* Las cifras cambian con cada corte: se citan siempre con su fecha de corte ({fecha-corte}).
+
+// Agrega aquí lo propio de la municipalidad: diferencias de criterio entre rentas y catastro, aranceles, etc.

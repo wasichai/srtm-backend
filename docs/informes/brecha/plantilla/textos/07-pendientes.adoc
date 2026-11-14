@@ -1,0 +1,17 @@
+// Pendientes y preguntas: lo que falta para cerrar la brecha y lo que se pregunta a la municipalidad. Cada
+// pregunta, con a quién se dirige y qué decisión desbloquea.
+[[pendientes]]
+== Pendientes y preguntas
+
+=== Pendientes
+
+. Completar el levantamiento de los {predios-sin-levantar} predios sin levantar.
+. Revisar las fichas de los {predios-dudoso} predios dudosos.
+. Volver a correr la brecha y tomar un corte nuevo para medir el avance.
+
+=== Preguntas a la municipalidad
+
+// Una viñeta por pregunta. Por ejemplo: qué criterio aplicar a los pisos que solo aparecen en catastro, o qué
+// unidad valida los predios de una categoría.
+* ¿Qué unidad revisa los predios dudosos y con qué plazo?
+* ¿Se fiscalizan primero las categorías con mayor Δ impuesto entre los confiables?

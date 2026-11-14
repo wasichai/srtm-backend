@@ -12,6 +12,13 @@
 #                                                                 Metabase DuckDB file atomically (#206, task 8)
 #   make corte-ficticio ORG=<org> SEMILLA=<n> [SALIDA=<carpeta>]  a corte of a fictitious org, no real network
 #
+# Informe de brechas (informe.py, srtm-backend#301), from a corte already loaded with `make local`; the edición
+# lives outside the repository, like docs/informes/recaudacion's:
+#   make nueva-edicion EDICION=<carpeta> ORG=<org> CORTE=<carpeta del corte> [NOMBRE=<municipalidad>]
+#                                                                 copies plantilla/textos, never overwriting
+#   make informe       EDICION=<carpeta> [CORTE_ANTERIOR=<carpeta>]  indicators, charts, HTML, then validar
+#   make validar-informe EDICION=<carpeta>                        only the validation (Ley 29733, textos, HTML)
+#
 # Metabase: one instance per organization (plan, Decisión 2026-10-25), the compose project metabase-<org>, all
 # configured from the organization's own ENTORNO_ORG (by omission ~/.config/srtm-analitica/<org>.env):
 #   make metabase-up       ORG=<org>                             builds the shared image, starts <org>'s instance
@@ -54,6 +61,8 @@ CARPETA_BASE := $(call sin_tilde,$(SALIDA))
 # environment) is honored for corte-ficticio too, like every other target
 CARPETA_BASE_FICTICIO := $(if $(filter file,$(origin SALIDA)),$(call sin_tilde,$(HOME)/cortes/ficticio),$(CARPETA_BASE))
 CARPETA_CORTE := $(patsubst %/,%,$(call sin_tilde,$(CORTE)))
+CARPETA_EDICION := $(patsubst %/,%,$(call sin_tilde,$(EDICION)))
+CARPETA_ANTERIOR := $(patsubst %/,%,$(call sin_tilde,$(CORTE_ANTERIOR)))
 # the organization's own env file: the corte's secrets and, on the VPS, its Metabase instance's keys
 # (metabase/metabase.env.example)
 ENTORNO_ORG ?= $(HOME)/.config/srtm-analitica/$(ORG).env
@@ -76,6 +85,7 @@ DESTINO := $(S3)/$(ORG)/$(FECHA)/
 MANIFIESTO_S3 := $(patsubst /%,%,$(S3_PREFIJO)/$(ORG)/$(FECHA)/manifiesto.json)
 
 .PHONY: venv pruebas comprobar-org comprobar-org-fecha extraer verificar publicar corte local duckdb corte-ficticio \
+	comprobar-edicion nueva-edicion informe validar-informe \
 	metabase-up metabase-reiniciar metabase-detener provisionar humo respaldo
 
 # a stamp, not .venv/bin/python (a symlink: -nt would compare against the system interpreter and always
@@ -144,6 +154,23 @@ duckdb: comprobar-org venv
 corte-ficticio: comprobar-org venv
 	@test -n "$(SEMILLA)" || { echo "falta SEMILLA=<entero>"; exit 2; }
 	$(VPY) ficticio.py --org "$(ORG)" --semilla "$(SEMILLA)" --fecha "$(FECHA)" --salida "$(CARPETA_BASE_FICTICIO)"
+
+# Informe de brechas (srtm-backend#301; README.adoc, «Informe de brechas»). CORTE is the corte's folder (its
+# .duckdb is <CORTE>.duckdb, from make local) or the .duckdb itself; so is CORTE_ANTERIOR.
+comprobar-edicion:
+	@test -n "$(CARPETA_EDICION)" || { echo "falta EDICION=<carpeta de la edición>"; exit 2; }
+
+nueva-edicion: comprobar-edicion comprobar-org venv
+	@test -n "$(CARPETA_CORTE)" || { echo "falta CORTE=<carpeta del corte>"; exit 2; }
+	$(VPY) informe.py nueva --edicion "$(CARPETA_EDICION)" --org "$(ORG)" --corte "$(CARPETA_CORTE)" \
+	  $(if $(NOMBRE),--nombre "$(NOMBRE)")
+
+informe: comprobar-edicion venv
+	$(VPY) informe.py generar --edicion "$(CARPETA_EDICION)" \
+	  $(if $(CARPETA_ANTERIOR),--corte-anterior "$(CARPETA_ANTERIOR)")
+
+validar-informe: comprobar-edicion venv
+	$(VPY) informe.py validar --edicion "$(CARPETA_EDICION)"
 
 # One Metabase per organization (plan, Decisión 2026-10-25). The image is shared (compose.yml `image:`): the
 # first metabase-up builds it, the rest find it cached.

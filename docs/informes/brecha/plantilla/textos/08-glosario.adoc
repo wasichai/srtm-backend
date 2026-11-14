@@ -1,0 +1,19 @@
+// Glosario: los términos del informe, para quien no conoce srtm ni catastro.
+[[glosario]]
+== Glosario
+
+Autoavalúo:: El valor del predio sobre el que se calcula el impuesto predial: terreno, construcción y otras
+instalaciones.
+Corte analítico:: Una foto fechada de srtm y de catastro, seudonimizada y verificable, de la que salen todas las
+cifras del informe.
+Corrida de brechas:: El cálculo que compara, predio por predio, lo declarado en rentas con lo levantado en
+catastro.
+Δ impuesto:: El impuesto predial con los datos de catastro menos el impuesto con lo declarado.
+Confianza:: Qué tan utilizable es el dato de catastro de un predio: confiable, dudoso o sin levantar.
+Categoría:: El resultado de la comparación de un predio: omiso, subvaluado, sobrevaluado, coincide, sin valor o
+sin catastro.
+Nivel:: Un piso de una construcción. Par si aparece en ambos sistemas; solo en rentas o solo en catastro si
+aparece en uno; ambiguo si no se pudo emparejar.
+Predial en tres columnas:: El impuesto del año por contribuyente según lo declarado, el motor de rentas y el
+motor con catastro.
+Reservado:: Un monto que no se publica porque su grupo tiene menos de {umbral-celda} predios (Ley 29733).

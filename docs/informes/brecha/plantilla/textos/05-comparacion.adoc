@@ -1,0 +1,19 @@
+// Comparación con el corte anterior: solo se llena con make informe CORTE_ANTERIOR=… (o con corte_anterior en
+// edicion.json). Explica qué cambió entre los dos cortes y por qué: un levantamiento nuevo, una corrección del
+// padrón, otra versión del motor. Una variación sin causa conocida se escribe como hipótesis.
+[[comparacion]]
+== Comparación con el corte anterior
+
+ifdef::comparacion[]
+Frente al corte del {fecha-corte-anterior}, la corrida pasó de {anterior-predios-en-la-corrida} a {predios}
+predios ({var-predios-en-la-corrida}) y el Δ impuesto varió en {var-delta-impuesto}.
+
+grafico::comparacion[]
+
+tabla::comparacion[]
+
+tabla::comparacion-categorias[]
+endif::[]
+ifndef::comparacion[]
+Esta edición no se comparó con un corte anterior.
+endif::[]

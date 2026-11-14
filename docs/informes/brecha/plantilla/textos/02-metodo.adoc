@@ -1,0 +1,35 @@
+// Punto de partida y método: de dónde salen los datos, qué se compara y qué no se puede afirmar con ellos.
+[[metodo]]
+== Punto de partida y método
+
+=== De dónde salen las cifras
+
+Todas las cifras salen de un *corte analítico*: una foto fechada de srtm y de catastro, leída por sus API con
+cuentas de solo lectura, con los documentos seudonimizados y un manifiesto con la suma de verificación de cada
+archivo. El informe lee solo las vistas del archivo DuckDB del corte; nada se teclea a mano.
+
+tabla::corte[]
+
+=== Qué se compara
+
+La corrida de brechas toma cada predio del padrón de rentas, busca su ficha de catastro por el código catastral
+y calcula dos veces el autoavalúo y el impuesto predial: con lo declarado y con lo levantado en catastro. La
+diferencia es el *Δ impuesto*. Cada predio recibe una *categoría* (omiso, subvaluado, sobrevaluado, coincide,
+sin valor, sin catastro) y una *confianza* (confiable, dudoso, sin levantar), que vienen del motor de srtm y no
+se recalculan aquí.
+
+El predial se presenta además en tres columnas por contribuyente: lo declarado en el padrón de origen, lo que
+liquidó el motor de rentas y lo que liquidaría el motor con los datos de catastro.
+
+=== Protección de datos personales
+
+El informe solo lleva agregados (Ley 29733): ningún nombre, documento, código de predio ni monto de un predio
+individual. Un grupo de menos de {umbral-celda} predios muestra cuántos son, pero no sus montos («reservado»);
+si un solo grupo de una tabla queda reservado, se reserva también el siguiente más pequeño, para que no se pueda
+deducir por diferencia.
+
+=== Avisos del corte
+
+// Si el manifiesto trae avisos ({avisos-corte}), explica aquí qué significan para la lectura del informe.
+
+tabla::avisos[]
