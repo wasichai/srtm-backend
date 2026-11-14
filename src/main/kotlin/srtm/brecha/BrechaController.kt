@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController
 import srtm.ParametroInvalido
 import srtm.Permisos
 import srtm.pagina
+import srtm.reportes.ReportesService
 import wasichai.core.common.PageRequest
 import wasichai.core.common.PageResponse
 import java.time.LocalDate
@@ -24,7 +25,8 @@ import java.util.UUID
 @RequestMapping("/api/srtm/brecha")
 class BrechaController(
     private val brechas: BrechaService,
-    private val permisos: Permisos
+    private val permisos: Permisos,
+    private val reportes: ReportesService
 ) {
     @PostMapping("/corridas")
     @ResponseStatus(HttpStatus.ACCEPTED)
@@ -52,11 +54,7 @@ class BrechaController(
     suspend fun panel(
         @PathVariable anio: Int,
         @RequestParam(required = false) corrida: UUID?
-    ): PanelBrecha {
-        leer()
-        val r = brechas.corridaDelAnio(anio, corrida)
-        return Brecha.panel(r, brechas.filas(r.id!!))
-    }
+    ): PanelBrecha = reportes.panel(anio, corrida)
 
     @GetMapping("/{anio}/predios")
     suspend fun predios(

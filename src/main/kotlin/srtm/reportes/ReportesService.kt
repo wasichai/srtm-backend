@@ -15,6 +15,7 @@ import srtm.brecha.Brecha
 import srtm.brecha.BrechaService
 import srtm.brecha.Catastros
 import srtm.brecha.FilaBrecha
+import srtm.brecha.PanelBrecha
 import srtm.brecha.RegistroCorrida
 import srtm.brecha.TERMINADA
 import srtm.brecha.delUsuario
@@ -123,6 +124,10 @@ class ReportesService(
     // not, with and without the decisiones, with what they were made of: made again only when one of those changed
     private val filasDerivadas = Cache<Triple<String, Boolean, Boolean>, Pair<Insumos, List<FilaReportePredio>>>(null, DERIVADAS)
 
+    // #306: the panel of the brecha (GET /brecha/{anio}/panel) of a TERMINADA corrida, by organization and corrida:
+    // made of its rows, which never change, so kept with no vigencia
+    private val paneles = Cache<Pair<UUID, String>, PanelBrecha>(null, corridas)
+
     // the corrida last warmed per organization and year
     private val precalentadas = ConcurrentHashMap<Pair<UUID, Int>, String>()
 
@@ -182,6 +187,24 @@ class ReportesService(
         )
     }
 
+    // #306: GET /brecha/{anio}/panel. the caller reads the corrida and its rows (Permisos, asked before any cache is
+    // touched, as leer). a TERMINADA corrida's panel is made once, of the rows this service keeps (the reportes' and
+    // the visor's, without the lotes' geometry, which the panel never reads), and kept per organization and corrida: a
+    // new corrida is another key, and the one warmed before it is dropped (precalentar). one that is not TERMINADA
+    // (?corrida= while it runs) is counted on every request, as it is read, and nothing of it is kept
+    suspend fun panel(
+        anio: Int,
+        corrida: UUID?
+    ): PanelBrecha {
+        permisos.exigirLeer(BRECHA_CORRIDA, "consultar la brecha de recaudación")
+        permisos.exigirLeer(BRECHA_PREDIO, "consultar la brecha de recaudación")
+        val r = brechas.corridaDelAnio(anio, corrida)
+        val id = r.id!!
+        if (r.estado != TERMINADA) return brechas.filas(id).let { calcular { Brecha.panel(r, it) } }
+        val organizacion = currentUser.require().organizationId
+        return paneles.obtener(organizacion to id) { filas(id).let { calcular { Brecha.panel(r, it) } } }
+    }
+
     // conDecisiones false: the caller does not show them (catastro is not asked)
     suspend fun leer(
         anio: Int,
@@ -234,8 +257,15 @@ class ReportesService(
             filasPorCorrida.quitar(it)
             titularesPorCorrida.quitar(it)
             lotesPorCorrida.quitar(it)
+            paneles.quitar(organizacion to it)
         }
         filas(corrida)
+        // #306: the brecha's panel too, of the same rows: the first visit of /brecha does not count them. before the
+        // titulares, so a corrida precalentada has its panel
+        paneles.obtener(organizacion to corrida) {
+            val r = registros.get(BRECHA_CORRIDA, RegistroCorrida::class.java, UUID.fromString(corrida))
+            filas(corrida).let { calcular { Brecha.panel(r, it) } }
+        }
         if (!titularesPorCorrida.obtener(corrida) { TitularesLeidos(titulares(anio), enteros = true) }.enteros) {
             titularesPorCorrida.put(corrida, TitularesLeidos(titulares(anio), enteros = true))
         }
@@ -244,6 +274,12 @@ class ReportesService(
 
     // whether the corrida's rows and titulares are kept: for the tests
     internal fun precalentada(corrida: String): Boolean = filasPorCorrida.get(corrida) != null && titularesPorCorrida.get(corrida) != null
+
+    // whether the organization's panel of the corrida is kept: for the tests
+    internal fun panelGuardado(
+        organizacion: UUID,
+        corrida: String
+    ): Boolean = paneles.get(organizacion to corrida) != null
 
     // the corrida's rows, without the lote's geometry (the reports never show it, the visor reads it from lotes): only
     // whether they had one. the geometries of the same read are kept for lotes

@@ -494,6 +494,19 @@ class BrechaApiTest : SrtmApiTest() {
         assertEquals(setOf("P-$sufijo"), filasPerene.mapNotNull { it["codigoCatastro"]?.asString() }.toSet())
         assertEquals(setOf("I-$sufijo", "I2-$sufijo"), filasIca.mapNotNull { it["codigoCatastro"]?.asString() }.toSet())
         assertEquals(BigDecimal("3500.00"), dec(deIca["catastro"]))
+        // #306: each organization's panel of its corrida, kept apart: asked twice (the second from the cache), each
+        // counts its own predios only
+        repeat(2) {
+            val panelPerene = tree(send("GET", "/api/srtm/brecha/2025/panel", null, HttpStatus.OK, perene))
+            val panelIca = tree(send("GET", "/api/srtm/brecha/2025/panel", null, HttpStatus.OK, ica))
+            assertEquals(dePerene["id"].asString(), panelPerene["corrida"]["id"].asString())
+            assertEquals(deIca["id"].asString(), panelIca["corrida"]["id"].asString())
+            assertEquals(1, panelPerene["kpis"]["prediosCatastro"].asInt(), panelPerene.toString())
+            assertEquals(2, panelIca["kpis"]["prediosCatastro"].asInt(), panelIca.toString())
+            assertEquals(BigDecimal("3500.00"), dec(panelIca["kpis"]["autoavaluoCatastroTotal"]))
+        }
+        assertTrue(reportes.panelGuardado(organizacionDe(ica), deIca["id"].asString()))
+        assertFalse(reportes.panelGuardado(organizacionDe(perene), deIca["id"].asString()))
         // each catastro saw its own service account only (its token is checked by the stub: another's is a 401). either
         // token may be cached since an earlier request: the declaración's write already asks its catastro (#156)
         assertTrue(CUENTAS.all { it == "srtm-perene" }, "$CUENTAS")
@@ -524,10 +537,46 @@ class BrechaApiTest : SrtmApiTest() {
         assertEquals(TERMINADA, primera["estado"].asString(), primera.toString())
         esperarPrecalentada(primera["id"].asString())
 
+        // #306: the brecha's panel too
+        assertTrue(reportes.panelGuardado(organizacionDe(org), primera["id"].asString()))
+
         val segunda = corrida(org, 2026)
         assertEquals(TERMINADA, segunda["estado"].asString(), segunda.toString())
         esperarPrecalentada(segunda["id"].asString())
         assertFalse(reportes.precalentada(primera["id"].asString()))
+        assertTrue(reportes.panelGuardado(organizacionDe(org), segunda["id"].asString()))
+        assertFalse(reportes.panelGuardado(organizacionDe(org), primera["id"].asString()))
+    }
+
+    // #306: the panel of the latest TERMINADA corrida of a year comes from the cache; a new corrida of the year is the
+    // new latest, and an older one is still answered by ?corrida=, its own entry, with its own counts. Ica's 2024, which
+    // no other test runs
+    @Test
+    fun `the panel of a new corrida replaces the cached one, and an older one is still read by its id`() {
+        val org = organizacionIca()
+        val sufijo = uniqueDocumento()
+        declarar(org, contribuyente(org), predio(org, "K-$sufijo"), "100000.00", anio = 2024)
+        ITEMS_ICA.set(listOf(item("K-$sufijo", "150000.00")))
+        val primera = corrida(org, 2024)
+        assertEquals(TERMINADA, primera["estado"].asString(), primera.toString())
+        val antes = tree(send("GET", "/api/srtm/brecha/2024/panel", null, HttpStatus.OK, org))
+        assertEquals(primera["id"].asString(), antes["corrida"]["id"].asString())
+        assertEquals(1, antes["kpis"]["subvaluados"].asInt(), antes.toString())
+
+        ITEMS_ICA.set(listOf(item("K-$sufijo", "100000.00")))
+        val segunda = corrida(org, 2024)
+        assertEquals(TERMINADA, segunda["estado"].asString(), segunda.toString())
+        val despues = tree(send("GET", "/api/srtm/brecha/2024/panel", null, HttpStatus.OK, org))
+        assertEquals(segunda["id"].asString(), despues["corrida"]["id"].asString())
+        assertEquals(0, despues["kpis"]["subvaluados"].asInt(), despues.toString())
+        assertEquals(1, despues["kpis"]["coinciden"].asInt(), despues.toString())
+
+        // once the new one is warmed (which drops the older one's entry), the older one is read again by its id
+        esperarPrecalentada(segunda["id"].asString())
+        val anterior = tree(send("GET", "/api/srtm/brecha/2024/panel?corrida=${primera["id"].asString()}", null, HttpStatus.OK, org))
+        assertEquals(primera["id"].asString(), anterior["corrida"]["id"].asString())
+        assertEquals(1, anterior["kpis"]["subvaluados"].asInt(), anterior.toString())
+        assertTrue(reportes.panelGuardado(organizacionDe(org), primera["id"].asString()))
     }
 
     private fun esperarPrecalentada(corrida: String) {
@@ -543,6 +592,9 @@ class BrechaApiTest : SrtmApiTest() {
         val lector = funcionario(listOf(permiso("predio", "READ")))
         send("POST", "/api/srtm/brecha/corridas", mapOf("anio" to 2026), HttpStatus.FORBIDDEN, lector)
         send("GET", "/api/srtm/brecha/2026/panel", null, HttpStatus.FORBIDDEN, lector)
+        // #306: the panel is kept, so it asks the read of the rows it counts before the cache is touched
+        val deLaCorrida = funcionario(listOf(permiso(BRECHA_CORRIDA, "READ")))
+        send("GET", "/api/srtm/brecha/2026/panel", null, HttpStatus.FORBIDDEN, deLaCorrida)
         send("GET", "/api/srtm/brecha/corridas", null, HttpStatus.FORBIDDEN, lector)
         // #203: the aviso de cambios asks the same read, no role needs a new permission over cambio_catastro
         send("GET", "/api/srtm/brecha/2026/cambios", null, HttpStatus.FORBIDDEN, lector)
