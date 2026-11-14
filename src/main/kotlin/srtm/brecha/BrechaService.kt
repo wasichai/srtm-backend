@@ -252,7 +252,10 @@ class BrechaService(
             } catch (_: ForbiddenException) {
                 emptyMap()
             }
-        val uit = Multas.uit(parametrosTributarios.todos(), LocalDate.of(anio, 1, 1)).valor?.valorNumerico
+        val parametros = parametrosTributarios.todos()
+        val uit = Multas.uit(parametros, LocalDate.of(anio, 1, 1)).valor?.valorNumerico
+        // #305: the organization's tolerances vigente today (its own parametro_tributario, read as the caller)
+        val tolerancias = Llaves.tolerancias(parametros, LocalDate.now(Seguimiento.LIMA))
         val contexto =
             ContextoDelPredio(
                 usos = usos,
@@ -260,7 +263,7 @@ class BrechaService(
                 guardados = guardadosDe(predio.toString(), anio),
                 codigoCompartido = fila.categoria == Categoria.SIN_CATASTRO.name && compartido(predio, id)
             )
-        return ComparacionDelPredio.comparar(r, fila, niveles, contexto)
+        return ComparacionDelPredio.comparar(r, fila, niveles, contexto, tolerancias)
     }
 
     // when the predio's vigente DJs of the year, their niveles and their obras were last saved

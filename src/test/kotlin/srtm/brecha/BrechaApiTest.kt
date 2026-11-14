@@ -293,7 +293,11 @@ class BrechaApiTest : SrtmApiTest() {
         val corrida = corrida(org, 2022)
         assertEquals(TERMINADA, corrida["estado"].asString(), corrida.toString())
         val filas = tree(send("GET", "/api/srtm/brecha/2022/predios", null, HttpStatus.OK, org))["content"]
-        val porPredio = filas.associate { it["codigoPredio"]?.asString() to it["categoria"].asString() }
+        // its own predios: another test's (#305) may share the year
+        val porPredio =
+            filas
+                .filter { it["codigoPredio"]?.asString()?.startsWith(codigo) == true }
+                .associate { it["codigoPredio"]?.asString() to it["categoria"].asString() }
         assertEquals(mapOf("$codigo-1" to "COINCIDE", "$codigo-2" to "SIN_CATASTRO"), porPredio, filas.toString())
         assertEquals(codigo, filas.single { it["codigoPredio"]?.asString() == "$codigo-1" }["codigoCatastro"].asString())
     }
@@ -683,6 +687,76 @@ class BrechaApiTest : SrtmApiTest() {
         val deOtra = predio(organizacion(), "O-$sufijo")
         send("GET", "/api/srtm/brecha/2023/predios/$deOtra", null, HttpStatus.NOT_FOUND, org)
         send("GET", "/api/srtm/brecha/2041/predios/${ids.getValue("SUB")}", null, HttpStatus.NOT_FOUND, org)
+    }
+
+    // #305: the tolerances of the comparison are each organization's parametro_tributario TOLERANCIA_BRECHA: Ica's
+    // AREA of 100 m2 makes its 50 m2 a no-difference, while Perené, without one, keeps the 0.50 m2 by default. the
+    // year 2022 of both (Perené's other test of the year reads only its own predios); Ica's row is annulled at the end,
+    // so no other test of Ica sees it
+    @Test
+    fun `each organization compares with its own tolerances, and without one with the defaults`() {
+        val perene = organizacion()
+        val ica = organizacionIca()
+        val sufijo = uniqueDocumento()
+        // the stub's ficha has 200 m2 of terreno: 50 m2 more than declared
+        val dePerene =
+            predio(perene, "T-$sufijo").also {
+                declarar(
+                    perene,
+                    contribuyente(perene),
+                    it,
+                    "100000.00",
+                    anio = 2022,
+                    delPadron =
+                        mapOf("area_terreno" to 150)
+                )
+            }
+        val deIca = predio(ica, "T-$sufijo").also { declarar(ica, contribuyente(ica), it, "100000.00", anio = 2022, delPadron = mapOf("area_terreno" to 150)) }
+        ITEMS.set(listOf(item("T-$sufijo", "100000.00")))
+        ITEMS_ICA.set(listOf(item("T-$sufijo", "100000.00")))
+        assertEquals(TERMINADA, corrida(perene, 2022)["estado"].asString())
+        assertEquals(TERMINADA, corrida(ica, 2022)["estado"].asString())
+
+        fun delPredio(
+            org: String,
+            predio: String
+        ) = tree(send("GET", "/api/srtm/brecha/2022/predios/$predio", null, HttpStatus.OK, org))
+
+        fun difiere(r: JsonNode) = r["diferencias"].any { it["campo"].asString() == "areaTerreno" }
+        // without configuring them: the same as the fixed tolerances
+        assertTrue(difiere(delPredio(ica, deIca)))
+        val tolerancia =
+            post(
+                "/api/objects/parametro_tributario/records",
+                mapOf(
+                    "attributes" to
+                        mapOf(
+                            "tipo" to "TOLERANCIA_BRECHA",
+                            "clave" to "AREA",
+                            "vigencia_desde" to "2020-01-01",
+                            "valor_numerico" to 100,
+                            "norma" to "Prueba ficticia",
+                            "fuente" to "BrechaApiTest",
+                            "transcribio" to "ana@ica.test",
+                            "verifico" to "beto@ica.test",
+                            "estado" to "VIGENTE"
+                        )
+                ),
+                ica
+            )["id"].asString()
+        try {
+            val conLaSuya = delPredio(ica, deIca)
+            assertFalse(difiere(conLaSuya), conLaSuya.toString())
+            assertTrue(conLaSuya["iguales"].any { it.asString() == "areaTerreno" })
+            assertEquals(0, BigDecimal("100").compareTo(conLaSuya["tolerancias"]["area"].decimalValue()))
+            assertEquals(BigDecimal("1.00"), dec(conLaSuya["tolerancias"]["monto"]))
+            val otra = delPredio(perene, dePerene)
+            assertTrue(difiere(otra), otra.toString())
+            assertEquals(BigDecimal("0.50"), dec(otra["tolerancias"]["area"]))
+        } finally {
+            send("POST", "/api/srtm/normativa/parametros/$tolerancia/anular", mapOf("motivo" to "fin de la prueba"), HttpStatus.OK, ica)
+        }
+        assertTrue(difiere(delPredio(ica, deIca)))
     }
 
     private fun esperarPrecalentada(corrida: String) {

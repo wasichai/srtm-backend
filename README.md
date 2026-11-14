@@ -954,8 +954,13 @@ Un piso `PAR` con un nivel en cada lado compara además, uno por uno, `material`
 `acabados` (por ejemplo `I·I·I·I·I` contra `F·F·D·F·F`). Hasta catastro-backend#84 no hay detalle del catastro, así
 que esa lista queda vacía.
 
-Tolerancias (`ComparacionDelPredio`, #305 las hará parámetro): un área o un frente difiere si \|Δ\| ≥ 0,5 m; un
-importe, si \|Δ\| ≥ S/ 1,00; un número, si es distinto; un texto, si es distinto sin contar mayúsculas ni espacios.
+Tolerancias: un área o un frente difiere si \|Δ\| ≥ la tolerancia de área (0,5 por omisión); un importe, si
+\|Δ\| ≥ la de monto (S/ 1,00 por omisión); un número, si es distinto; un texto, si es distinto sin contar mayúsculas
+ni espacios. Desde #305, cada organización las configura en Normativa como parámetros tributarios
+`TOLERANCIA_BRECHA`, con clave `AREA` (m²) o `MONTO` (soles), 0 o más, con su doble firma y su vigencia. La ruta usa la
+fila vigente hoy, y si hay varias, la de `vigencia_desde` más reciente. Sin fila, usa la de omisión. Un valor
+negativo, una clave distinta o un valor que no es número se rechazan con 400. La respuesta dice en `tolerancias` las
+que usó. La vista `v_diferencias_por_categoria` del corte analítico sigue con las de omisión.
 
 | Aviso | Cuándo |
 |---|---|

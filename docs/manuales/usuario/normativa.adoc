@@ -15,7 +15,8 @@ perfil {p-normativa}.
 
 Los cálculos de {sigla} toman sus cifras de los *parámetros tributarios*: la UIT de cada año, los tramos y el mínimo
 del impuesto predial, las deducciones, las tasas y los mapeos de los arbitrios, los plazos y feriados de las
-infracciones y las tasas de anuncios. Cada parámetro tiene un *tipo* (por ejemplo, `UIT` o `TRAMO_PREDIAL`), una
+infracciones, las tasas de anuncios y las tolerancias con que la brecha compara rentas y catastro
+(`TOLERANCIA_BRECHA`, clave `AREA` en m² o `MONTO` en soles, nunca negativas). Cada parámetro tiene un *tipo* (por ejemplo, `UIT` o `TRAMO_PREDIAL`), una
 *clave* cuando el tipo tiene varios valores (el tramo 1, 2 o 3; un servicio, zona y uso), una *vigencia* (desde y,
 si termina, hasta), su valor y la norma de la que sale.
 

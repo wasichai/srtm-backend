@@ -36,6 +36,12 @@ object DatosDeParametro {
             val clave = p.clave?.trim().orEmpty()
             if (tipo.usaClave && clave.isEmpty()) v.mal("clave", "es obligatoria en ${tipo.tipo}")
             if (!tipo.usaClave && clave.isNotEmpty()) v.mal("clave", "va vacía en ${tipo.tipo}: es un solo valor")
+            if (tipo.claves != null && clave.isNotEmpty() &&
+                clave !in tipo.claves
+            ) {
+                v.mal("clave", "debe ser una de ${tipo.claves.joinToString()} en ${tipo.tipo}")
+            }
+            if (tipo.noNegativo && p.valorNumerico != null && p.valorNumerico.signum() < 0) v.mal("valor_numerico", "no puede ser negativo en ${tipo.tipo}")
             when (tipo.valor) {
                 ClaseDeValor.NUMERICO -> if (p.valorNumerico == null) v.mal("valor_numerico", "es obligatorio en ${tipo.tipo}")
                 ClaseDeValor.TEXTO -> if (p.texto.isNullOrBlank() && !tipo.admiteVacio) v.mal("texto", "es obligatorio en ${tipo.tipo}")

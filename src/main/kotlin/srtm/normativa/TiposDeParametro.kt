@@ -10,6 +10,7 @@ import tools.jackson.databind.PropertyNamingStrategies
 import tools.jackson.databind.annotation.JsonNaming
 import srtm.anuncios.Llaves as LlavesAnuncios
 import srtm.arbitrios.Llaves as LlavesArbitrios
+import srtm.brecha.Llaves as LlavesBrecha
 import srtm.sanciones.Llaves as LlavesSanciones
 
 // which of a row's values carries the figure: valor_numerico or texto
@@ -26,7 +27,10 @@ data class TipoDeParametro(
     val valor: ClaseDeValor,
     val unidad: String?,
     val modulo: String,
-    val admiteVacio: Boolean = false
+    val admiteVacio: Boolean = false,
+    // #305: the only claves the tipo takes (null: any), and whether its value may not be below 0
+    val claves: Set<String>? = null,
+    val noNegativo: Boolean = false
 )
 
 // every tipo a module reads, once: the predial's (srtm.impuesto), each Llaves of the arbitrios, the sanciones and the
@@ -38,6 +42,7 @@ object TiposDeParametro {
     private const val ARBITRIOS = "arbitrios"
     private const val SANCIONES = "sanciones"
     private const val ANUNCIOS = "anuncios"
+    private const val BRECHA = "brecha"
 
     private fun numero(
         tipo: String,
@@ -79,7 +84,14 @@ object TiposDeParametro {
             numero(LlavesArbitrios.ARBITRIO_PU_POR_USO, "Un PU por uso desde el 1 de enero", false, null, ARBITRIOS),
             numero(LlavesSanciones.PLAZO, "Plazo de un acto de sanciones", true, "días", SANCIONES),
             texto(LlavesSanciones.FERIADOS, "Feriados movibles de un año", true, SANCIONES, unidad = "fechas", admiteVacio = true),
-            numero(LlavesAnuncios.TASA_ANUNCIO, "Tasa anual de una clase de anuncio", true, "soles", ANUNCIOS)
+            numero(LlavesAnuncios.TASA_ANUNCIO, "Tasa anual de una clase de anuncio", true, "soles", ANUNCIOS),
+            numero(
+                LlavesBrecha.TOLERANCIA_BRECHA,
+                "Tolerancia de la comparación rentas-catastro (AREA en m², MONTO en soles)",
+                true,
+                "m² o soles",
+                BRECHA
+            ).copy(claves = LlavesBrecha.CLAVES_TOLERANCIA, noNegativo = true)
         )
 
     private val porTipo = TODOS.associateBy { it.tipo }
