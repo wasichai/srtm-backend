@@ -33,6 +33,7 @@ import srtm.rentas.DECLARACION
 import srtm.rentas.Declaracion
 import srtm.rentas.NIVEL_CONSTRUCCION
 import srtm.rentas.NivelConstruccion
+import srtm.rentas.ORIGEN_MODIFICADO
 import srtm.rentas.PREDIO
 import srtm.rentas.Predio
 import srtm.rentas.Records
@@ -53,6 +54,7 @@ import wasichai.core.identity.AuthenticatedUser
 import wasichai.core.identity.CurrentUser
 import wasichai.core.metadata.MetadataService
 import wasichai.core.organization.OrganizationRepository
+import java.math.BigDecimal
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -450,37 +452,55 @@ class BrechaService(
                     val monto = r["valor_otras_instalaciones"]?.toString()?.trim()?.toBigDecimalOrNull() ?: return@mapNotNull null
                     if (monto.signum() > 0) r["id"].toString() to monto else null
                 }.toMap()
+        // #304: the external padrón's valuación de origen of each DJ (its terreno and construcción), read as records
+        val origen =
+            registrosDj
+                .mapNotNull { r ->
+                    val terreno = decimal(r["valor_terreno"])
+                    val construccion = decimal(r["valor_construccion"])
+                    if (terreno == null && construccion == null) return@mapNotNull null
+                    r["id"].toString() to ValuacionDeOrigen(terreno, construccion, r[ORIGEN_MODIFICADO] == true)
+                }.toMap()
         val contribuyentes = registros.byIds(CONTRIBUYENTE, Contribuyente::class.java, declaraciones.mapNotNull { it.contribuyente })
-        val niveles = nivelesDe(declaraciones.filter { it.anio == anio && declaracionVigente(it) }.mapNotNull { it.id })
-        if (contexto == null) {
-            return Padron(
+        val (niveles, valoresDeNiveles) = nivelesDe(declaraciones.filter { it.anio == anio && declaracionVigente(it) }.mapNotNull { it.id })
+        val padron =
+            Padron(
                 predios,
                 declaraciones,
                 obrasDelPadron = obrasDelPadron,
                 contribuyentes = contribuyentes,
                 prediosDeBaja = prediosDeBaja,
-                niveles = niveles
+                niveles = niveles,
+                origen = origen,
+                valoresDeNiveles = valoresDeNiveles
             )
-        }
-        return Padron(
-            predios,
-            declaraciones,
-            contribuyentes.mapValues { it.value.codigo },
-            registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java),
-            obrasDelPadron,
-            contribuyentes,
-            prediosDeBaja,
-            niveles
+        if (contexto == null) return padron
+        return padron.copy(
+            codigos = contribuyentes.mapValues { it.value.codigo },
+            inafectaciones = registros.all(INAFECTACION_ARBITRIO, InafectacionArbitrio::class.java)
         )
     }
 
-    // #247: the niveles of these declaraciones, by declaración: a query per page of ids (their declaracion among them)
-    private suspend fun nivelesDe(declaraciones: List<String>): Map<String, List<NivelConstruccion>> =
-        declaraciones
-            .chunked(PageRequest.MAX_SIZE)
-            .flatMap { ids -> registros.donde(NIVEL_CONSTRUCCION, NivelConstruccion::class.java, listOf(declaracionEntre(ids))) }
-            .filter { it.declaracion != null }
-            .groupBy { it.declaracion!! }
+    // #247: the niveles of these declaraciones, by declaración: a query per page of ids (their declaracion among them).
+    // read as records: #304's valores of the external padrón (PADRON_EXTERNO_NIVEL), by nivel id, no dto reads
+    @Suppress("UNCHECKED_CAST")
+    private suspend fun nivelesDe(declaraciones: List<String>): Pair<Map<String, List<NivelConstruccion>>, Map<String, ValorDeNivel>> {
+        val registrosNivel =
+            declaraciones
+                .chunked(PageRequest.MAX_SIZE)
+                .flatMap { ids -> registros.donde(NIVEL_CONSTRUCCION, Map::class.java, listOf(declaracionEntre(ids))) }
+                .map { it as Map<String, Any?> }
+        val niveles = registrosNivel.map { Records.read(NivelConstruccion::class.java, it["id"].toString(), it) }
+        val valores =
+            registrosNivel
+                .mapNotNull { r ->
+                    val valor = ValorDeNivel(decimal(r["valor_unitario"]), decimal(r["porcentaje_depreciacion"]), decimal(r["valor_total"]))
+                    if (valor == ValorDeNivel()) null else r["id"].toString() to valor
+                }.toMap()
+        return niveles.filter { it.declaracion != null }.groupBy { it.declaracion!! } to valores
+    }
+
+    private fun decimal(valor: Any?): BigDecimal? = valor?.toString()?.trim()?.toBigDecimalOrNull()
 
     // a nivel's declaracion (a relation, uuid) among `ids`: bound as text and cast, so the column keeps its index
     private fun declaracionEntre(ids: List<String>) =

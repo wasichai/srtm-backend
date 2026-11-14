@@ -85,7 +85,9 @@ WITH ficha AS (
     WHERE codigo_municipal IS NOT NULL
     QUALIFY row_number() OVER (PARTITION BY codigo_municipal ORDER BY id) = 1
 )
-SELECT b.* REPLACE (coalesce(nullif(trim(b.confianza), ''), 'SIN_DATO') AS confianza),
+-- srtm-backend#304: brecha_predio's own estado_levantamiento and vinculo_metodo (the ficha as the corrida read it)
+-- give way to the ficha's of the corte, as before
+SELECT b.* EXCLUDE (estado_levantamiento, vinculo_metodo) REPLACE (coalesce(nullif(trim(b.confianza), ''), 'SIN_DATO') AS confianza),
        f.estado_levantamiento, f.vinculo_metodo, f.vinculo_revisado, c.clase
 FROM srtm_brecha_predio b
 LEFT JOIN ficha f ON f.codigo_municipal = b.codigo_catastro
@@ -229,6 +231,35 @@ JOIN srtm_brecha_predio b ON b.id = n.brecha_predio
 WHERE n.estado = 'PAR' AND n.area_rentas > 0 AND n.area_catastro > n.area_rentas
 GROUP BY b.sector, b.manzana, b.uso
 ORDER BY b.sector, b.manzana, b.uso;
+
+-- srtm-backend#304: per categoría, how many brecha_predio differ in each field the corrida keeps of both sides, with
+-- the tolerances of the comparison (srtm-backend#303): 0.5 m2 in areas and frente, S/ 1.00 in amounts. A field
+-- missing on either side (a corrida from before #304, a DJ without its valuación de origen, a catastro before
+-- catastro-backend#84's arancel) is no difference: it is counted apart in sin_dato_*. The uso is not compared here:
+-- brecha_predio.uso is catastro's label, uso_declarado a code (#303 compares them by clase and subclase).
+-- niveles_area_distinta counts the PAR pisos whose areas differ.
+CREATE OR REPLACE VIEW v_diferencias_por_categoria AS
+WITH n AS (
+    SELECT brecha_predio, count(*) AS pisos
+    FROM srtm_brecha_nivel
+    WHERE estado = 'PAR' AND abs(area_catastro - area_rentas) > 0.5
+    GROUP BY brecha_predio
+)
+SELECT b.categoria, count(*) AS predios,
+       count(*) FILTER (abs(b.area_terreno_catastro - b.area_terreno_declarada) > 0.5) AS area_terreno,
+       count(*) FILTER (abs(b.area_construida_catastro - b.area_construida_declarada) > 0.5) AS area_construida,
+       count(*) FILTER (abs(b.terreno_catastro - b.terreno_declarado) > 1) AS terreno,
+       count(*) FILTER (abs(b.construccion_catastro - b.construccion_declarada) > 1) AS construccion,
+       count(*) FILTER (abs(b.obras_catastro - b.obras_declaradas) > 1) AS obras,
+       count(*) FILTER (abs(b.arancel_catastro - b.arancel_declarado) > 1) AS arancel,
+       count(*) FILTER (abs(b.frente_catastro - b.frente_declarado) > 0.5) AS frente,
+       coalesce(sum(n.pisos), 0) AS niveles_area_distinta,
+       count(*) FILTER (b.terreno_declarado IS NULL OR b.terreno_catastro IS NULL) AS sin_dato_terreno,
+       count(*) FILTER (b.arancel_declarado IS NULL OR b.arancel_catastro IS NULL) AS sin_dato_arancel
+FROM srtm_brecha_predio b
+LEFT JOIN n ON n.brecha_predio = b.id
+GROUP BY b.categoria
+ORDER BY b.categoria;
 
 -- srtm-backend#301: the views only the informe de brechas reads (informe.py). Aggregates only, never a predio.
 

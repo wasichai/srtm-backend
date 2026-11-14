@@ -303,6 +303,11 @@ manifiesto no lista).
 |Pisos con más área en catastro, por sector, manzana y uso
 |`v_niveles_catastro_mayor` (los `PAR` con área de rentas mayor que 0, la regla de
 `brecha_predio.niveles_catastro_mayor`)
+
+|Qué difiere entre rentas y catastro, por categoría
+|`v_diferencias_por_categoria` (srtm-backend#304: áreas, valores de terreno, construcción y obras, arancel, frente y
+pisos `PAR` con área distinta, con 0,5 m² y S/ 1,00 de tolerancia; un dato que falta en un lado no cuenta como
+diferencia y va en `sin_dato_*`)
 |===
 
 `v_predial_contribuyente` calcula, por contribuyente:

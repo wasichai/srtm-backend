@@ -911,6 +911,32 @@ no escribe `brecha_nivel`; una lista vacía sí compara (todo lo declarado sale 
 siete campos en camelCase; los niveles se leen por la API genérica
 (`/api/objects/brecha_nivel/records?brecha_predio=<id>`).
 
+**Valores y características de cada lado** (#304). La corrida guarda lo que leyó de los dos lados. Así, la comparación
+del predio (#303) explica el Δ autoavalúo con los datos de esa corrida y no con la DJ de hoy. Son campos opcionales:
+una corrida anterior los deja vacíos.
+
+| Lado | Campos de `brecha_predio` | De dónde salen |
+|---|---|---|
+| Rentas | `terreno_declarado`, `construccion_declarada` | `valor_terreno` y `valor_construccion` de la valuación de origen del padrón importado, sumados una vez por secuencia de uso (la DJ de mayor autoavalúo de sus titulares). Quedan vacíos si alguna DJ no los trae o tiene `origen_modificado`: nunca se recalculan. |
+| Rentas | `obras_declaradas` | `valor_obras`, y si no hay, las otras instalaciones del padrón (#208). |
+| Rentas | `arancel_declarado`, `uso_declarado`, `frente_declarado` | La DJ de mayor autoavalúo. |
+| Catastro | `terreno_catastro`, `construccion_catastro`, `obras_catastro`, `frente_catastro` | El ítem de `/valuaciones`; las obras con las de la DJ si se sumaron (#208). |
+| Catastro | `arancel_catastro` | El `arancelM2` del ítem; queda vacío hasta catastro-backend#84. |
+| Ficha | `estado_levantamiento`, `vinculo_metodo` | La ficha tal como la leyó la corrida. |
+
+Los componentes declarados se guardan **tal como vinieron**, aunque no sumen el autoavalúo declarado, que sigue siendo
+`valor_autoavaluo`. En el padrón de Ica de 2026, cerca del 3,3 % de las DJ no cuadra por más de S/ 1. En casi todas,
+la suma de los componentes es casi el doble del autoavalúo, y el importador ya las marca con
+`VALOR_PREDIO_NO_CUADRA`. Del lado del catastro, terreno + construcción + obras = autoavalúo.
+
+Cada `brecha_nivel` agrega `niveles_rentas` (cuántos niveles de la DJ suma el piso) y `detalle_rentas`, un JSON con la
+lista de esos niveles. Cada nivel lleva `{area, anioConstruccion, material, estadoConservacion, murosColumnas, techos,
+pisos, puertasVentanas, revestimientos, banos, instalaciones, clasificacion}`, y `valorUnitario`,
+`porcentajeDepreciacion` y `valor` solo cuando vienen del padrón importado. Las claves vacías se omiten.
+`detalle_catastro` tendrá las secciones de la ficha con las mismas claves cuando catastro-backend#84 las mande; hasta
+entonces queda vacío. El corte analítico exporta todos estos campos, que no llevan datos personales, y la vista
+`v_diferencias_por_categoria` cuenta por categoría cuántos predios difieren en cada uno (0,5 m² y S/ 1,00 de tolerancia).
+
 **Impuesto.** Por cada contribuyente con DJ vigente del año:
 - el valor catastral de cada predio cruzado y valorizado se reparte entre sus secuencias de uso según el autoavalúo
   declarado de cada una; si todas declaran 0, según su área construida; si tampoco, en partes iguales (D12), al

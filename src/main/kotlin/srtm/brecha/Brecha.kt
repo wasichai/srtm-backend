@@ -15,6 +15,7 @@ import srtm.rentas.condominio
 import srtm.rentas.grupoDe
 import srtm.rentas.totalesDeContribuyente
 import srtm.rentas.totalesDePredio
+import tools.jackson.databind.json.JsonMapper
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.LocalDate
@@ -37,7 +38,36 @@ data class Padron(
     val obrasDelPadron: Map<String, BigDecimal> = emptyMap(),
     val contribuyentes: Map<String, Contribuyente> = emptyMap(),
     val prediosDeBaja: List<Predio> = emptyList(),
-    val niveles: Map<String, List<NivelConstruccion>> = emptyMap()
+    val niveles: Map<String, List<NivelConstruccion>> = emptyMap(),
+    // #304: declaración id -> the external padrón's valuación de origen, and nivel id -> its valores (which no dto
+    // reads)
+    val origen: Map<String, ValuacionDeOrigen> = emptyMap(),
+    val valoresDeNiveles: Map<String, ValorDeNivel> = emptyMap()
+)
+
+// #304: what an external padrón determined of a DJ (PADRON_EXTERNO_DECLARACION): its terreno and construcción, and
+// whether the DJ changed since it was imported (origen_modificado: then they are no longer its figures)
+data class ValuacionDeOrigen(
+    val terreno: BigDecimal? = null,
+    val construccion: BigDecimal? = null,
+    val modificado: Boolean = false
+)
+
+// #304: an external padrón's valuation of a nivel (PADRON_EXTERNO_NIVEL)
+data class ValorDeNivel(
+    val valorUnitario: BigDecimal? = null,
+    val porcentajeDepreciacion: BigDecimal? = null,
+    val valorTotal: BigDecimal? = null
+)
+
+// #304: what a predio's DJs declare of its values (Brecha.declarados)
+data class Declarados(
+    val terreno: BigDecimal?,
+    val construccion: BigDecimal?,
+    val obras: BigDecimal?,
+    val arancel: BigDecimal?,
+    val uso: String?,
+    val frente: BigDecimal?
 )
 
 // the rows of a corrida, or what the year lacks to liquidate (then no row). avisos are what could not be computed
@@ -102,6 +132,9 @@ object Brecha {
     private const val OBSERVACION = "Brecha de recaudación"
 
     private val DIGITOS = Regex("\\d+")
+
+    // #304: the detalle of a nivel (DetalleNivel) as brecha_nivel's JSON text
+    private val DETALLE = JsonMapper.builder().build()
 
     // a code compared as the catastro and the padrón may write it: trimmed, upper case, and every run of digits without
     // its leading zeros, so 01-01-0006 and 1-1-6 (or a lote 08 and 8) are one key. blank is no code
@@ -471,7 +504,8 @@ object Brecha {
     // none has one, or the side lacks the piso). by piso, the null one last
     fun niveles(
         rentas: List<NivelConstruccion>,
-        catastro: List<ConstruccionCatastral>
+        catastro: List<ConstruccionCatastral>,
+        valores: Map<String, ValorDeNivel> = emptyMap()
     ): List<NivelBrecha> {
         val declarados = rentas.filter { it.estado != INACTIVO }.groupBy(::pisoDeRentas)
         val construidos = catastro.groupBy { it.piso }
@@ -487,8 +521,71 @@ object Brecha {
                 }
             val areaRentas = r?.let { sumaDeAreas(it.map(NivelConstruccion::areaConstruida)) }
             val areaCatastro = c?.let { sumaDeAreas(it.map(ConstruccionCatastral::areaConstruida)) }
-            NivelBrecha(piso, areaRentas, areaCatastro, estado.name)
+            NivelBrecha(
+                piso,
+                areaRentas,
+                areaCatastro,
+                estado.name,
+                nivelesRentas = r?.size,
+                detalleRentas = r?.let { ns -> DETALLE.writeValueAsString(ns.map { detalle(it, it.id?.let(valores::get)) }) }
+            )
         }
+    }
+
+    // #304: a rentas nivel as detalle_rentas keeps it: its características, and its valores when the external padrón
+    // brought them
+    fun detalle(
+        n: NivelConstruccion,
+        valor: ValorDeNivel?
+    ) = DetalleNivel(
+        area = n.areaConstruida,
+        anioConstruccion = n.anioConstruccion,
+        material = n.material,
+        estadoConservacion = n.estadoConservacion,
+        murosColumnas = n.murosColumnas,
+        techos = n.techos,
+        pisos = n.pisos,
+        puertasVentanas = n.puertasVentanas,
+        revestimientos = n.revestimientos,
+        banos = n.banos,
+        instalaciones = n.instalaciones,
+        clasificacion = n.clasificacion,
+        valorUnitario = valor?.valorUnitario,
+        porcentajeDepreciacion = valor?.porcentajeDepreciacion,
+        valor = valor?.valorTotal
+    )
+
+    // #304: what a predio's DJs declare of its values. each secuencia once, its titular of highest autoavalúo (as
+    // totalesDePredio counts it; the first on a tie): terreno and construcción are the external padrón's, added over
+    // the secuencias, null when one lacks them or has origen_modificado (never recalculated, and kept as they came:
+    // they may not add up to the autoavalúo); obras are obrasDeLaDj's (#208); arancel, uso and frente are those of the
+    // DJ of highest autoavalúo among them
+    fun declarados(
+        declaraciones: List<Declaracion>,
+        padron: Padron
+    ): Declarados {
+        val elegidas = declaraciones.groupBy(::grupoDe).values.mapNotNull { s -> s.maxByOrNull { it.valorAutoavaluo ?: BigDecimal.ZERO } }
+
+        fun componente(de: (ValuacionDeOrigen) -> BigDecimal?): BigDecimal? {
+            val valores =
+                elegidas.map { d ->
+                    d.id
+                        ?.let(padron.origen::get)
+                        ?.takeIf { !it.modificado }
+                        ?.let(de)
+                }
+            if (valores.isEmpty() || valores.any { it == null }) return null
+            return valores.fold(BigDecimal.ZERO) { suma, v -> suma + v!! }
+        }
+        val mayor = elegidas.maxByOrNull { it.valorAutoavaluo ?: BigDecimal.ZERO }
+        return Declarados(
+            terreno = componente(ValuacionDeOrigen::terreno),
+            construccion = componente(ValuacionDeOrigen::construccion),
+            obras = obrasDeLaDj(declaraciones, padron.obrasDelPadron),
+            arancel = mayor?.arancel,
+            uso = mayor?.uso,
+            frente = mayor?.longitudFrente
+        )
     }
 
     // a rentas nivel's piso as a number: a PISO's (or one without tipo) numero_piso; a sótano, mezanine or azotea has
@@ -542,10 +639,16 @@ object Brecha {
         fila: FilaBrecha,
         item: ValuacionCatastral?,
         declaraciones: List<Declaracion>?,
-        delPadron: Map<String, List<NivelConstruccion>>
+        padron: Padron
     ): FilaBrecha {
         val construcciones = item?.construcciones
-        val comparados = if (construcciones == null || declaraciones == null) null else niveles(nivelesDeRentas(declaraciones, delPadron), construcciones)
+        val comparados =
+            if (construcciones == null || declaraciones == null) {
+                null
+            } else {
+                niveles(nivelesDeRentas(declaraciones, padron.niveles), construcciones, padron.valoresDeNiveles)
+            }
+        val declarados = declaraciones?.let { declarados(it, padron) }
         val resumen = comparados?.let(::resumenDeNiveles)
         return fila.copy(
             areaTerrenoDeclarada = declaraciones?.let { areaDeclarada(it, Declaracion::areaTerreno) },
@@ -555,7 +658,17 @@ object Brecha {
             niveles = comparados,
             nivelesComparados = resumen?.comparados,
             nivelesCatastroMayor = resumen?.catastroMayor,
-            deltaAreaNiveles = resumen?.delta
+            deltaAreaNiveles = resumen?.delta,
+            terrenoDeclarado = declarados?.terreno,
+            construccionDeclarada = declarados?.construccion,
+            obrasDeclaradas = declarados?.obras,
+            arancelDeclarado = declarados?.arancel,
+            usoDeclarado = declarados?.uso,
+            frenteDeclarado = declarados?.frente,
+            terrenoCatastro = item?.terreno,
+            construccionCatastro = item?.construccion,
+            obrasCatastro = item?.obras,
+            frenteCatastro = item?.longitudFrente
         )
     }
 
@@ -690,7 +803,9 @@ object Brecha {
                     autoavaluoCatastro = item.autoavaluo,
                     motivo = item.motivo,
                     confianza = conf.confianza.name,
-                    confianzaMotivo = conf.motivo
+                    confianzaMotivo = conf.motivo,
+                    estadoLevantamiento = item.estadoLevantamiento,
+                    vinculoMetodo = item.vinculoMetodo
                 )
             val suyas = predio?.id?.let(vigentesPorPredio::get)
             if (sinLevantar(item)) {
@@ -698,7 +813,7 @@ object Brecha {
                 val delPadron = predio?.id?.takeIf { suyas != null }
                 if (delPadron != null) cruzados += delPadron
                 filas +=
-                    conAreas(base, null, suyas, padron.niveles).copy(
+                    conAreas(base, null, suyas, padron).copy(
                         categoria = Categoria.SIN_LEVANTAR.name,
                         autoavaluoCatastro = null,
                         autoavaluoDeclarado = suyas?.let { totalesDePredio(it).autoavaluo.setScale(2, RoundingMode.HALF_UP) },
@@ -711,7 +826,7 @@ object Brecha {
             if (predio == null || suyas == null) {
                 val impuesto = item.autoavaluo?.let { estimado(anio, it, parametros) }
                 filas +=
-                    conAreas(base, item, null, padron.niveles).copy(
+                    conAreas(base, item, null, padron).copy(
                         categoria = Categoria.OMISO.name,
                         deltaAutoavaluo = item.autoavaluo,
                         impuestoCatastro = impuesto,
@@ -727,7 +842,7 @@ object Brecha {
             val impuesto = impuestos.porPredio[predio.id] ?: ImpuestoDelPredio(cero, cero)
             val valor = item.autoavaluo
             filas +=
-                conAreas(base, item, suyas, padron.niveles).copy(
+                conAreas(base, item, suyas, padron).copy(
                     categoria = categoria(declarado, valor).name,
                     autoavaluoDeclarado = declarado,
                     deltaAutoavaluo = valor?.subtract(declarado),
@@ -746,7 +861,7 @@ object Brecha {
             val predio = porId[id]
             val conf = confianza(null, predio)
             filas +=
-                conAreas(FilaBrecha(), null, suyas, padron.niveles).copy(
+                conAreas(FilaBrecha(), null, suyas, padron).copy(
                     predio = id,
                     codigoPredio = predio?.codigo,
                     categoria = Categoria.SIN_CATASTRO.name,

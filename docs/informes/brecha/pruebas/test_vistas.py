@@ -117,6 +117,22 @@ class VistasTests(ConCorte, unittest.TestCase):
             [("01", "01", "CASA HABITACIÓN", 1, 1, Decimal("60"), Decimal("100.5"), Decimal("40.5"))],
         )
 
+    def test_diferencias_por_categoria(self):
+        # srtm-backend#304: BP1 (SUBVALUADO) differs in its terreno (20 000 -> 24 000) and construcción (30 000 ->
+        # 31 000), not in its obras nor frente; its arancel lacks catastro's side (catastro-backend#84), so it is no
+        # difference but a sin_dato. its PAR piso BN1 differs in area (60 -> 100.50). BP2 and BP3 have no values
+        con = self._base()
+        filas = {
+            f[0]: f[1:]
+            for f in con.execute(
+                "SELECT categoria, predios, terreno, construccion, obras, arancel, frente, niveles_area_distinta, "
+                "sin_dato_terreno, sin_dato_arancel FROM v_diferencias_por_categoria"
+            ).fetchall()
+        }
+        self.assertEqual(filas["SUBVALUADO"], (1, 1, 1, 0, 0, 0, 1, 0, 1))
+        self.assertEqual(filas["SOBREVALUADO"], (1, 0, 0, 0, 0, 0, 0, 1, 1))
+        self.assertEqual(filas["OMISO"], (1, 0, 0, 0, 0, 0, 0, 1, 1))
+
     def test_brecha_por_clase(self):
         con = self._base()
         filas = con.execute("SELECT confianza, clase, predios, delta_impuesto FROM v_brecha_por_clase").fetchall()
@@ -201,9 +217,9 @@ class VistasTests(ConCorte, unittest.TestCase):
                 "SELECT view_name FROM duckdb_views() WHERE NOT internal ORDER BY view_name"
             ).fetchall()
         ]
-        # the 8 views of task 6, the 5 tablero-only views of #206 task 8, v_niveles_catastro_mayor (#256) and
-        # the 4 of the informe de brechas (#301)
-        self.assertEqual(len(vistas), 18)
+        # the 8 views of task 6, the 5 tablero-only views of #206 task 8, v_niveles_catastro_mayor (#256),
+        # the 4 of the informe de brechas (#301) and v_diferencias_por_categoria (#304)
+        self.assertEqual(len(vistas), 19)
         for vista in vistas:
             with self.subTest(vista=vista):
                 # v_corte carries leido_en as TIMESTAMPTZ; fetching it as is would need duckdb's Python

@@ -454,7 +454,13 @@ class ShippedModelTests(unittest.TestCase):
                                         # #247
                                         "area_terreno_declarada", "area_terreno_catastro", "area_construida_declarada",
                                         "area_construida_catastro", "niveles_comparados", "niveles_catastro_mayor",
-                                        "delta_area_niveles"])
+                                        "delta_area_niveles",
+                                        # #304: each side's values, optional (a corrida before it leaves them empty)
+                                        "terreno_declarado", "construccion_declarada", "obras_declaradas",
+                                        "arancel_declarado", "uso_declarado", "frente_declarado", "terreno_catastro",
+                                        "construccion_catastro", "obras_catastro", "arancel_catastro", "frente_catastro",
+                                        "estado_levantamiento", "vinculo_metodo"])
+        self.assertFalse(any(predio[n].get("required") for n in list(predio)[28:]))
         self.assertEqual(self.model["enums"]["categoria_brecha"],
                          ["OMISO", "SIN_CATASTRO", "SIN_VALOR", "SUBVALUADO", "SOBREVALUADO", "COINCIDE", "SIN_LEVANTAR"])
         self.assertEqual(self.model["enums"]["confianza_brecha"], ["CONFIABLE", "DUDOSO", "SIN_LEVANTAR"])
@@ -464,7 +470,9 @@ class ShippedModelTests(unittest.TestCase):
         # #247: a piso of a brecha_predio, the area each side gives it and how they paired
         nivel = self.campos("brecha_nivel")
         self.assertEqual({n: f["type"] for n, f in nivel.items()},
-                         {"piso": "INTEGER", "area_rentas": "DECIMAL", "area_catastro": "DECIMAL", "estado": "ENUM"})
+                         {"piso": "INTEGER", "area_rentas": "DECIMAL", "area_catastro": "DECIMAL", "estado": "ENUM",
+                          # #304: how many rentas niveles, and each side's detalle as JSON text
+                          "niveles_rentas": "INTEGER", "detalle_rentas": "LONG_TEXT", "detalle_catastro": "LONG_TEXT"})
         self.assertEqual({n for n, f in nivel.items() if f.get("required")}, {"estado"})
         self.assertEqual(self.model["enums"]["estado_nivel_brecha"], ["PAR", "SOLO_RENTAS", "SOLO_CATASTRO", "AMBIGUO"])
         self.assertEqual(self.relaciones("brecha_nivel"),
