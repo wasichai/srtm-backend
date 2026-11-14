@@ -480,9 +480,10 @@ sin definir.
 
 `make informe` termina con `make validar-informe`, que falla si:
 
-* una salida (`salida/`, `generado/`, `textos/`) lleva un identificador del corte (código de predio, de ficha o
-  de contribuyente, seudónimo o id de srtm), el monto al céntimo de un predio individual, un número de 8 u 11
-  dígitos (DNI o RUC), un correo o el nombre de un campo personal;
+* una salida (`salida/`, `generado/`, `textos/`; del HTML y los SVG, solo el texto visible) lleva un
+  identificador del corte (código de predio, de ficha o de contribuyente, seudónimo o id de srtm), el monto al
+  céntimo de un predio individual que no sea a la vez un agregado del propio informe, un número de 8 u 11 dígitos
+  (DNI o RUC), un correo o el nombre de un campo personal;
 * un grupo de menos predios que el umbral publica sus montos;
 * un texto lleva una cifra tecleada o un atributo sin definir;
 * el HTML carga algo de fuera (script, hoja de estilos, imagen, fuente o URL);

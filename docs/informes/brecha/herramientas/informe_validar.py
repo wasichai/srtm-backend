@@ -12,6 +12,7 @@ informe` fails when any does. Like recaudacion/herramientas/validar.py:
   chart and table a texto cites exists.
 """
 
+import html
 import json
 import re
 from decimal import Decimal
@@ -113,17 +114,55 @@ def _archivos(e):
     return rutas
 
 
-def privacidad(v, e, sensibles):
+def texto_visible(texto):
+    """What a reader sees of an HTML page or an SVG: its text nodes (table cells, labels, <title>), without the
+    <style> block, the tags or their attributes - coordinates, sizes, viewBox and path data are geometry, and with
+    tens of thousands of predios almost any small number with decimals is some predio's amount."""
+    texto = re.sub(r"<style\b.*?</style>|<script\b.*?</script>|<!--.*?-->", " ", texto, flags=re.S | re.I)
+    texto = re.sub(r"<[^>]*>", " ", texto)
+    return html.unescape(texto)
+
+
+def agregados(*indicadores):
+    """Every amount the report computed for a group (as 1803.03): a published aggregate that happens to equal one
+    predio's amount is a coincidence, not a leak. Reserved cells carry no amount, so none comes from them."""
+    encontrados = set()
+
+    def recorrer(nodo):
+        if isinstance(nodo, dict):
+            if nodo.get("reservado"):
+                return
+            for valor in nodo.values():
+                recorrer(valor)
+        elif isinstance(nodo, list):
+            for valor in nodo:
+                recorrer(valor)
+        elif isinstance(nodo, str) and re.fullmatch(r"-?\d+(\.\d+)?", nodo):
+            d = Decimal(nodo)
+            encontrados.add(f"{d.quantize(Decimal('0.01')):.2f}")
+
+    for ind in indicadores:
+        recorrer(ind)
+    return encontrados
+
+
+def privacidad(v, e, sensibles, publicados=frozenset()):
     identificadores, montos = sensibles
+    montos = montos - set(publicados)
     for ruta in _archivos(e):
         donde = str(ruta.relative_to(e))
-        texto = ruta.read_text(encoding="utf-8")
+        crudo = ruta.read_text(encoding="utf-8")
+        texto = texto_visible(crudo) if ruta.suffix in (".html", ".svg") else crudo
         tokens = set(_TOKEN.findall(texto))
         tokens |= {parte for t in tokens for parte in re.split(r"[_\-./]", t) if parte}
         for ident in sorted(identificadores & tokens)[:5]:
             v.falla(donde, f"lleva un identificador del corte «{ident}» (código de predio, contribuyente o ficha)")
-        for monto in sorted(montos & _montos_en(texto))[:5]:
-            v.falla(donde, f"lleva el monto de un predio individual «{monto}»")
+        # indicadores.json only holds group aggregates: umbrales() checks that no group under the umbral carries
+        # an amount, which is what an individual row would look like there
+        if ruta.name != "indicadores.json":
+            for monto in sorted(montos & _montos_en(texto))[:5]:
+                v.falla(donde, f"lleva el monto de un predio individual «{monto}»")
+        texto = crudo
         for campo in CAMPOS_PERSONALES:
             if campo in texto:
                 v.falla(donde, f"menciona el campo personal {campo}")
@@ -234,7 +273,8 @@ def validar(e):
         otros = _sensibles(ic.ruta_duckdb(datos["corte_anterior"]))
         sensibles_id |= otros[0]
         sensibles_monto |= otros[1]
-    privacidad(v, e, (sensibles_id, sensibles_monto))
+    publicados = agregados(ind, datos.get("anterior"), datos.get("comparacion"))
+    privacidad(v, e, (sensibles_id, sensibles_monto), publicados)
     textos(v, e, atributos)
     autocontenido(v, e)
     return v.fallas

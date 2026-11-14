@@ -239,6 +239,42 @@ class InformeTests(ConInforme, unittest.TestCase):
         fallas = self._validar(self.edicion)
         self.assertTrue(any("monto de un predio individual" in f for f in fallas), fallas)
 
+    def _monto_individual(self):
+        """One predio's amount (to the céntimo) that is not any aggregate the report published."""
+        con = duckdb.connect(f"{self.corte}.duckdb", read_only=True)
+        sql = "SELECT autoavaluo_catastro FROM srtm_brecha_predio ORDER BY id"
+        montos = [m for (m,) in con.execute(sql).fetchall()]
+        con.close()
+        ind = json.loads((self.edicion / "generado" / "indicadores.json").read_text(encoding="utf-8"))
+        publicados = informe_validar.agregados(ind["actual"])
+        return next(Decimal(m).quantize(Decimal("0.01")) for m in montos
+                    if f"{Decimal(m).quantize(Decimal('0.01')):.2f}" not in publicados)
+
+    def test_falla_con_el_monto_de_un_predio_en_el_html(self):
+        self._generar(self.edicion)
+        monto = self._monto_individual()
+        html = self.edicion / "salida" / ic.HTML
+        original = html.read_text(encoding="utf-8")
+        for fragmento in (f"<p>Un caso: {ic.numero(monto, 2)}.</p>",
+                          f'<table><tr><td class="num">S/ {ic.numero(monto, 2)}</td></tr></table>',
+                          f"<svg><text x=\"1\" y=\"2\">{monto}</text></svg>"):
+            with self.subTest(fragmento=fragmento):
+                html.write_text(original.replace("</main>", fragmento + "</main>"), encoding="utf-8")
+                fallas = self._validar(self.edicion)
+                self.assertTrue(any("monto de un predio individual" in f for f in fallas), fallas)
+
+    def test_geometria_del_svg_no_es_un_monto(self):
+        self._generar(self.edicion)
+        monto = self._monto_individual()
+        # the same amount as a coordinate, a size and path data: geometry, never shown to the reader
+        geometria = (f'<svg viewBox="0 0 {monto} 10"><rect x="{monto}" y="1.5" width="{monto}" height="2"/>'
+                     f'<path d="M {monto} 0 L 1 1" transform="translate({monto} 0)"/></svg>')
+        html = self.edicion / "salida" / ic.HTML
+        html.write_text(html.read_text(encoding="utf-8").replace("</main>", geometria + "</main>"), encoding="utf-8")
+        svg = self.edicion / "generado" / "graficos" / "confianza.svg"
+        svg.write_text(svg.read_text(encoding="utf-8").replace("</svg>", geometria + "</svg>"), encoding="utf-8")
+        self.assertEqual(self._validar(self.edicion), [])
+
     def test_falla_con_un_recurso_externo(self):
         self._generar(self.edicion)
         html = self.edicion / "salida" / ic.HTML
@@ -272,6 +308,39 @@ class InformeTests(ConInforme, unittest.TestCase):
         ruta.write_text("== Lecciones\n\ntabla::no-existe[]\n", encoding="utf-8")
         salida = self._generar(self.edicion, esperado=2)
         self.assertIn("tabla desconocida", salida)
+
+
+class CorteGrandeTests(ConInforme, unittest.TestCase):
+    """A fictitious corte with many predios of small amounts: its SVG coordinates and the report's own
+    aggregates collide with some predio's amount, and neither is a leak."""
+
+    def test_coordenadas_y_agregados_coincidentes_no_fallan(self):
+        corte = self._duckdb(datos(11, contribuyentes=400))
+        edicion = self._edicion(corte)
+        self._generar(edicion)
+        ind = json.loads((edicion / "generado" / "indicadores.json").read_text(encoding="utf-8"))
+        svg = (edicion / "generado" / "graficos" / "categorias.svg").read_text(encoding="utf-8")
+        coordenada = Decimal(re.search(r'<rect x="(\d+\.\d)"', svg.split("</title>", 1)[1]).group(1))
+        agregado = Decimal(next(c["delta_autoavaluo"] for c in ind["actual"]["confianza"] if not c["reservado"]))
+        # make the collisions certain, not just likely: one predio's amount equals an x coordinate of a chart,
+        # another's a published aggregate
+        con = duckdb.connect(f"{corte}.duckdb")
+        ids = [i for (i,) in con.execute("SELECT id FROM srtm_brecha_predio ORDER BY id LIMIT 2").fetchall()]
+        con.execute("UPDATE srtm_brecha_predio SET autoavaluo_catastro = ? WHERE id = ?", [coordenada, ids[0]])
+        con.execute("UPDATE srtm_brecha_predio SET autoavaluo_declarado = ? WHERE id = ?", [agregado, ids[1]])
+        con.close()
+        _, montos = informe_validar._sensibles(ic.ruta_duckdb(corte))
+        self.assertIn(f"{coordenada:.2f}", montos)
+        self.assertIn(f"{agregado.quantize(Decimal('0.01')):.2f}", montos)
+        # the old check, over the raw text of every file, would have failed
+        self.assertTrue(montos & informe_validar._montos_en(svg))
+        self.assertEqual(self._validar(edicion), [])
+        # and a real individual amount in a visible text still fails
+        html = edicion / "salida" / ic.HTML
+        fuga = f"<p>{ic.numero(coordenada, 2)}</p></main>"
+        html.write_text(html.read_text(encoding="utf-8").replace("</main>", fuga), encoding="utf-8")
+        fallas = self._validar(edicion)
+        self.assertTrue(any("monto de un predio individual" in f for f in fallas), fallas)
 
 
 class MarcadoTests(unittest.TestCase):
