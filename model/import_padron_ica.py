@@ -410,6 +410,7 @@ class Dataset:
     niveles: list = field(default_factory=list)
     filas: dict = field(default_factory=dict)  # ("contribuyente" | "predio", codigo) -> its first row
     reporte: list = field(default_factory=list)
+    niveles_sin_valor: int = 0  # DJs whose niveles carry no valor_total_nivel: compared by área only
     compartidos: list = field(default_factory=list)  # the SAT codes of distinct predios, as codigos_derivados lists them
     srtm: dict = field(default_factory=dict)  # (SAT code, contribuyente) -> srtm code; None: codigo_derivado_repetido
     titulares: dict = field(default_factory=dict)  # srtm code -> contribuyente -> its first row, in the sheet's order
@@ -787,9 +788,13 @@ class _Builder:
         """The padrón's construction against its niveles; a pair with an unreadable number is left out (its rows are
         rejected)."""
         detalles = []
-        for columna, padron_columna, tolerancia, que in (
-                ("valor_total_nivel", "valor_area_construida", TOLERANCIA_VALOR, "valor"),
-                ("area_construida_propia", "area_construida", TOLERANCIA_AREA, "área")):
+        comparaciones = [("valor_total_nivel", "valor_area_construida", TOLERANCIA_VALOR, "valor"),
+                         ("area_construida_propia", "area_construida", TOLERANCIA_AREA, "área")]
+        if all(clean_decimal(r.get("valor_total_nivel")) is None for r in secciones):
+            # no nivel has a valor_total_nivel (the SAT padrón's niveles): their valor is unknown, not 0
+            self.data.niveles_sin_valor += 1
+            comparaciones = comparaciones[1:]
+        for columna, padron_columna, tolerancia, que in comparaciones:
             niveles = _sum([_decimal(r.get(columna)) for r in secciones])
             declarado = _decimal(padron_row.get(padron_columna))
             if niveles is not None and declarado is not None and abs(niveles - declarado) > tolerancia:
@@ -1158,6 +1163,7 @@ def main(argv=None):
     print(f"predios: {len(data.predios)}")
     print(f"declaraciones: {len(data.declaraciones)}")
     print(f"niveles: {len(data.niveles)}")
+    print(f"niveles_sin_valor: {data.niveles_sin_valor}")
     print(f"códigos compartidos: {len(data.compartidos)} ({sum(len(c['predios']) for c in data.compartidos)} predios, "
           f"{sum(c['djs'] for c in data.compartidos)} DJ)")
     categorias = Counter(r["categoria"] for r in data.reporte)

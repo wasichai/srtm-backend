@@ -774,6 +774,29 @@ class BuildNivelesTests(unittest.TestCase):
         self.assertIn("área", r["detalle"])
         self.assertEqual(categorias(build([padron(valor_area_construida="1")], [construccion()]))["niveles_vs_padron"], 1)
 
+    def test_niveles_without_valor_are_compared_by_area_only(self):
+        # the SAT padrón's niveles carry no valor unitario, incremento, depreciación or valor total
+        sin = dict(valor_unitario=None, incremento_5=None, depreciacion=None, valor_total_nivel=None)
+        data = build([padron(area_construida="100")], [construccion(**sin)])
+        self.assertEqual(categorias(data)["niveles_vs_padron"], 0)
+        self.assertEqual(data.niveles_sin_valor, 1)
+        data = build([padron(area_construida="120")], [construccion(**sin)])
+        [r] = [r for r in data.reporte if r["categoria"] == "niveles_vs_padron"]
+        self.assertIn("área", r["detalle"])
+        self.assertNotIn("valor", r["detalle"])
+        self.assertEqual(data.niveles_sin_valor, 1)
+
+    def test_niveles_with_valor_keep_the_valor_comparison(self):
+        data = build([padron(valor_area_construida="1")], [construccion()])
+        self.assertEqual(categorias(data)["niveles_vs_padron"], 1)
+        self.assertEqual(data.niveles_sin_valor, 0)
+
+    def test_the_observacion_of_niveles_without_valor_is_only_for_area(self):
+        sin = dict(valor_total_nivel=None)
+        self.assertEqual(de_regla(observaciones([padron()], [construccion(**sin)]), "NIVELES_NO_CUADRAN"), [])
+        [o] = de_regla(observaciones([padron(area_construida="120")], [construccion(**sin)]), "NIVELES_NO_CUADRAN")
+        self.assertNotIn("valor", o["detalle"])
+
     def test_a_rejected_contribuyente_takes_its_declaraciones_and_niveles(self):
         data = build([padron(nombre_completo=None, apellido_paterno=None, apellido_materno=None, nombres=None)], [construccion()])
         self.assertEqual((data.contribuyentes, data.declaraciones, data.niveles), ({}, [], []))
